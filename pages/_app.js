@@ -2,12 +2,11 @@ import '../styles/globals.css'
 import Navbar from '../components/Navbar'
 import { UserContext } from '../lib/context'
 
-import { getAuth } from 'firebase/auth'
+import { auth } from '../lib/firebase'
 import { useAuthState } from 'react-firebase-hooks/auth'
 
 function MyApp({ Component, pageProps }) {
 
-  const auth = getAuth();
   const [user, loading, error] = useAuthState(auth);
 
   return (

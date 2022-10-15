@@ -22,7 +22,7 @@ export default function Navbar() {
             </Link>
           </li>
           <li>
-            <Link href={`/admin/${username}`}>
+            <Link href={`/admin/${user.uid}}`}>
               <button className="btn-blue">Profile Settings</button>
             </Link>
           </li>
