@@ -1,9 +1,11 @@
 import Link from 'next/link';
+import { useContext } from 'react';
+import { UserContext } from '../lib/context';
 
 export default function Navbar() {
-  const user = null;
-  const username = true;
-
+  
+  const { user } = useContext(UserContext);
+  
   return (
     <nav className="navbar">
       <ul>
@@ -12,7 +14,7 @@ export default function Navbar() {
             <button className="btn-logo">OSF-RELAY</button>
           </Link>
         </li>
-      {username ? (
+      {user ? (
         <>
           <li>
             <Link href="/admin">
