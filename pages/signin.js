@@ -2,15 +2,15 @@ import { signInWithEmailAndPassword } from 'firebase/auth'
 import { useState } from 'react'
 
 export default function SignInPage({}) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [emailVal, setEmail] = useState('');
+  const [passwordVal, setPassword] = useState('');
 
   return (
     <div>
       <h1>Sign In Page</h1>
       <div>
-        <input type="email" id="email" placeholder="Email" value={email} onChange={(e)=>setEmail(e.value)} />
-        <input type="password" id="password" placeholder="Password" value={password} onChange={(e)=>setPassword(e.value)} />
+        <input type="email" id="email" placeholder="Email" value={emailVal} onChange={(e)=>setEmail(e.target.value)} />
+        <input type="password" id="password" placeholder="Password" value={passwordVal} onChange={(e)=>setPassword(e.target.value)} />
         <button onClick={handleSignInButton}>Sign In</button>
       </div>
     </div>
