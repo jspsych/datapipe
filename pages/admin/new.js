@@ -1,4 +1,5 @@
 import { useContext, useState } from 'react';
+import { nanoid } from 'nanoid';
 import AuthCheck from '../../components/AuthCheck';
 import { UserContext } from '../../lib/context';
 import { collection, addDoc } from "firebase/firestore";
@@ -29,7 +30,8 @@ async function handleCreateExperiment(user, title){
   try {
     await addDoc(collection(db, `users/${user.uid}/experiments`), {
       title: title,
-      active: false
+      active: false,
+      id: nanoid(12)
     });
   } catch (error) {
     console.log(error);
