@@ -1,7 +1,7 @@
 import AuthCheck from "../../components/AuthCheck"
 import { doc, setDoc } from "firebase/firestore";
 import { auth, db } from "../../lib/firebase";
-import { useContext } from "react";
+import { useContext, useState, useEffect } from "react";
 import { useDocumentData, useDocumentDataOnce } from "react-firebase-hooks/firestore";
 import { UserContext } from "../../lib/context";
 
@@ -24,8 +24,36 @@ function ProfileForm() {
     {data && <>
       <input type="text" id="osf-token" placeholder="OSF Token" defaultValue={data.osfToken} />
       <button onClick={handleSaveButton}>Save</button>
+      <ValidToken token={data.osfToken} />
     </>}
   </>)
+}
+
+function ValidToken({token}){
+  const [isValid, setIsValid] = useState(false);
+
+  useEffect(() => {
+    const osfAPIFetch = async () => {
+      const data = await fetch('https://api.osf.io/v2/', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        }
+      });
+
+      if (data.status === 200) {
+        setIsValid(true);
+      } else {
+        setIsValid(false);
+      }
+    }
+
+    osfAPIFetch();
+  }, [token]);
+
+  return (
+    <p>{isValid ? 'Valid' : 'Invalid'}</p>
+  )
 }
 
 async function handleSaveButton(token) {
