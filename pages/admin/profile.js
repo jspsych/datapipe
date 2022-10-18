@@ -1,25 +1,37 @@
 import AuthCheck from "../../components/AuthCheck"
 import { doc, setDoc } from "firebase/firestore";
 import { auth, db } from "../../lib/firebase";
-import { useState } from "react";
+import { useContext } from "react";
+import { useDocumentData, useDocumentDataOnce } from "react-firebase-hooks/firestore";
+import { UserContext } from "../../lib/context";
 
 export default function ProfilePage({}) {
-
-  const [token, setToken] = useState('');
 
   return (
     <AuthCheck>
       <h1>Profile</h1>
-      <input type="text" id="osf-token" placeholder="OSF Token" value={token} onChange={(e)=>setToken(e.target.value)} />
-      <button onClick={() => handleSaveButton(token)}>Save</button>
+      <ProfileForm />
     </AuthCheck>
   )
+}
+
+function ProfileForm() {
+  const { user } = useContext(UserContext);
+  const [data, loading, error, snapshot, reload] = useDocumentData(doc(db, 'users', user.uid));
+
+  return(<>
+    {loading && <p>Loading...</p>}
+    {data && <>
+      <input type="text" id="osf-token" placeholder="OSF Token" defaultValue={data.osfToken} />
+      <button onClick={handleSaveButton}>Save</button>
+    </>}
+  </>)
 }
 
 async function handleSaveButton(token) {
   try {
     const userDoc = doc(db, 'users', auth.currentUser.uid);
-    await setDoc(userDoc, {osfToken: token}, {merge: true});
+    await setDoc(userDoc, {osfToken: document.querySelector("#osf-token").value}, {merge: true});
   } catch (error) {
     console.log(error);
   }
