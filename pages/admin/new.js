@@ -56,13 +56,14 @@ async function handleCreateExperiment(){
       })
     });
 
-    console.log(osfResult);
+    const nodeData = await osfResult.json();
+    console.log(nodeData);
 
     await setDoc(doc(db, `users/${user.uid}/experiments/${id}`), {
       title: title,
       active: false,
       id: id,
-      osfRepo: ""
+      osfRepo: nodeData.data.id,
     });
   } catch (error) {
     console.log(error);
