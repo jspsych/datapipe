@@ -1,10 +1,8 @@
 import AuthCheck from '../../components/AuthCheck';
 import { useRouter } from 'next/router';
 import { useDocumentData } from 'react-firebase-hooks/firestore';
-import { useContext } from 'react';
-import { UserContext } from '../../lib/context';
 import { db, auth } from '../../lib/firebase';
-import { doc } from "firebase/firestore";
+import { doc, setDoc } from "firebase/firestore";
 
 export default function ExperimentPage() {
 
@@ -29,12 +27,21 @@ function ExperimentEditForm({expId}) {
         <input type="text" id="title" placeholder="Experiment Title" defaultValue={data.title} />
         <input type="text" id="osf-repo" placeholder="OSF Repo" defaultValue={data.osfRepo} />
         <input type="checkbox" id="active" defaultChecked={data.active} />
-        <button onClick={handleSaveButton}>Save</button>
+        <button onClick={()=>{handleSaveButton(expId)}}>Save</button>
       </>}
     </>
   )
 }
 
-function handleSaveButton() {
-  console.log("Saving");
+async function handleSaveButton(expId) {
+  try {
+    await setDoc(doc(db, `users/${auth.currentUser.uid}/experiments/${expId}`), {
+      title: document.querySelector('#title').value,
+      osfRepo: document.querySelector('#osf-repo').value,
+      active: document.querySelector('#active').checked,
+    }, {merge: true});
+  }
+  catch (error) {
+    console.error(error);
+  }
 }
