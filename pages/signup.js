@@ -47,6 +47,7 @@ async function handleCreateAccountButton(email, password) {
     await setDoc(doc(db, "users", user.uid), {
       email: user.email,
       uid: user.uid,
+      experiments: []
     });
   }
   catch (error) {

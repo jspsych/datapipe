@@ -1,7 +1,7 @@
 
 import { customAlphabet } from 'nanoid';
 import AuthCheck from '../../components/AuthCheck';
-import { doc, setDoc, getDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc, writeBatch, arrayUnion } from "firebase/firestore";
 import { db, auth } from '../../lib/firebase';
 
 export default function NewExperimentPage({}) {
@@ -58,13 +58,24 @@ async function handleCreateExperiment(){
 
     const nodeData = await osfResult.json();
     console.log(nodeData);
+    
+    const batch = writeBatch(db);
 
-    await setDoc(doc(db, `users/${user.uid}/experiments/${id}`), {
+    const experimentDoc = doc(db, 'experiments', id);
+    batch.set(experimentDoc, {
       title: title,
+      osfRepo: nodeData.data.id,
       active: false,
       id: id,
-      osfRepo: nodeData.data.id,
+      owner: user.uid,
     });
+
+    const userDoc = doc(db, `users/${user.uid}`);
+    batch.update(userDoc, {
+      experiments: arrayUnion(id)
+    });
+   
+    await batch.commit();
   } catch (error) {
     console.log(error);
   }
