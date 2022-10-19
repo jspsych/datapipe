@@ -9,6 +9,7 @@ export default function AdminPage({}) {
     <AuthCheck>
       <h1>Your Experiments</h1>
       <ExperimentList />
+      <Link href="/admin/new">Create New Experiment</Link>
     </AuthCheck>
   )
 }
