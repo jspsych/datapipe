@@ -1,8 +1,8 @@
 import { useContext, useState } from 'react';
-import { nanoid } from 'nanoid';
+import { customAlphabet } from 'nanoid';
 import AuthCheck from '../../components/AuthCheck';
 import { UserContext } from '../../lib/context';
-import { collection, addDoc } from "firebase/firestore";
+import { doc, setDoc } from "firebase/firestore";
 
 import { db } from '../../lib/firebase';
 
@@ -26,12 +26,15 @@ export default function New({}) {
 async function handleCreateExperiment(user, title){
   //e.preventDefault();
   console.log("Creating experiment");
+  const nanoid = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', 12);
+  const id = nanoid();
 
   try {
-    await addDoc(collection(db, `users/${user.uid}/experiments`), {
+    await setDoc(doc(db, `users/${user.uid}/experiments/${id}`), {
       title: title,
       active: false,
-      id: nanoid(12)
+      id: id,
+      osfRepo: ""
     });
   } catch (error) {
     console.log(error);
