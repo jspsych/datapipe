@@ -59,12 +59,26 @@ async function handleCreateExperiment(){
     const nodeData = await osfResult.json();
     console.log(nodeData);
     
+    const filesLink = nodeData.data.relationships.files.links.related.href;
+
+    const filesResult = await fetch(filesLink, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${osfToken}`,
+      }
+    });
+
+    const filesData = await filesResult.json();
+    const uploadLink = filesData.data[0].links.upload;
+
     const batch = writeBatch(db);
 
     const experimentDoc = doc(db, 'experiments', id);
     batch.set(experimentDoc, {
       title: title,
       osfRepo: nodeData.data.id,
+      osfFilesLink: uploadLink,
       active: false,
       id: id,
       owner: user.uid,

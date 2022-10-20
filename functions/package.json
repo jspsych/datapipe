@@ -12,11 +12,13 @@
     "node": "16"
   },
   "main": "index.js",
+  "type": "module",
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.18.2",
     "firebase-admin": "^10.0.2",
-    "firebase-functions": "^4.0.1"
+    "firebase-functions": "^4.0.1",
+    "node-fetch": "^3.2.10"
   },
   "devDependencies": {
     "firebase-functions-test": "^0.2.0"
