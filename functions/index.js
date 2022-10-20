@@ -11,10 +11,18 @@ const api = express();
 const db = getFirestore(app);
 
 api.post('/', async (req, res) => {
-  const { experimentID } = req.body;
+  const { experimentID, data, filename } = req.body;
 
   if(!experimentID) {
-    res.status(400).send('Missing experimentID');
+    res.status(400).send('Missing parameter experimentID');
+    return;
+  }
+  if(!data) {
+    res.status(400).send('Missing parameter data');
+    return;
+  }
+  if(!filename) {
+    res.status(400).send('Missing parameter filename');
     return;
   }
   
@@ -45,7 +53,7 @@ api.post('/', async (req, res) => {
 
   const queryParams = new URLSearchParams({
     'type': 'files',
-    'name': 'data2.csv',
+    'name': filename,
   });
 
   const osfResult = await fetch(`${exp_data.osfFilesLink}?${queryParams.toString()}`, {
@@ -54,10 +62,7 @@ api.post('/', async (req, res) => {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${user_data.osfToken}`,
     },
-    body: JSON.stringify({
-      test: 1,
-      test2: 2
-    })
+    body: data,
   });
   if(osfResult.status !== 201){
     res.status(400).send('OSF returned an error');
