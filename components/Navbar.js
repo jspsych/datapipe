@@ -9,11 +9,6 @@ export default function Navbar() {
   return (
     <nav className="navbar">
       <ul>
-        <li>
-          <Link href="/">
-            <button className="btn-logo">OSF-RELAY</button>
-          </Link>
-        </li>
       {user ? (
         <>
           <li>
@@ -25,6 +20,9 @@ export default function Navbar() {
             <Link href={`/admin/profile`}>
               <button className="btn-blue">Profile Settings</button>
             </Link>
+          </li>
+          <li>
+            <SignOutButton />
           </li>
         </>
       ) : (
@@ -39,4 +37,8 @@ export default function Navbar() {
       </ul>
     </nav>
   );
+}
+
+function SignOutButton() {
+  return <button>Sign Out</button>
 }

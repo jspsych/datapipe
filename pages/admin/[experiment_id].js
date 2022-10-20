@@ -19,7 +19,7 @@ export default function ExperimentPage() {
 
 function ExperimentEditForm({expId}) {
 
-  const [data, loading, error, snapshot, reload] = useDocumentData(doc(db, `users/${auth.currentUser.uid}/experiments/${expId}`));
+  const [data, loading, error, snapshot, reload] = useDocumentData(doc(db, `experiments/${expId}`));
   return (
     <>
       {loading && <p>Loading...</p>}
@@ -35,7 +35,7 @@ function ExperimentEditForm({expId}) {
 
 async function handleSaveButton(expId) {
   try {
-    await setDoc(doc(db, `users/${auth.currentUser.uid}/experiments/${expId}`), {
+    await setDoc(doc(db, `experiments/${expId}`), {
       title: document.querySelector('#title').value,
       osfRepo: document.querySelector('#osf-repo').value,
       active: document.querySelector('#active').checked,

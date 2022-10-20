@@ -1,5 +1,5 @@
 import AuthCheck from "../../components/AuthCheck";
-import { collection, query } from "firebase/firestore";
+import { collection, query, where } from "firebase/firestore";
 import { db, auth } from '../../lib/firebase';
 import { useCollectionData } from "react-firebase-hooks/firestore";
 import Link from "next/link";
@@ -16,8 +16,8 @@ export default function AdminPage({}) {
 
 function ExperimentList() {
   const user = auth.currentUser;
-  const ref = collection(db, `users/${user.uid}/experiments`);
-  const q = query(ref);
+  const experiments = collection(db, `experiments`);
+  const q = query(experiments, where("owner", "==", user.uid));
   const [querySnapshot] = useCollectionData(q);
 
   console.log(querySnapshot)
