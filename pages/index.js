@@ -13,7 +13,7 @@ export default function Home() {
       {user ? 
         <Link href="/admin">Go to Dashboard</Link>
         :
-        <Link href="/signin">Create an Account</Link>
+        <Link href="/signup">Create an Account</Link>
       }
     </div>
   )
