@@ -54,6 +54,29 @@ describe('/users', () => {
     await assertFails(getDoc(doc(user123.firestore(), 'users/user456')));
   });
 
+  it('should allow writes with the right data', async () => {
+    const user123 = testEnv.authenticatedContext('user123');
+
+    await assertSucceeds(setDoc(doc(user123.firestore(), 'users/user123'), {
+      email: 'john@doe.com',
+      experiments: ['exp1', 'exp2'],
+      osfToken: 'abc123',
+      uid: 'user123'
+    }));
+  });
+
+  it('should deny writes when uid does not match authenticated user id', async () => {
+    const user123 = testEnv.authenticatedContext('user123');
+
+    await assertFails(setDoc(doc(user123.firestore(), 'users/user123'), {
+      email: 'john@doe.com',
+      experiments: ['exp1', 'exp2'],
+      osfToken: 'abc123',
+      uid: 'user456'
+    }));
+  });
+
+
   it('should deny writes that have extra keys', async () => {
     const user123 = testEnv.authenticatedContext('user123');
     
@@ -66,7 +89,7 @@ describe('/users', () => {
 });
 
 describe('/experiments', () => {
-  it('should allow deny read access to unauthenticated users', async () => {
+  it('should deny read access to unauthenticated users', async () => {
     const unauth = testEnv.unauthenticatedContext();
 
     await assertFails(getDoc(doc(unauth.firestore(), 'experiments/123')));
