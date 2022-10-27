@@ -53,6 +53,16 @@ describe('/users', () => {
     
     await assertFails(getDoc(doc(user123.firestore(), 'users/user456')));
   });
+
+  it('should deny writes that have extra keys', async () => {
+    const user123 = testEnv.authenticatedContext('user123');
+    
+    await assertFails(setDoc(doc(user123.firestore(), 'users/user123'), {
+      name: 'John Doe',
+      email: 'john@doe.com',
+      extra: 'extra'
+    }));
+  })
 });
 
 describe('/experiments', () => {
@@ -75,7 +85,7 @@ describe('/experiments', () => {
     await assertSucceeds(getDoc(doc(user123.firestore(), 'experiments/123')));
   });
 
-  it('should deny read access to authenticated users for their own doc', async () => {
+  it('should deny read access to authenticated users for someone elses doc', async () => {
     const data = {
       'experiments/456': {
         owner: 'user456',
