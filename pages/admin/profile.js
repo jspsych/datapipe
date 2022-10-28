@@ -1,8 +1,8 @@
 import AuthCheck from "../../components/AuthCheck"
 import { doc, setDoc } from "firebase/firestore";
 import { auth, db } from "../../lib/firebase";
-import { useContext, useState, useEffect } from "react";
-import { useDocumentData, useDocumentDataOnce } from "react-firebase-hooks/firestore";
+import { useContext } from "react";
+import { useDocumentData } from "react-firebase-hooks/firestore";
 import { UserContext } from "../../lib/context";
 
 export default function ProfilePage({}) {
@@ -23,44 +23,46 @@ function ProfileForm() {
     {loading && <p>Loading...</p>}
     {data && <>
       <input type="text" id="osf-token" placeholder="OSF Token" defaultValue={data.osfToken} />
-      <button onClick={handleSaveButton}>Save</button>
-      <ValidToken token={data.osfToken} />
+      <ValidToken isValid={data.osfTokenValid} />
+      <SaveProfileButon isValid={data.osfTokenValid} />
     </>}
   </>)
 }
 
-function ValidToken({token}){
-  const [isValid, setIsValid] = useState(false);
-
-  useEffect(() => {
-    const osfAPIFetch = async () => {
-      const data = await fetch('https://api.osf.io/v2/', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        }
-      });
-
-      if (data.status === 200) {
-        setIsValid(true);
-      } else {
-        setIsValid(false);
-      }
-    }
-
-    osfAPIFetch();
-  }, [token]);
-
+function ValidToken({isValid}){
   return (
-    <p>{isValid ? 'Valid' : 'Invalid'}</p>
+    <p>OSF Token is {isValid ? 'Valid' : 'Invalid'}</p>
   )
 }
 
-async function handleSaveButton(token) {
+function SaveProfileButon({isValid}) {
+  return (
+    <button onClick={handleSaveButton}>Save</button>
+  )
+}
+
+async function handleSaveButton() {
+  const token = document.querySelector('#osf-token').value;
   try {
+    const isTokenValid = await checkOSFToken(token);
     const userDoc = doc(db, 'users', auth.currentUser.uid);
-    await setDoc(userDoc, {osfToken: document.querySelector("#osf-token").value}, {merge: true});
+    await setDoc(userDoc, {osfToken: token, osfTokenValid: isTokenValid}, {merge: true});  
   } catch (error) {
     console.log(error);
+  }
+}
+
+async function checkOSFToken(token) {
+  const data = await fetch('https://api.osf.io/v2/', {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    }
+  });
+
+  if (data.status === 200) {
+    return true;
+  } else {
+    return false;
   }
 }
