@@ -13,11 +13,11 @@ let testEnv;
 
 async function seedDB(data){
   await testEnv.withSecurityRulesDisabled(async (context) => {
-    const dbAdmin = context.firestore();
+      const dbAdmin = context.firestore();
 
       await setDoc(doc(dbAdmin, key), value);
     }
-  });
+  );
 }
 
 beforeAll(async () => {
