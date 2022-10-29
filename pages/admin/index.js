@@ -4,6 +4,7 @@ import { db, auth } from '../../lib/firebase';
 import { useCollectionData } from "react-firebase-hooks/firestore";
 import Link from "next/link";
 import { Heading, Box, Button, Text, Avatar, Flex, HStack, Link as ChakraLink, Stack, MenuItem, Menu, MenuButton, MenuList, MenuDivider, Icon } from "@chakra-ui/react";
+import { CheckCircleIcon } from "@chakra-ui/icons";
 
 export default function AdminPage({}) {
   return (
@@ -33,9 +34,9 @@ function ExperimentList() {
 function ExperimentItem({exp}){
   return (
     <Box id={exp.id}>
-      <h2>{exp.title}</h2>
+      <Heading>{exp.title}</Heading>
       <Link href={`/admin/${exp.id}`}>edit</Link>
-      <p>{exp.active}</p>
+      <CheckCircleIcon color={exp.active ? 'green' : 'red'}/>
     </Box>
   )
 }
