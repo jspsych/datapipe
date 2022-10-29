@@ -3,11 +3,12 @@ import { collection, query, where } from "firebase/firestore";
 import { db, auth } from '../../lib/firebase';
 import { useCollectionData } from "react-firebase-hooks/firestore";
 import Link from "next/link";
+import { Heading, Box, Button, Text, Avatar, Flex, HStack, Link as ChakraLink, Stack, MenuItem, Menu, MenuButton, MenuList, MenuDivider, Icon } from "@chakra-ui/react";
 
 export default function AdminPage({}) {
   return (
     <AuthCheck>
-      <h1>Your Experiments</h1>
+      <Heading>Your Experiments</Heading>
       <ExperimentList />
       <Link href="/admin/new">Create New Experiment</Link>
     </AuthCheck>
@@ -23,18 +24,18 @@ function ExperimentList() {
   console.log(querySnapshot)
 
   return (
-    <div>
+    <Box>
       {querySnapshot && querySnapshot.map(exp => <ExperimentItem key={exp.id} exp={exp} />)}
-    </div>
+    </Box>
   )
 }
 
 function ExperimentItem({exp}){
   return (
-    <div id={exp.id}>
+    <Box id={exp.id}>
       <h2>{exp.title}</h2>
       <Link href={`/admin/${exp.id}`}>edit</Link>
       <p>{exp.active}</p>
-    </div>
+    </Box>
   )
 }

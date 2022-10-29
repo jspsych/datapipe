@@ -11,12 +11,18 @@
     "test": "jest --watch"
   },
   "dependencies": {
+    "@chakra-ui/icons": "^2.0.11",
+    "@chakra-ui/react": "^2.3.6",
+    "@emotion/react": "^11.10.5",
+    "@emotion/styled": "^11.10.5",
     "firebase": "^9.12.1",
+    "framer-motion": "^6.5.1",
     "nanoid": "^4.0.0",
     "next": "12.3.1",
     "react": "18.2.0",
     "react-dom": "18.2.0",
-    "react-firebase-hooks": "^5.0.3"
+    "react-firebase-hooks": "^5.0.3",
+    "react-icons": "^4.6.0"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^2.0.4",
