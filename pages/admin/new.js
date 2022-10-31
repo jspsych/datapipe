@@ -11,33 +11,34 @@ import { db, auth } from "../../lib/firebase";
 import { useContext } from "react";
 import { UserContext } from "../../lib/context";
 import { useDocumentData } from "react-firebase-hooks/firestore";
+import Link from "next/link";
+import { Button, Stack, Heading, FormControl, FormLabel, Input, Spinner } from "@chakra-ui/react";
 
 export default function NewExperimentPage({}) {
   const { user } = useContext(UserContext);
 
-  const [data, loading, error] = useDocumentData(
-    doc(db, "users", user.uid)
-  );
+  const [data, loading, error] = useDocumentData(doc(db, "users", user.uid));
 
   return (
     <AuthCheck>
-      {loading && (
-        <>
-          <p>Loading...</p>
-        </>
-      )}
+      {loading && <Spinner color="green.500" size={"xl"} />}
       {data && data.osfTokenValid && (
-        <div>
-          <h1>Create a New Experiment</h1>
-          <input type="text" id="title" placeholder="Experiment Title" />
-          <input type="text" id="osf-repo" placeholder="Parent OSF Repo" />
-          <input
-            type="text"
-            id="osf-component-name"
-            placeholder="OSF Component Name"
-          />
-          <button onClick={handleCreateExperiment}>Create</button>
-        </div>
+        <Stack>
+          <Heading>Create a New Experiment</Heading>
+          <FormControl id="title">
+            <FormLabel>Title</FormLabel>
+            <Input type="text" />
+          </FormControl>
+          <FormControl id="osf-repo">
+            <FormLabel>OSF Repo</FormLabel>
+            <Input type="text" />
+          </FormControl>
+          <FormControl id="osf-component-name">
+            <FormLabel>OSF Component Name</FormLabel>
+            <Input type="text" />
+          </FormControl>
+          <Button onClick={handleCreateExperiment}>Create</Button>
+        </Stack>
       )}
       {data && !data.osfTokenValid && (
         <div>
@@ -46,6 +47,11 @@ export default function NewExperimentPage({}) {
             Before you can create an experiment, you need to connect your OSF
             account.
           </p>
+          <Link href="/admin/profile">
+            <Button variant={"solid"} colorScheme={"green"} size={"md"}>
+              Connect OSF Account
+            </Button>
+          </Link>
         </div>
       )}
     </AuthCheck>
