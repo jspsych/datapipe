@@ -16,10 +16,11 @@ import {
   MenuButton,
   MenuList,
   MenuDivider,
-  Icon
+  Icon,
 } from "@chakra-ui/react";
 import { AddIcon } from "@chakra-ui/icons";
 import { VscDebugDisconnect } from "react-icons/vsc";
+import { auth } from "../lib/firebase";
 
 export default function Navbar() {
   const { user } = useContext(UserContext);
@@ -46,37 +47,46 @@ export default function Navbar() {
           </HStack>
         </HStack>
         <HStack>
-        <Link href="/admin/new">
-          <Button
-            variant={"solid"}
-            colorScheme={"green"}
-            size={"sm"}
-            mr={4}
-            leftIcon={<AddIcon />}
-          >
-            New Experiment
-          </Button>
-        </Link>
-        <Menu>
-          <MenuButton
-            as={Button}
-            rounded={"full"}
-            variant={"link"}
-            cursor={"pointer"}
-            minW={0}
-          >
-            Account
-          </MenuButton>
-          <MenuList>
-            <MenuItem>
-              <Link href="/admin/profile" passHref>
-                <ChakraLink>Settings</ChakraLink>
-              </Link>
-            </MenuItem>
-            <MenuDivider />
-            <MenuItem>Sign Out</MenuItem>
-          </MenuList>
-        </Menu>
+          <Link href="/admin/new">
+            <Button
+              variant={"solid"}
+              colorScheme={"green"}
+              size={"sm"}
+              mr={4}
+              leftIcon={<AddIcon />}
+            >
+              New Experiment
+            </Button>
+          </Link>
+          {user && (
+            <Menu>
+              <MenuButton
+                as={Button}
+                rounded={"full"}
+                variant={"link"}
+                cursor={"pointer"}
+                minW={0}
+              >
+                Account
+              </MenuButton>
+              <MenuList>
+                <MenuItem>
+                  <Link href="/admin/profile" passHref>
+                    <ChakraLink>Settings</ChakraLink>
+                  </Link>
+                </MenuItem>
+                <MenuDivider />
+                <MenuItem onClick={()=>auth.signOut()}>Sign Out</MenuItem>
+              </MenuList>
+            </Menu>
+          )}
+          {!user && (
+            <Link href="/signin">
+              <Button variant={"ghost"} colorScheme={"green"} size={"sm"} mr={4}>
+                Sign In
+              </Button>
+            </Link>
+          )}
         </HStack>
       </Flex>
     </Box>
