@@ -1,42 +1,40 @@
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
-import { useState } from "react";
 
 import { auth, db } from "../lib/firebase";
 
+import { FormControl, Stack, Spinner, Input, InputGroup, InputLeftAddon, Checkbox, FormLabel, Button } from '@chakra-ui/react';
+
 export default function SignUpPage({}) {
-  const [emailVal, setEmail] = useState("");
-  const [passwordVal, setPassword] = useState("");
 
   return (
-    <div>
-      <h1>Sign Up Page</h1>
-      <div>
-        <input
-          type="email"
-          id="email"
-          placeholder="Email"
-          value={emailVal}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <input
-          type="password"
-          id="password"
-          placeholder="Password"
-          value={passwordVal}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-        <button
-          onClick={() => handleCreateAccountButton(emailVal, passwordVal)}
-        >
-          Create Account
-        </button>
-      </div>
-    </div>
+    <Stack>
+      <FormControl id="email">
+        <FormLabel>Email</FormLabel>
+        <Input type="email" />
+      </FormControl>
+      <FormControl id="password">
+        <FormLabel>Password</FormLabel>
+        <Input type="password" />
+      </FormControl>
+      <Button
+
+        variant={"solid"}
+        colorScheme={"green"}
+        size={"md"}
+        mr={4}
+        onClick={handleCreateAccount}
+      >
+        Create Account
+      </Button>
+    </Stack>
   );
 }
 
-async function handleCreateAccountButton(email, password) {
+async function handleCreateAccount() {
+  const email = document.querySelector('#email').value;
+  const password = document.querySelector('#password').value;
+  
   try {
     const userCredential = await createUserWithEmailAndPassword(
       auth,
