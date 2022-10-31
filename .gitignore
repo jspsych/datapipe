@@ -141,3 +141,5 @@ yarn-error.log*
 next-env.d.ts
 
 osf-token-info.txt
+
+.firebase
