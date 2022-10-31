@@ -4,6 +4,8 @@ import { useDocumentData } from 'react-firebase-hooks/firestore';
 import { db, auth } from '../../lib/firebase';
 import { doc, setDoc } from "firebase/firestore";
 
+import { FormControl, Stack, Spinner, Input, InputGroup, InputLeftAddon, Checkbox, FormLabel, Button } from '@chakra-ui/react';
+
 export default function ExperimentPage() {
 
   const router = useRouter();
@@ -11,7 +13,6 @@ export default function ExperimentPage() {
 
   return (
     <AuthCheck>
-      <h1>Experiment Page</h1>
       <ExperimentEditForm expId={experiment_id} />
     </AuthCheck>
   )
@@ -22,13 +23,31 @@ function ExperimentEditForm({expId}) {
   const [data, loading, error, snapshot, reload] = useDocumentData(doc(db, `experiments/${expId}`));
   return (
     <>
-      {loading && <p>Loading...</p>}
-      {data && <>
-        <input type="text" id="title" placeholder="Experiment Title" defaultValue={data.title} />
-        <input type="text" id="osf-repo" placeholder="OSF Repo" defaultValue={data.osfRepo} />
-        <input type="checkbox" id="active" defaultChecked={data.active} />
-        <button onClick={()=>{handleSaveButton(expId)}}>Save</button>
-      </>}
+      {loading && <Spinner color="green.500" size={"xl"} />}
+      {data &&
+      <Stack>
+        <FormControl id="title">
+          <FormLabel>Title</FormLabel>
+          <Input type="text" defaultValue={data.title} />
+        </FormControl>
+        <FormControl id="osf-repo">
+          <FormLabel>OSF Repo</FormLabel>
+          <Input type="text" defaultValue={data.osfRepo} />
+        </FormControl>
+        <FormControl id="active">
+          <FormLabel>Active</FormLabel>
+          <Checkbox defaultChecked={data.active} />
+        </FormControl>
+        <Button
+          variant={"solid"}
+          colorScheme={"green"}
+          size={"md"}
+          mr={4}
+          onClick={() => handleSaveButton(expId)}
+        >
+          Save
+        </Button>
+      </Stack>}
     </>
   )
 }
