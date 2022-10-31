@@ -57,10 +57,6 @@ function ProfileForm() {
   );
 }
 
-function ValidToken({ isValid }) {
-  return <p>OSF Token is {isValid ? "Valid" : "Invalid"}</p>;
-}
-
 async function handleSaveButton() {
   const token = document.querySelector("#osf-token").value;
   try {

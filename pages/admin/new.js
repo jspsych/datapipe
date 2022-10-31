@@ -12,16 +12,23 @@ import { useContext } from "react";
 import { UserContext } from "../../lib/context";
 import { useDocumentData } from "react-firebase-hooks/firestore";
 import Link from "next/link";
-import { Button, Stack, Heading, FormControl, FormLabel, Input, Spinner } from "@chakra-ui/react";
+import { Button, Stack, Heading, FormControl, FormLabel, Input, Spinner, InputGroup, InputLeftAddon } from "@chakra-ui/react";
 
 export default function NewExperimentPage({}) {
+  return (
+    <AuthCheck>
+      <NewExperimentForm />
+    </AuthCheck>
+  );
+}
+
+function NewExperimentForm(){
   const { user } = useContext(UserContext);
 
   const [data, loading, error] = useDocumentData(doc(db, "users", user.uid));
 
-  return (
-    <AuthCheck>
-      {loading && <Spinner color="green.500" size={"xl"} />}
+  return(<>
+    {loading && <Spinner color="green.500" size={"xl"} />}
       {data && data.osfTokenValid && (
         <Stack>
           <Heading>Create a New Experiment</Heading>
@@ -30,11 +37,14 @@ export default function NewExperimentPage({}) {
             <Input type="text" />
           </FormControl>
           <FormControl id="osf-repo">
-            <FormLabel>OSF Repo</FormLabel>
-            <Input type="text" />
+            <FormLabel>Existing OSF Project</FormLabel>
+            <InputGroup>
+              <InputLeftAddon>https://osf.io/</InputLeftAddon>
+              <Input type="text" />
+            </InputGroup>
           </FormControl>
           <FormControl id="osf-component-name">
-            <FormLabel>OSF Component Name</FormLabel>
+            <FormLabel>New OSF Data Component Name</FormLabel>
             <Input type="text" />
           </FormControl>
           <Button onClick={handleCreateExperiment}>Create</Button>
@@ -53,9 +63,7 @@ export default function NewExperimentPage({}) {
             </Button>
           </Link>
         </div>
-      )}
-    </AuthCheck>
-  );
+  )}</>)
 }
 
 async function handleCreateExperiment() {

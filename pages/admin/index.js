@@ -16,21 +16,11 @@ import {
   Td,
   Tag,
   TagLabel,
-  TableCaption,
   TableContainer,
   IconButton,
-  Text,
-  Avatar,
-  Flex,
   HStack,
-  Link as ChakraLink,
   Stack,
-  MenuItem,
-  Menu,
-  MenuButton,
-  MenuList,
-  MenuDivider,
-  Icon,
+  Spinner
 } from "@chakra-ui/react";
 import { DeleteIcon, EditIcon } from "@chakra-ui/icons";
 
@@ -54,11 +44,10 @@ function ExperimentList() {
   const user = auth.currentUser;
   const experiments = collection(db, `experiments`);
   const q = query(experiments, where("owner", "==", user.uid));
-  const [querySnapshot] = useCollectionData(q);
-
-  console.log(querySnapshot);
+  const [querySnapshot, loading] = useCollectionData(q);
 
   return (
+    <>
     <TableContainer>
       <Table>
         <Thead>
@@ -68,10 +57,16 @@ function ExperimentList() {
             <Th></Th>
           </Tr>
         </Thead>
-      {querySnapshot &&
-        querySnapshot.map((exp) => <ExperimentItem key={exp.id} exp={exp} />)}
+        <Tbody>
+          {querySnapshot &&
+            querySnapshot.map((exp) => (
+              <ExperimentItem key={exp.id} exp={exp} />
+            ))}
+        </Tbody>
       </Table>
     </TableContainer>
+    {loading && <Spinner color="green.500" size={"xl"} />}
+    </>
   );
 }
 
@@ -79,8 +74,12 @@ function ExperimentItem({ exp }) {
   return (
     <Tr id={exp.id}>
       <Td>{exp.title}</Td>
-      <Td><ExperimentStatusTag active={exp.active} /></Td>
-      <Td><ExperimentActions exp={exp} /></Td>
+      <Td>
+        <ExperimentStatusTag active={exp.active} />
+      </Td>
+      <Td>
+        <ExperimentActions exp={exp} />
+      </Td>
     </Tr>
   );
 }
@@ -93,13 +92,13 @@ function ExperimentStatusTag({ active }) {
   );
 }
 
-function ExperimentActions({exp}){
+function ExperimentActions({ exp }) {
   return (
     <HStack>
       <Link href={`/admin/${exp.id}`}>
-        <IconButton aria-label='Edit' icon={<EditIcon />} />
+        <IconButton aria-label="Edit" icon={<EditIcon />} />
       </Link>
-      <IconButton aria-label='Delete' icon={<DeleteIcon />} />
+      <IconButton aria-label="Delete" icon={<DeleteIcon />} />
     </HStack>
-  )
+  );
 }
