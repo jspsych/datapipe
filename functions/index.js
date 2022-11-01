@@ -8,9 +8,12 @@ import cors from "cors";
 const app = initializeApp();
 const api = express();
 
+api.use(cors({ origin: true }));
+
 const db = getFirestore(app);
 
 api.post('/', async (req, res) => {
+
   const { experimentID, data, filename } = req.body;
 
   if(!experimentID) {
