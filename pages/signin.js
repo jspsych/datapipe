@@ -5,7 +5,7 @@ export default function SignInPage({}) {
 
   return (
     <Box>
-      <SignInForm />
+      <SignInForm routeAfterSignIn={"/admin"}/>
     </Box>
   )
 }

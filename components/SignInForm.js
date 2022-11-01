@@ -1,8 +1,9 @@
 import { Button, Input, InputGroup, InputLeftAddon, Stack, Heading, FormControl, FormLabel } from "@chakra-ui/react";
 import { auth } from "../lib/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
+import Router from "next/router";
 
-export default function SignInForm({afterSignIn}) {
+export default function SignInForm({routeAfterSignIn}) {
   return(
     <Stack>
       <Heading>Sign In</Heading>
@@ -19,18 +20,16 @@ export default function SignInForm({afterSignIn}) {
   )
 }
 
-function handleSignInButton() {
+async function handleSignInButton() {
   const email = document.getElementById("email").value;
   const password = document.getElementById("password").value;
 
-  signInWithEmailAndPassword(auth, email, password)
-    .then((userCredential) => {
-      // Signed in
-      const user = userCredential.user;
-      // ...
-    })
-    .catch((error) => {
-      const errorCode = error.code;
-      const errorMessage = error.message;
-    });
+  try{
+    const user = await signInWithEmailAndPassword(auth, email, password);
+    Router.push(routeAfterSignIn);
+  } catch(error) {
+    console.log("Sign in failed");
+    console.log(error);
+  }
+    
 }

@@ -3,6 +3,8 @@ import { doc, setDoc } from "firebase/firestore";
 
 import { auth, db } from "../lib/firebase";
 
+import Router from "next/router";
+
 import { FormControl, Stack, Spinner, Input, InputGroup, InputLeftAddon, Checkbox, FormLabel, Button } from '@chakra-ui/react';
 
 export default function SignUpPage({}) {
@@ -49,6 +51,8 @@ async function handleCreateAccount() {
       osfTokenValid: false,
       experiments: []
     });
+
+    Router.push("/admin")
   }
   catch (error) {
     console.log(error);
