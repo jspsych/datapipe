@@ -6,11 +6,11 @@ import fetch from "node-fetch";
 import cors from "cors";
 
 const app = initializeApp();
+const db = getFirestore(app);
+
 const api = express();
 
 api.use(cors({ origin: true }));
-
-const db = getFirestore(app);
 
 api.post('/', async (req, res) => {
 
