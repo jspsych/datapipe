@@ -1,6 +1,6 @@
 import functions from "firebase-functions";
 import { initializeApp } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import express from "express";
 import fetch from "node-fetch";
 import cors from "cors";
@@ -29,7 +29,8 @@ api.post('/', async (req, res) => {
     return;
   }
   
-  const exp_doc = await db.doc(`experiments/${experimentID}`).get();
+  const exp_doc_ref = db.collection('experiments').doc(experimentID);
+  const exp_doc = await exp_doc_ref.get();
   
   if(!exp_doc.exists){
     res.status(400).send('Experiment does not exist');
@@ -72,10 +73,11 @@ api.post('/', async (req, res) => {
     return;
   }
 
+  await exp_doc_ref.set({sessions: FieldValue.increment(1)}, {merge: true});
+
   res.status(201).send(`Success`);
   
 });
-
 
 const api_export = functions.https.onRequest(api);
 

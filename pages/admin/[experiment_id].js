@@ -54,6 +54,8 @@ function ExperimentEditForm({ expId }) {
       {data && (
         <Stack>
           <ExperimentTitle title={data.title} />
+          <Text>Experiment ID</Text>
+          <Text>{data.id}</Text>
           <Text>Parent OSF Project</Text>
           <Link href={`https://osf.io/${data.osfRepo}`} isExternal>
             {`https://osf.io/${data.osfRepo}`} <ExternalLinkIcon mx="2px" />
