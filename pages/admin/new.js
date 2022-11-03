@@ -8,10 +8,11 @@ import {
   arrayUnion,
 } from "firebase/firestore";
 import { db, auth } from "../../lib/firebase";
-import { useContext } from "react";
+import { useContext, useState } from "react";
 import { UserContext } from "../../lib/context";
 import { useDocumentData } from "react-firebase-hooks/firestore";
 import Link from "next/link";
+import Router from "next/router";
 import { Button, Stack, Heading, FormControl, FormLabel, Input, Spinner, InputGroup, InputLeftAddon } from "@chakra-ui/react";
 
 export default function NewExperimentPage({}) {
@@ -24,6 +25,7 @@ export default function NewExperimentPage({}) {
 
 function NewExperimentForm(){
   const { user } = useContext(UserContext);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [data, loading, error] = useDocumentData(doc(db, "users", user.uid));
 
@@ -47,7 +49,7 @@ function NewExperimentForm(){
             <FormLabel>New OSF Data Component Name</FormLabel>
             <Input type="text" />
           </FormControl>
-          <Button onClick={handleCreateExperiment}>Create</Button>
+          <Button onClick={()=>handleCreateExperiment(setIsSubmitting)} isLoading={isSubmitting}>Create</Button>
         </Stack>
       )}
       {data && !data.osfTokenValid && (
@@ -66,7 +68,9 @@ function NewExperimentForm(){
   )}</>)
 }
 
-async function handleCreateExperiment() {
+async function handleCreateExperiment(setIsSubmitting) {
+  setIsSubmitting(true);
+
   const user = auth.currentUser;
   const title = document.querySelector("#title").value;
   const osfRepo = document.querySelector("#osf-repo").value;
@@ -143,7 +147,10 @@ async function handleCreateExperiment() {
     });
 
     await batch.commit();
+
+    Router.push(`/admin/${id}`);
   } catch (error) {
+    setIsSubmitting(false);
     console.log(error);
   }
 }
