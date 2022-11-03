@@ -1,7 +1,7 @@
 import AuthCheck from "../../components/AuthCheck";
 import { doc, setDoc } from "firebase/firestore";
 import { auth, db } from "../../lib/firebase";
-import { useContext } from "react";
+import { useContext, useState } from "react";
 import { useDocumentData } from "react-firebase-hooks/firestore";
 import { UserContext } from "../../lib/context";
 import {
@@ -31,6 +31,7 @@ function ProfileForm() {
   const [data, loading, error, snapshot, reload] = useDocumentData(
     doc(db, "users", user.uid)
   );
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   return (
     <>
@@ -47,7 +48,8 @@ function ProfileForm() {
             colorScheme={"green"}
             size={"md"}
             mr={4}
-            onClick={handleSaveButton}
+            onClick={()=>handleSaveButton(setIsSubmitting)}
+            isLoading={isSubmitting}
           >
             Save
           </Button>
@@ -57,8 +59,9 @@ function ProfileForm() {
   );
 }
 
-async function handleSaveButton() {
+async function handleSaveButton(setIsSubmitting) {
   const token = document.querySelector("#osf-token").value;
+  setIsSubmitting(true);
   try {
     const isTokenValid = await checkOSFToken(token);
     const userDoc = doc(db, "users", auth.currentUser.uid);
@@ -67,7 +70,9 @@ async function handleSaveButton() {
       { osfToken: token, osfTokenValid: isTokenValid },
       { merge: true }
     );
+    setIsSubmitting(false);
   } catch (error) {
+    setIsSubmitting(false);
     console.log(error);
   }
 }
