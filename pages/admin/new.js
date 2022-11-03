@@ -134,9 +134,11 @@ async function handleCreateExperiment(setIsSubmitting) {
     const experimentDoc = doc(db, "experiments", id);
     batch.set(experimentDoc, {
       title: title,
-      osfRepo: nodeData.data.id,
+      osfRepo: osfRepo,
+      osfComponent: nodeData.data.id,
       osfFilesLink: uploadLink,
       active: false,
+      sessions: 0,
       id: id,
       owner: user.uid,
     });
