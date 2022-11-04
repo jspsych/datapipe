@@ -136,21 +136,6 @@ function ExperimentTitle({ title, onSubmit }) {
   );
 }
 
-async function handleSaveButton(expId) {
-  try {
-    await setDoc(
-      doc(db, `experiments/${expId}`),
-      {
-        title: document.querySelector("#title").value,
-        osfRepo: document.querySelector("#osf-repo").value,
-        active: document.querySelector("#active").checked,
-      },
-      { merge: true }
-    );
-  } catch (error) {
-    console.error(error);
-  }
-}
 
 async function activateExperiment(expId){
   try {
