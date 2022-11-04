@@ -14,9 +14,9 @@ function MyApp({ Component, pageProps }) {
   return (
     <ChakraProvider>
       <UserContext.Provider value={{user}} >
-        <Box>
+        <Box h="100%" display="flex" flexDirection="column" justifyContent="space-between">
           <Navbar />
-          <Center>
+          <Center h="100%" px={"2"}>
             <Component {...pageProps} />
           </Center>
         </Box>
