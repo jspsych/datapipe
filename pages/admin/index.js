@@ -20,7 +20,15 @@ import {
   IconButton,
   HStack,
   Stack,
-  Spinner
+  Spinner,
+  AlertDialog,
+  AlertDialogBody,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogContent,
+  AlertDialogOverlay,
+  useDisclosure,
+  Text,
 } from "@chakra-ui/react";
 import { DeleteIcon, EditIcon } from "@chakra-ui/icons";
 
@@ -98,7 +106,46 @@ function ExperimentActions({ exp }) {
       <Link href={`/admin/${exp.id}`}>
         <IconButton aria-label="Edit" icon={<EditIcon />} />
       </Link>
-      <IconButton aria-label="Delete" icon={<DeleteIcon />} />
+      <DeleteAlertDialog />
     </HStack>
   );
+}
+
+function DeleteAlertDialog() {
+  const { isOpen, onOpen, onClose } = useDisclosure()
+  const cancelRef = useRef()
+
+  return (
+    <>
+      <IconButton aria-label="Delete" icon={<DeleteIcon />} />
+
+      <AlertDialog
+        isOpen={isOpen}
+        leastDestructiveRef={cancelRef}
+        onClose={onClose}
+      >
+        <AlertDialogOverlay>
+          <AlertDialogContent>
+            <AlertDialogHeader fontSize='lg' fontWeight='bold'>
+              Delete Experiment
+            </AlertDialogHeader>
+
+            <AlertDialogBody>
+              <Text>Are you sure? This action is final.</Text>
+              <Text>Deleting the experiment will not delete any data that is already on the OSF.</Text>
+            </AlertDialogBody>
+
+            <AlertDialogFooter>
+              <Button ref={cancelRef} onClick={onClose}>
+                Cancel
+              </Button>
+              <Button colorScheme='red' onClick={onClose} ml={3}>
+                Delete
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialogOverlay>
+      </AlertDialog>
+    </>
+  )
 }
