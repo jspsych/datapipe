@@ -1,7 +1,8 @@
 import AuthCheck from "../../components/AuthCheck";
-import { collection, query, where } from "firebase/firestore";
+import { collection, query, where, doc, deleteDoc } from "firebase/firestore";
 import { db, auth } from "../../lib/firebase";
 import { useCollectionData } from "react-firebase-hooks/firestore";
+import { useRef } from "react";
 import Link from "next/link";
 import {
   Heading,
@@ -110,18 +111,18 @@ function ExperimentActions({ exp }) {
       <Link href={`/admin/${exp.id}`}>
         <IconButton aria-label="Edit" icon={<EditIcon />} />
       </Link>
-      <DeleteAlertDialog />
+      <DeleteAlertDialog exp={exp}/>
     </HStack>
   );
 }
 
-function DeleteAlertDialog() {
+function DeleteAlertDialog({exp}) {
   const { isOpen, onOpen, onClose } = useDisclosure()
   const cancelRef = useRef()
 
   return (
     <>
-      <IconButton aria-label="Delete" icon={<DeleteIcon />} />
+      <IconButton aria-label="Delete" icon={<DeleteIcon />} onClick={onOpen} />
 
       <AlertDialog
         isOpen={isOpen}
@@ -143,7 +144,7 @@ function DeleteAlertDialog() {
               <Button ref={cancelRef} onClick={onClose}>
                 Cancel
               </Button>
-              <Button colorScheme='red' onClick={onClose} ml={3}>
+              <Button colorScheme='red' onClick={() => {onClose(); deleteExperiment(exp);}} ml={3}>
                 Delete
               </Button>
             </AlertDialogFooter>
@@ -152,4 +153,9 @@ function DeleteAlertDialog() {
       </AlertDialog>
     </>
   )
+}
+
+async function deleteExperiment(exp) {
+  const docRef = doc(db, `experiments/${exp.id}`);
+  await deleteDoc(docRef);
 }
