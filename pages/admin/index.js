@@ -54,6 +54,7 @@ function ExperimentList() {
           <Tr>
             <Th>Experiment</Th>
             <Th>Status</Th>
+            <Th>Completed Sessions</Th>
             <Th></Th>
           </Tr>
         </Thead>
@@ -76,6 +77,9 @@ function ExperimentItem({ exp }) {
       <Td>{exp.title}</Td>
       <Td>
         <ExperimentStatusTag active={exp.active} />
+      </Td>
+      <Td>
+        {exp.sessions}
       </Td>
       <Td>
         <ExperimentActions exp={exp} />
