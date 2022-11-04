@@ -53,7 +53,7 @@ function ExperimentEditForm({ expId }) {
       {loading && <Spinner color="green.500" size={"xl"} />}
       {data && (
         <Stack>
-          <ExperimentTitle title={data.title} />
+          <ExperimentTitle title={data.title} onSubmit={(newTitle)=>updateExperimentTitle(newTitle, expId)} />
           <Text>Experiment ID</Text>
           <Text>{data.id}</Text>
           <Text>Parent OSF Project</Text>
@@ -100,8 +100,8 @@ function ExperimentEditForm({ expId }) {
   );
 }
 
-function ExperimentTitle({ title }) {
-  /* Here's a custom control */
+function ExperimentTitle({ title, onSubmit }) {
+ 
   function EditableControls() {
     const {
       isEditing,
@@ -122,10 +122,11 @@ function ExperimentTitle({ title }) {
 
   return (
     <Editable
-      textAlign="center"
+      textAlign="left"
       defaultValue={title}
       fontSize="2xl"
       isPreviewFocusable={false}
+      onSubmit={onSubmit}
     >
       <EditablePreview />
       {/* Here is the custom input */}
@@ -171,6 +172,20 @@ async function deactivateExperiment(expId){
       doc(db, `experiments/${expId}`),
       {
         active: false,
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+async function updateExperimentTitle(newTitle, expId){
+  try {
+    await setDoc(
+      doc(db, `experiments/${expId}`),
+      {
+        title: newTitle
       },
       { merge: true }
     );
