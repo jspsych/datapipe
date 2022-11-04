@@ -15,12 +15,11 @@ export default function SignUpPage({}) {
         <FormLabel>Email</FormLabel>
         <Input type="email" />
       </FormControl>
-      <FormControl id="password">
+      <FormControl id="password" pb={4}>
         <FormLabel>Password</FormLabel>
         <Input type="password" />
       </FormControl>
       <Button
-
         variant={"solid"}
         colorScheme={"green"}
         size={"md"}

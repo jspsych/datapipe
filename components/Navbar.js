@@ -28,7 +28,7 @@ export default function Navbar() {
   return (
     <Box as="nav">
       <Flex
-        justifyContent={"space-between"}
+        justifyContent={"center"}
         alignItems={"center"}
         bg={"gray.100"}
         p={"4"}
@@ -36,7 +36,8 @@ export default function Navbar() {
       >
         <HStack spacing={8} alignItems={"center"} pe={"2"}>
           <Box display={"flex"} alignItems={"center"}>
-            <Icon as={VscDebugDisconnect} me={"1"} /> OSF Relay
+            <Icon as={VscDebugDisconnect} me={"1"} />
+            <Link href="/"><ChakraLink>OSF Relay</ChakraLink></Link>
           </Box>
           <HStack as={"nav"} spacing={4} display={{ base: "none", md: "flex" }}>
             <Link href="/admin" passHref>

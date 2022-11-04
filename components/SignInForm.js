@@ -8,12 +8,12 @@ export default function SignInForm({routeAfterSignIn}) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   return(
     <Stack>
-      <Heading>Sign In</Heading>
+      <Heading pb={2}>Sign In</Heading>
       <FormControl id="email">
         <FormLabel>Email</FormLabel>
         <Input type="email" />
       </FormControl>
-      <FormControl id="password">
+      <FormControl id="password" pb={4}>
         <FormLabel>Password</FormLabel>
         <Input type="password" />
       </FormControl>
