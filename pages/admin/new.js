@@ -13,7 +13,23 @@ import { UserContext } from "../../lib/context";
 import { useDocumentData } from "react-firebase-hooks/firestore";
 import Link from "next/link";
 import Router from "next/router";
-import { Button, Stack, Heading, FormControl, FormLabel, Input, Spinner, InputGroup, InputLeftAddon } from "@chakra-ui/react";
+import {
+  Button,
+  Stack,
+  Heading,
+  FormControl,
+  FormLabel,
+  Input,
+  Spinner,
+  InputGroup,
+  InputLeftAddon,
+  Switch,
+  NumberInputStepper,
+  NumberInputField,
+  NumberIncrementStepper,
+  NumberDecrementStepper,
+  NumberInput,
+} from "@chakra-ui/react";
 
 export default function NewExperimentPage({}) {
   return (
@@ -23,14 +39,16 @@ export default function NewExperimentPage({}) {
   );
 }
 
-function NewExperimentForm(){
+function NewExperimentForm() {
   const { user } = useContext(UserContext);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [conditionToggle, setConditionToggle] = useState(false);
 
   const [data, loading, error] = useDocumentData(doc(db, "users", user.uid));
 
-  return(<>
-    {loading && <Spinner color="green.500" size={"xl"} />}
+  return (
+    <>
+      {loading && <Spinner color="green.500" size={"xl"} />}
       {data && data.osfTokenValid && (
         <Stack>
           <Heading>Create a New Experiment</Heading>
@@ -49,7 +67,28 @@ function NewExperimentForm(){
             <FormLabel>New OSF Data Component Name</FormLabel>
             <Input type="text" />
           </FormControl>
-          <Button onClick={()=>handleCreateExperiment(setIsSubmitting)} isLoading={isSubmitting}>Create</Button>
+          <FormControl id="enable-condition-assignment">
+            <FormLabel>Enable condition assignment?</FormLabel>
+            <Switch onChange={(e) => setConditionToggle(e.target.checked)} />
+          </FormControl>
+          {conditionToggle && (
+            <FormControl id="condition-assignment">
+              <FormLabel>How many conditions?</FormLabel>
+              <NumberInput defaultValue={2} min={2}>
+                <NumberInputField />
+                <NumberInputStepper>
+                  <NumberIncrementStepper />
+                  <NumberDecrementStepper />
+                </NumberInputStepper>
+              </NumberInput>
+            </FormControl>
+          )}
+          <Button
+            onClick={() => handleCreateExperiment(setIsSubmitting)}
+            isLoading={isSubmitting}
+          >
+            Create
+          </Button>
         </Stack>
       )}
       {data && !data.osfTokenValid && (
@@ -65,7 +104,9 @@ function NewExperimentForm(){
             </Button>
           </Link>
         </div>
-  )}</>)
+      )}
+    </>
+  );
 }
 
 async function handleCreateExperiment(setIsSubmitting) {
@@ -75,6 +116,7 @@ async function handleCreateExperiment(setIsSubmitting) {
   const title = document.querySelector("#title").value;
   const osfRepo = document.querySelector("#osf-repo").value;
   const osfComponentName = document.querySelector("#osf-component-name").value;
+  const nConditions = document.querySelector("#enable-condition-assignment").checked ? document.querySelector("#condition-assignment").value : 1;
 
   //e.preventDefault();
   console.log("Creating experiment");
@@ -141,6 +183,7 @@ async function handleCreateExperiment(setIsSubmitting) {
       sessions: 0,
       id: id,
       owner: user.uid,
+      nConditions: nConditions
     });
 
     const userDoc = doc(db, `users/${user.uid}`);

@@ -67,6 +67,8 @@ function ExperimentEditForm({ expId }) {
           </Link>
           <Text>Completed Sessions</Text>
           <Text>{data.sessions}</Text>
+          <Text>Number of Conditions</Text>
+          <Text>{data.nConditions}</Text>
           <Text>
             This experiment is currently{" "}
             <Tag
