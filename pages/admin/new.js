@@ -183,7 +183,8 @@ async function handleCreateExperiment(setIsSubmitting) {
       sessions: 0,
       id: id,
       owner: user.uid,
-      nConditions: nConditions
+      nConditions: nConditions,
+      currentCondition: 0,
     });
 
     const userDoc = doc(db, `users/${user.uid}`);
