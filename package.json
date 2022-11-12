@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "export": "next export",
-    "test": "jest --watch"
+    "test": "jest --watch",
+    "emulators": "firebase emulators:start --import=./.emulator-data --export-on-exit"
   },
   "dependencies": {
     "@chakra-ui/icons": "^2.0.11",
