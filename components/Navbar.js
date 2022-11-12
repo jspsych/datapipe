@@ -43,8 +43,8 @@ export default function Navbar() {
             <Link href="/admin" passHref>
               <ChakraLink>My Experiments</ChakraLink>
             </Link>
-            <Link href="/support" passHref>
-              <ChakraLink>Support</ChakraLink>
+            <Link href="/help" passHref>
+              <ChakraLink>Help</ChakraLink>
             </Link>
           </HStack>
         </HStack>
