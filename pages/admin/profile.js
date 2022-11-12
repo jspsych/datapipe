@@ -19,14 +19,14 @@ export default function ProfilePage({}) {
   return (
     <AuthCheck>
       <Stack>
-      <Heading>Profile</Heading>
-      <ProfileForm />
+        <Heading>Profile</Heading>
+        <OsfTokenForm />
       </Stack>
     </AuthCheck>
   );
 }
 
-function ProfileForm() {
+function OsfTokenForm() {
   const { user } = useContext(UserContext);
   const [data, loading, error, snapshot, reload] = useDocumentData(
     doc(db, "users", user.uid)
@@ -41,17 +41,21 @@ function ProfileForm() {
           <FormControl id="osf-token">
             <FormLabel>OSF Token</FormLabel>
             <Input type="text" defaultValue={data.osfToken} />
-            <FormHelperText>{data.osfTokenValid ? "This is a valid token": "This is an invalid token"}</FormHelperText>
+            <FormHelperText>
+              {data.osfTokenValid
+                ? "This is a valid token"
+                : "This is an invalid token"}
+            </FormHelperText>
           </FormControl>
           <Button
             variant={"solid"}
             colorScheme={"green"}
             size={"md"}
             mr={4}
-            onClick={()=>handleSaveButton(setIsSubmitting)}
+            onClick={() => handleSaveButton(setIsSubmitting)}
             isLoading={isSubmitting}
           >
-            Save
+            Save Token
           </Button>
         </Stack>
       )}
