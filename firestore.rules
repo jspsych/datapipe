@@ -8,13 +8,16 @@ service cloud.firestore {
         (request.resource.data.uid == userId);
     }
     match /experiments/{experimentId} {
+      function verifyFields(){
+        return request.resource.data.keys().hasOnly(['active', 'id', 'osfRepo', 'osfComponent', 'osfFilesLink', 'owner', 'title', 'sessions', 'nConditions', 'currentCondition', 'useValidation', 'allowJSON', 'allowCSV'])
+      }
       allow read: if(request.auth.uid != null) &&
         resource.data.owner == request.auth.uid;
       allow create: if(request.auth.uid != null) &&
-        request.resource.data.keys().hasOnly(['active', 'id', 'osfRepo', 'osfComponent', 'osfFilesLink', 'owner', 'title', 'sessions', 'nConditions', 'currentCondition']) &&
+       verifyFields() &&
         request.resource.data.owner == request.auth.uid;
       allow update: if(request.auth.uid == resource.data.owner) &&
-        request.resource.data.keys().hasOnly(['active', 'id', 'osfRepo', 'osfComponent', 'osfFilesLink', 'owner', 'title', 'sessions', 'nConditions', 'currentCondition']);
+       verifyFields();
       allow delete: if(request.auth.uid == resource.data.owner);
     }
   }

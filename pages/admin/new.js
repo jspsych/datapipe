@@ -29,6 +29,8 @@ import {
   NumberIncrementStepper,
   NumberDecrementStepper,
   NumberInput,
+  CheckboxGroup,
+  Checkbox,
 } from "@chakra-ui/react";
 
 export default function NewExperimentPage({}) {
@@ -43,6 +45,7 @@ function NewExperimentForm() {
   const { user } = useContext(UserContext);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [conditionToggle, setConditionToggle] = useState(false);
+  const [validationToggle, setValidationToggle] = useState(true);
 
   const [data, loading, error] = useDocumentData(doc(db, "users", user.uid));
 
@@ -83,6 +86,18 @@ function NewExperimentForm() {
               </NumberInput>
             </FormControl>
           )}
+          <FormControl id="enable-validation">
+            <FormLabel>Use data validation?</FormLabel>
+            <Switch defaultChecked onChange={(e) => setValidationToggle(e.target.checked)} />
+          </FormControl>
+          {validationToggle && (
+            <CheckboxGroup id="validation-settings" defaultValue={['json']}>
+              <Stack spacing={5} direction='row'>
+                <Checkbox value='json'>Allow JSON</Checkbox>
+                <Checkbox value='csv'>Allow CSV</Checkbox>
+              </Stack>
+            </CheckboxGroup>
+          )}
           <Button
             onClick={() => handleCreateExperiment(setIsSubmitting)}
             isLoading={isSubmitting}
@@ -117,6 +132,9 @@ async function handleCreateExperiment(setIsSubmitting) {
   const osfRepo = document.querySelector("#osf-repo").value;
   const osfComponentName = document.querySelector("#osf-component-name").value;
   const nConditions = document.querySelector("#enable-condition-assignment").checked ? document.querySelector("#condition-assignment").value : 1;
+  const useValidation = document.querySelector("#enable-validation").checked;
+  const allowJSON = document.querySelector("#validation-settings").value.includes('json');
+  const allowCSV = document.querySelector("#validation-settings").value.includes('csv');
 
   //e.preventDefault();
   console.log("Creating experiment");
@@ -185,6 +203,9 @@ async function handleCreateExperiment(setIsSubmitting) {
       owner: user.uid,
       nConditions: nConditions,
       currentCondition: 0,
+      useValidation: useValidation,
+      allowJSON: allowJSON,
+      allowCSV: allowCSV,
     });
 
     const userDoc = doc(db, `users/${user.uid}`);
