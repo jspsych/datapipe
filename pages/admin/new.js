@@ -46,6 +46,7 @@ function NewExperimentForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [conditionToggle, setConditionToggle] = useState(false);
   const [validationToggle, setValidationToggle] = useState(true);
+  const [validationSettings, setValidationSettings] = useState(['json']);
 
   const [data, loading, error] = useDocumentData(doc(db, "users", user.uid));
 
@@ -91,7 +92,7 @@ function NewExperimentForm() {
             <Switch defaultChecked onChange={(e) => setValidationToggle(e.target.checked)} />
           </FormControl>
           {validationToggle && (
-            <CheckboxGroup id="validation-settings" defaultValue={['json']}>
+            <CheckboxGroup id="validation-settings" defaultValue={['json']} onChange={setValidationSettings}>
               <Stack spacing={5} direction='row'>
                 <Checkbox value='json'>Allow JSON</Checkbox>
                 <Checkbox value='csv'>Allow CSV</Checkbox>
@@ -99,7 +100,7 @@ function NewExperimentForm() {
             </CheckboxGroup>
           )}
           <Button
-            onClick={() => handleCreateExperiment(setIsSubmitting)}
+            onClick={() => handleCreateExperiment(setIsSubmitting, validationSettings)}
             isLoading={isSubmitting}
           >
             Create
@@ -124,7 +125,7 @@ function NewExperimentForm() {
   );
 }
 
-async function handleCreateExperiment(setIsSubmitting) {
+async function handleCreateExperiment(setIsSubmitting, validationSettings) {
   setIsSubmitting(true);
 
   const user = auth.currentUser;
@@ -133,11 +134,9 @@ async function handleCreateExperiment(setIsSubmitting) {
   const osfComponentName = document.querySelector("#osf-component-name").value;
   const nConditions = document.querySelector("#enable-condition-assignment").checked ? document.querySelector("#condition-assignment").value : 1;
   const useValidation = document.querySelector("#enable-validation").checked;
-  const allowJSON = document.querySelector("#validation-settings").value.includes('json');
-  const allowCSV = document.querySelector("#validation-settings").value.includes('csv');
+  const allowJSON = validationSettings.includes('json');
+  const allowCSV = validationSettings.includes('csv');
 
-  //e.preventDefault();
-  console.log("Creating experiment");
   const nanoid = customAlphabet(
     "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
     12
