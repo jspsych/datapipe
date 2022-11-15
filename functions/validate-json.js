@@ -11,7 +11,7 @@ export default function validateJSON(json) {
   try {
     parsedJSON = JSON.parse(json);
   } catch(error) {
-    console.log(error);
+    console.log(`JSON parsing error: ${error}`);
     return false;
   }
   

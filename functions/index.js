@@ -5,6 +5,7 @@ import express from "express";
 import fetch from "node-fetch";
 import cors from "cors";
 import validateJSON from "./validate-json.js";
+import validateCSV from "./validate-csv.js";
 
 const app = initializeApp();
 const db = getFirestore(app);
@@ -49,6 +50,12 @@ api.post('/', async (req, res) => {
     if(exp_data.allowJSON){
       const validJSON = validateJSON(data);
       if(validJSON){
+        valid = true;
+      }
+    }
+    if(exp_data.allowCSV && !valid){
+      const validCSV = validateCSV(data);
+      if(validCSV){
         valid = true;
       }
     }
