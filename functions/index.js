@@ -4,6 +4,8 @@ import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import express from "express";
 import fetch from "node-fetch";
 import cors from "cors";
+import validateJSON from "./validate-json.js";
+import validateCSV from "./validate-csv.js";
 
 const app = initializeApp();
 const db = getFirestore(app);
@@ -42,6 +44,26 @@ api.post('/', async (req, res) => {
     res.status(400).send('Experiment is not active');
     return;
   } 
+
+  if(exp_data.useValidation){
+    let valid = false;
+    if(exp_data.allowJSON){
+      const validJSON = validateJSON(data);
+      if(validJSON){
+        valid = true;
+      }
+    }
+    if(exp_data.allowCSV && !valid){
+      const validCSV = validateCSV(data);
+      if(validCSV){
+        valid = true;
+      }
+    }
+    if(!valid){
+      res.status(400).send('Data is not valid');
+      return;
+    }
+  }
 
   const user_doc = await db.doc(`users/${exp_data.owner}`).get();
   if(!user_doc.exists){
