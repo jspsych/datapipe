@@ -19,13 +19,13 @@ export default function SignInForm({routeAfterSignIn}) {
         <Input type="password" />
         <FormHelperText><Link href="/reset-password" passHref><ChakraLink>Forgot password?</ChakraLink></Link></FormHelperText>
       </FormControl>
-      <Button onClick={()=>handleSignInButton(setIsSubmitting)} isLoading={isSubmitting}>Sign In</Button>
+      <Button onClick={()=>handleSignInButton(setIsSubmitting, routeAfterSignIn)} isLoading={isSubmitting}>Sign In</Button>
       <Text pt={4}>Need an account? <Link href="/signup" passHref><ChakraLink>Sign up</ChakraLink></Link></Text>
     </Stack>
   )
 }
 
-async function handleSignInButton(setIsSubmitting) {
+async function handleSignInButton(setIsSubmitting, routeAfterSignIn) {
   const email = document.getElementById("email").value;
   const password = document.getElementById("password").value;
 
