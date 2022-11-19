@@ -12,6 +12,7 @@ export default function SignUpPage({}) {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [invalidEmail, setInvalidEmail] = useState(false);
+  const [invalidEmailType, setInvalidEmailType] = useState("");
   const [weakPassword, setWeakPassword] = useState(false);
 
   return (
@@ -19,7 +20,7 @@ export default function SignUpPage({}) {
       <FormControl id="email" isInvalid={invalidEmail}>
         <FormLabel>Email</FormLabel>
         <Input type="email" onChange={()=>setInvalidEmail(false)}/>
-        <FormErrorMessage>Invalid email</FormErrorMessage>
+        <FormErrorMessage>{invalidEmailType}</FormErrorMessage>
       </FormControl>
       <FormControl id="password" pb={4} isInvalid={weakPassword}>
         <FormLabel>Password</FormLabel>
@@ -31,7 +32,7 @@ export default function SignUpPage({}) {
         colorScheme={"green"}
         size={"md"}
         mr={4}
-        onClick={()=>handleCreateAccount(setIsSubmitting, setInvalidEmail, setWeakPassword)}
+        onClick={()=>handleCreateAccount(setIsSubmitting, setInvalidEmail, setInvalidEmailType, setWeakPassword)}
         isLoading={isSubmitting}
       >
         Create Account
@@ -40,7 +41,7 @@ export default function SignUpPage({}) {
   );
 }
 
-async function handleCreateAccount(setIsSubmitting, setInvalidEmail, setWeakPassword) {
+async function handleCreateAccount(setIsSubmitting, setInvalidEmail, setInvalidEmailType, setWeakPassword) {
   const email = document.querySelector('#email').value;
   const password = document.querySelector('#password').value;
 
@@ -65,13 +66,15 @@ async function handleCreateAccount(setIsSubmitting, setInvalidEmail, setWeakPass
   }
   catch (error) {
     if(error.code == "auth/email-already-in-use") {
-      // do something.
+      setInvalidEmail(true);
+      setInvalidEmailType("Email already in use");
     }
     if(error.code == "auth/weak-password") {
       setWeakPassword(true);
     }
     if(error.code == "auth/invalid-email") {
       setInvalidEmail(true);
+      setInvalidEmailType("Invalid email");
     }
     setIsSubmitting(false);
     console.log(error);
