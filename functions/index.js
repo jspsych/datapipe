@@ -101,6 +101,71 @@ api.post('/', async (req, res) => {
   
 });
 
+api.post('/base64', async (req, res) => {
+  const { experimentID, data, filename } = req.body;
+
+  if(!experimentID) {
+    res.status(400).send('Missing parameter experimentID');
+    return;
+  }
+  if(!data) {
+    res.status(400).send('Missing parameter data');
+    return;
+  }
+  if(!filename) {
+    res.status(400).send('Missing parameter filename');
+    return;
+  }
+  
+  const exp_doc_ref = db.collection('experiments').doc(experimentID);
+  const exp_doc = await exp_doc_ref.get();
+  
+  if(!exp_doc.exists){
+    res.status(400).send('Experiment does not exist');
+    return;
+  }
+
+  const exp_data = exp_doc.data();
+  if(!exp_data.active){
+    res.status(400).send('Experiment is not active');
+    return;
+  } 
+
+  const buffer = Buffer.from(data, 'base64');
+
+  const user_doc = await db.doc(`users/${exp_data.owner}`).get();
+  if(!user_doc.exists){
+    res.status(400).send('This experiment has an invalid owner ID');
+    return;
+  } 
+
+  const user_data = user_doc.data();
+  if(!user_data.osfToken){
+    res.status(400).send('This experiment does not have a valid OSF token');
+    return;
+  }
+
+  const queryParams = new URLSearchParams({
+    'type': 'files',
+    'name': filename,
+  });
+
+  const osfResult = await fetch(`${exp_data.osfFilesLink}?${queryParams.toString()}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${user_data.osfToken}`,
+    },
+    body: buffer,
+  });
+  if(osfResult.status !== 201){
+    res.status(400).send('OSF returned an error');
+    return;
+  }
+
+  res.status(201).send(`Success`);
+});
+
 api.get('/condition', async (req, res) => {
   const { experimentID } = req.body;
 
