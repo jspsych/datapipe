@@ -1,5 +1,6 @@
 import AuthCheck from "../../components/AuthCheck";
 import { doc, setDoc } from "firebase/firestore";
+import { updatePassword } from "firebase/auth";
 import { auth, db } from "../../lib/firebase";
 import { useContext, useState } from "react";
 import { useDocumentData } from "react-firebase-hooks/firestore";
@@ -20,10 +21,46 @@ export default function ProfilePage({}) {
     <AuthCheck>
       <Stack>
         <Heading>Profile</Heading>
+        <PasswordChangeForm />
         <OsfTokenForm />
       </Stack>
     </AuthCheck>
   );
+}
+
+function PasswordChangeForm() {
+  const { user } = useContext(UserContext);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  return (
+    <Stack>
+      <Heading>Password</Heading>
+      <FormControl id="new-password">
+        <FormLabel>New Password</FormLabel>
+        <Input type="password" />
+      </FormControl>
+      <Button
+        isLoading={isSubmitting}
+        onClick={() => {
+          handleChangePassword(setIsSubmitting);
+        }}
+      >
+        Change Password
+      </Button>
+    </Stack>
+  );
+}
+
+async function handleChangePassword(setIsSubmitting) {
+  setIsSubmitting(true);
+  const user = auth.currentUser;
+  const newPassword = document.querySelector("#new-password").value;
+  try {
+    await updatePassword(user, newPassword);
+    setIsSubmitting(false);
+  } catch (error) {
+    console.log(error);
+  }
 }
 
 function OsfTokenForm() {
