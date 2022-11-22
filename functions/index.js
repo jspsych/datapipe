@@ -14,7 +14,7 @@ const api = express();
 
 api.use(cors({ origin: true }));
 
-api.post('/', async (req, res) => {
+api.post('/api/data', async (req, res) => {
 
   const { experimentID, data, filename } = req.body;
 
@@ -101,7 +101,7 @@ api.post('/', async (req, res) => {
   
 });
 
-api.post('/base64', async (req, res) => {
+api.post('/api/base64', async (req, res) => {
   const { experimentID, data, filename } = req.body;
 
   if(!experimentID) {
@@ -166,7 +166,7 @@ api.post('/base64', async (req, res) => {
   res.status(201).send(`Success`);
 });
 
-api.get('/condition', async (req, res) => {
+api.get('/api/condition', async (req, res) => {
   const { experimentID } = req.body;
 
   if(!experimentID) {
