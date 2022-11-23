@@ -8,8 +8,12 @@
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [
       {
-        "source": "/api/**",
-        "function": "api"
+        "source": "/api/data",
+        "function": "apiData"
+      },
+      {
+        "source": "/api/condition",
+        "function": "apiCondition"
       }
     ]
   },

@@ -1,12 +1,18 @@
-import functions from "firebase-functions";
-import { initializeApp } from "firebase-admin/app";
-import { FieldValue, getFirestore } from "firebase-admin/firestore";
-import express from "express";
-import fetch from "node-fetch";
-import cors from "cors";
-import validateJSON from "./validate-json.js";
-import validateCSV from "./validate-csv.js";
+// import functions from "firebase-functions";
+// import { initializeApp } from "firebase-admin/app";
+// import { FieldValue, getFirestore } from "firebase-admin/firestore";
+// import express from "express";
+// import fetch from "node-fetch";
+// import cors from "cors";
+// import validateJSON from "./validate-json.js";
+// import validateCSV from "./validate-csv.js";
+// import putFileOSF from "./put-file-osf.js";
+import apiData from "./api-data.js";
+import { apiCondition } from "./api-condition.js";
 
+export { apiData, apiCondition }
+
+/**
 const app = initializeApp();
 const db = getFirestore(app);
 
@@ -77,21 +83,10 @@ api.post('/api/data', async (req, res) => {
     return;
   }
 
-  const queryParams = new URLSearchParams({
-    'type': 'files',
-    'name': filename,
-  });
+  const osfResult = await putFileOSF(exp_data.osfComponent, user_data.osfToken, data, filename);
 
-  const osfResult = await fetch(`${exp_data.osfFilesLink}?${queryParams.toString()}`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${user_data.osfToken}`,
-    },
-    body: data,
-  });
-  if(osfResult.status !== 201){
-    res.status(400).send('OSF returned an error');
+  if(!osfResult.success){
+    res.status(400).send(`Error uploading file to OSF: ${osfResult.error}`);
     return;
   }
 
@@ -219,4 +214,5 @@ const api_export = functions.https.onRequest(api);
 
 export { api_export as api };
 
+*/
 
