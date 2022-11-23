@@ -6,29 +6,18 @@ const corsHandler = cors({ origin: true });
 
 export const apiCondition = functions.https.onRequest((req, res) => {
   corsHandler(req, res, async () => {
-    try {
-      const { experimentID } = req.body;
+    
+    const { experimentID } = req.body;
 
-      if (!experimentID) {
-        res.status(400).send("Missing parameter experimentID");
-        return;
-      }
-    } catch (error) {
-      functions.logger.error(error);
-      res.status(500).send(error);
-    }
-
-    let exp_doc_ref;
-    let exp_doc;
-    try {
-      exp_doc_ref = db.collection("experiments").doc(experimentID);
-      exp_doc = await exp_doc_ref.get();
-    } catch (error) {
-      res.status(400).send("Experiment does not exist");
+    if (!experimentID) {
+      res.status(400).send("Missing parameter experimentID");
       return;
     }
-
-    if (!exp_doc.exists()) {
+    
+    const exp_doc_ref = db.collection("experiments").doc(experimentID);
+    const exp_doc = await exp_doc_ref.get();
+   
+    if (!exp_doc.exists) {
       res.status(400).send("Experiment does not exist");
       return;
     }
