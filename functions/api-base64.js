@@ -50,15 +50,19 @@ export const apiBase64 = functions.https.onRequest(async (req, res) => {
       return;
     }
 
-    const osfResult = await putFileOSF(
-      exp_data.osfComponent,
+    const result = await putFileOSF(
+      exp_data.osfFilesLink,
       user_data.osfToken,
       buffer,
       filename
     );
 
-    if (osfResult.status !== 201) {
-      res.status(400).send("OSF returned an error");
+    if (!result.success) {
+      if(result.errorCode === 409 && result.errorText === "Conflict") {
+        res.status(400).send("Error uploading file to OSF: File already exists");
+      } else {
+        res.status(400).send("Error uploading file to OSF");
+      }
       return;
     }
 

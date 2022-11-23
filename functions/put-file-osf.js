@@ -19,8 +19,9 @@ export default async function putFileOSF(
     },
     body: filedata,
   });
+
   if (osfResult.status !== 201) {
-    return {success: false, error: osfResult.status};
+    return {success: false, errorCode: osfResult.status, errorText: osfResult.statusText};
   }
-  return {success: true, error: null};
+  return {success: true, errorCode: null, errorText: null};
 }
