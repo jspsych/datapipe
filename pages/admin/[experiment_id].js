@@ -24,6 +24,13 @@ import {
   Text,
   Tag,
   TagLabel,
+  Tabs,
+  TabList,
+  TabPanels,
+  Tab,
+  TabPanel,
+  VStack,
+  HStack,
 } from "@chakra-ui/react";
 import { useEditableControls } from "@chakra-ui/react";
 import {
@@ -39,71 +46,100 @@ export default function ExperimentPage() {
 
   return (
     <AuthCheck>
-      <ExperimentEditForm expId={experiment_id} />
+      <ExperimentPageContent experiment_id={experiment_id} />
     </AuthCheck>
   );
 }
 
-function ExperimentEditForm({ expId }) {
+function ExperimentPageContent({ experiment_id }) {
   const [data, loading, error, snapshot, reload] = useDocumentData(
-    doc(db, `experiments/${expId}`)
+    doc(db, `experiments/${experiment_id}`)
   );
+
   return (
     <>
       {loading && <Spinner color="green.500" size={"xl"} />}
       {data && (
-        <Stack>
-          <ExperimentTitle title={data.title} onSubmit={(newTitle)=>updateExperimentTitle(newTitle, expId)} />
-          <Text>Experiment ID</Text>
-          <Text>{data.id}</Text>
-          <Text>Parent OSF Project</Text>
-          <Link href={`https://osf.io/${data.osfRepo}`} isExternal>
-            {`https://osf.io/${data.osfRepo}`} <ExternalLinkIcon mx="2px" />
-          </Link>
-          <Text>OSF Data Component</Text>
-          <Link href={`https://osf.io/${data.osfComponent}`} isExternal>
-            {`https://osf.io/${data.osfComponent}`}{" "}
-            <ExternalLinkIcon mx="2px" />
-          </Link>
-          <Text>Completed Sessions</Text>
-          <Text>{data.sessions}</Text>
-          <Text>Number of Conditions</Text>
-          <Text>{data.nConditions}</Text>
-          <Text>
-            This experiment is currently{" "}
-            <Tag
-              size="sm"
-              variant="solid"
-              colorScheme={data.active ? "green" : "red"}
-            >
-              <TagLabel>{data.active ? "Active" : "Inactive"}</TagLabel>
-            </Tag>
-          </Text>
-          {data.active ? (
-            <Button
-              variant={"solid"}
-              colorScheme="red"
-              onClick={()=>deactivateExperiment(expId)}
-            >
-              Deactivate Experiment
-            </Button>
-          ) : (
-            <Button
-              variant={"solid"}
-              colorScheme="green"
-              onClick={()=>activateExperiment(expId)}
-            >
-              Activate Experiment
-            </Button>
-          )}
-        </Stack>
+        <VStack align="start">
+          <ExperimentTitle
+            title={data.title}
+            onSubmit={(newTitle) => {
+              if (data.title !== newTitle) {
+                updateExperimentTitle(newTitle, experiment_id);
+              }
+            }}
+          />
+          <Flex>
+            <ExperimentEditForm data={data} />
+            <CodeHints expId={experiment_id} />
+          </Flex>
+        </VStack>
       )}
     </>
   );
 }
 
+function ExperimentEditForm({ data }) {
+  return (
+    <Stack w="50%" pr={8}>
+      <HStack justify="space-between">
+        <Text fontSize="xl">Experiment ID</Text>
+        <Text>{data.id}</Text>
+      </HStack>
+      <HStack justify="space-between">
+        <Text>Parent OSF Project</Text>
+        <Link href={`https://osf.io/${data.osfRepo}`} isExternal>
+          {`https://osf.io/${data.osfRepo}`} <ExternalLinkIcon mx="2px" />
+        </Link>
+      </HStack>
+      <HStack justify="space-between">
+        <Text>OSF Data Component</Text>
+        <Link href={`https://osf.io/${data.osfComponent}`} isExternal>
+          {`https://osf.io/${data.osfComponent}`} <ExternalLinkIcon mx="2px" />
+        </Link>
+      </HStack>
+      <HStack justify="space-between">
+        <Text>Completed Sessions</Text>
+        <Text>{data.sessions}</Text>
+      </HStack>
+      <HStack justify="space-between">
+        <Text>Number of Conditions</Text>
+        <Text>{data.nConditions}</Text>
+      </HStack>
+      <HStack justify="space-between"></HStack>
+
+      <Text>
+        This experiment is currently{" "}
+        <Tag
+          size="sm"
+          variant="solid"
+          colorScheme={data.active ? "green" : "red"}
+        >
+          <TagLabel>{data.active ? "Active" : "Inactive"}</TagLabel>
+        </Tag>
+      </Text>
+      {data.active ? (
+        <Button
+          variant={"solid"}
+          colorScheme="red"
+          onClick={() => deactivateExperiment(expId)}
+        >
+          Deactivate Experiment
+        </Button>
+      ) : (
+        <Button
+          variant={"solid"}
+          colorScheme="green"
+          onClick={() => activateExperiment(expId)}
+        >
+          Activate Experiment
+        </Button>
+      )}
+    </Stack>
+  );
+}
+
 function ExperimentTitle({ title, onSubmit }) {
- 
   function EditableControls() {
     const {
       isEditing,
@@ -113,10 +149,18 @@ function ExperimentTitle({ title, onSubmit }) {
     } = useEditableControls();
 
     return isEditing ? (
-      <>
-        <IconButton icon={<CheckIcon />} {...getSubmitButtonProps()} />
-        <IconButton icon={<CloseIcon />} {...getCancelButtonProps()} />
-      </>
+      <HStack spacing={2}>
+        <IconButton
+          size="sm"
+          icon={<CheckIcon />}
+          {...getSubmitButtonProps()}
+        />
+        <IconButton
+          size="sm"
+          icon={<CloseIcon />}
+          {...getCancelButtonProps()}
+        />
+      </HStack>
     ) : (
       <IconButton size="sm" icon={<EditIcon />} {...getEditButtonProps()} />
     );
@@ -126,20 +170,21 @@ function ExperimentTitle({ title, onSubmit }) {
     <Editable
       textAlign="left"
       defaultValue={title}
-      fontSize="2xl"
+      fontSize="6xl"
       isPreviewFocusable={false}
       onSubmit={onSubmit}
+      as={Flex}
+      align="center"
     >
-      <EditablePreview />
+      <EditablePreview mr={8} />
       {/* Here is the custom input */}
-      <Input as={EditableInput} />
+      <Input as={EditableInput} size="lg" mr={8} />
       <EditableControls />
     </Editable>
   );
 }
 
-
-async function activateExperiment(expId){
+async function activateExperiment(expId) {
   try {
     await setDoc(
       doc(db, `experiments/${expId}`),
@@ -153,7 +198,7 @@ async function activateExperiment(expId){
   }
 }
 
-async function deactivateExperiment(expId){
+async function deactivateExperiment(expId) {
   try {
     await setDoc(
       doc(db, `experiments/${expId}`),
@@ -167,16 +212,42 @@ async function deactivateExperiment(expId){
   }
 }
 
-async function updateExperimentTitle(newTitle, expId){
+async function updateExperimentTitle(newTitle, expId) {
   try {
     await setDoc(
       doc(db, `experiments/${expId}`),
       {
-        title: newTitle
+        title: newTitle,
       },
       { merge: true }
     );
   } catch (error) {
     console.error(error);
   }
+}
+
+function CodeHints({ expId }) {
+  return (
+    <Tabs variant="soft-rounded">
+      <TabList>
+        <Tab>jsPsych</Tab>
+        <Tab>JavaScript</Tab>
+      </TabList>
+
+      <TabPanels>
+        <TabPanel>
+          <Text>
+            To use this experiment in jsPsych, you will need to add the
+            following code to your experiment:
+          </Text>
+        </TabPanel>
+        <TabPanel>
+          <Text>
+            To use this experiment in JavaScript, you will need to add the
+            following code to your experiment:
+          </Text>
+        </TabPanel>
+      </TabPanels>
+    </Tabs>
+  );
 }
