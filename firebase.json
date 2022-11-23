@@ -14,6 +14,10 @@
       {
         "source": "/api/condition",
         "function": "apiCondition"
+      },
+      {
+        "source": "/api/base64",
+        "function": "apiBase64"
       }
     ]
   },

@@ -5,7 +5,6 @@ import { db } from "./app.js";
 const corsHandler = cors({ origin: true });
 
 export const apiCondition = functions.https.onRequest((req, res) => {
-  functions.logger.log("running api-condition");
   corsHandler(req, res, async () => {
     try {
       const { experimentID } = req.body;
