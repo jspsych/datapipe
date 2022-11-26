@@ -23,7 +23,12 @@ export default function SignInForm({routeAfterSignIn}) {
         <FormErrorMessage>Invalid password</FormErrorMessage>
       </FormControl>
       <Text><Link href="/reset-password" passHref><ChakraLink>Forgot password?</ChakraLink></Link></Text>
-      <Button onClick={()=>handleSignInButton(setIsSubmitting, setInvalidEmail, setInvalidPassword, routeAfterSignIn)} isLoading={isSubmitting}>Sign In</Button>
+      <Button
+        colorScheme={"green"}
+        isLoading={isSubmitting}
+        onClick={()=>handleSignInButton(setIsSubmitting, setInvalidEmail, setInvalidPassword, routeAfterSignIn)}>
+          Sign In
+        </Button>
       <Text pt={4}>Need an account? <Link href="/signup" passHref><ChakraLink>Sign up</ChakraLink></Link></Text>
     </Stack>
   )
