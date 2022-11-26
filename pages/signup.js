@@ -1,12 +1,13 @@
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
+import Link from "next/link";
 
 import { auth, db } from "../lib/firebase";
 
 import Router from "next/router";
 import { useState } from "react";
 
-import { FormControl, Stack, Spinner, Input, InputGroup, InputLeftAddon, Checkbox, FormLabel, Button, FormErrorMessage } from '@chakra-ui/react';
+import { Card, CardBody, CardHeader, Heading, Link as ChakraLink, Text, FormControl, Stack, Input, FormLabel, Button, FormErrorMessage } from '@chakra-ui/react';
 
 export default function SignUpPage({}) {
 
@@ -16,28 +17,36 @@ export default function SignUpPage({}) {
   const [weakPassword, setWeakPassword] = useState(false);
 
   return (
-    <Stack>
-      <FormControl id="email" isInvalid={invalidEmail}>
-        <FormLabel>Email</FormLabel>
-        <Input type="email" onChange={()=>setInvalidEmail(false)}/>
-        <FormErrorMessage>{invalidEmailType}</FormErrorMessage>
-      </FormControl>
-      <FormControl id="password" pb={4} isInvalid={weakPassword}>
-        <FormLabel>Password</FormLabel>
-        <Input type="password" onChange={()=>setWeakPassword(false)}/>
-        <FormErrorMessage>Password must be at least 6 characters</FormErrorMessage>
-      </FormControl>
-      <Button
-        variant={"solid"}
-        colorScheme={"green"}
-        size={"md"}
-        mr={4}
-        onClick={()=>handleCreateAccount(setIsSubmitting, setInvalidEmail, setInvalidEmailType, setWeakPassword)}
-        isLoading={isSubmitting}
-      >
-        Create Account
-      </Button>
-    </Stack>
+    <Card w={360}>
+      <CardHeader>
+        <Heading size='lg'>Sign Up</Heading>
+      </CardHeader>
+      <CardBody>
+        <Stack>
+          <FormControl id="email" isInvalid={invalidEmail}>
+            <FormLabel>Email</FormLabel>
+            <Input type="email" onChange={()=>setInvalidEmail(false)}/>
+            <FormErrorMessage>{invalidEmailType}</FormErrorMessage>
+          </FormControl>
+          <FormControl id="password" pb={4} isInvalid={weakPassword}>
+            <FormLabel>Password</FormLabel>
+            <Input type="password" onChange={()=>setWeakPassword(false)}/>
+            <FormErrorMessage>Password must be at least 6 characters</FormErrorMessage>
+          </FormControl>
+          <Text>&nbsp;</Text>
+          <Button
+            variant={"solid"}
+            colorScheme={"green"}
+            size={"md"}
+            mr={4}
+            onClick={()=>handleCreateAccount(setIsSubmitting, setInvalidEmail, setInvalidEmailType, setWeakPassword)}
+            isLoading={isSubmitting}>
+            Create Account
+          </Button>
+          <Text pt={4}>Have an account? <Link href="/signin" passHref><ChakraLink>Sign In!</ChakraLink></Link></Text>
+        </Stack>
+      </CardBody>
+    </Card>
   );
 }
 
