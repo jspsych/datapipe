@@ -43,6 +43,9 @@ export default function Navbar() {
             <Link href="/help" passHref>
               <ChakraLink>Help</ChakraLink>
             </Link>
+            <Link href="/faq" passHref>
+              <ChakraLink>FAQ</ChakraLink>
+            </Link>
             {user && (
               <Link href="/admin" passHref>
                 <ChakraLink>My Experiments</ChakraLink>
