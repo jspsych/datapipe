@@ -31,6 +31,7 @@ import {
   TabPanel,
   VStack,
   HStack,
+  Code,
 } from "@chakra-ui/react";
 import { useEditableControls } from "@chakra-ui/react";
 import {
@@ -236,10 +237,29 @@ function CodeHints({ expId }) {
 
       <TabPanels>
         <TabPanel>
-          <Text>
-            To use this experiment in jsPsych, you will need to add the
-            following code to your experiment:
-          </Text>
+          <VStack alignItems={"start"}>
+          <Text>Load the pipe plugin:</Text>
+          <Code display="block">
+            {`<script src="https://unpkg.com/@jspsych-contrib/jspsych-pipe"></script>`}
+          </Code>
+          <Text>Generate a unique filename:</Text>
+          <Code display="block" whiteSpace={"pre-line"}>
+            {`const subject_id = jsPsych.randomization.randomID(10);
+              const filename = \`\${subject_id}.csv\`;
+            `}
+          </Code>
+          <Text>To save data, add this trial to your timeline after all data is collected:</Text>
+          <Code display="block" whiteSpace={"pre"}>
+            {`
+              const save_data = {
+                type: jsPsychPipe,
+                experiment_id: "${expId}",
+                filename: filename,
+                data: ()=>jsPsych.data.get().csv()
+              };`
+            }
+          </Code>
+          </VStack>
         </TabPanel>
         <TabPanel>
           <Text>
