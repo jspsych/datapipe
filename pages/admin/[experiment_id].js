@@ -42,6 +42,8 @@ import {
   ExternalLinkIcon,
 } from "@chakra-ui/icons";
 
+import CodeBlock from "../../components/CodeBlock";
+
 export default function ExperimentPage() {
   const router = useRouter();
   const { experiment_id } = router.query;
@@ -223,17 +225,18 @@ function CodeHints({ expId }) {
         <TabPanel>
           <VStack alignItems={"start"}>
           <Text>Load the pipe plugin:</Text>
-          <Code display="block">
+          <CodeBlock>
             {`<script src="https://unpkg.com/@jspsych-contrib/jspsych-pipe"></script>`}
-          </Code>
+          </CodeBlock>
           <Text>Generate a unique filename:</Text>
-          <Code display="block" whiteSpace={"pre-line"}>
-            {`const subject_id = jsPsych.randomization.randomID(10);
+          <CodeBlock>
+            {`
+              const subject_id = jsPsych.randomization.randomID(10);
               const filename = \`\${subject_id}.csv\`;
             `}
-          </Code>
+          </CodeBlock>
           <Text>To save data, add this trial to your timeline after all data is collected:</Text>
-          <Code display="block" whiteSpace={"pre"}>
+          <CodeBlock>
             {`
               const save_data = {
                 type: jsPsychPipe,
@@ -242,7 +245,7 @@ function CodeHints({ expId }) {
                 data: ()=>jsPsych.data.get().csv()
               };`
             }
-          </Code>
+          </CodeBlock>
           </VStack>
         </TabPanel>
         <TabPanel>
