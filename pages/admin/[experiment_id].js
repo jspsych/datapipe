@@ -32,6 +32,7 @@ import {
   VStack,
   HStack,
   Code,
+  Switch,
 } from "@chakra-ui/react";
 import { useEditableControls } from "@chakra-ui/react";
 import {
@@ -82,13 +83,13 @@ function ExperimentPageContent({ experiment_id }) {
 
 function ExperimentEditForm({ data }) {
   return (
-    <Stack w="50%" pr={8}>
+    <Stack w="50%" pr={8} spacing={2}>
       <HStack justify="space-between">
         <Text fontSize="xl">Experiment ID</Text>
         <Text>{data.id}</Text>
       </HStack>
       <HStack justify="space-between">
-        <Text>Parent OSF Project</Text>
+        <Text>OSF Project</Text>
         <Link href={`https://osf.io/${data.osfRepo}`} isExternal>
           {`https://osf.io/${data.osfRepo}`} <ExternalLinkIcon mx="2px" />
         </Link>
@@ -107,35 +108,10 @@ function ExperimentEditForm({ data }) {
         <Text>Number of Conditions</Text>
         <Text>{data.nConditions}</Text>
       </HStack>
-      <HStack justify="space-between"></HStack>
-
-      <Text>
-        This experiment is currently{" "}
-        <Tag
-          size="sm"
-          variant="solid"
-          colorScheme={data.active ? "green" : "red"}
-        >
-          <TagLabel>{data.active ? "Active" : "Inactive"}</TagLabel>
-        </Tag>
-      </Text>
-      {data.active ? (
-        <Button
-          variant={"solid"}
-          colorScheme="red"
-          onClick={() => deactivateExperiment(expId)}
-        >
-          Deactivate Experiment
-        </Button>
-      ) : (
-        <Button
-          variant={"solid"}
-          colorScheme="green"
-          onClick={() => activateExperiment(expId)}
-        >
-          Activate Experiment
-        </Button>
-      )}
+      <FormControl as={HStack} justify="space-between">
+        <FormLabel>Enable data collection?</FormLabel>
+        <Switch colorScheme="green" size="md" isChecked={data.active} onChange={()=>toggleExperimentActive(data.id, data.active)}/>
+      </FormControl>
     </Stack>
   );
 }
@@ -183,6 +159,14 @@ function ExperimentTitle({ title, onSubmit }) {
       <EditableControls />
     </Editable>
   );
+}
+
+async function toggleExperimentActive(expId, active){
+  if(active){
+    deactivateExperiment(expId)
+  } else {
+    activateExperiment(expId)
+  }
 }
 
 async function activateExperiment(expId) {
