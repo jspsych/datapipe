@@ -73,7 +73,7 @@ function ExperimentPageContent({ experiment_id }) {
               }
             }}
           />
-          <Flex>
+          <Flex alignItems="flex-start" wrap="wrap">
             <ExperimentEditForm data={data} />
             <CodeHints expId={experiment_id} />
           </Flex>
@@ -85,7 +85,7 @@ function ExperimentPageContent({ experiment_id }) {
 
 function ExperimentEditForm({ data }) {
   return (
-    <Stack w="50%" pr={8} spacing={2}>
+    <Stack w="35%" pr={8} spacing={2}>
       <HStack justify="space-between">
         <Text fontSize="xl">Experiment ID</Text>
         <Text>{data.id}</Text>
@@ -149,7 +149,7 @@ function ExperimentTitle({ title, onSubmit }) {
     <Editable
       textAlign="left"
       defaultValue={title}
-      fontSize="6xl"
+      fontSize="4xl"
       isPreviewFocusable={false}
       onSubmit={onSubmit}
       as={Flex}
