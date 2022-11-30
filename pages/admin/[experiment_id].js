@@ -249,10 +249,25 @@ function CodeHints({ expId }) {
           </VStack>
         </TabPanel>
         <TabPanel>
-          <Text>
-            To use this experiment in JavaScript, you will need to add the
-            following code to your experiment:
-          </Text>
+        <VStack alignItems={"start"}>
+          <Text>Use fetch to send data:</Text>
+          <CodeBlock>
+            {`
+            fetch("https://pipe.jspsych.org/api/data/", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Accept: "*/*",
+              },
+              body: JSON.stringify({
+                experimentID: "${expId}",
+                filename: "UNIQUE_FILENAME.csv",
+                data: dataAsString,
+              }),
+            });`
+            }
+          </CodeBlock>
+          </VStack>
         </TabPanel>
       </TabPanels>
     </Tabs>
