@@ -1,4 +1,4 @@
-import { Box, HStack } from "@chakra-ui/react";
+import { Box, Container, HStack } from "@chakra-ui/react";
 import CopyButton from "./CopyButton";
 
 export default function CodeBlock({ children, ...props }) {
@@ -15,11 +15,11 @@ export default function CodeBlock({ children, ...props }) {
   const code = lines.join("\n");
 
   return (
-    <Box as="pre" bg="gray.800" color="white" p={4} rounded="md" {...props}>
+    <Box w="100%" bg="gray.800" color="white" p={4} rounded="md" {...props}>
       <HStack alignItems="start" spacing={6}>
-        <code>
-          {code}
-        </code>
+          <Container as="pre" fontFamily="monospace" overflowX="auto">
+            {code}
+          </Container>
         <CopyButton code={children} />
       </HStack>
     </Box>

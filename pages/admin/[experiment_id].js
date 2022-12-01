@@ -64,7 +64,7 @@ function ExperimentPageContent({ experiment_id }) {
     <>
       {loading && <Spinner color="green.500" size={"xl"} />}
       {data && (
-        <VStack align="start">
+        <VStack align="start" w={1200}>
           <ExperimentTitle
             title={data.title}
             onSubmit={(newTitle) => {
