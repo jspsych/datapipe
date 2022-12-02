@@ -64,7 +64,7 @@ function ExperimentPageContent({ experiment_id }) {
     <>
       {loading && <Spinner color="green.500" size={"xl"} />}
       {data && (
-        <VStack align="start" w={1200}>
+        <VStack alignSelf="flex-start" align="flex-start" w={1000}>
           <ExperimentTitle
             title={data.title}
             onSubmit={(newTitle) => {
@@ -73,7 +73,7 @@ function ExperimentPageContent({ experiment_id }) {
               }
             }}
           />
-          <Flex alignItems="flex-start" wrap="wrap">
+          <Flex alignItems="flex-start" wrap="wrap" w="100%">
             <ExperimentEditForm data={data} />
             <CodeHints expId={experiment_id} />
           </Flex>
@@ -85,7 +85,7 @@ function ExperimentPageContent({ experiment_id }) {
 
 function ExperimentEditForm({ data }) {
   return (
-    <Stack w="35%" pr={8} spacing={2}>
+    <Stack w="38%" pr={8} spacing={2}>
       <HStack justify="space-between">
         <Text fontSize="xl">Experiment ID</Text>
         <Text>{data.id}</Text>
@@ -112,7 +112,12 @@ function ExperimentEditForm({ data }) {
       </HStack>
       <FormControl as={HStack} justify="space-between">
         <FormLabel>Enable data collection?</FormLabel>
-        <Switch colorScheme="green" size="md" isChecked={data.active} onChange={()=>toggleExperimentActive(data.id, data.active)}/>
+        <Switch
+          colorScheme="green"
+          size="md"
+          isChecked={data.active}
+          onChange={() => toggleExperimentActive(data.id, data.active)}
+        />
       </FormControl>
     </Stack>
   );
@@ -163,11 +168,11 @@ function ExperimentTitle({ title, onSubmit }) {
   );
 }
 
-async function toggleExperimentActive(expId, active){
-  if(active){
-    deactivateExperiment(expId)
+async function toggleExperimentActive(expId, active) {
+  if (active) {
+    deactivateExperiment(expId);
   } else {
-    activateExperiment(expId)
+    activateExperiment(expId);
   }
 }
 
@@ -224,35 +229,37 @@ function CodeHints({ expId }) {
       <TabPanels>
         <TabPanel>
           <VStack alignItems={"start"}>
-          <Text>Load the pipe plugin:</Text>
-          <CodeBlock>
-            {`<script src="https://unpkg.com/@jspsych-contrib/jspsych-pipe"></script>`}
-          </CodeBlock>
-          <Text>Generate a unique filename:</Text>
-          <CodeBlock>
-            {`
+            <Text>Load the pipe plugin:</Text>
+            <CodeBlock>
+              {`<script src="https://unpkg.com/@jspsych-contrib/jspsych-pipe"></script>`}
+            </CodeBlock>
+            <Text>Generate a unique filename:</Text>
+            <CodeBlock>
+              {`
               const subject_id = jsPsych.randomization.randomID(10);
               const filename = \`\${subject_id}.csv\`;
             `}
-          </CodeBlock>
-          <Text>To save data, add this trial to your timeline after all data is collected:</Text>
-          <CodeBlock>
-            {`
+            </CodeBlock>
+            <Text>
+              To save data, add this trial to your timeline after all data is
+              collected:
+            </Text>
+            <CodeBlock>
+              {`
               const save_data = {
                 type: jsPsychPipe,
                 experiment_id: "${expId}",
                 filename: filename,
                 data: ()=>jsPsych.data.get().csv()
-              };`
-            }
-          </CodeBlock>
+              };`}
+            </CodeBlock>
           </VStack>
         </TabPanel>
         <TabPanel>
-        <VStack alignItems={"start"}>
-          <Text>Use fetch to send data:</Text>
-          <CodeBlock>
-            {`
+          <VStack alignItems={"start"}>
+            <Text>Use fetch to send data:</Text>
+            <CodeBlock>
+              {`
             fetch("https://pipe.jspsych.org/api/data/", {
               method: "POST",
               headers: {
@@ -264,9 +271,8 @@ function CodeHints({ expId }) {
                 filename: "UNIQUE_FILENAME.csv",
                 data: dataAsString,
               }),
-            });`
-            }
-          </CodeBlock>
+            });`}
+            </CodeBlock>
           </VStack>
         </TabPanel>
       </TabPanels>
