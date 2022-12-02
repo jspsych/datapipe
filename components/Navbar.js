@@ -30,16 +30,16 @@ export default function Navbar() {
       <Flex
         justifyContent={"space-between"}
         alignItems={"center"}
-        bg={"gray.100"}
         p={"4"}
         w={"100%"}
+        color={"white"}
       >
         <HStack spacing={4} alignItems={"center"} pe={"2"}>
-          <Box display={"flex"} alignItems={"center"}>
+          <Box display={"flex"} alignItems={"center"} fontSize={"large"}>
             <Icon as={VscDebugDisconnect} me={"1"} />
-            <Link href="/"><ChakraLink>Pipe My Data</ChakraLink></Link>
+            <Link href="/"><ChakraLink>Data Pipe</ChakraLink></Link>
           </Box>
-          <HStack as={"nav"} spacing={4} display={{ base: "none", md: "flex" }}>
+          <HStack as={"nav"} fontWeight="bold" spacing={4} display={{ base: "none", md: "flex" }}>
             <Link href="/help" passHref>
               <ChakraLink>Help</ChakraLink>
             </Link>
@@ -57,12 +57,12 @@ export default function Navbar() {
           {!user && (
             <>
               <Link href="/signin">
-                <Button variant={"ghost"} colorScheme={"green"} size={"sm"} mr={4}>
+                <Button variant={"ghost"} colorScheme={"white"} size={"sm"} mr={4}>
                   Sign In
                 </Button>
               </Link>
               <Link href="/signup">
-                <Button variant={"solid"} colorScheme={"green"} size={"sm"}>
+                <Button variant={"solid"} colorScheme={"brandSand"} size={"sm"}>
                   Sign Up
                 </Button>
               </Link>

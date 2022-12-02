@@ -46,7 +46,7 @@ export default function SignInForm({ routeAfterSignIn }) {
   }
 
   return(
-    <Card w={360}>
+    <Card w={360} bgColor="white">
       <CardHeader>
         <Heading size='lg'>Sign In</Heading>
       </CardHeader>
@@ -66,7 +66,7 @@ export default function SignInForm({ routeAfterSignIn }) {
             <Link href="/reset-password" passHref><ChakraLink>Forgot password?</ChakraLink></Link>
           </Text>
           <Button
-            colorScheme={"green"}
+            colorScheme={"brandBlue"}
             isLoading={isSubmitting}
             onClick={onSubmit}>
             Sign In
