@@ -220,7 +220,7 @@ async function updateExperimentTitle(newTitle, expId) {
 
 function CodeHints({ expId }) {
   return (
-    <Tabs variant="soft-rounded">
+    <Tabs variant="solid-rounded" colorScheme="brandOrange">
       <TabList>
         <Tab>jsPsych</Tab>
         <Tab>JavaScript</Tab>

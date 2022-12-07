@@ -15,16 +15,16 @@ import {
 import { auth } from "../lib/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { useState } from "react";
-import { useRouter } from 'next/router';
+import { useRouter } from "next/router";
 import Link from "next/link";
 import { ERROR, getError } from "../lib/utils";
 
 export default function SignInForm({ routeAfterSignIn }) {
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [errorEmail, setErrorEmail] = useState('');
-  const [errorPassword, setErrorPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [errorEmail, setErrorEmail] = useState("");
+  const [errorPassword, setErrorPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const onSubmit = async () => {
@@ -32,7 +32,7 @@ export default function SignInForm({ routeAfterSignIn }) {
     try {
       const user = await signInWithEmailAndPassword(auth, email, password);
       router.push(routeAfterSignIn);
-    } catch(error) {
+    } catch (error) {
       setIsSubmitting(false);
       const { code } = error;
       if (code == ERROR.PASSWORD_WRONG) {
@@ -42,38 +42,58 @@ export default function SignInForm({ routeAfterSignIn }) {
       }
       console.log("Sign in failed");
       console.log(error);
-    }  
-  }
+    }
+  };
 
-  return(
-    <Card w={360} bgColor="white">
+  return (
+    <Card w={360}>
       <CardHeader>
-        <Heading size='lg'>Sign In</Heading>
+        <Heading size="lg">Sign In</Heading>
       </CardHeader>
       <CardBody>
         <Stack>
           <FormControl isInvalid={errorEmail}>
             <FormLabel>Email</FormLabel>
-            <Input type="email" onChange={e => { setEmail(e.target.value); setErrorEmail('') }} />
+            <Input
+              type="email"
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setErrorEmail("");
+              }}
+            />
             <FormErrorMessage>{errorEmail}</FormErrorMessage>
           </FormControl>
           <FormControl pb={4} isInvalid={errorPassword}>
             <FormLabel>Password</FormLabel>
-            <Input type="password" onChange={e => { setPassword(e.target.value); setErrorPassword('') }} />
+            <Input
+              type="password"
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setErrorPassword("");
+              }}
+            />
             <FormErrorMessage>{errorPassword}</FormErrorMessage>
           </FormControl>
           <Text>
-            <Link href="/reset-password" passHref><ChakraLink>Forgot password?</ChakraLink></Link>
+            <Link href="/reset-password" passHref>
+              <ChakraLink>Forgot password?</ChakraLink>
+            </Link>
           </Text>
           <Button
-            colorScheme={"brandBlue"}
+            colorScheme={"brandTeal"}
             isLoading={isSubmitting}
-            onClick={onSubmit}>
+            onClick={onSubmit}
+          >
             Sign In
           </Button>
-          <Text pt={4}>Need an account? <Link href="/signup" passHref><ChakraLink>Sign Up!</ChakraLink></Link></Text>
+          <Text pt={4}>
+            Need an account?{" "}
+            <Link href="/signup" passHref>
+              <ChakraLink>Sign Up!</ChakraLink>
+            </Link>
+          </Text>
         </Stack>
       </CardBody>
     </Card>
-  )
+  );
 }

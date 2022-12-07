@@ -79,7 +79,7 @@ export default function Navbar() {
             )}
           </HStack>
         </HStack>
-        <HStack ps={"2"}>
+        <HStack spacing={8}>
           {!user && (
             <>
               <Link href="/signin">
@@ -103,7 +103,7 @@ export default function Navbar() {
             <>
               <Link href="/admin/new">
                 <Button
-                  variant={"solid"}
+                  variant={"outline"}
                   colorScheme={"green"}
                   size={"sm"}
                   leftIcon={<AddIcon />}
@@ -114,6 +114,7 @@ export default function Navbar() {
               <Menu>
                 <MenuButton
                   as={Button}
+                  colorScheme={"white"}
                   rounded={"full"}
                   variant={"link"}
                   cursor={"pointer"}

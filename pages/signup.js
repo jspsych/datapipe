@@ -80,7 +80,7 @@ export default function SignUpPage() {
           </FormControl>
           <Text>&nbsp;</Text>
           <Button
-            colorScheme={"green"}
+            colorScheme={"brandTeal"}
             isLoading={isSubmitting}
             onClick={onSubmit}>
             Create Account
