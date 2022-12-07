@@ -122,14 +122,14 @@ export default function Navbar() {
                 >
                   Account
                 </MenuButton>
-                <MenuList>
-                  <MenuItem>
+                <MenuList bg="greyBackground">
+                  <MenuItem bg="greyBackground">
                     <Link href="/admin/profile" passHref>
-                      <ChakraLink>Settings</ChakraLink>
+                      Settings
                     </Link>
                   </MenuItem>
                   <MenuDivider />
-                  <MenuItem onClick={() => auth.signOut()}>Sign Out</MenuItem>
+                  <MenuItem bg="greyBackground" onClick={() => auth.signOut()}>Sign Out</MenuItem>
                 </MenuList>
               </Menu>
             </>

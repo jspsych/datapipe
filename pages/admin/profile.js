@@ -7,6 +7,7 @@ import { useDocumentData } from "react-firebase-hooks/firestore";
 import { UserContext } from "../../lib/context";
 import {
   Stack,
+  VStack,
   Button,
   Heading,
   FormControl,
@@ -19,11 +20,11 @@ import {
 export default function ProfilePage({}) {
   return (
     <AuthCheck>
-      <Stack>
-        <Heading>Profile</Heading>
+      <VStack spacing={16}>
+        <Heading>Account Settings</Heading>
         <PasswordChangeForm />
         <OsfTokenForm />
-      </Stack>
+      </VStack>
     </AuthCheck>
   );
 }
@@ -34,7 +35,6 @@ function PasswordChangeForm() {
 
   return (
     <Stack>
-      <Heading>Password</Heading>
       <FormControl id="new-password">
         <FormLabel>New Password</FormLabel>
         <Input type="password" />
@@ -44,6 +44,7 @@ function PasswordChangeForm() {
         onClick={() => {
           handleChangePassword(setIsSubmitting);
         }}
+        colorScheme="brandTeal"
       >
         Change Password
       </Button>
@@ -78,7 +79,7 @@ function OsfTokenForm() {
           <FormControl id="osf-token">
             <FormLabel>OSF Token</FormLabel>
             <Input type="text" defaultValue={data.osfToken} />
-            <FormHelperText>
+            <FormHelperText color="white">
               {data.osfTokenValid
                 ? "This is a valid token"
                 : "This is an invalid token"}
@@ -86,7 +87,7 @@ function OsfTokenForm() {
           </FormControl>
           <Button
             variant={"solid"}
-            colorScheme={"green"}
+            colorScheme={"brandTeal"}
             size={"md"}
             mr={4}
             onClick={() => handleSaveButton(setIsSubmitting)}

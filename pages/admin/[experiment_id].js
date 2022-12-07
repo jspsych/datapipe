@@ -136,17 +136,19 @@ function ExperimentTitle({ title, onSubmit }) {
       <HStack spacing={2}>
         <IconButton
           size="sm"
+          variant="outline" colorScheme={"brandTeal"}
           icon={<CheckIcon />}
           {...getSubmitButtonProps()}
         />
         <IconButton
           size="sm"
+          variant="outline" colorScheme={"red"}
           icon={<CloseIcon />}
           {...getCancelButtonProps()}
         />
       </HStack>
     ) : (
-      <IconButton size="sm" icon={<EditIcon />} {...getEditButtonProps()} />
+      <IconButton variant="outline" colorScheme={"whiteAlpha"} size="sm" icon={<EditIcon />} {...getEditButtonProps()} />
     );
   }
 
