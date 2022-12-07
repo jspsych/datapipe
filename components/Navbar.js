@@ -21,6 +21,11 @@ import {
 import { AddIcon } from "@chakra-ui/icons";
 import { VscDebugDisconnect } from "react-icons/vsc";
 import { auth } from "../lib/firebase";
+import Image from "next/image";
+
+import { Rubik } from "@next/font/google";
+
+const rubik = Rubik({ subsets: ["latin"] });
 
 export default function Navbar() {
   const { user } = useContext(UserContext);
@@ -35,11 +40,32 @@ export default function Navbar() {
         color={"white"}
       >
         <HStack spacing={4} alignItems={"center"} pe={"2"}>
-          <Box display={"flex"} alignItems={"center"} fontSize={"large"}>
-            <Icon as={VscDebugDisconnect} me={"1"} />
-            <Link href="/"><ChakraLink>Data Pipe</ChakraLink></Link>
-          </Box>
-          <HStack as={"nav"} fontWeight="bold" spacing={4} display={{ base: "none", md: "flex" }}>
+          <Link href="/">
+            <Box
+              display={"flex"}
+              alignItems={"center"}
+              fontSize={"2xl"}
+              className={rubik.className}
+              pr={10}
+            >
+              <Box p={2}>
+                <Image
+                  src="/logo.png"
+                  alt="DataPipe Logo"
+                  width="64"
+                  height="64"
+                  quality={100}
+                />
+              </Box>
+              <Text>DataPipe</Text>
+            </Box>
+          </Link>
+          <HStack
+            as={"nav"}
+            fontWeight="bold"
+            spacing={8}
+            display={{ base: "none", md: "flex" }}
+          >
             <Link href="/help" passHref>
               <ChakraLink>Help</ChakraLink>
             </Link>
@@ -57,12 +83,17 @@ export default function Navbar() {
           {!user && (
             <>
               <Link href="/signin">
-                <Button variant={"ghost"} colorScheme={"white"} size={"sm"} mr={4}>
+                <Button
+                  variant={"ghost"}
+                  colorScheme={"white"}
+                  size={"sm"}
+                  mr={4}
+                >
                   Sign In
                 </Button>
               </Link>
               <Link href="/signup">
-                <Button variant={"solid"} colorScheme={"brandSand"} size={"sm"}>
+                <Button variant={"outline"} colorScheme={"white"} size={"sm"}>
                   Sign Up
                 </Button>
               </Link>
@@ -71,7 +102,12 @@ export default function Navbar() {
           {user && (
             <>
               <Link href="/admin/new">
-                <Button variant={"solid"} colorScheme={"green"} size={"sm"} leftIcon={<AddIcon />}>
+                <Button
+                  variant={"solid"}
+                  colorScheme={"green"}
+                  size={"sm"}
+                  leftIcon={<AddIcon />}
+                >
                   New Experiment
                 </Button>
               </Link>
@@ -81,7 +117,8 @@ export default function Navbar() {
                   rounded={"full"}
                   variant={"link"}
                   cursor={"pointer"}
-                  minW={0}>
+                  minW={0}
+                >
                   Account
                 </MenuButton>
                 <MenuList>
@@ -91,7 +128,7 @@ export default function Navbar() {
                     </Link>
                   </MenuItem>
                   <MenuDivider />
-                  <MenuItem onClick={()=>auth.signOut()}>Sign Out</MenuItem>
+                  <MenuItem onClick={() => auth.signOut()}>Sign Out</MenuItem>
                 </MenuList>
               </Menu>
             </>
