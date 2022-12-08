@@ -2,7 +2,14 @@ import Link from "next/link";
 import Image from "next/image";
 import { useContext } from "react";
 import { UserContext } from "../lib/context";
-import { HStack, VStack, Container, Heading, Text, Button } from "@chakra-ui/react";
+import {
+  HStack,
+  VStack,
+  Container,
+  Heading,
+  Text,
+  Button,
+} from "@chakra-ui/react";
 
 export default function Home() {
   const { user } = useContext(UserContext);
@@ -15,7 +22,11 @@ export default function Home() {
           Framework, for free.
         </Text>
         {user ? (
-          <Link href="/admin">Go to Dashboard</Link>
+          <Link href="/admin">
+            <Button variant={"outline"} colorScheme={"brandOrange"} size={"lg"}>
+              Go to Dashboard
+            </Button>
+          </Link>
         ) : (
           <Link href="/signup">
             <Button variant={"outline"} colorScheme={"brandOrange"} size={"lg"}>
@@ -24,9 +35,15 @@ export default function Home() {
           </Link>
         )}
       </VStack>
-      
-      <Image src="/homepipe.png" alt="Hero Image" width="768" height="768" quality={100} />
-      
+
+      <Image
+        src="/homepipe.png"
+        alt="Decorative illustration of a pipe with data flowing through it"
+        width="768"
+        height="768"
+        quality={100}
+        priority={true}
+      />
     </HStack>
   );
 }

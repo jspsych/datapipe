@@ -1,4 +1,4 @@
-import Link from "next/link";
+import NextLink from "next/link";
 import { useContext } from "react";
 import { UserContext } from "../lib/context";
 import {
@@ -9,7 +9,7 @@ import {
   Flex,
   HStack,
   Heading,
-  Link as ChakraLink,
+  Link,
   Stack,
   MenuItem,
   Menu,
@@ -40,7 +40,7 @@ export default function Navbar() {
         color={"white"}
       >
         <HStack spacing={4} alignItems={"center"} pe={"2"}>
-          <Link href="/">
+          <NextLink href="/">
             <Box
               display={"flex"}
               alignItems={"center"}
@@ -59,22 +59,22 @@ export default function Navbar() {
               </Box>
               <Text>DataPipe</Text>
             </Box>
-          </Link>
+          </NextLink>
           <HStack
             as={"nav"}
             fontWeight="bold"
             spacing={8}
             display={{ base: "none", md: "flex" }}
           >
-            <Link href="/help" passHref>
-              <ChakraLink>Help</ChakraLink>
+            <Link as={NextLink} href="/help">
+              Help
             </Link>
-            <Link href="/faq" passHref>
-              <ChakraLink>FAQ</ChakraLink>
+            <Link as={NextLink} href="/faq">
+              FAQ
             </Link>
             {user && (
-              <Link href="/admin" passHref>
-                <ChakraLink>My Experiments</ChakraLink>
+              <Link as={NextLink} href="/admin">
+                My Experiments
               </Link>
             )}
           </HStack>
@@ -82,7 +82,7 @@ export default function Navbar() {
         <HStack spacing={8}>
           {!user && (
             <>
-              <Link href="/signin">
+              <NextLink href="/signin">
                 <Button
                   variant={"ghost"}
                   colorScheme={"white"}
@@ -91,17 +91,17 @@ export default function Navbar() {
                 >
                   Sign In
                 </Button>
-              </Link>
-              <Link href="/signup">
+              </NextLink>
+              <NextLink href="/signup">
                 <Button variant={"outline"} colorScheme={"white"} size={"sm"}>
                   Sign Up
                 </Button>
-              </Link>
+              </NextLink>
             </>
           )}
           {user && (
             <>
-              <Link href="/admin/new">
+              <NextLink href="/admin/new">
                 <Button
                   variant={"outline"}
                   colorScheme={"green"}
@@ -110,7 +110,7 @@ export default function Navbar() {
                 >
                   New Experiment
                 </Button>
-              </Link>
+              </NextLink>
               <Menu>
                 <MenuButton
                   as={Button}
@@ -124,12 +124,14 @@ export default function Navbar() {
                 </MenuButton>
                 <MenuList bg="greyBackground">
                   <MenuItem bg="greyBackground">
-                    <Link href="/admin/profile" passHref>
+                    <NextLink href="/admin/profile">
                       Settings
-                    </Link>
+                    </NextLink>
                   </MenuItem>
                   <MenuDivider />
-                  <MenuItem bg="greyBackground" onClick={() => auth.signOut()}>Sign Out</MenuItem>
+                  <MenuItem bg="greyBackground" onClick={() => auth.signOut()}>
+                    Sign Out
+                  </MenuItem>
                 </MenuList>
               </Menu>
             </>
