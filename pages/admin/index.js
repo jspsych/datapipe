@@ -20,7 +20,7 @@ import {
   TableContainer,
   IconButton,
   HStack,
-  Stack,
+  VStack,
   Spinner,
   AlertDialog,
   AlertDialogBody,
@@ -36,15 +36,22 @@ import { DeleteIcon, EditIcon } from "@chakra-ui/icons";
 export default function AdminPage({}) {
   return (
     <AuthCheck>
-      <Stack>
-        <Heading>Your Experiments</Heading>
+      <VStack spacing={8}>
+        <HStack justifyContent="space-between" w="100%">
+          <Heading>Your Experiments</Heading>
+          <Link href="/admin/new">
+            <Button
+              variant={"solid"}
+              colorScheme={"brandTeal"}
+              size={"md"}
+              mr={4}
+            >
+              Create New Experiment
+            </Button>
+          </Link>
+        </HStack>
         <ExperimentList />
-        <Link href="/admin/new">
-          <Button variant={"solid"} colorScheme={"green"} size={"md"} mr={4}>
-            Create New Experiment
-          </Button>
-        </Link>
-      </Stack>
+      </VStack>
     </AuthCheck>
   );
 }
@@ -57,25 +64,25 @@ function ExperimentList() {
 
   return (
     <>
-    <TableContainer>
-      <Table>
-        <Thead>
-          <Tr>
-            <Th>Experiment</Th>
-            <Th>Status</Th>
-            <Th>Completed Sessions</Th>
-            <Th></Th>
-          </Tr>
-        </Thead>
-        <Tbody>
-          {querySnapshot &&
-            querySnapshot.map((exp) => (
-              <ExperimentItem key={exp.id} exp={exp} />
-            ))}
-        </Tbody>
-      </Table>
-    </TableContainer>
-    {loading && <Spinner color="green.500" size={"xl"} />}
+      <TableContainer>
+        <Table size="lg">
+          <Thead>
+            <Tr>
+              <Th color="white">Name</Th>
+              <Th color="white">Status</Th>
+              <Th color="white">Completed Sessions</Th>
+              <Th></Th>
+            </Tr>
+          </Thead>
+          <Tbody>
+            {querySnapshot &&
+              querySnapshot.map((exp) => (
+                <ExperimentItem key={exp.id} exp={exp} />
+              ))}
+          </Tbody>
+        </Table>
+      </TableContainer>
+      {loading && <Spinner color="green.500" size={"xl"} />}
     </>
   );
 }
@@ -83,13 +90,13 @@ function ExperimentList() {
 function ExperimentItem({ exp }) {
   return (
     <Tr id={exp.id}>
-      <Td>{exp.title}</Td>
+      <Td fontSize="lg">
+        <Link href={`/admin/${exp.id}`}>{exp.title}</Link>
+      </Td>
       <Td>
         <ExperimentStatusTag active={exp.active} />
       </Td>
-      <Td>
-        {exp.sessions}
-      </Td>
+      <Td>{exp.sessions}</Td>
       <Td>
         <ExperimentActions exp={exp} />
       </Td>
@@ -99,7 +106,7 @@ function ExperimentItem({ exp }) {
 
 function ExperimentStatusTag({ active }) {
   return (
-    <Tag size="sm" variant="solid" colorScheme={active ? "green" : "red"}>
+    <Tag size="lg" variant="solid" colorScheme={active ? "green" : "red"}>
       <TagLabel>{active ? "Active" : "Inactive"}</TagLabel>
     </Tag>
   );
@@ -109,20 +116,31 @@ function ExperimentActions({ exp }) {
   return (
     <HStack>
       <Link href={`/admin/${exp.id}`}>
-        <IconButton aria-label="Edit" icon={<EditIcon />} />
+        <IconButton
+          aria-label="Edit"
+          icon={<EditIcon />}
+          variant="outline"
+          colorScheme="whiteAlpha"
+        />
       </Link>
-      <DeleteAlertDialog exp={exp}/>
+      <DeleteAlertDialog exp={exp} />
     </HStack>
   );
 }
 
-function DeleteAlertDialog({exp}) {
-  const { isOpen, onOpen, onClose } = useDisclosure()
-  const cancelRef = useRef()
+function DeleteAlertDialog({ exp }) {
+  const { isOpen, onOpen, onClose } = useDisclosure();
+  const cancelRef = useRef();
 
   return (
     <>
-      <IconButton aria-label="Delete" icon={<DeleteIcon />} onClick={onOpen} />
+      <IconButton
+        aria-label="Delete"
+        icon={<DeleteIcon />}
+        onClick={onOpen}
+        variant="outline"
+        colorScheme="red"
+      />
 
       <AlertDialog
         isOpen={isOpen}
@@ -130,21 +148,31 @@ function DeleteAlertDialog({exp}) {
         onClose={onClose}
       >
         <AlertDialogOverlay>
-          <AlertDialogContent>
-            <AlertDialogHeader fontSize='lg' fontWeight='bold'>
+          <AlertDialogContent bg="greyBackground">
+            <AlertDialogHeader fontSize="lg" fontWeight="bold">
               Delete Experiment
             </AlertDialogHeader>
 
             <AlertDialogBody>
               <Text>Are you sure? This action is final.</Text>
-              <Text>Deleting the experiment will not delete any data that is already on the OSF.</Text>
+              <Text>
+                Deleting the experiment will not delete any data that is already
+                on the OSF.
+              </Text>
             </AlertDialogBody>
 
             <AlertDialogFooter>
-              <Button ref={cancelRef} onClick={onClose}>
+              <Button ref={cancelRef} onClick={onClose} colorScheme="brandTeal">
                 Cancel
               </Button>
-              <Button colorScheme='red' onClick={() => {onClose(); deleteExperiment(exp);}} ml={3}>
+              <Button
+                colorScheme="red"
+                onClick={() => {
+                  onClose();
+                  deleteExperiment(exp);
+                }}
+                ml={3}
+              >
                 Delete
               </Button>
             </AlertDialogFooter>
@@ -152,7 +180,7 @@ function DeleteAlertDialog({exp}) {
         </AlertDialogOverlay>
       </AlertDialog>
     </>
-  )
+  );
 }
 
 async function deleteExperiment(exp) {

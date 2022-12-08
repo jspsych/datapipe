@@ -1,4 +1,4 @@
-import Link from "next/link";
+import NextLink from "next/link";
 import { useContext } from "react";
 import { UserContext } from "../lib/context";
 import {
@@ -9,7 +9,7 @@ import {
   Flex,
   HStack,
   Heading,
-  Link as ChakraLink,
+  Link,
   Stack,
   MenuItem,
   Menu,
@@ -21,6 +21,11 @@ import {
 import { AddIcon } from "@chakra-ui/icons";
 import { VscDebugDisconnect } from "react-icons/vsc";
 import { auth } from "../lib/firebase";
+import Image from "next/image";
+
+import { Rubik } from "@next/font/google";
+
+const rubik = Rubik({ subsets: ["latin"] });
 
 export default function Navbar() {
   const { user } = useContext(UserContext);
@@ -30,68 +35,103 @@ export default function Navbar() {
       <Flex
         justifyContent={"space-between"}
         alignItems={"center"}
-        bg={"gray.100"}
         p={"4"}
         w={"100%"}
+        color={"white"}
       >
         <HStack spacing={4} alignItems={"center"} pe={"2"}>
-          <Box display={"flex"} alignItems={"center"}>
-            <Icon as={VscDebugDisconnect} me={"1"} />
-            <Link href="/"><ChakraLink>Pipe My Data</ChakraLink></Link>
-          </Box>
-          <HStack as={"nav"} spacing={4} display={{ base: "none", md: "flex" }}>
-            <Link href="/help" passHref>
-              <ChakraLink>Help</ChakraLink>
+          <NextLink href="/">
+            <Box
+              display={"flex"}
+              alignItems={"center"}
+              fontSize={"2xl"}
+              className={rubik.className}
+              pr={10}
+            >
+              <Box p={2}>
+                <Image
+                  src="/logo.png"
+                  alt="DataPipe Logo"
+                  width="64"
+                  height="64"
+                  quality={100}
+                />
+              </Box>
+              <Text>DataPipe</Text>
+            </Box>
+          </NextLink>
+          <HStack
+            as={"nav"}
+            fontWeight="bold"
+            spacing={8}
+            display={{ base: "none", md: "flex" }}
+          >
+            <Link as={NextLink} href="/help">
+              Help
             </Link>
-            <Link href="/faq" passHref>
-              <ChakraLink>FAQ</ChakraLink>
+            <Link as={NextLink} href="/faq">
+              FAQ
             </Link>
             {user && (
-              <Link href="/admin" passHref>
-                <ChakraLink>My Experiments</ChakraLink>
+              <Link as={NextLink} href="/admin">
+                My Experiments
               </Link>
             )}
           </HStack>
         </HStack>
-        <HStack ps={"2"}>
+        <HStack spacing={8}>
           {!user && (
             <>
-              <Link href="/signin">
-                <Button variant={"ghost"} colorScheme={"green"} size={"sm"} mr={4}>
+              <NextLink href="/signin">
+                <Button
+                  variant={"ghost"}
+                  colorScheme={"white"}
+                  size={"sm"}
+                  mr={4}
+                >
                   Sign In
                 </Button>
-              </Link>
-              <Link href="/signup">
-                <Button variant={"solid"} colorScheme={"green"} size={"sm"}>
+              </NextLink>
+              <NextLink href="/signup">
+                <Button variant={"outline"} colorScheme={"white"} size={"sm"}>
                   Sign Up
                 </Button>
-              </Link>
+              </NextLink>
             </>
           )}
           {user && (
             <>
-              <Link href="/admin/new">
-                <Button variant={"solid"} colorScheme={"green"} size={"sm"} leftIcon={<AddIcon />}>
+              <NextLink href="/admin/new">
+                <Button
+                  variant={"outline"}
+                  colorScheme={"green"}
+                  size={"sm"}
+                  leftIcon={<AddIcon />}
+                >
                   New Experiment
                 </Button>
-              </Link>
+              </NextLink>
               <Menu>
                 <MenuButton
                   as={Button}
+                  colorScheme={"white"}
                   rounded={"full"}
                   variant={"link"}
                   cursor={"pointer"}
-                  minW={0}>
+                  minW={0}
+                >
                   Account
                 </MenuButton>
-                <MenuList>
-                  <MenuItem>
-                    <Link href="/admin/profile" passHref>
-                      <ChakraLink>Settings</ChakraLink>
-                    </Link>
+                <MenuList bg="greyBackground">
+                  <MenuItem bg="greyBackground">
+                    <NextLink href="/admin/profile">
+                      Settings
+                    </NextLink>
                   </MenuItem>
                   <MenuDivider />
-                  <MenuItem onClick={()=>auth.signOut()}>Sign Out</MenuItem>
+                  <MenuItem bg="greyBackground" onClick={() => auth.signOut()}>
+                    Sign Out
+                  </MenuItem>
                 </MenuList>
               </Menu>
             </>

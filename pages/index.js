@@ -1,29 +1,49 @@
 import Link from "next/link";
+import Image from "next/image";
 import { useContext } from "react";
 import { UserContext } from "../lib/context";
-import { HStack, VStack, Box, Heading, Text, Button } from "@chakra-ui/react";
+import {
+  HStack,
+  VStack,
+  Container,
+  Heading,
+  Text,
+  Button,
+} from "@chakra-ui/react";
 
 export default function Home() {
   const { user } = useContext(UserContext);
 
   return (
-    <HStack px={12}>
-      <VStack spacing={4} align="start">
-        <Text fontSize="2xl">
+    <HStack px={12} maxW="1400px">
+      <VStack spacing={4} align="start" flexBasis="66%">
+        <Text fontSize="4xl" fontWeight="semibold">
           Send data from your behavioral experiments to the Open Science
           Framework, for free.
         </Text>
         {user ? (
-          <Link href="/admin">Go to Dashboard</Link>
+          <Link href="/admin">
+            <Button variant={"outline"} colorScheme={"brandOrange"} size={"lg"}>
+              Go to Dashboard
+            </Button>
+          </Link>
         ) : (
           <Link href="/signup">
-            <Button variant={"solid"} colorScheme={"green"} size={"md"}>
+            <Button variant={"outline"} colorScheme={"brandOrange"} size={"lg"}>
               Create an account
             </Button>
           </Link>
         )}
       </VStack>
-      <Box w="50vw" h="100%" bg="gray.500"></Box>
+
+      <Image
+        src="/homepipe.png"
+        alt="Decorative illustration of a pipe with data flowing through it"
+        width="768"
+        height="768"
+        quality={100}
+        priority={true}
+      />
     </HStack>
   );
 }

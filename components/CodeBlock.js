@@ -3,13 +3,13 @@ import CopyButton from "./CopyButton";
 
 const customScrollBarCSS = {
   "::-webkit-scrollbar": {
-    backgroundColor: "gray.700",
+    backgroundColor: "gray.800",
     height: "8px",
     paddingTop: "10px",
     borderRadius: "8px"
   },
   "::-webkit-scrollbar-thumb": {
-    background: "gray.500",
+    background: "gray.600",
     borderRadius: "8px"
   }
 }
@@ -28,7 +28,7 @@ export default function CodeBlock({ children, ...props }) {
   const code = lines.join("\n");
 
   return (
-    <Box w="100%" bg="gray.800" color="white" p={4} rounded="md" {...props}>
+    <Box w="100%" bg="black" color="white" p={4} rounded="md" {...props}>
       <HStack alignItems="start" spacing={6}>
           <Container as="pre" fontFamily="monospace" pb={3} overflowX="auto" sx={customScrollBarCSS}>
             {code}

@@ -63,7 +63,7 @@ function NewExperimentForm() {
           <FormControl id="osf-repo">
             <FormLabel>Existing OSF Project</FormLabel>
             <InputGroup>
-              <InputLeftAddon>https://osf.io/</InputLeftAddon>
+              <InputLeftAddon bgColor={"greyBackground"}>https://osf.io/</InputLeftAddon>
               <Input type="text" />
             </InputGroup>
           </FormControl>
@@ -73,7 +73,7 @@ function NewExperimentForm() {
           </FormControl>
           <FormControl id="enable-condition-assignment">
             <FormLabel>Enable condition assignment?</FormLabel>
-            <Switch onChange={(e) => setConditionToggle(e.target.checked)} />
+            <Switch colorScheme={"brandTeal"} onChange={(e) => setConditionToggle(e.target.checked)} />
           </FormControl>
           {conditionToggle && (
             <FormControl id="condition-assignment">
@@ -89,10 +89,10 @@ function NewExperimentForm() {
           )}
           <FormControl id="enable-validation">
             <FormLabel>Use data validation?</FormLabel>
-            <Switch defaultChecked onChange={(e) => setValidationToggle(e.target.checked)} />
+            <Switch colorScheme={"brandTeal"} defaultChecked onChange={(e) => setValidationToggle(e.target.checked)} />
           </FormControl>
           {validationToggle && (
-            <CheckboxGroup id="validation-settings" defaultValue={['json']} onChange={setValidationSettings}>
+            <CheckboxGroup id="validation-settings" defaultValue={['json']} onChange={setValidationSettings} colorScheme="brandTeal">
               <Stack spacing={5} direction='row'>
                 <Checkbox value='json'>Allow JSON</Checkbox>
                 <Checkbox value='csv'>Allow CSV</Checkbox>
@@ -102,6 +102,7 @@ function NewExperimentForm() {
           <Button
             onClick={() => handleCreateExperiment(setIsSubmitting, validationSettings)}
             isLoading={isSubmitting}
+            colorScheme={"brandTeal"}
           >
             Create
           </Button>
