@@ -5,7 +5,7 @@ import {
   CardHeader,
   Input,
   Text,
-  Link as ChakraLink,
+  Link,
   Stack,
   Heading,
   FormControl,
@@ -16,7 +16,7 @@ import { auth } from "../lib/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { useState } from "react";
 import { useRouter } from "next/router";
-import Link from "next/link";
+import NextLink from "next/link";
 import { ERROR, getError } from "../lib/utils";
 
 export default function SignInForm({ routeAfterSignIn }) {
@@ -75,8 +75,8 @@ export default function SignInForm({ routeAfterSignIn }) {
             <FormErrorMessage>{errorPassword}</FormErrorMessage>
           </FormControl>
           <Text>
-            <Link href="/reset-password" passHref>
-              <ChakraLink>Forgot password?</ChakraLink>
+            <Link as={NextLink} href="/reset-password">
+              Forgot password?
             </Link>
           </Text>
           <Button
@@ -88,8 +88,8 @@ export default function SignInForm({ routeAfterSignIn }) {
           </Button>
           <Text pt={4}>
             Need an account?{" "}
-            <Link href="/signup" passHref>
-              <ChakraLink>Sign Up!</ChakraLink>
+            <Link as={NextLink} href="/signup">
+              Sign Up!
             </Link>
           </Text>
         </Stack>

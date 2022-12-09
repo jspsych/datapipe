@@ -12,6 +12,8 @@ import ExperimentActive from "../../components/dashboard/ExperimentActive";
 import ExperimentValidation from "../../components/dashboard/ExperimentValidation";
 import CodeHints from "../../components/dashboard/CodeHints";
 
+import { useState } from "react";
+
 export default function ExperimentPage() {
   const router = useRouter();
   const { experiment_id } = router.query;
@@ -44,12 +46,7 @@ function ExperimentPageDashboard({ experiment_id }) {
           <Flex alignItems="flex-start" wrap="wrap" w="100%">
             <VStack w="40%">
               <ExperimentInfo data={data} />
-              <ExperimentActive
-                data={data}
-                onChange={(status) =>
-                  toggleExperimentActive(experiment_id, status)
-                }
-              />
+              <ExperimentActive data={data} />
               <ExperimentValidation data={data} />
             </VStack>
             <CodeHints expId={experiment_id} />
@@ -58,42 +55,6 @@ function ExperimentPageDashboard({ experiment_id }) {
       )}
     </>
   );
-}
-
-async function toggleExperimentActive(expId, active) {
-  if (active) {
-    deactivateExperiment(expId);
-  } else {
-    activateExperiment(expId);
-  }
-}
-
-async function activateExperiment(expId) {
-  try {
-    await setDoc(
-      doc(db, `experiments/${expId}`),
-      {
-        active: true,
-      },
-      { merge: true }
-    );
-  } catch (error) {
-    console.error(error);
-  }
-}
-
-async function deactivateExperiment(expId) {
-  try {
-    await setDoc(
-      doc(db, `experiments/${expId}`),
-      {
-        active: false,
-      },
-      { merge: true }
-    );
-  } catch (error) {
-    console.error(error);
-  }
 }
 
 async function updateExperimentTitle(newTitle, expId) {
@@ -109,3 +70,4 @@ async function updateExperimentTitle(newTitle, expId) {
     console.error(error);
   }
 }
+
