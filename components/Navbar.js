@@ -17,11 +17,11 @@ import {
   MenuList,
   MenuDivider,
   Icon,
+  Image,
 } from "@chakra-ui/react";
 import { AddIcon } from "@chakra-ui/icons";
 import { VscDebugDisconnect } from "react-icons/vsc";
 import { auth } from "../lib/firebase";
-import Image from "next/image";
 
 import { Rubik } from "@next/font/google";
 
@@ -52,8 +52,7 @@ export default function Navbar() {
                 <Image
                   src="/logo.png"
                   alt="DataPipe Logo"
-                  width="64"
-                  height="64"
+                  boxSize="64px"
                   quality={100}
                 />
               </Box>

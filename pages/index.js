@@ -1,5 +1,4 @@
 import Link from "next/link";
-import Image from "next/image";
 import { useContext } from "react";
 import { UserContext } from "../lib/context";
 import {
@@ -9,6 +8,7 @@ import {
   Heading,
   Text,
   Button,
+  Image,
 } from "@chakra-ui/react";
 
 export default function Home() {
@@ -39,8 +39,7 @@ export default function Home() {
       <Image
         src="/homepipe.png"
         alt="Decorative illustration of a pipe with data flowing through it"
-        width="768"
-        height="768"
+        boxSize="768px"
         quality={100}
         priority={true}
       />
