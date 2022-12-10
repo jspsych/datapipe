@@ -35,14 +35,7 @@ function ExperimentPageDashboard({ experiment_id }) {
       {loading && <Spinner color="green.500" size={"xl"} />}
       {data && (
         <VStack alignSelf="flex-start" align="flex-start" w={1000}>
-          <Title
-            title={data.title}
-            onSubmit={(newTitle) => {
-              if (data.title !== newTitle) {
-                updateExperimentTitle(newTitle, experiment_id);
-              }
-            }}
-          />
+          <Title data={data} />
           <Flex alignItems="flex-start" wrap="wrap" w="100%">
             <VStack w="40%">
               <ExperimentInfo data={data} />
@@ -56,18 +49,3 @@ function ExperimentPageDashboard({ experiment_id }) {
     </>
   );
 }
-
-async function updateExperimentTitle(newTitle, expId) {
-  try {
-    await setDoc(
-      doc(db, `experiments/${expId}`),
-      {
-        title: newTitle,
-      },
-      { merge: true }
-    );
-  } catch (error) {
-    console.error(error);
-  }
-}
-

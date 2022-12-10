@@ -11,7 +11,10 @@ import {
 
 import { CheckIcon, CloseIcon, EditIcon } from "@chakra-ui/icons";
 
-export default function ExperimentTitle({ title, onSubmit }) {
+import { db } from "../../lib/firebase";
+import { doc, setDoc } from "firebase/firestore";
+
+export default function ExperimentTitle({ data }) {
   function EditableControls() {
     const {
       isEditing,
@@ -43,10 +46,10 @@ export default function ExperimentTitle({ title, onSubmit }) {
   return (
     <Editable
       textAlign="left"
-      defaultValue={title}
+      defaultValue={data.title}
       fontSize="4xl"
       isPreviewFocusable={false}
-      onSubmit={onSubmit}
+      onSubmit={(e)=>updateExperimentTitle(e.target.value, data.id, data.title)}
       as={Flex}
       align="center"
     >
@@ -56,4 +59,19 @@ export default function ExperimentTitle({ title, onSubmit }) {
       <EditableControls />
     </Editable>
   );
+}
+
+async function updateExperimentTitle(newTitle, expId, oldTitle) {
+  if (newTitle === oldTitle) return;
+  try {
+    await setDoc(
+      doc(db, `experiments/${expId}`),
+      {
+        title: newTitle,
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    console.error(error);
+  }
 }
