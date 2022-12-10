@@ -102,7 +102,7 @@ export default function CodeHints({ expId }) {
           <TabPanels>
             <TabPanel>
               <VStack alignItems={"start"}>
-                <Text>Use fetch to send data:</Text>
+                <Text>Use fetch to send data.</Text>
                 <CodeBlock>
                   {`
             fetch("https://pipe.jspsych.org/api/data/", {
@@ -122,10 +122,10 @@ export default function CodeHints({ expId }) {
             </TabPanel>
             <TabPanel>
               <VStack alignItems={"start"}>
-                <Text>Use fetch to send data:</Text>
+              <Text>Use fetch to send base64 data. The server will decode the base64 and send the decoded file to the OSF. Use the appropriate file extension in the file name.</Text>
                 <CodeBlock>
                   {`
-            fetch("https://pipe.jspsych.org/api/data/", {
+            fetch("https://pipe.jspsych.org/api/base64/", {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
@@ -133,11 +133,30 @@ export default function CodeHints({ expId }) {
               },
               body: JSON.stringify({
                 experimentID: "${expId}",
-                filename: "UNIQUE_FILENAME.csv",
-                data: dataAsString,
+                filename: "UNIQUE_FILENAME.webm",
+                data: base64DataString,
               }),
             });`}
                 </CodeBlock>
+              </VStack>
+            </TabPanel>
+            <TabPanel>
+              <VStack alignItems={"start"}>
+              <Text>Use fetch to request the next condition number.</Text>
+                <CodeBlock>
+                  {`
+            const condition = await fetch("https://pipe.jspsych.org/api/condition/", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Accept: "*/*",
+              },
+              body: JSON.stringify({
+                experimentID: "${expId}",
+              }),
+            });`}
+                </CodeBlock>
+                <Text>This request is asynchronous, so you will need to wrap this in an async function. The value of condition will be a string.</Text>
               </VStack>
             </TabPanel>
           </TabPanels>
