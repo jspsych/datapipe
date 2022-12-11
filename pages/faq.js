@@ -11,7 +11,7 @@ import {
 const copy = [
   {
     q: "How do I use this service?",
-    a: "Work In Progress...",
+    a: "DataPipe serves as a connection between an experiment and the Open Science Framework. To use DataPipe, you'll need to use a webhost to get your experiment online (e.g., GitHub Pages) and then add some code to your experiment to send data to DataPipe. You'll also need to have an OSF account to store the data and create an authorization token on the OSF to allow DataPipe to write data to your OSF account. Our help page has more information about how to get started using DataPipe.",
   },
   {
     q: "Will this host my experiment?",
@@ -35,7 +35,7 @@ const copy = [
   },
   {
     q: "Who can see the data that I collect using this service?",
-    a: "Work In Progress...",
+    a: "The data that you send to DataPipe are not stored anywhere on our servers and we do not log any information about the data when it is sent. If your OSF component that receives the data is private, then you have full control over who can see the data. If your OSF component is public, then anyone can see the data.",
   },
   {
     q: "What are the risks of using this service and how can I mitigate them?",
