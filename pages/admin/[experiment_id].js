@@ -2,7 +2,7 @@ import AuthCheck from "../../components/AuthCheck";
 import { useRouter } from "next/router";
 import { useDocumentData } from "react-firebase-hooks/firestore";
 import { db } from "../../lib/firebase";
-import { doc, setDoc } from "firebase/firestore";
+import { doc } from "firebase/firestore";
 
 import { Spinner, Flex, VStack } from "@chakra-ui/react";
 
@@ -11,8 +11,6 @@ import ExperimentInfo from "../../components/dashboard/ExperimentInfo";
 import ExperimentActive from "../../components/dashboard/ExperimentActive";
 import ExperimentValidation from "../../components/dashboard/ExperimentValidation";
 import CodeHints from "../../components/dashboard/CodeHints";
-
-import { useState } from "react";
 
 export default function ExperimentPage() {
   const router = useRouter();
