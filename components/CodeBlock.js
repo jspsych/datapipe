@@ -6,18 +6,18 @@ const customScrollBarCSS = {
     backgroundColor: "gray.800",
     height: "8px",
     paddingTop: "10px",
-    borderRadius: "8px"
+    borderRadius: "8px",
   },
   "::-webkit-scrollbar-thumb": {
     background: "gray.600",
-    borderRadius: "8px"
-  }
-}
+    borderRadius: "8px",
+  },
+};
 
 export default function CodeBlock({ children, ...props }) {
   let lines = children.split("\n");
   // remove first line if it is empty
-  if(lines[0].trim() === "") {
+  if (lines[0].trim() === "") {
     lines.shift();
   }
   // get indent of the first line
@@ -28,11 +28,17 @@ export default function CodeBlock({ children, ...props }) {
   const code = lines.join("\n");
 
   return (
-    <Box w="100%" bg="black" color="white" p={4} rounded="md" {...props}>
-      <HStack alignItems="start" spacing={6}>
-          <Container as="pre" fontFamily="monospace" pb={3} overflowX="auto" sx={customScrollBarCSS}>
-            {code}
-          </Container>
+    <Box w="100%" bg="gray.800" color="white" p={4} rounded="md" {...props}>
+      <HStack alignItems="start" justifyContent="space-between" spacing={6}>
+        <Box
+          as="pre"
+          fontFamily="monospace"
+          pb={3}
+          overflowX="auto"
+          sx={customScrollBarCSS}
+        >
+          {code}
+        </Box>
         <CopyButton code={children} />
       </HStack>
     </Box>

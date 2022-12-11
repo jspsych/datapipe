@@ -5,23 +5,19 @@ import {
   Box,
   Button,
   Text,
-  Avatar,
   Flex,
   HStack,
-  Heading,
   Link,
-  Stack,
   MenuItem,
   Menu,
   MenuButton,
   MenuList,
   MenuDivider,
-  Icon,
+  Image,
 } from "@chakra-ui/react";
 import { AddIcon } from "@chakra-ui/icons";
-import { VscDebugDisconnect } from "react-icons/vsc";
+
 import { auth } from "../lib/firebase";
-import Image from "next/image";
 
 import { Rubik } from "@next/font/google";
 
@@ -52,8 +48,7 @@ export default function Navbar() {
                 <Image
                   src="/logo.png"
                   alt="DataPipe Logo"
-                  width="64"
-                  height="64"
+                  boxSize="64px"
                   quality={100}
                 />
               </Box>
@@ -124,9 +119,7 @@ export default function Navbar() {
                 </MenuButton>
                 <MenuList bg="greyBackground">
                   <MenuItem bg="greyBackground">
-                    <NextLink href="/admin/profile">
-                      Settings
-                    </NextLink>
+                    <NextLink href="/admin/profile">Settings</NextLink>
                   </MenuItem>
                   <MenuDivider />
                   <MenuItem bg="greyBackground" onClick={() => auth.signOut()}>

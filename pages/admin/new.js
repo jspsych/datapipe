@@ -206,6 +206,7 @@ async function handleCreateExperiment(setIsSubmitting, validationSettings) {
       useValidation: useValidation,
       allowJSON: allowJSON,
       allowCSV: allowCSV,
+      requiredFields: ['trial_type']
     });
 
     const userDoc = doc(db, `users/${user.uid}`);

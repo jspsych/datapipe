@@ -42,13 +42,13 @@ export const apiData = functions.https.onRequest(async (req, res) => {
     if (exp_data.useValidation) {
       let valid = false;
       if (exp_data.allowJSON) {
-        const validJSON = validateJSON(data);
+        const validJSON = validateJSON(data, exp_data.requiredFields);
         if (validJSON) {
           valid = true;
         }
       }
       if (exp_data.allowCSV && !valid) {
-        const validCSV = validateCSV(data);
+        const validCSV = validateCSV(data, exp_data.requiredFields);
         if (validCSV) {
           valid = true;
         }
