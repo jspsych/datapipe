@@ -1,5 +1,6 @@
 import '../styles/globals.css'
 import Navbar from '../components/Navbar'
+import Footer from '../components/Footer'
 import { UserContext } from '../lib/context'
 import { ChakraProvider } from '@chakra-ui/react'
 import { Box, Center } from '@chakra-ui/react'
@@ -24,6 +25,7 @@ function MyApp({ Component, pageProps }) {
           <Center h="100%" px={"2"}>
             <Component {...pageProps} />
           </Center>
+          <Footer />
         </Box>
       </UserContext.Provider>
     </ChakraProvider>
