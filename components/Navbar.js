@@ -27,7 +27,7 @@ export default function Navbar() {
   const { user } = useContext(UserContext);
 
   return (
-    <Box as="nav">
+    <Box as="nav" flexShrink={0}>
       <Flex
         justifyContent={"space-between"}
         alignItems={"center"}

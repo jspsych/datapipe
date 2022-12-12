@@ -2,12 +2,15 @@ import {
   Box,
   Container,
   SimpleGrid,
+  HStack,
+  VStack,
   Link,
   Stack,
   Text,
   Button,
 } from "@chakra-ui/react";
 import { OpenCollectiveIcon } from "./OpenCollectiveIcon";
+import { JsPsychIcon } from "./JsPsychIcon";
 
 const ListHeader = ({ children }) => {
   return (
@@ -19,60 +22,29 @@ const ListHeader = ({ children }) => {
 
 export default function Footer() {
   return (
-    <Box bg="greyBackground" color="white">
+    <Box bg="greyBackground" color="gray.300">
       <Container as={Stack} maxW={"6xl"} py={10}>
-        <SimpleGrid columns={{ base: 1, sm: 2, md: 4 }} spacing={8}>
+        <HStack justifyContent="space-between" borderTopWidth={1} borderColor="gray.700" pt={3} fontSize={"sm"}>
+          <Text>Created by the developers of jsPsych <JsPsychIcon boxSize={10} /></Text>
+          <Link href={"#"}>Report an Issue</Link>
+          <Link href={"#"}>GitHub</Link>
+          <Link href={"#"}>Contact Us</Link>
           <Stack align={"flex-start"}>
-            <ListHeader>Company</ListHeader>
-            <Link href={"#"}>About Us</Link>
-            <Link href={"#"}>Blog</Link>
-            <Link href={"#"}>Careers</Link>
-            <Link href={"#"}>Contact Us</Link>
-          </Stack>
-
-          <Stack align={"flex-start"}>
-            <ListHeader>Support</ListHeader>
-            <Link href={"#"}>Help Center</Link>
-            <Link href={"#"}>Safety Center</Link>
-            <Link href={"#"}>Community Guidelines</Link>
-          </Stack>
-
-          <Stack align={"flex-start"}>
-            <ListHeader>Legal</ListHeader>
-            <Link href={"#"}>Cookies Policy</Link>
-            <Link href={"#"}>Privacy Policy</Link>
-            <Link href={"#"}>Terms of Service</Link>
-            <Link href={"#"}>Law Enforcement</Link>
-          </Stack>
-
-          <Stack align={"flex-start"}>
-            <ListHeader>Keep this service running</ListHeader>
             <Button
-              rightIcon={<OpenCollectiveIcon boxSize={10} />}
+              rightIcon={<OpenCollectiveIcon boxSize={8} />}
               variant="outline"
+              color="white"
               colorScheme="white"
-              size="lg"
+              size="sm"
+              onClick={()=>{
+                window.open("https://opencollective.com/jspsych")
+              }}
             >
               Donate on Open Collective
             </Button>
           </Stack>
-        </SimpleGrid>
+        </HStack>
       </Container>
-
-      <Box borderTopWidth={1} borderStyle={"solid"} borderColor={"gray.600"}>
-        <Container
-          as={Stack}
-          maxW={"6xl"}
-          py={4}
-          direction={{ base: "column", md: "row" }}
-          spacing={4}
-          justify={{ md: "space-between" }}
-          align={{ md: "center" }}
-        >
-          <Text>Created by the developers of jsPsych.</Text>
-          <Stack direction={"row"} spacing={6}></Stack>
-        </Container>
-      </Box>
     </Box>
   );
 }
