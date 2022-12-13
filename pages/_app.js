@@ -10,6 +10,7 @@ import { useAuthState } from 'react-firebase-hooks/auth'
 
 import { extendTheme } from '@chakra-ui/react'
 import { theme } from '../lib/theme'
+import Head from 'next/head';
 
 const newTheme = extendTheme(theme)
 
@@ -20,6 +21,9 @@ function MyApp({ Component, pageProps }) {
   return (
     <ChakraProvider theme={newTheme}>
       <UserContext.Provider value={{user}} >
+        <Head>
+          <title>DataPipe</title>
+        </Head>
         <Box minH="100vh" display="flex" flexDirection="column" justifyContent="space-between">
           <Navbar />
           <Center flexGrow={1} flexShrink={0} flexBasis="auto" px={"2"} justifySelf="flex-start">
