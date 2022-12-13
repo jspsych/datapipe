@@ -57,12 +57,12 @@ export default function Navbar() {
           </NextLink>
           <HStack
             as={"nav"}
-            fontWeight="bold"
+            fontSize="lg"
             spacing={8}
             display={{ base: "none", md: "flex" }}
           >
             <Link as={NextLink} href="/help">
-              Help
+              Getting Started
             </Link>
             <Link as={NextLink} href="/faq">
               FAQ
