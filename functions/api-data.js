@@ -39,6 +39,13 @@ export const apiData = functions.https.onRequest(async (req, res) => {
       return;
     }
 
+    if(exp_data.limitSessions) {
+      if(exp_data.sessions >= exp_data.maxSessions) {
+        res.status(400).send("Experiment has reached its session limit");
+        return;
+      }
+    }
+
     if (exp_data.useValidation) {
       let valid = false;
       if (exp_data.allowJSON) {
