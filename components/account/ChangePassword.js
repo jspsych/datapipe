@@ -16,7 +16,7 @@ import {
   ModalCloseButton,
   FormControl,
   FormLabel,
-  Input
+  Input,
 } from "@chakra-ui/react";
 
 import { auth } from "../../lib/firebase";
@@ -29,6 +29,7 @@ export default function ChangePassword() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordMatch, setPasswordMatch] = useState(true);
+  const [passwordLengthSatisfied, setPasswordLengthSatisfied] = useState(true);
 
   useEffect(() => {
     if (password !== confirmPassword) {
@@ -38,10 +39,17 @@ export default function ChangePassword() {
     }
   }, [password, confirmPassword]);
 
+  useEffect(() => {
+    if (password.length < 6) {
+      setPasswordLengthSatisfied(false);
+    } else {
+      setPasswordLengthSatisfied(true);
+    }
+  }, [password]);
 
   return (
-    <HStack justifyContent="space-between">
-      <Text>Password</Text>
+    <HStack justifyContent="space-between" w="100%">
+      <Text fontSize={"lg"}>Password</Text>
       <Button isLoading={isSubmitting} onClick={onOpen} colorScheme="brandTeal">
         Change Password
       </Button>
@@ -52,15 +60,26 @@ export default function ChangePassword() {
           <ModalCloseButton />
           <ModalBody>
             <VStack spacing={4}>
-            <FormControl id="new-password">
-              <FormLabel>New Password</FormLabel>
-              <Input type="password" value={password} onChange={(e)=>setPassword(e.target.value)}/>
-            </FormControl>
-            <FormControl id="confirm-password" isInvalid={!passwordMatch}>
-              <FormLabel>Confirm Password</FormLabel>
-              <Input type="password" value={confirmPassword} onChange={(e)=>setConfirmPassword(e.target.value)} />
-              <FormErrorMessage>Passwords do not match</FormErrorMessage>
-            </FormControl>
+              <FormControl id="new-password" isInvalid={!passwordLengthSatisfied}>
+                <FormLabel>New Password</FormLabel>
+                <Input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+                <FormErrorMessage>
+                  Password must be at least 6 characters
+                </FormErrorMessage>
+              </FormControl>
+              <FormControl id="confirm-password" isInvalid={!passwordMatch}>
+                <FormLabel>Confirm Password</FormLabel>
+                <Input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                />
+                <FormErrorMessage>Passwords do not match</FormErrorMessage>
+              </FormControl>
             </VStack>
           </ModalBody>
           <ModalFooter>
@@ -69,9 +88,9 @@ export default function ChangePassword() {
               colorScheme={"brandTeal"}
               size={"md"}
               mr={4}
-              onClick={() => handleChangePassword(setIsSubmitting)}
+              onClick={() => handleChangePassword(password, setIsSubmitting)}
               isLoading={isSubmitting}
-              isDisabled={!passwordMatch || password.length < 6}
+              isDisabled={!passwordMatch || !passwordLengthSatisfied}
             >
               Change Password
             </Button>
@@ -82,10 +101,10 @@ export default function ChangePassword() {
   );
 }
 
-async function handleChangePassword(setIsSubmitting) {
+async function handleChangePassword(newPassword, setIsSubmitting) {
   setIsSubmitting(true);
   const user = auth.currentUser;
-  const newPassword = document.querySelector("#new-password").value;
+  
   try {
     await updatePassword(user, newPassword);
     setIsSubmitting(false);
