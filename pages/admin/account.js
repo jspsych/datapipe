@@ -15,53 +15,21 @@ import {
   FormHelperText,
   Input,
   Spinner,
+  HStack,
+  Text
 } from "@chakra-ui/react";
+import ChangePassword from "../../components/account/ChangePassword";
 
-export default function ProfilePage({}) {
+export default function AccountPage({}) {
   return (
     <AuthCheck>
       <VStack spacing={16}>
         <Heading>Account Settings</Heading>
-        <PasswordChangeForm />
+        <ChangePassword />
         <OsfTokenForm />
       </VStack>
     </AuthCheck>
   );
-}
-
-function PasswordChangeForm() {
-  const { user } = useContext(UserContext);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  return (
-    <Stack>
-      <FormControl id="new-password">
-        <FormLabel>New Password</FormLabel>
-        <Input type="password" />
-      </FormControl>
-      <Button
-        isLoading={isSubmitting}
-        onClick={() => {
-          handleChangePassword(setIsSubmitting);
-        }}
-        colorScheme="brandTeal"
-      >
-        Change Password
-      </Button>
-    </Stack>
-  );
-}
-
-async function handleChangePassword(setIsSubmitting) {
-  setIsSubmitting(true);
-  const user = auth.currentUser;
-  const newPassword = document.querySelector("#new-password").value;
-  try {
-    await updatePassword(user, newPassword);
-    setIsSubmitting(false);
-  } catch (error) {
-    console.log(error);
-  }
 }
 
 function OsfTokenForm() {

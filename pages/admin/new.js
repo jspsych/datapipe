@@ -132,7 +132,7 @@ function NewExperimentForm() {
             Before you can create an experiment, you need to connect your OSF
             account.
           </p>
-          <Link href="/admin/profile">
+          <Link href="/admin/account">
             <Button variant={"solid"} colorScheme={"brandTeal"} size={"md"}>
               Connect OSF Account
             </Button>
