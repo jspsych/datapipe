@@ -36,7 +36,7 @@ import { DeleteIcon, EditIcon } from "@chakra-ui/icons";
 export default function AdminPage({}) {
   return (
     <AuthCheck>
-      <VStack spacing={8}>
+      <VStack spacing={8} w="860px">
         <HStack justifyContent="space-between" w="100%">
           <Heading>Your Experiments</Heading>
           <Link href="/admin/new">
@@ -64,7 +64,7 @@ function ExperimentList() {
 
   return (
     <>
-      <TableContainer>
+      <TableContainer w="100%">
         <Table size="lg">
           <Thead>
             <Tr>
