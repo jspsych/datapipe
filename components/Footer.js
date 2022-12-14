@@ -13,14 +13,6 @@ import { OpenCollectiveIcon } from "./OpenCollectiveIcon";
 import { JsPsychIcon } from "./JsPsychIcon";
 import NextLink from "next/link";
 
-const ListHeader = ({ children }) => {
-  return (
-    <Text fontWeight={"500"} fontSize={"lg"} mb={2}>
-      {children}
-    </Text>
-  );
-};
-
 export default function Footer() {
   return (
     <Box bg="greyBackground" color="gray.300">
