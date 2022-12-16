@@ -68,7 +68,7 @@ export default function CodeHints({ expId }) {
               <VStack alignItems={"start"}>
                 <Text>Load the pipe plugin:</Text>
                 <CodeBlock>
-                  {`<script src="https://unpkg.com/@jspsych-contrib/jspsych-pipe"></script>`}
+                  {`<script src="https://unpkg.com/@jspsych-contrib/plugin-pipe"></script>`}
                 </CodeBlock>
                 <Text>Generate a unique filename:</Text>
                 <CodeBlock>
@@ -102,7 +102,7 @@ export default function CodeHints({ expId }) {
               <VStack alignItems={"start"}>
                 <Text>Load the pipe plugin:</Text>
                 <CodeBlock>
-                  {`<script src="https://unpkg.com/@jspsych-contrib/jspsych-pipe"></script>`}
+                  {`<script src="https://unpkg.com/@jspsych-contrib/plugin-pipe"></script>`}
                 </CodeBlock>
                 <Text>
                   This example will imagine that you are recording audio data
@@ -158,7 +158,7 @@ export default function CodeHints({ expId }) {
               <VStack alignItems={"start"}>
                 <Text>Load the pipe plugin:</Text>
                 <CodeBlock>
-                  {`<script src="https://unpkg.com/@jspsych-contrib/jspsych-pipe"></script>`}
+                  {`<script src="https://unpkg.com/@jspsych-contrib/plugin-pipe"></script>`}
                 </CodeBlock>
                 <Text>Use the static method of the pipe plugin to request the condition. This is an asynchronous request so we need to wait for the response before using the condition value. An easy wait to do this is to put your experiment creation code inside an async function.</Text>
                 <CodeBlock>
