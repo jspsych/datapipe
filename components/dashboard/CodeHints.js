@@ -21,7 +21,7 @@ import { ChevronDownIcon } from "@chakra-ui/icons";
 import CodeBlock from "../CodeBlock";
 
 export default function CodeHints({ expId }) {
-  const [language, setLanguage] = useState("jsPsych");
+  const [language, setLanguage] = useState("jsPsych version 7");
 
   return (
     <Stack
@@ -45,8 +45,8 @@ export default function CodeHints({ expId }) {
             {language}
           </MenuButton>
           <MenuList bg="black" variant="outline">
-            <MenuItem bg="black" onClick={() => setLanguage("jsPsych")}>
-              jsPsych
+            <MenuItem bg="black" onClick={() => setLanguage("jsPsych version 7")}>
+              jsPsych version 7
             </MenuItem>
             <MenuDivider />
             <MenuItem bg="black" onClick={() => setLanguage("JavaScript")}>
@@ -55,7 +55,7 @@ export default function CodeHints({ expId }) {
           </MenuList>
         </Menu>
       </VStack>
-      {language === "jsPsych" && (
+      {language === "jsPsych version 7" && (
         <Tabs variant="solid-rounded" colorScheme="brandOrange">
           <TabList>
             <Tab>Send data</Tab>
