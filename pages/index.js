@@ -41,7 +41,6 @@ export default function Home() {
         alt="Decorative illustration of a pipe with data flowing through it"
         boxSize="768px"
         quality={100}
-        priority={true}
       />
     </HStack>
   );
