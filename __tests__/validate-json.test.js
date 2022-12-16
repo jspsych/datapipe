@@ -34,4 +34,10 @@ describe("validateJSON", () => {
     const requiredFields = ['foo', 'baz'];
     expect(validateJSON(json, requiredFields)).toBe(false);
   });
+  
+  it("should return false for invalid JSON string", () => {
+    const json = `{"foo": "bar"`;
+    const requiredFields = ['foo'];
+    expect(validateJSON(json, requiredFields)).toBe(false);
+  });
 });
