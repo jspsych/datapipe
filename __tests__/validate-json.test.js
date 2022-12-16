@@ -29,10 +29,10 @@ describe("validateJSON", () => {
     expect(validateJSON(json, requiredFields)).toBe(true);
   });
 
-  it("should return false when all required fields are not present in at least one array item", () => {
+  it("should return true when all required fields are present in at least one array item, even if in different items", () => {
     const json = `[{"foo": "bar"}, {"baz": "qux"}]`;
     const requiredFields = ['foo', 'baz'];
-    expect(validateJSON(json, requiredFields)).toBe(false);
+    expect(validateJSON(json, requiredFields)).toBe(true);
   });
   
   it("should return false for invalid JSON string", () => {

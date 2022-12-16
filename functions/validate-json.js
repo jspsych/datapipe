@@ -8,10 +8,18 @@ export default function validateJSON(json, requiredFields) {
     }
 
     if (Array.isArray(parsedJSON)) {
-      return parsedJSON.some((trial) => {
-        const keys = Object.keys(trial);
-        return requiredFields.every((field) => keys.includes(field));
-      });
+      const keys = new Set();
+
+      // Iterate over the array of objects
+      for (const object of parsedJSON) {
+        // Get the keys for each object and add them to the Set
+        keys.add(...Object.keys(object));
+      }
+
+      const uniqueKeys = Array.from(keys);
+
+      // Check if all required fields are present in the Set
+      return requiredFields.every((field) => uniqueKeys.includes(field));
     } else {
       const keys = Object.keys(parsedJSON);
       return requiredFields.every((field) => keys.includes(field));
