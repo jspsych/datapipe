@@ -22,4 +22,5 @@ describe("validateCSV", () => {
     const requiredFields = ['foo', 'baz'];
     expect(validateCSV(csv, requiredFields)).toBe(false);
   });
+  
 });
