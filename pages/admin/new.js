@@ -31,6 +31,7 @@ import {
   NumberInput,
   CheckboxGroup,
   Checkbox,
+  FormErrorMessage,
 } from "@chakra-ui/react";
 
 export default function NewExperimentPage({}) {
@@ -44,6 +45,7 @@ export default function NewExperimentPage({}) {
 function NewExperimentForm() {
   const { user } = useContext(UserContext);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [osfError, setOsfError] = useState(false);
   const [conditionToggle, setConditionToggle] = useState(false);
   const [sessionToggle, setSessionToggle] = useState(false);
   const [validationToggle, setValidationToggle] = useState(true);
@@ -61,12 +63,13 @@ function NewExperimentForm() {
             <FormLabel>Title</FormLabel>
             <Input type="text" />
           </FormControl>
-          <FormControl id="osf-repo">
+          <FormControl id="osf-repo" isInvalid={osfError}>
             <FormLabel>Existing OSF Project</FormLabel>
             <InputGroup>
               <InputLeftAddon bgColor={"greyBackground"}>https://osf.io/</InputLeftAddon>
               <Input type="text" />
             </InputGroup>
+            <FormErrorMessage color={"red"}>Cannot connect to this OSF component</FormErrorMessage>
           </FormControl>
           <FormControl id="osf-component-name">
             <FormLabel>New OSF Data Component Name</FormLabel>
@@ -117,7 +120,7 @@ function NewExperimentForm() {
             </FormControl>
           )}
           <Button
-            onClick={() => handleCreateExperiment(setIsSubmitting, validationSettings)}
+            onClick={() => handleCreateExperiment(setIsSubmitting, setOsfError, validationSettings)}
             isLoading={isSubmitting}
             colorScheme={"brandTeal"}
           >
@@ -143,12 +146,13 @@ function NewExperimentForm() {
   );
 }
 
-async function handleCreateExperiment(setIsSubmitting, validationSettings) {
+async function handleCreateExperiment(setIsSubmitting, setOsfError, validationSettings) {
   setIsSubmitting(true);
+  setOsfError(false);
 
   const user = auth.currentUser;
   const title = document.querySelector("#title").value;
-  const osfRepo = document.querySelector("#osf-repo").value;
+  let osfRepo = document.querySelector("#osf-repo").value;
   const osfComponentName = document.querySelector("#osf-component-name").value;
   const nConditions = document.querySelector("#enable-condition-assignment").checked ? document.querySelector("#condition-assignment").value : 1;
   const useValidation = document.querySelector("#enable-validation").checked;
@@ -162,6 +166,12 @@ async function handleCreateExperiment(setIsSubmitting, validationSettings) {
     12
   );
   const id = nanoid();
+
+  // check if OSF repo string contains https://osf.io/
+  // and remove it if it does
+  if(osfRepo.includes('https://osf.io/')){
+    osfRepo = osfRepo.replace('https://osf.io/', '');
+  }
 
   try {
     const userdoc = await getDoc(doc(db, `users/${user.uid}`));
@@ -194,6 +204,10 @@ async function handleCreateExperiment(setIsSubmitting, validationSettings) {
 
     const nodeData = await osfResult.json();
     console.log(nodeData);
+
+    if(nodeData.errors) {
+      throw new Error(nodeData.errors);
+    }
 
     const filesLink = nodeData.data.relationships.files.links.related.href;
 
@@ -240,6 +254,7 @@ async function handleCreateExperiment(setIsSubmitting, validationSettings) {
     Router.push(`/admin/${id}`);
   } catch (error) {
     setIsSubmitting(false);
-    console.log(error);
+    //TODO: are there other errors that could be thrown here?
+    setOsfError(true);
   }
 }
