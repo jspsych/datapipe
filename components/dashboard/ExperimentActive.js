@@ -64,10 +64,18 @@ export default function ExperimentActive({ data }) {
           <FormLabel>How many total sessions?</FormLabel>
           <NumberInput
             value={maxSessions}
-            min={1}
+            min={0}
             onChange={(value) => {
               setMaxSessions(value);
-              updateMaxSessions(data.id, value);
+              if(value!=="" && parseInt(value) >= 0){
+                updateMaxSessions(data.id, value);
+              }
+            }}
+            onBlur={(e)=>{
+              if(e.target.value ===""){
+                setMaxSessions(0);
+                updateMaxSessions(data.id, 0);
+              }
             }}
           >
             <NumberInputField />

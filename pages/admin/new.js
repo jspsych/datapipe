@@ -159,7 +159,7 @@ async function handleCreateExperiment(setIsSubmitting, setOsfError, validationSe
   const allowJSON = validationSettings.includes('json');
   const allowCSV = validationSettings.includes('csv');
   const useSessionLimit = document.querySelector("#enable-session-limit").checked;
-  const maxSessions = document.querySelector("#enable-session-limit").checked ? document.querySelector("#session-limit").value : null;
+  const maxSessions = document.querySelector("#enable-session-limit").checked ? document.querySelector("#session-limit").value : 0;
 
   const nanoid = customAlphabet(
     "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
