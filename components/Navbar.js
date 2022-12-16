@@ -119,7 +119,7 @@ export default function Navbar() {
                 </MenuButton>
                 <MenuList bg="greyBackground">
                   <MenuItem bg="greyBackground">
-                    <NextLink href="/admin/profile">Settings</NextLink>
+                    <NextLink href="/admin/account">Settings</NextLink>
                   </MenuItem>
                   <MenuDivider />
                   <MenuItem bg="greyBackground" onClick={() => auth.signOut()}>
