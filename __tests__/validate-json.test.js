@@ -29,6 +29,12 @@ describe("validateJSON", () => {
     expect(validateJSON(json, requiredFields)).toBe(true);
   });
 
+  it("should return true when all required fields are present in all array items", () => {
+    const json = `[{"trial_type": "bar", "baz":"qux"}, {"trial_type": "bar", "baz":"quz"}]`;
+    const requiredFields = ['trial_type'];
+    expect(validateJSON(json, requiredFields)).toBe(true);
+  });
+
   it("should return true when all required fields are present in at least one array item, even if in different items", () => {
     const json = `[{"foo": "bar"}, {"baz": "qux"}]`;
     const requiredFields = ['foo', 'baz'];
