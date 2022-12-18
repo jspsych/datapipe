@@ -111,6 +111,15 @@ export default function CodeHints({ expId }) {
                   this, but this method will illustrate the key ideas.
                 </Text>
                 <Text>
+                  First, we will generate a unique subject ID so that we can label
+                  the file with the subject ID and the trial number.
+                </Text>
+                <CodeBlock>
+                  {`
+                    const subject_id = jsPsych.randomization.randomID(10);
+                  `}
+                </CodeBlock>
+                <Text>
                   In the on_finish event, we can send the data using the static
                   method of the pipe plugin.
                 </Text>
@@ -145,7 +154,9 @@ export default function CodeHints({ expId }) {
                 type: jsPsychPipe,
                 action: "saveBase64",
                 experiment_id: "${expId}",
-                filename: filename,
+                filename: ()=>{
+                  return \`\${subject_id}_\${jsPsych.getProgress().current_trial_global}_audio.webm\`;
+                },
                 data: ()=>{
                   // get the last trial's response (imagine that this is the audio data)
                   return jsPsych.data.get().last(1).values()[0].response;
