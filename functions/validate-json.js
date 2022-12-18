@@ -13,7 +13,10 @@ export default function validateJSON(json, requiredFields) {
       // Iterate over the array of objects
       for (const object of parsedJSON) {
         // Get the keys for each object and add them to the Set
-        keys.add(...Object.keys(object));
+        const k = Object.keys(object);
+        for(const key of k) {
+          keys.add(key);
+        }
       }
 
       const uniqueKeys = Array.from(keys);

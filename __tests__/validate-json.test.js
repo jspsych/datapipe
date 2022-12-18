@@ -46,4 +46,10 @@ describe("validateJSON", () => {
     const requiredFields = ['foo'];
     expect(validateJSON(json, requiredFields)).toBe(false);
   });
+
+  it("should work for real jsPsych data", () => {
+    const json = `[{"rt":1161,"stimulus":"You are in condition 0","response":0,"trial_type":"html-button-response","trial_index":0,"time_elapsed":1163,"internal_node_id":"0.0-0.0","subject":"9om0mjpqjm"},{"rt":3676,"response":"button","png":null,"trial_type":"sketchpad","trial_index":1,"time_elapsed":4844,"internal_node_id":"0.0-1.0","subject":"9om0mjpqjm"}]`
+    const requiredFields = ['trial_type'];
+    expect(validateJSON(json, requiredFields)).toBe(true);
+  });
 });
