@@ -88,7 +88,7 @@ export default function CodeHints({ expId }) {
                 action: "save",
                 experiment_id: "${expId}",
                 filename: filename,
-                data: ()=>jsPsych.data.get().csv()
+                data_string: ()=>jsPsych.data.get().csv()
               };`}
                 </CodeBlock>
                 <Text>
@@ -157,7 +157,7 @@ export default function CodeHints({ expId }) {
                 filename: ()=>{
                   return \`\${subject_id}_\${jsPsych.getProgress().current_trial_global}_audio.webm\`;
                 },
-                data: ()=>{
+                data_string: ()=>{
                   // get the last trial's response (imagine that this is the audio data)
                   return jsPsych.data.get().last(1).values()[0].response;
                 }
