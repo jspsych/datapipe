@@ -31,8 +31,8 @@ export const apiBase64 = functions.https.onRequest(async (req, res) => {
     }
 
     const exp_data = exp_doc.data();
-    if (!exp_data.active) {
-      res.status(400).send("Experiment is not active");
+    if (!exp_data.activeBase64) {
+      res.status(400).send("Base64 data collection is not active for this experiment");
       return;
     }
 

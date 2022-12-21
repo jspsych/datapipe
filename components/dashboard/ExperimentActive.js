@@ -23,6 +23,7 @@ export default function ExperimentActive({ data }) {
     data.limitSessions
   );
   const [experimentActive, setExperimentActive] = useState(data.active);
+  const [base64Active, setBase64Active] = useState(data.activeBase64 || false);
   const [maxSessions, setMaxSessions] = useState(data.maxSessions);
 
   return (
@@ -44,6 +45,18 @@ export default function ExperimentActive({ data }) {
           onChange={(e) => {
             setExperimentActive(e.target.checked);
             toggleExperimentActive(data.id, e.target.checked);
+          }}
+        />
+      </FormControl>
+      <FormControl as={HStack} justify="space-between" alignItems="center">
+        <FormLabel fontWeight={"normal"}>Enable base64 data collection?</FormLabel>
+        <Switch
+          colorScheme="green"
+          size="md"
+          isChecked={base64Active}
+          onChange={(e) => {
+            setBase64Active(e.target.checked);
+            toggleBase64Active(data.id, e.target.checked);
           }}
         />
       </FormControl>
@@ -118,6 +131,42 @@ async function deactivateExperiment(expId) {
       doc(db, `experiments/${expId}`),
       {
         active: false,
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+async function toggleBase64Active(expId, active) {
+  if (active) {
+    activateBase64(expId);
+  } else {
+    deactivateBase64(expId);
+  }
+}
+
+async function activateBase64(expId) {
+  try {
+    await setDoc(
+      doc(db, `experiments/${expId}`),
+      {
+        activeBase64: true,
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+async function deactivateBase64(expId) {
+  try {
+    await setDoc(
+      doc(db, `experiments/${expId}`),
+      {
+        activeBase64: false,
       },
       { merge: true }
     );

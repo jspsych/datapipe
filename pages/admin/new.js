@@ -231,6 +231,7 @@ async function handleCreateExperiment(setIsSubmitting, setOsfError, validationSe
       osfComponent: nodeData.data.id,
       osfFilesLink: uploadLink,
       active: false,
+      activeBase64: false,
       sessions: 0,
       limitSessions: useSessionLimit,
       maxSessions: maxSessions,
