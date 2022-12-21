@@ -27,7 +27,7 @@ import { doc, setDoc } from "firebase/firestore";
 import { db, auth } from "../../lib/firebase";
 import { CheckCircleIcon, WarningIcon } from "@chakra-ui/icons";
 
-export default function ChangePassword() {
+export default function OSFToken() {
   const { user } = useContext(UserContext);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { isOpen, onOpen, onClose } = useDisclosure();
