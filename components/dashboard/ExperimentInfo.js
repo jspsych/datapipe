@@ -32,10 +32,6 @@ export default function ExperimentInfo({ data }) {
         <Text>Completed Sessions</Text>
         <Text>{data.sessions}</Text>
       </HStack>
-      <HStack justify="space-between">
-        <Text>Number of Conditions</Text>
-        <Text>{data.nConditions}</Text>
-      </HStack>
     </Stack>
   );
 }
