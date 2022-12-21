@@ -49,7 +49,7 @@ export default function ExperimentTitle({ data }) {
       defaultValue={data.title}
       fontSize="4xl"
       isPreviewFocusable={false}
-      onSubmit={(e)=>updateExperimentTitle(e.target.value, data.id, data.title)}
+      onSubmit={(value)=>updateExperimentTitle(value, data.id, data.title)}
       as={Flex}
       align="center"
     >

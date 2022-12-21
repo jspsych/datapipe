@@ -23,7 +23,10 @@ export default function ExperimentActive({ data }) {
     data.limitSessions
   );
   const [experimentActive, setExperimentActive] = useState(data.active);
+  const [base64Active, setBase64Active] = useState(data.activeBase64 || false);
+  const [conditionActive, setConditionActive] = useState("activeConditionAssignment" in data ? data.activeConditionAssignment : data.nConditions > 1);
   const [maxSessions, setMaxSessions] = useState(data.maxSessions);
+  const [nConditions, setNConditions] = useState(data.nConditions);
 
   return (
     <Stack
@@ -47,6 +50,60 @@ export default function ExperimentActive({ data }) {
           }}
         />
       </FormControl>
+
+      <FormControl as={HStack} justify="space-between" alignItems="center">
+        <FormLabel fontWeight={"normal"}>Enable base64 data collection?</FormLabel>
+        <Switch
+          colorScheme="green"
+          size="md"
+          isChecked={base64Active}
+          onChange={(e) => {
+            setBase64Active(e.target.checked);
+            toggleBase64Active(data.id, e.target.checked);
+          }}
+        />
+      </FormControl>
+
+      <FormControl as={HStack} justify="space-between" alignItems="center">
+        <FormLabel fontWeight={"normal"}>Enable condition assignment?</FormLabel>
+        <Switch
+          colorScheme="green"
+          size="md"
+          isChecked={conditionActive}
+          onChange={(e) => {
+            setConditionActive(e.target.checked);
+            updateConditionActive(data.id, e.target.checked);
+          }}
+        />
+      </FormControl>
+      {conditionActive && (
+        <FormControl id="n-conditions" pb={6}>
+          <FormLabel>How many conditions?</FormLabel>
+          <NumberInput
+            value={nConditions}
+            min={2}
+            onChange={(value) => {
+              setNConditions(value);
+              if(value!=="" && parseInt(value) >= 0){
+                updateNConditions(data.id, value);
+              }
+            }}
+            onBlur={(e)=>{
+              if(e.target.value ===""){
+                setNConditions(2);
+                updateNConditions(data.id, 0);
+              }
+            }}
+          >
+            <NumberInputField />
+            <NumberInputStepper>
+              <NumberIncrementStepper />
+              <NumberDecrementStepper />
+            </NumberInputStepper>
+          </NumberInput>
+        </FormControl>
+      )}
+      
       <FormControl as={HStack} justify="space-between" alignItems="center">
         <FormLabel fontWeight={"normal"}>Enable session limit?</FormLabel>
         <Switch
@@ -126,6 +183,42 @@ async function deactivateExperiment(expId) {
   }
 }
 
+async function toggleBase64Active(expId, active) {
+  if (active) {
+    activateBase64(expId);
+  } else {
+    deactivateBase64(expId);
+  }
+}
+
+async function activateBase64(expId) {
+  try {
+    await setDoc(
+      doc(db, `experiments/${expId}`),
+      {
+        activeBase64: true,
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+async function deactivateBase64(expId) {
+  try {
+    await setDoc(
+      doc(db, `experiments/${expId}`),
+      {
+        activeBase64: false,
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    console.error(error);
+  }
+}
+
 async function updateSessionLimitActive(expId, active) {
   try {
     await setDoc(
@@ -146,6 +239,34 @@ async function updateMaxSessions(expId, maxSessions) {
       doc(db, `experiments/${expId}`),
       {
         maxSessions: parseInt(maxSessions),
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+async function updateConditionActive(expId, active) {
+  try {
+    await setDoc(
+      doc(db, `experiments/${expId}`),
+      {
+        activeConditionAssignment: active,
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+async function updateNConditions(expId, nConditions) {
+  try {
+    await setDoc(
+      doc(db, `experiments/${expId}`),
+      {
+        nConditions: parseInt(nConditions),
       },
       { merge: true }
     );

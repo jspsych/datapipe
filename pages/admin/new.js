@@ -32,6 +32,8 @@ import {
   CheckboxGroup,
   Checkbox,
   FormErrorMessage,
+  VStack,
+  Text,
 } from "@chakra-ui/react";
 
 export default function NewExperimentPage({}) {
@@ -129,18 +131,18 @@ function NewExperimentForm() {
         </Stack>
       )}
       {data && !data.osfTokenValid && (
-        <div>
-          <h1>Connect your OSF Account</h1>
-          <p>
+        <VStack>
+          <Heading as="h2">Connect your OSF Account</Heading>
+          <Text>
             Before you can create an experiment, you need to connect your OSF
-            account.
-          </p>
+            account. 
+          </Text>
           <Link href="/admin/account">
             <Button variant={"solid"} colorScheme={"brandTeal"} size={"md"}>
               Connect OSF Account
             </Button>
           </Link>
-        </div>
+        </VStack>
       )}
     </>
   );
@@ -231,6 +233,8 @@ async function handleCreateExperiment(setIsSubmitting, setOsfError, validationSe
       osfComponent: nodeData.data.id,
       osfFilesLink: uploadLink,
       active: false,
+      activeBase64: false,
+      activeConditionAssignment: nConditions > 1,
       sessions: 0,
       limitSessions: useSessionLimit,
       maxSessions: maxSessions,
