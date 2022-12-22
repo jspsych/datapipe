@@ -30,8 +30,14 @@ import {
   AlertDialogOverlay,
   useDisclosure,
   Text,
+  Tooltip,
 } from "@chakra-ui/react";
-import { CheckIcon, NotAllowedIcon, DeleteIcon, EditIcon } from "@chakra-ui/icons";
+import {
+  CheckIcon,
+  NotAllowedIcon,
+  DeleteIcon,
+  EditIcon,
+} from "@chakra-ui/icons";
 
 export default function AdminPage({}) {
   return (
@@ -96,13 +102,19 @@ function ExperimentItem({ exp }) {
         <Link href={`/admin/${exp.id}`}>{exp.title}</Link>
       </Td>
       <Td>
-        <ExperimentStatusTag active={exp.active} />
+        <ExperimentStatusTag prepend="Data collection" active={exp.active} />
       </Td>
       <Td>
-        <ExperimentStatusTag active={exp.activeBase64} />
+        <ExperimentStatusTag
+          prepend="Base 64 data collection"
+          active={exp.activeBase64}
+        />
       </Td>
       <Td>
-        <ExperimentStatusTag active={exp.activeCondition} />
+        <ExperimentStatusTag
+          prepend="Condition assignment "
+          active={exp.activeCondition}
+        />
       </Td>
       <Td>{exp.sessions}</Td>
       <Td>
@@ -112,11 +124,13 @@ function ExperimentItem({ exp }) {
   );
 }
 
-function ExperimentStatusTag({ active }) {
+function ExperimentStatusTag({ active, prepend }) {
   return (
-    <Tag size="md" variant="outline" colorScheme={active ? "green" : "gray"}>
-      <TagLabel>{active ? <CheckIcon /> : <NotAllowedIcon />}</TagLabel>
-    </Tag>
+    <Tooltip label={active ? `${prepend} is active` : `${prepend} is inactive`}>
+      <Tag size="lg" variant="outline" colorScheme={active ? "green" : "gray"}>
+        <TagLabel>{active ? <CheckIcon boxSize={4} /> : <NotAllowedIcon boxSize={4} />}</TagLabel>
+      </Tag>
+    </Tooltip>
   );
 }
 
