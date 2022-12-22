@@ -31,12 +31,12 @@ import {
   useDisclosure,
   Text,
 } from "@chakra-ui/react";
-import { DeleteIcon, EditIcon } from "@chakra-ui/icons";
+import { CheckIcon, NotAllowedIcon, DeleteIcon, EditIcon } from "@chakra-ui/icons";
 
 export default function AdminPage({}) {
   return (
     <AuthCheck>
-      <VStack spacing={8} w="860px">
+      <VStack spacing={8} w="960px">
         <HStack justifyContent="space-between" w="100%">
           <Heading>Your Experiments</Heading>
           <Link href="/admin/new">
@@ -65,12 +65,14 @@ function ExperimentList() {
   return (
     <>
       <TableContainer w="100%">
-        <Table size="lg">
+        <Table size="md">
           <Thead>
             <Tr>
               <Th color="white">Name</Th>
-              <Th color="white">Status</Th>
-              <Th color="white">Completed Sessions</Th>
+              <Th color="white">Data collection?</Th>
+              <Th color="white">Base 64?</Th>
+              <Th color="white">Conditions?</Th>
+              <Th color="white">Sessions</Th>
               <Th></Th>
             </Tr>
           </Thead>
@@ -96,6 +98,12 @@ function ExperimentItem({ exp }) {
       <Td>
         <ExperimentStatusTag active={exp.active} />
       </Td>
+      <Td>
+        <ExperimentStatusTag active={exp.activeBase64} />
+      </Td>
+      <Td>
+        <ExperimentStatusTag active={exp.activeCondition} />
+      </Td>
       <Td>{exp.sessions}</Td>
       <Td>
         <ExperimentActions exp={exp} />
@@ -106,8 +114,8 @@ function ExperimentItem({ exp }) {
 
 function ExperimentStatusTag({ active }) {
   return (
-    <Tag size="lg" variant="solid" colorScheme={active ? "green" : "red"}>
-      <TagLabel>{active ? "Active" : "Inactive"}</TagLabel>
+    <Tag size="md" variant="outline" colorScheme={active ? "green" : "gray"}>
+      <TagLabel>{active ? <CheckIcon /> : <NotAllowedIcon />}</TagLabel>
     </Tag>
   );
 }
