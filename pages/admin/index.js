@@ -113,7 +113,7 @@ function ExperimentItem({ exp }) {
       <Td>
         <ExperimentStatusTag
           prepend="Condition assignment "
-          active={exp.activeCondition}
+          active={exp.activeConditionAssignment}
         />
       </Td>
       <Td>{exp.sessions}</Td>
