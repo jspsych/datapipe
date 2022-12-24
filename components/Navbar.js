@@ -74,7 +74,7 @@ export default function Navbar() {
             )}
           </HStack>
         </HStack>
-        <HStack spacing={8}>
+        <HStack display={{ base: "none", md: "flex" }} spacing={8}>
           {!user && (
             <>
               <NextLink href="/signin">
