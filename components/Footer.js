@@ -17,11 +17,11 @@ export default function Footer() {
   return (
     <Box bg="greyBackground" color="gray.300">
       <Container as={Stack} maxW={"6xl"} py={10}>
-        <HStack justifyContent="space-between" borderTopWidth={1} borderColor="gray.700" pt={3} fontSize={"sm"}>
+        <Stack direction={['column', 'row']} justifyContent={["flex-start", "space-between"]} spacing={[4, 1]} borderTopWidth={1} borderColor="gray.700" pt={3} fontSize={"sm"}>
           <Text>Created by the developers of jsPsych <JsPsychIcon boxSize={10} /></Text>
-          <Link href={"https://github.com/jspsych/datapipe/issues/new"} isExternal>Report an Issue</Link>
-          <Link href={"https://github.com/jspsych/datapipe"} isExternal>GitHub</Link>
-          <Link as={NextLink} href="/contact">Contact Us</Link>
+          <Text><Link href={"https://github.com/jspsych/datapipe/issues/new"} isExternal>Report an Issue</Link></Text>
+          <Text><Link href={"https://github.com/jspsych/datapipe"} isExternal>GitHub</Link></Text>
+          <Text><Link as={NextLink} href="/contact">Contact Us</Link></Text>
           <Stack align={"flex-start"}>
             <Button
               rightIcon={<OpenCollectiveIcon boxSize={8} />}
@@ -36,7 +36,7 @@ export default function Footer() {
               Donate on Open Collective
             </Button>
           </Stack>
-        </HStack>
+        </Stack>
       </Container>
     </Box>
   );
