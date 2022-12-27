@@ -31,6 +31,7 @@ import {
   useDisclosure,
   Text,
   Tooltip,
+  Stack,
 } from "@chakra-ui/react";
 import {
   CheckIcon,
@@ -42,8 +43,8 @@ import {
 export default function AdminPage({}) {
   return (
     <AuthCheck>
-      <VStack spacing={8} w="960px">
-        <HStack justifyContent="space-between" w="100%">
+      <VStack spacing={8} w={["100%", "960px"]}>
+        <Stack justifyContent="space-between" w="100%" direction={["column", "row"]}>
           <Heading>Your Experiments</Heading>
           <Link href="/admin/new">
             <Button
@@ -55,7 +56,7 @@ export default function AdminPage({}) {
               Create New Experiment
             </Button>
           </Link>
-        </HStack>
+        </Stack>
         <ExperimentList />
       </VStack>
     </AuthCheck>
@@ -75,10 +76,10 @@ function ExperimentList() {
           <Thead>
             <Tr>
               <Th color="white">Name</Th>
-              <Th color="white">Data collection?</Th>
-              <Th color="white">Base 64?</Th>
-              <Th color="white">Conditions?</Th>
-              <Th color="white">Sessions</Th>
+              <Th color="white" display={["none", "table-cell"]}>Data collection?</Th>
+              <Th color="white" display={["none", "table-cell"]}>Base 64?</Th>
+              <Th color="white" display={["none", "table-cell"]}>Conditions?</Th>
+              <Th color="white" display={["none", "table-cell"]}>Sessions</Th>
               <Th></Th>
             </Tr>
           </Thead>
@@ -101,22 +102,22 @@ function ExperimentItem({ exp }) {
       <Td fontSize="lg">
         <Link href={`/admin/${exp.id}`}>{exp.title}</Link>
       </Td>
-      <Td>
+      <Td display={["none", "table-cell"]}>
         <ExperimentStatusTag prepend="Data collection" active={exp.active} />
       </Td>
-      <Td>
+      <Td display={["none", "table-cell"]}>
         <ExperimentStatusTag
           prepend="Base 64 data collection"
           active={exp.activeBase64}
         />
       </Td>
-      <Td>
+      <Td display={["none", "table-cell"]}>
         <ExperimentStatusTag
           prepend="Condition assignment "
           active={exp.activeConditionAssignment}
         />
       </Td>
-      <Td>{exp.sessions}</Td>
+      <Td display={["none", "table-cell"]}>{exp.sessions}</Td>
       <Td>
         <ExperimentActions exp={exp} />
       </Td>
