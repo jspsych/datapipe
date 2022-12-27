@@ -14,8 +14,9 @@ import {
   MenuList,
   MenuDivider,
   Image,
+  IconButton,
 } from "@chakra-ui/react";
-import { AddIcon } from "@chakra-ui/icons";
+import { AddIcon, HamburgerIcon } from "@chakra-ui/icons";
 
 import { auth } from "../lib/firebase";
 
@@ -129,6 +130,47 @@ export default function Navbar() {
               </Menu>
             </>
           )}
+        </HStack>
+        <HStack display={{ base: "flex", md: "none" }} spacing={8}>
+          <Menu>
+            <MenuButton
+              as={IconButton}
+              colorScheme={"white"}
+              icon={<HamburgerIcon boxSize={8} />}
+              cursor={"pointer"}
+              minW={0}
+            ></MenuButton>
+            <MenuList w="90vw" bg="greyBackground">
+              <MenuItem bg="greyBackground">
+                <NextLink href="/help">Getting Started</NextLink>
+              </MenuItem>
+              <MenuItem bg="greyBackground">
+                <NextLink href="/faq">FAQ</NextLink>
+              </MenuItem>
+              <MenuItem bg="greyBackground">
+                <NextLink href="/admin">My Experiments</NextLink>
+              </MenuItem>
+              <MenuItem bg="greyBackground">
+                <NextLink href="/admin/new">New Experiment</NextLink>
+              </MenuItem>
+              <MenuDivider />
+              {!user && (
+                <>
+                  <MenuItem bg="greyBackground">
+                    <NextLink href="/signup">Sign Up</NextLink>
+                  </MenuItem>
+                  <MenuItem bg="greyBackground">
+                    <NextLink href="/signin">Sign In</NextLink>
+                  </MenuItem>
+                </>
+              )}
+              {user && (
+                <MenuItem bg="greyBackground" onClick={() => auth.signOut()}>
+                  Sign Out
+                </MenuItem>
+              )}
+            </MenuList>
+          </Menu>
         </HStack>
       </Flex>
     </Box>
