@@ -2,7 +2,7 @@ import { Stack, Heading, Text, Button } from "@chakra-ui/react";
 
 export default function Help() {
   return (
-    <Stack w={640}>
+    <Stack w={["95%", 640]} spacing={6}>
       <Heading as="h1" size="2xl">
         Getting Started
       </Heading>
