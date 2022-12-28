@@ -23,10 +23,11 @@ function MyApp({ Component, pageProps }) {
       <UserContext.Provider value={{user}} >
         <Head>
           <title>DataPipe</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
         </Head>
         <Box minH="100vh" display="flex" flexDirection="column" justifyContent="space-between">
           <Navbar />
-          <Center flexGrow={1} flexShrink={0} flexBasis="auto" px={"2"} justifySelf="flex-start">
+          <Center flexGrow={1} flexShrink={0} flexBasis="auto" justifySelf="flex-start">
             <Component {...pageProps} />
           </Center>
           <Footer />

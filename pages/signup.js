@@ -65,7 +65,7 @@ export default function SignUpPage() {
   };
 
   return (
-    <VStack w={660} spacing={8}>
+    <VStack w={["100%", 660]} spacing={8}>
       <Alert status="warning" variant="solid">
           <AlertIcon />
           This service is still in development. Do not use for anything

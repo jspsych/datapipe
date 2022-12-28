@@ -2,7 +2,7 @@ import Link from "next/link";
 import { useContext } from "react";
 import { UserContext } from "../lib/context";
 import {
-  HStack,
+  Stack,
   VStack,
   Container,
   Heading,
@@ -15,9 +15,9 @@ export default function Home() {
   const { user } = useContext(UserContext);
 
   return (
-    <HStack px={12} maxW="1400px">
+    <Stack direction={['column', 'row']} px={[2,12]} maxW={["95%", "1400px"]} flexDirection={["column-reverse", "row"]}>
       <VStack spacing={4} align="start" flexBasis="66%">
-        <Text fontSize="4xl" fontWeight="semibold">
+        <Text fontSize={["2xl", "4xl"]} fontWeight="semibold">
           Send data from your behavioral experiments to the Open Science
           Framework, for free.
         </Text>
@@ -35,13 +35,12 @@ export default function Home() {
           </Link>
         )}
       </VStack>
-
       <Image
         src="/homepipe.png"
         alt="Decorative illustration of a pipe with data flowing through it"
-        boxSize="768px"
+        boxSize={["100%", "768px"]}
         quality={100}
       />
-    </HStack>
+    </Stack>
   );
 }

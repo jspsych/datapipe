@@ -30,14 +30,21 @@ import {
   AlertDialogOverlay,
   useDisclosure,
   Text,
+  Tooltip,
+  Stack,
 } from "@chakra-ui/react";
-import { DeleteIcon, EditIcon } from "@chakra-ui/icons";
+import {
+  CheckIcon,
+  NotAllowedIcon,
+  DeleteIcon,
+  EditIcon,
+} from "@chakra-ui/icons";
 
 export default function AdminPage({}) {
   return (
     <AuthCheck>
-      <VStack spacing={8} w="860px">
-        <HStack justifyContent="space-between" w="100%">
+      <VStack spacing={8} w={["100%", "960px"]}>
+        <Stack justifyContent="space-between" w="100%" direction={["column", "row"]}>
           <Heading>Your Experiments</Heading>
           <Link href="/admin/new">
             <Button
@@ -49,7 +56,7 @@ export default function AdminPage({}) {
               Create New Experiment
             </Button>
           </Link>
-        </HStack>
+        </Stack>
         <ExperimentList />
       </VStack>
     </AuthCheck>
@@ -65,12 +72,14 @@ function ExperimentList() {
   return (
     <>
       <TableContainer w="100%">
-        <Table size="lg">
+        <Table size="md">
           <Thead>
             <Tr>
               <Th color="white">Name</Th>
-              <Th color="white">Status</Th>
-              <Th color="white">Completed Sessions</Th>
+              <Th color="white" display={["none", "table-cell"]}>Data collection?</Th>
+              <Th color="white" display={["none", "table-cell"]}>Base 64?</Th>
+              <Th color="white" display={["none", "table-cell"]}>Conditions?</Th>
+              <Th color="white" display={["none", "table-cell"]}>Sessions</Th>
               <Th></Th>
             </Tr>
           </Thead>
@@ -93,10 +102,22 @@ function ExperimentItem({ exp }) {
       <Td fontSize="lg">
         <Link href={`/admin/${exp.id}`}>{exp.title}</Link>
       </Td>
-      <Td>
-        <ExperimentStatusTag active={exp.active} />
+      <Td display={["none", "table-cell"]}>
+        <ExperimentStatusTag prepend="Data collection" active={exp.active} />
       </Td>
-      <Td>{exp.sessions}</Td>
+      <Td display={["none", "table-cell"]}>
+        <ExperimentStatusTag
+          prepend="Base 64 data collection"
+          active={exp.activeBase64}
+        />
+      </Td>
+      <Td display={["none", "table-cell"]}>
+        <ExperimentStatusTag
+          prepend="Condition assignment "
+          active={exp.activeConditionAssignment}
+        />
+      </Td>
+      <Td display={["none", "table-cell"]}>{exp.sessions}</Td>
       <Td>
         <ExperimentActions exp={exp} />
       </Td>
@@ -104,11 +125,13 @@ function ExperimentItem({ exp }) {
   );
 }
 
-function ExperimentStatusTag({ active }) {
+function ExperimentStatusTag({ active, prepend }) {
   return (
-    <Tag size="lg" variant="solid" colorScheme={active ? "green" : "red"}>
-      <TagLabel>{active ? "Active" : "Inactive"}</TagLabel>
-    </Tag>
+    <Tooltip label={active ? `${prepend} is active` : `${prepend} is inactive`}>
+      <Tag size="lg" variant="outline" colorScheme={active ? "green" : "gray"}>
+        <TagLabel>{active ? <CheckIcon boxSize={4} /> : <NotAllowedIcon boxSize={4} />}</TagLabel>
+      </Tag>
+    </Tooltip>
   );
 }
 
