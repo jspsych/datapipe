@@ -62,14 +62,14 @@ export default function Navbar() {
             spacing={8}
             display={{ base: "none", md: "flex" }}
           >
-            <Link as={NextLink} href="/help">
+            <Link color="white" as={NextLink} href="/help">
               Getting Started
             </Link>
-            <Link as={NextLink} href="/faq">
+            <Link color="white" as={NextLink} href="/faq">
               FAQ
             </Link>
             {user && (
-              <Link as={NextLink} href="/admin">
+              <Link color="white" as={NextLink} href="/admin">
                 My Experiments
               </Link>
             )}
