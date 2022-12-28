@@ -56,8 +56,8 @@ export default function CodeHints({ expId }) {
         </Menu>
       </VStack>
       {language === "jsPsych version 7" && (
-        <Tabs variant="solid-rounded" colorScheme="brandOrange" orientation={["vertical", "horizontal"]}>
-          <TabList>
+        <Tabs variant="solid-rounded" colorScheme="brandOrange">
+          <TabList >
             <Tab>Send data</Tab>
             <Tab>Send and decode base64 data</Tab>
             <Tab>Get condition assignment</Tab>
@@ -189,7 +189,7 @@ export default function CodeHints({ expId }) {
         </Tabs>
       )}
       {language === "JavaScript" && (
-        <Tabs variant="solid-rounded" colorScheme="brandOrange" orientation={["vertical", "horizontal"]}>
+        <Tabs variant="solid-rounded" colorScheme="brandOrange">
           <TabList>
             <Tab>Send data</Tab>
             <Tab>Send and decode base64 data</Tab>

@@ -32,7 +32,7 @@ function ExperimentPageDashboard({ experiment_id }) {
     <>
       {loading && <Spinner color="green.500" size={"xl"} />}
       {data && (
-        <VStack alignSelf="flex-start" align="flex-start" w={["100vw", 1200]}>
+        <VStack alignSelf="flex-start" align="flex-start" w={["99vw", 1200]}>
           <Title data={data} />
           <Flex alignItems="flex-start" wrap="wrap" w="100%" justifyContent="space-between">
             <VStack w={["100%", "38%"]}>

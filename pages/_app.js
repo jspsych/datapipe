@@ -27,7 +27,7 @@ function MyApp({ Component, pageProps }) {
         </Head>
         <Box minH="100vh" display="flex" flexDirection="column" justifyContent="space-between">
           <Navbar />
-          <Center flexGrow={1} flexShrink={0} flexBasis="auto" px={"2"} justifySelf="flex-start">
+          <Center flexGrow={1} flexShrink={0} flexBasis="auto" justifySelf="flex-start">
             <Component {...pageProps} />
           </Center>
           <Footer />
