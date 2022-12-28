@@ -151,7 +151,7 @@ function ExperimentStatusTag({ active, prepend }) {
 
 function ExperimentActions({ exp }) {
   return (
-    <HStack>
+    <HStack justifyContent="flex-end">
       <Link href={`/admin/${exp.id}`}>
         <IconButton
           aria-label="Edit"
