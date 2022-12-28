@@ -48,8 +48,9 @@ export default function FAQ() {
               This guide on GitHub Pages
             </Link>{" "}
             describes how to set up a free website using their service. In the
-            guide, select &quot;project site&quot; and &quot;start from scratch&quot; and follow the
-            guide to get an experiment hosted quickly.
+            guide, select &quot;project site&quot; and &quot;start from
+            scratch&quot; and follow the guide to get an experiment hosted
+            quickly.
           </Text>
         </FAQItem>
         <FAQItem question="Will this store my data?">
@@ -134,13 +135,14 @@ export default function FAQ() {
               This service does allow a technically savvy user to potentially
               write fake data to your OSF project. This is almost always a risk
               with online experiments because the data are usually recorded on
-              the participant&apos;s computer before being sent to the server. It is
-              possible for a malicious user to change or create the data before
-              sending it to the service. It is also possible that a user could
-              spam data to your OSF account or could send files that are not
-              actually experiment data. We provide tools to mitigate these risks
-              by allowing you to specify validation rules for the data that is
-              sent and to rate limit the amount of data you are receiving.
+              the participant&apos;s computer before being sent to the server.
+              It is possible for a malicious user to change or create the data
+              before sending it to the service. It is also possible that a user
+              could spam data to your OSF account or could send files that are
+              not actually experiment data. We provide tools to mitigate these
+              risks by allowing you to specify validation rules for the data
+              that is sent and to rate limit the amount of data you are
+              receiving.
             </ListItem>
             <ListItem>
               This service is not a commercial venture with a dedicated user

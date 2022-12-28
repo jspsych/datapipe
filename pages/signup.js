@@ -20,7 +20,7 @@ import {
   FormErrorMessage,
   Alert,
   AlertIcon,
-  VStack
+  VStack,
 } from "@chakra-ui/react";
 import { ERROR, getError } from "../lib/utils";
 
@@ -67,55 +67,55 @@ export default function SignUpPage() {
   return (
     <VStack w={["100%", 660]} spacing={8}>
       <Alert status="warning" variant="solid">
-          <AlertIcon />
-          This service is still in development. Do not use for anything
-          important yet.
-        </Alert>
-    <Card w={360}>
-      <CardHeader>
-        <Heading size="lg">Sign Up</Heading>
-      </CardHeader>
-      <CardBody>
-        <Stack>
-          <FormControl id="email" isInvalid={errorEmail}>
-            <FormLabel>Email</FormLabel>
-            <Input
-              type="email"
-              onChange={(e) => {
-                setEmail(e.target.value);
-                setErrorEmail("");
-              }}
-            />
-            <FormErrorMessage>{errorEmail}</FormErrorMessage>
-          </FormControl>
-          <FormControl id="password" pb={4} isInvalid={errorPassword}>
-            <FormLabel>Password</FormLabel>
-            <Input
-              type="password"
-              onChange={(e) => {
-                setPassword(e.target.value);
-                setErrorPassword("");
-              }}
-            />
-            <FormErrorMessage>{errorPassword}</FormErrorMessage>
-          </FormControl>
-          <Text>&nbsp;</Text>
-          <Button
-            colorScheme={"brandTeal"}
-            isLoading={isSubmitting}
-            onClick={onSubmit}
-          >
-            Create Account
-          </Button>
-          <Text pt={4}>
-            Have an account?{" "}
-            <Link href="/signin" passHref>
-              <ChakraLink>Sign In!</ChakraLink>
-            </Link>
-          </Text>
-        </Stack>
-      </CardBody>
-    </Card>
+        <AlertIcon />
+        This service is still in development. Do not use for anything important
+        yet.
+      </Alert>
+      <Card w={360}>
+        <CardHeader>
+          <Heading size="lg">Sign Up</Heading>
+        </CardHeader>
+        <CardBody>
+          <Stack>
+            <FormControl id="email" isInvalid={errorEmail}>
+              <FormLabel>Email</FormLabel>
+              <Input
+                type="email"
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setErrorEmail("");
+                }}
+              />
+              <FormErrorMessage>{errorEmail}</FormErrorMessage>
+            </FormControl>
+            <FormControl id="password" pb={4} isInvalid={errorPassword}>
+              <FormLabel>Password</FormLabel>
+              <Input
+                type="password"
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setErrorPassword("");
+                }}
+              />
+              <FormErrorMessage>{errorPassword}</FormErrorMessage>
+            </FormControl>
+            <Text>&nbsp;</Text>
+            <Button
+              colorScheme={"brandTeal"}
+              isLoading={isSubmitting}
+              onClick={onSubmit}
+            >
+              Create Account
+            </Button>
+            <Text pt={4}>
+              Have an account?{" "}
+              <Link href="/signin" passHref>
+                <ChakraLink>Sign In!</ChakraLink>
+              </Link>
+            </Text>
+          </Stack>
+        </CardBody>
+      </Card>
     </VStack>
   );
 }

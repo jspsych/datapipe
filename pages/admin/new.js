@@ -51,7 +51,7 @@ function NewExperimentForm() {
   const [conditionToggle, setConditionToggle] = useState(false);
   const [sessionToggle, setSessionToggle] = useState(false);
   const [validationToggle, setValidationToggle] = useState(true);
-  const [validationSettings, setValidationSettings] = useState(['json']);
+  const [validationSettings, setValidationSettings] = useState(["json"]);
 
   const [data, loading, error] = useDocumentData(doc(db, "users", user.uid));
 
@@ -68,10 +68,14 @@ function NewExperimentForm() {
           <FormControl id="osf-repo" isInvalid={osfError}>
             <FormLabel>Existing OSF Project</FormLabel>
             <InputGroup>
-              <InputLeftAddon bgColor={"greyBackground"}>https://osf.io/</InputLeftAddon>
+              <InputLeftAddon bgColor={"greyBackground"}>
+                https://osf.io/
+              </InputLeftAddon>
               <Input type="text" />
             </InputGroup>
-            <FormErrorMessage color={"red"}>Cannot connect to this OSF component</FormErrorMessage>
+            <FormErrorMessage color={"red"}>
+              Cannot connect to this OSF component
+            </FormErrorMessage>
           </FormControl>
           <FormControl id="osf-component-name">
             <FormLabel>New OSF Data Component Name</FormLabel>
@@ -79,7 +83,10 @@ function NewExperimentForm() {
           </FormControl>
           <FormControl id="enable-condition-assignment">
             <FormLabel>Enable condition assignment?</FormLabel>
-            <Switch colorScheme={"brandTeal"} onChange={(e) => setConditionToggle(e.target.checked)} />
+            <Switch
+              colorScheme={"brandTeal"}
+              onChange={(e) => setConditionToggle(e.target.checked)}
+            />
           </FormControl>
           {conditionToggle && (
             <FormControl id="condition-assignment">
@@ -95,19 +102,31 @@ function NewExperimentForm() {
           )}
           <FormControl id="enable-validation">
             <FormLabel>Enable data validation?</FormLabel>
-            <Switch colorScheme={"brandTeal"} defaultChecked onChange={(e) => setValidationToggle(e.target.checked)} />
+            <Switch
+              colorScheme={"brandTeal"}
+              defaultChecked
+              onChange={(e) => setValidationToggle(e.target.checked)}
+            />
           </FormControl>
           {validationToggle && (
-            <CheckboxGroup id="validation-settings" defaultValue={['json']} onChange={setValidationSettings} colorScheme="brandTeal">
-              <Stack spacing={5} direction='row'>
-                <Checkbox value='json'>Allow JSON</Checkbox>
-                <Checkbox value='csv'>Allow CSV</Checkbox>
+            <CheckboxGroup
+              id="validation-settings"
+              defaultValue={["json"]}
+              onChange={setValidationSettings}
+              colorScheme="brandTeal"
+            >
+              <Stack spacing={5} direction="row">
+                <Checkbox value="json">Allow JSON</Checkbox>
+                <Checkbox value="csv">Allow CSV</Checkbox>
               </Stack>
             </CheckboxGroup>
           )}
           <FormControl id="enable-session-limit">
             <FormLabel>Enable session limit?</FormLabel>
-            <Switch colorScheme={"brandTeal"} onChange={(e) => setSessionToggle(e.target.checked)} />
+            <Switch
+              colorScheme={"brandTeal"}
+              onChange={(e) => setSessionToggle(e.target.checked)}
+            />
           </FormControl>
           {sessionToggle && (
             <FormControl id="session-limit">
@@ -122,7 +141,13 @@ function NewExperimentForm() {
             </FormControl>
           )}
           <Button
-            onClick={() => handleCreateExperiment(setIsSubmitting, setOsfError, validationSettings)}
+            onClick={() =>
+              handleCreateExperiment(
+                setIsSubmitting,
+                setOsfError,
+                validationSettings
+              )
+            }
             isLoading={isSubmitting}
             colorScheme={"brandTeal"}
           >
@@ -135,7 +160,7 @@ function NewExperimentForm() {
           <Heading as="h2">Connect your OSF Account</Heading>
           <Text>
             Before you can create an experiment, you need to connect your OSF
-            account. 
+            account.
           </Text>
           <Link href="/admin/account">
             <Button variant={"solid"} colorScheme={"brandTeal"} size={"md"}>
@@ -148,7 +173,11 @@ function NewExperimentForm() {
   );
 }
 
-async function handleCreateExperiment(setIsSubmitting, setOsfError, validationSettings) {
+async function handleCreateExperiment(
+  setIsSubmitting,
+  setOsfError,
+  validationSettings
+) {
   setIsSubmitting(true);
   setOsfError(false);
 
@@ -156,12 +185,19 @@ async function handleCreateExperiment(setIsSubmitting, setOsfError, validationSe
   const title = document.querySelector("#title").value;
   let osfRepo = document.querySelector("#osf-repo").value;
   const osfComponentName = document.querySelector("#osf-component-name").value;
-  const nConditions = document.querySelector("#enable-condition-assignment").checked ? document.querySelector("#condition-assignment").value : 1;
+  const nConditions = document.querySelector("#enable-condition-assignment")
+    .checked
+    ? document.querySelector("#condition-assignment").value
+    : 1;
   const useValidation = document.querySelector("#enable-validation").checked;
-  const allowJSON = validationSettings.includes('json');
-  const allowCSV = validationSettings.includes('csv');
-  const useSessionLimit = document.querySelector("#enable-session-limit").checked;
-  const maxSessions = document.querySelector("#enable-session-limit").checked ? document.querySelector("#session-limit").value : 0;
+  const allowJSON = validationSettings.includes("json");
+  const allowCSV = validationSettings.includes("csv");
+  const useSessionLimit = document.querySelector(
+    "#enable-session-limit"
+  ).checked;
+  const maxSessions = document.querySelector("#enable-session-limit").checked
+    ? document.querySelector("#session-limit").value
+    : 0;
 
   const nanoid = customAlphabet(
     "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
@@ -171,8 +207,8 @@ async function handleCreateExperiment(setIsSubmitting, setOsfError, validationSe
 
   // check if OSF repo string contains https://osf.io/
   // and remove it if it does
-  if(osfRepo.includes('https://osf.io/')){
-    osfRepo = osfRepo.replace('https://osf.io/', '');
+  if (osfRepo.includes("https://osf.io/")) {
+    osfRepo = osfRepo.replace("https://osf.io/", "");
   }
 
   try {
@@ -207,7 +243,7 @@ async function handleCreateExperiment(setIsSubmitting, setOsfError, validationSe
     const nodeData = await osfResult.json();
     console.log(nodeData);
 
-    if(nodeData.errors) {
+    if (nodeData.errors) {
       throw new Error(nodeData.errors);
     }
 
@@ -245,7 +281,7 @@ async function handleCreateExperiment(setIsSubmitting, setOsfError, validationSe
       useValidation: useValidation,
       allowJSON: allowJSON,
       allowCSV: allowCSV,
-      requiredFields: ['trial_type']
+      requiredFields: ["trial_type"],
     });
 
     const userDoc = doc(db, `users/${user.uid}`);

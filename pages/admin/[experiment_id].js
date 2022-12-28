@@ -34,7 +34,12 @@ function ExperimentPageDashboard({ experiment_id }) {
       {data && (
         <VStack alignSelf="flex-start" align="flex-start" w={["99vw", 1200]}>
           <Title data={data} />
-          <Flex alignItems="flex-start" wrap="wrap" w="100%" justifyContent="space-between">
+          <Flex
+            alignItems="flex-start"
+            wrap="wrap"
+            w="100%"
+            justifyContent="space-between"
+          >
             <VStack w={["100%", "38%"]}>
               <ExperimentInfo data={data} />
               <ExperimentActive data={data} />

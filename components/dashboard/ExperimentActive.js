@@ -24,7 +24,11 @@ export default function ExperimentActive({ data }) {
   );
   const [experimentActive, setExperimentActive] = useState(data.active);
   const [base64Active, setBase64Active] = useState(data.activeBase64 || false);
-  const [conditionActive, setConditionActive] = useState("activeConditionAssignment" in data ? data.activeConditionAssignment : data.nConditions > 1);
+  const [conditionActive, setConditionActive] = useState(
+    "activeConditionAssignment" in data
+      ? data.activeConditionAssignment
+      : data.nConditions > 1
+  );
   const [maxSessions, setMaxSessions] = useState(data.maxSessions);
   const [nConditions, setNConditions] = useState(data.nConditions);
 
@@ -52,7 +56,9 @@ export default function ExperimentActive({ data }) {
       </FormControl>
 
       <FormControl as={HStack} justify="space-between" alignItems="center">
-        <FormLabel fontWeight={"normal"}>Enable base64 data collection?</FormLabel>
+        <FormLabel fontWeight={"normal"}>
+          Enable base64 data collection?
+        </FormLabel>
         <Switch
           colorScheme="green"
           size="md"
@@ -65,7 +71,9 @@ export default function ExperimentActive({ data }) {
       </FormControl>
 
       <FormControl as={HStack} justify="space-between" alignItems="center">
-        <FormLabel fontWeight={"normal"}>Enable condition assignment?</FormLabel>
+        <FormLabel fontWeight={"normal"}>
+          Enable condition assignment?
+        </FormLabel>
         <Switch
           colorScheme="green"
           size="md"
@@ -84,12 +92,12 @@ export default function ExperimentActive({ data }) {
             min={2}
             onChange={(value) => {
               setNConditions(value);
-              if(value!=="" && parseInt(value) >= 0){
+              if (value !== "" && parseInt(value) >= 0) {
                 updateNConditions(data.id, value);
               }
             }}
-            onBlur={(e)=>{
-              if(e.target.value ===""){
+            onBlur={(e) => {
+              if (e.target.value === "") {
                 setNConditions(2);
                 updateNConditions(data.id, 0);
               }
@@ -103,7 +111,7 @@ export default function ExperimentActive({ data }) {
           </NumberInput>
         </FormControl>
       )}
-      
+
       <FormControl as={HStack} justify="space-between" alignItems="center">
         <FormLabel fontWeight={"normal"}>Enable session limit?</FormLabel>
         <Switch
@@ -124,12 +132,12 @@ export default function ExperimentActive({ data }) {
             min={0}
             onChange={(value) => {
               setMaxSessions(value);
-              if(value!=="" && parseInt(value) >= 0){
+              if (value !== "" && parseInt(value) >= 0) {
                 updateMaxSessions(data.id, value);
               }
             }}
-            onBlur={(e)=>{
-              if(e.target.value ===""){
+            onBlur={(e) => {
+              if (e.target.value === "") {
                 setMaxSessions(0);
                 updateMaxSessions(data.id, 0);
               }

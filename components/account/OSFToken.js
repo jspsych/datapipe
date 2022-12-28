@@ -60,26 +60,30 @@ export default function OSFToken() {
           <ModalCloseButton />
           <ModalBody>
             <VStack spacing={4} w="100%">
-            <Text>
-              To generate an OSF token, go to{" "}
-              <Link color="brandOrange.100" href="https://osf.io/settings/tokens/" isExternal>
-                https://osf.io/settings/tokens/
-              </Link>{" "}
-              and click &quot;Create Token&quot;.
-            </Text>
-            <Text>
-              Select osf.full_write under scopes and click &quot;Create
-              token&quot;. Copy the token and paste it below.
-            </Text>
-            
-            {data && (
-              <VStack spacing={4} w="100%">
-                <FormControl id="osf-token">
-                  <FormLabel>OSF Token</FormLabel>
-                  <Input type="text" defaultValue={data.osfToken} />
-                </FormControl>
-              </VStack>
-            )}
+              <Text>
+                To generate an OSF token, go to{" "}
+                <Link
+                  color="brandOrange.100"
+                  href="https://osf.io/settings/tokens/"
+                  isExternal
+                >
+                  https://osf.io/settings/tokens/
+                </Link>{" "}
+                and click &quot;Create Token&quot;.
+              </Text>
+              <Text>
+                Select osf.full_write under scopes and click &quot;Create
+                token&quot;. Copy the token and paste it below.
+              </Text>
+
+              {data && (
+                <VStack spacing={4} w="100%">
+                  <FormControl id="osf-token">
+                    <FormLabel>OSF Token</FormLabel>
+                    <Input type="text" defaultValue={data.osfToken} />
+                  </FormControl>
+                </VStack>
+              )}
             </VStack>
           </ModalBody>
           <ModalFooter>

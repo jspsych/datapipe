@@ -27,19 +27,27 @@ export default function ExperimentTitle({ data }) {
       <HStack spacing={2}>
         <IconButton
           size="sm"
-          variant="outline" colorScheme={"brandTeal"}
+          variant="outline"
+          colorScheme={"brandTeal"}
           icon={<CheckIcon />}
           {...getSubmitButtonProps()}
         />
         <IconButton
           size="sm"
-          variant="outline" colorScheme={"red"}
+          variant="outline"
+          colorScheme={"red"}
           icon={<CloseIcon />}
           {...getCancelButtonProps()}
         />
       </HStack>
     ) : (
-      <IconButton variant="outline" colorScheme={"whiteAlpha"} size="sm" icon={<EditIcon />} {...getEditButtonProps()} />
+      <IconButton
+        variant="outline"
+        colorScheme={"whiteAlpha"}
+        size="sm"
+        icon={<EditIcon />}
+        {...getEditButtonProps()}
+      />
     );
   }
 
@@ -49,7 +57,7 @@ export default function ExperimentTitle({ data }) {
       defaultValue={data.title}
       fontSize="4xl"
       isPreviewFocusable={false}
-      onSubmit={(value)=>updateExperimentTitle(value, data.id, data.title)}
+      onSubmit={(value) => updateExperimentTitle(value, data.id, data.title)}
       as={Flex}
       align="center"
     >

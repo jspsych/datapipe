@@ -39,8 +39,8 @@ export const apiData = functions.https.onRequest(async (req, res) => {
       return;
     }
 
-    if(exp_data.limitSessions) {
-      if(exp_data.sessions >= exp_data.maxSessions) {
+    if (exp_data.limitSessions) {
+      if (exp_data.sessions >= exp_data.maxSessions) {
         res.status(400).send("Experiment has reached its session limit");
         return;
       }
@@ -87,15 +87,20 @@ export const apiData = functions.https.onRequest(async (req, res) => {
     );
 
     if (!result.success) {
-      if(result.errorCode === 409 && result.errorText === "Conflict") {
-        res.status(400).send("Error uploading file to OSF: File already exists");
+      if (result.errorCode === 409 && result.errorText === "Conflict") {
+        res
+          .status(400)
+          .send("Error uploading file to OSF: File already exists");
       } else {
         res.status(400).send("Error uploading file to OSF");
       }
       return;
     }
 
-    await exp_doc_ref.set({sessions: FieldValue.increment(1)}, {merge: true});
+    await exp_doc_ref.set(
+      { sessions: FieldValue.increment(1) },
+      { merge: true }
+    );
 
     res.status(201).send(`Success`);
   });

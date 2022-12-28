@@ -1,8 +1,5 @@
 import AuthCheck from "../../components/AuthCheck";
-import {
-  VStack,
-  Heading,
-} from "@chakra-ui/react";
+import { VStack, Heading } from "@chakra-ui/react";
 import ChangePassword from "../../components/account/ChangePassword";
 import OSFToken from "../../components/account/OSFToken";
 
@@ -17,4 +14,3 @@ export default function AccountPage({}) {
     </AuthCheck>
   );
 }
-

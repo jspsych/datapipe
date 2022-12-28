@@ -89,7 +89,15 @@ export default function ExperimentValidation({ data }) {
         variant={"solid"}
         colorScheme={"green"}
         size={"md"}
-        onClick={() => handleSaveSubmit(data.id, validationEnabled, validationSettings, requiredFields, setIsSaving)}
+        onClick={() =>
+          handleSaveSubmit(
+            data.id,
+            validationEnabled,
+            validationSettings,
+            requiredFields,
+            setIsSaving
+          )
+        }
         isLoading={isSaving}
       >
         Save Validation Settings
@@ -98,8 +106,13 @@ export default function ExperimentValidation({ data }) {
   );
 }
 
-async function handleSaveSubmit(expId, validationEnabled, validationSettings, requiredFields, setIsSaving) {
-
+async function handleSaveSubmit(
+  expId,
+  validationEnabled,
+  validationSettings,
+  requiredFields,
+  setIsSaving
+) {
   // split array and remove all whitespace
   const fieldsArray = requiredFields.split(",").map((field) => field.trim());
 
@@ -111,16 +124,11 @@ async function handleSaveSubmit(expId, validationEnabled, validationSettings, re
   };
 
   setIsSaving(true);
-  try { 
-    await setDoc(
-      doc(db, `experiments/${expId}`),
-      settings,
-      { merge: true }
-    );
+  try {
+    await setDoc(doc(db, `experiments/${expId}`), settings, { merge: true });
     setIsSaving(false);
   } catch (error) {
     console.error(error);
     setIsSaving(false);
   }
 }
-

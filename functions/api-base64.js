@@ -32,7 +32,9 @@ export const apiBase64 = functions.https.onRequest(async (req, res) => {
 
     const exp_data = exp_doc.data();
     if (!exp_data.activeBase64) {
-      res.status(400).send("Base64 data collection is not active for this experiment");
+      res
+        .status(400)
+        .send("Base64 data collection is not active for this experiment");
       return;
     }
 
@@ -58,8 +60,10 @@ export const apiBase64 = functions.https.onRequest(async (req, res) => {
     );
 
     if (!result.success) {
-      if(result.errorCode === 409 && result.errorText === "Conflict") {
-        res.status(400).send("Error uploading file to OSF: File already exists");
+      if (result.errorCode === 409 && result.errorText === "Conflict") {
+        res
+          .status(400)
+          .send("Error uploading file to OSF: File already exists");
       } else {
         res.status(400).send("Error uploading file to OSF");
       }

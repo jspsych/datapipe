@@ -45,7 +45,10 @@ export default function CodeHints({ expId }) {
             {language}
           </MenuButton>
           <MenuList bg="black" variant="outline">
-            <MenuItem bg="black" onClick={() => setLanguage("jsPsych version 7")}>
+            <MenuItem
+              bg="black"
+              onClick={() => setLanguage("jsPsych version 7")}
+            >
               jsPsych version 7
             </MenuItem>
             <MenuDivider />
@@ -57,7 +60,7 @@ export default function CodeHints({ expId }) {
       </VStack>
       {language === "jsPsych version 7" && (
         <Tabs variant="solid-rounded" colorScheme="brandOrange">
-          <TabList >
+          <TabList>
             <Tab>Send data</Tab>
             <Tab>Send and decode base64 data</Tab>
             <Tab>Get condition assignment</Tab>
@@ -111,8 +114,8 @@ export default function CodeHints({ expId }) {
                   this, but this method will illustrate the key ideas.
                 </Text>
                 <Text>
-                  First, we will generate a unique subject ID so that we can label
-                  the file with the subject ID and the trial number.
+                  First, we will generate a unique subject ID so that we can
+                  label the file with the subject ID and the trial number.
                 </Text>
                 <CodeBlock>
                   {`
@@ -171,7 +174,13 @@ export default function CodeHints({ expId }) {
                 <CodeBlock>
                   {`<script src="https://unpkg.com/@jspsych-contrib/plugin-pipe"></script>`}
                 </CodeBlock>
-                <Text>Use the static method of the pipe plugin to request the condition. This is an asynchronous request so we need to wait for the response before using the condition value. An easy wait to do this is to put your experiment creation code inside an async function.</Text>
+                <Text>
+                  Use the static method of the pipe plugin to request the
+                  condition. This is an asynchronous request so we need to wait
+                  for the response before using the condition value. An easy
+                  wait to do this is to put your experiment creation code inside
+                  an async function.
+                </Text>
                 <CodeBlock>
                   {`
                   async function createExperiment(){

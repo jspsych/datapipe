@@ -60,7 +60,10 @@ export default function ChangePassword() {
           <ModalCloseButton />
           <ModalBody>
             <VStack spacing={4}>
-              <FormControl id="new-password" isInvalid={!passwordLengthSatisfied}>
+              <FormControl
+                id="new-password"
+                isInvalid={!passwordLengthSatisfied}
+              >
                 <FormLabel>New Password</FormLabel>
                 <Input
                   type="password"
@@ -104,7 +107,7 @@ export default function ChangePassword() {
 async function handleChangePassword(newPassword, setIsSubmitting) {
   setIsSubmitting(true);
   const user = auth.currentUser;
-  
+
   try {
     await updatePassword(user, newPassword);
     setIsSubmitting(false);

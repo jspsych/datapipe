@@ -14,7 +14,7 @@ export default function validateJSON(json, requiredFields) {
       for (const object of parsedJSON) {
         // Get the keys for each object and add them to the Set
         const k = Object.keys(object);
-        for(const key of k) {
+        for (const key of k) {
           keys.add(key);
         }
       }

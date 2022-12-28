@@ -44,7 +44,11 @@ export default function AdminPage({}) {
   return (
     <AuthCheck>
       <VStack spacing={8} w={["100%", "960px"]}>
-        <Stack justifyContent="space-between" w="100%" direction={["column", "row"]}>
+        <Stack
+          justifyContent="space-between"
+          w="100%"
+          direction={["column", "row"]}
+        >
           <Heading>Your Experiments</Heading>
           <Link href="/admin/new">
             <Button
@@ -76,10 +80,18 @@ function ExperimentList() {
           <Thead>
             <Tr>
               <Th color="white">Name</Th>
-              <Th color="white" display={["none", "table-cell"]}>Data collection?</Th>
-              <Th color="white" display={["none", "table-cell"]}>Base 64?</Th>
-              <Th color="white" display={["none", "table-cell"]}>Conditions?</Th>
-              <Th color="white" display={["none", "table-cell"]}>Sessions</Th>
+              <Th color="white" display={["none", "table-cell"]}>
+                Data collection?
+              </Th>
+              <Th color="white" display={["none", "table-cell"]}>
+                Base 64?
+              </Th>
+              <Th color="white" display={["none", "table-cell"]}>
+                Conditions?
+              </Th>
+              <Th color="white" display={["none", "table-cell"]}>
+                Sessions
+              </Th>
               <Th></Th>
             </Tr>
           </Thead>
@@ -129,7 +141,9 @@ function ExperimentStatusTag({ active, prepend }) {
   return (
     <Tooltip label={active ? `${prepend} is active` : `${prepend} is inactive`}>
       <Tag size="lg" variant="outline" colorScheme={active ? "green" : "gray"}>
-        <TagLabel>{active ? <CheckIcon boxSize={4} /> : <NotAllowedIcon boxSize={4} />}</TagLabel>
+        <TagLabel>
+          {active ? <CheckIcon boxSize={4} /> : <NotAllowedIcon boxSize={4} />}
+        </TagLabel>
       </Tag>
     </Tooltip>
   );

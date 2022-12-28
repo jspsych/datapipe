@@ -15,7 +15,13 @@ export default function Home() {
   const { user } = useContext(UserContext);
 
   return (
-    <Stack direction={['column', 'row']} px={[2,12]} maxW={["95%", "1400px"]} flexDirection={["column-reverse", "row"]} align="center">
+    <Stack
+      direction={["column", "row"]}
+      px={[2, 12]}
+      maxW={["95%", "1400px"]}
+      flexDirection={["column-reverse", "row"]}
+      align="center"
+    >
       <VStack spacing={4} align="start" flexBasis="66%">
         <Text fontSize={["2xl", "4xl"]} fontWeight="semibold">
           Send data from your behavioral experiments to the Open Science

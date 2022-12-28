@@ -1,16 +1,17 @@
-import {
-  Stack,
-  HStack,
-  Text,
-  Link,
-  Heading
-} from "@chakra-ui/react";
+import { Stack, HStack, Text, Link, Heading } from "@chakra-ui/react";
 
 import { ExternalLinkIcon } from "@chakra-ui/icons";
 
 export default function ExperimentInfo({ data }) {
   return (
-    <Stack w="100%" pr={8} spacing={2} bgColor={"black"} borderRadius={16} p={6}>
+    <Stack
+      w="100%"
+      pr={8}
+      spacing={2}
+      bgColor={"black"}
+      borderRadius={16}
+      p={6}
+    >
       <Heading fontSize="2xl">Info</Heading>
       <HStack justify="space-between">
         <Text>Experiment ID</Text>
