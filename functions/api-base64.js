@@ -38,7 +38,13 @@ export const apiBase64 = functions.https.onRequest(async (req, res) => {
       return;
     }
 
-    const buffer = Buffer.from(data, "base64");
+    let buffer;
+    try {
+      buffer = Buffer.from(data, "base64");
+    } catch (e) {
+      res.status(400).send("Invalid base64 data");
+      return;
+    }
 
     const user_doc = await db.doc(`users/${exp_data.owner}`).get();
     if (!user_doc.exists) {
