@@ -22,8 +22,10 @@ export const apiCondition = functions.https.onRequest((req, res) => {
     }
 
     const exp_data = exp_doc.data();
-    if (!exp_data.active) {
-      res.status(400).send("Experiment is not active");
+    if (!exp_data.activeConditionAssignment) {
+      res
+        .status(400)
+        .send("Condition assignment is not active for this experiment");
       return;
     }
 
