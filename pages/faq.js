@@ -158,7 +158,7 @@ export default function FAQ() {
           </OrderedList>
         </FAQItem>
         <FAQItem question="How does data validation work?">
-          <Text>
+          <Text mb={2}>
             DataPipe has an optional feature that will validate any incoming
             data before sending it to the OSF. Currently, this feature supports
             checking whether an incoming file is valid JSON or CSV data (meaning
@@ -183,7 +183,7 @@ export default function FAQ() {
           </Text>
         </FAQItem>
         <FAQItem question="How does base 64 data collection work?">
-          <Text>
+          <Text mb={2}>
             DataPipe has an optional feature that will collect data as base 64
             encoded strings. This is useful if you want to collect data that is
             not text-based, like JSON or CSV. This feature is designed to
