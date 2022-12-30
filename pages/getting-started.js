@@ -8,7 +8,7 @@ import {
   ListItem,
 } from "@chakra-ui/react";
 
-export default function Help() {
+export default function GettingStarted() {
   return (
     <Stack w={["95%", 960]} spacing={6}>
       <Heading as="h1" size="2xl">

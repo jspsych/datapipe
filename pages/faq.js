@@ -29,7 +29,7 @@ export default function FAQ() {
             to have an OSF account to store the data and create an authorization
             token on the OSF to allow DataPipe to write data to your OSF
             account. Our{" "}
-            <Link as={NextLink} href="/help">
+            <Link as={NextLink} href="/getting-started">
               getting started guide
             </Link>{" "}
             has more information about how to use DataPipe.

@@ -142,7 +142,7 @@ export default function Navbar() {
             ></MenuButton>
             <MenuList w="90vw" bg="greyBackground">
               <MenuItem bg="greyBackground">
-                <NextLink href="/help">Getting Started</NextLink>
+                <NextLink href="/getting-started">Getting Started</NextLink>
               </MenuItem>
               <MenuItem bg="greyBackground">
                 <NextLink href="/faq">FAQ</NextLink>
