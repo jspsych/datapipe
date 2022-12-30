@@ -10,6 +10,7 @@ import {
   FormErrorMessage,
   Input,
   Button,
+  FormHelperText,
 } from "@chakra-ui/react";
 
 import { auth } from "../lib/firebase";
@@ -50,6 +51,10 @@ export default function ResetPassword() {
   };
 
   const setNewPassword = async () => {
+    if (password.length < 12) {
+      setError("Password must be at least 12 characters");
+      return;
+    }
     setIsSubmitting(true);
     try {
       await confirmPasswordReset(auth, token, password);
@@ -64,15 +69,12 @@ export default function ResetPassword() {
   return (
     <Card w={360}>
       <CardHeader>
-        <Heading size="lg">Forgotten password</Heading>
+        <Heading size="lg">Reset your password</Heading>
       </CardHeader>
       <CardBody>
         <Stack>
           {state === "send" && (
-            <Text>
-              We have sent you link to reset password, please check in spam
-              before resubmittting form.
-            </Text>
+            <Text>We have sent you a link to reset your password.</Text>
           )}
           {state === "forgot" && (
             <>
@@ -103,7 +105,7 @@ export default function ResetPassword() {
           {state === "token" && (
             <>
               <FormControl isInvalid={error}>
-                <FormLabel>Password</FormLabel>
+                <FormLabel>New Password</FormLabel>
                 <Input
                   type="password"
                   onChange={(e) => {
@@ -111,9 +113,11 @@ export default function ResetPassword() {
                     setError("");
                   }}
                 />
+                <FormHelperText display={error === "" ? "block" : "none"}>
+                  Password must be at least 12 characters
+                </FormHelperText>
                 <FormErrorMessage>{error}</FormErrorMessage>
               </FormControl>
-              <Text>Provide a new password</Text>
               <Button
                 colorScheme={"green"}
                 isLoading={isSubmitting}

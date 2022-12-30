@@ -21,6 +21,7 @@ import {
   Alert,
   AlertIcon,
   VStack,
+  FormHelperText,
 } from "@chakra-ui/react";
 import { ERROR, getError } from "../lib/utils";
 
@@ -33,6 +34,11 @@ export default function SignUpPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const onSubmit = async () => {
+    if (password.length < 12) {
+      setErrorPassword("Password must be at least 12 characters");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -97,6 +103,9 @@ export default function SignUpPage() {
                   setErrorPassword("");
                 }}
               />
+              <FormHelperText display={errorPassword === "" ? "block" : "none"}>
+                Password must be at least 12 characters
+              </FormHelperText>
               <FormErrorMessage>{errorPassword}</FormErrorMessage>
             </FormControl>
             <Text>&nbsp;</Text>
