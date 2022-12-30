@@ -157,6 +157,64 @@ export default function FAQ() {
             </ListItem>
           </OrderedList>
         </FAQItem>
+        <FAQItem question="How does data validation work?">
+          <Text>
+            DataPipe has an optional feature that will validate any incoming
+            data before sending it to the OSF. Currently, this feature supports
+            checking whether an incoming file is valid JSON or CSV data (meaning
+            that it has the correct format) and it allows you to specify a set
+            of columns/fields that the data must contain. For CSV data, the
+            validation simply checks if all of the required columns are in the
+            header row. For JSON data, the validation checks if all of the
+            required fields are present in at least one object in the data. For
+            example, if the data are an array of trials (as jsPsych generates),
+            then this validation will generate a list of all of the unique
+            fields that are present in any of the trials and then check if all
+            of the required fields are present. This is equivalent to converting
+            the data to CSV format and then checking if all of the required
+            columns are present.
+          </Text>
+          <Text>
+            If an invalid data file is sent, it will be rejected and not sent to
+            the OSF. There is no way to recover this data. This feature is not
+            designed to catch errors in legitimate data files. It is designed to
+            prevent malicious users from sending non-data files to your OSF
+            project.
+          </Text>
+        </FAQItem>
+        <FAQItem question="How does base 64 data collection work?">
+          <Text>
+            DataPipe has an optional feature that will collect data as base 64
+            encoded strings. This is useful if you want to collect data that is
+            not text-based, like JSON or CSV. This feature is designed to
+            collect a single file of data at a time. For example, if you are
+            running an experiment where the participant will record several
+            audio files, you could use this feature to send each file to the OSF
+            as it is recorded. When DataPipe gets a base 64 encoded file, it
+            will decode it and then send it to the OSF as a file.
+          </Text>
+          <Text>
+            Note that validating base 64 encoded data is not currently
+            supported, so enabling this feature does create additional risk. We
+            recommend minimizing this risk by enabling the feature only when you
+            are actively collecting data and disabling it when you are not.
+          </Text>
+        </FAQItem>
+        <FAQItem question="How does condition assignment work?">
+          <Text>
+            When you enable condition assignment, you can call an API endpoint
+            to get the next condition for a participant. DataPipe will send you
+            a number between 0 and n-1, where n is the number of conditions you
+            set in your experiment. If you have an experimental design with
+            multiple factors, set the number of conditions to the number of
+            unique cells in your design, and then use the condition number to
+            determine the appropriate level of each factor. DataPipe generates
+            condition numbers sequentially, so if you have 3 conditions, the
+            first participant will get condition 0, the second participant will
+            get condition 1, the third participant will get condition 2, and
+            then the cycle will repeat.
+          </Text>
+        </FAQItem>
       </Accordion>
     </Stack>
   );
