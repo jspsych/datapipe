@@ -24,7 +24,7 @@ export default function GettingStarted() {
         Create an OSF project for your experiment
       </Heading>
       <Text>
-        The next step is to create an OSF project for your experiment. You can
+        The first step is to create an OSF project for your experiment. You can
         create an OSF project at{" "}
         <Link isExternal href="https://osf.io">
           https://osf.io
@@ -72,7 +72,7 @@ export default function GettingStarted() {
         name you would like to use for the Data component.
       </Text>
       <Text>
-        There are two three optional features that you can enable for your
+        There are three optional features that you can enable for your
         experiment. (These can be adjusted later if you change your mind.)
       </Text>
       <Text>
@@ -126,7 +126,7 @@ export default function GettingStarted() {
         Publish your experiment
       </Heading>
       <Text>
-        The first step is to publish your experiment online so that participants
+        The next step is to publish your experiment online so that participants
         can view it. You can use any tool that allows you to publish a web page,
         such as university web hosting, GitHub Pages, or Netlify. We will
         describe how to use GitHub Pages, since it is free, accessible, and
@@ -155,21 +155,18 @@ export default function GettingStarted() {
         create the repository.
       </Text>
       <Text>
-        Next, we need to configure the repository to share its content as a
-        webpage. Go to the Settings tab of your repository. Select the Pages
-        menu item on the left side. For Source, leave it as deploy from a
-        branch. Under branch select main as the source. Click the save button to
-        finish this step.
+        Next, configure the repository to share its content as a webpage. Go to
+        the Settings tab of your repository. Select the Pages menu item on the
+        left side. For Source, leave it as deploy from a branch. Under branch
+        select main as the source. Click the save button to finish this step.
       </Text>
       <Text>
-        Now we need to add the experiment files to the repository. We are going
-        to assume that you already have your experiment created and that it is
-        written in JavaScript / CSS / HTML. In your GitHub repository, click the
-        Add Files button near the top of the screen and select Upload Files.
-        Drag and drop your experiment files into the upload box. You can also
-        click the upload box to select the files from your computer. Once you
-        have uploaded all of your experiment files, click the Commit Changes
-        button.
+        Now add the experiment files to the repository. In your GitHub
+        repository, click the Add Files button near the top of the screen and
+        select Upload Files. Drag and drop your experiment files into the upload
+        box. You can also click the upload box to select the files from your
+        computer. Once you have uploaded all of your experiment files, click the
+        Commit Changes button.
       </Text>
       <Text>
         That&apos;s it! Your experiment is now published on the web. You can
