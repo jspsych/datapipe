@@ -2,6 +2,7 @@ import functions from "firebase-functions";
 import cors from "cors";
 import putFileOSF from "./put-file-osf.js";
 import { db } from "./app.js";
+import writeLog from "./write-log.js";
 
 const corsHandler = cors({ origin: true });
 
@@ -21,6 +22,8 @@ export const apiBase64 = functions.https.onRequest(async (req, res) => {
       res.status(400).send("Missing parameter filename");
       return;
     }
+
+    await writeLog(experimentID, "saveBase64Data");
 
     const exp_doc_ref = db.collection("experiments").doc(experimentID);
     const exp_doc = await exp_doc_ref.get();
