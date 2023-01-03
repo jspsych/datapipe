@@ -22,12 +22,22 @@ import { useRef } from "react";
 
 import { useRouter } from "next/router";
 
-export default function ChangePassword() {
+export default function DeleteAccount({ setDeleting }) {
   const { user } = useContext(UserContext);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { isOpen, onOpen, onClose } = useDisclosure();
   const cancelRef = useRef();
   const router = useRouter();
+
+  const deleteAccount = async function () {
+    try {
+      await deleteUser(auth.currentUser);
+      router.push("/admin/deleted-account");
+    } catch (error) {
+      setDeleting(false);
+      console.log(error);
+    }
+  };
 
   return (
     <HStack justifyContent="space-between" w="100%">
@@ -65,6 +75,7 @@ export default function ChangePassword() {
               <Button
                 colorScheme="red"
                 onClick={() => {
+                  setDeleting(true);
                   onClose();
                   deleteAccount();
                 }}
@@ -78,13 +89,4 @@ export default function ChangePassword() {
       </AlertDialog>
     </HStack>
   );
-}
-
-async function deleteAccount() {
-  try {
-    await deleteUser(auth.currentUser);
-    router.push("/admin/deleted-account");
-  } catch (error) {
-    console.log(error);
-  }
 }
