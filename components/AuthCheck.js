@@ -1,12 +1,19 @@
-import { useContext } from "react";
+import { useContext, useEffect } from "react";
 import { UserContext } from "../lib/context";
 import SignInForm from "./SignInForm";
 import { useRouter } from "next/router";
 
-export default function AuthCheck(props) {
+export default function AuthCheck({ children, fallback, fallbackRoute }) {
   const router = useRouter();
   const { user } = useContext(UserContext);
+
+  useEffect(() => {
+    if (!user && fallbackRoute) {
+      router.push(fallbackRoute);
+    }
+  }, [user, router, fallbackRoute]);
+
   return user
-    ? props.children
-    : props.fallback || <SignInForm routeAfterSignIn={router.pathname} />;
+    ? children
+    : fallback || <SignInForm routeAfterSignIn={router.pathname} />;
 }
