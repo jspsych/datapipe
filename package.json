@@ -9,7 +9,7 @@
     "lint": "next lint",
     "export": "next export",
     "test": "jest --watch",
-    "test-ci": "firebase emulators:exec --only firestore jest --ci",
+    "test-ci": "jest --ci",
     "emulators": "firebase emulators:start --import=./.emulator-data --export-on-exit"
   },
   "dependencies": {
