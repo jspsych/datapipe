@@ -31,6 +31,5 @@ jobs:
       - name: Run npm ci in /functions
         working-directory: functions
         run: npm ci
-      - name: Launch firestore emulator
-        run: firebase emulators:exec --only firestore
-      - run: npm run test-ci
+      - name: Launch firestore emulator and test
+        run: firebase emulators:exec --only firestore 'npm run test-ci'
