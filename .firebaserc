@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "osf-relay"
-  }
+    "default": "osf-relay",
+    "test": "datapipe-test"
+  },
+  "targets": {},
+  "etags": {}
 }
