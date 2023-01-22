@@ -32,4 +32,6 @@ jobs:
         working-directory: functions
         run: npm ci
       - name: Deploy firebase project
-        run: firebase deploy
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: firebase deploy --token "$FIREBASE_TOKEN"
