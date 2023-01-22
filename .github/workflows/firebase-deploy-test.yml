@@ -7,6 +7,9 @@ on:
   push:
     branches: ["test"]
 
+env:
+  FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -34,6 +37,4 @@ jobs:
       - name: Use test firebase project
         run: firebase use test
       - name: Deploy firebase project
-        env:
-          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
-        run: firebase deploy --token "$FIREBASE_TOKEN"
+        run: firebase deploy
