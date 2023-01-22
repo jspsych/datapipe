@@ -1,10 +1,10 @@
 # This workflow will do a clean installation of node dependencies, cache/restore them, build the source code and run tests across different versions of node
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-nodejs
 
-name: Test
+name: Deploy to Production
 
 on:
-  pull_request:
+  push:
     branches: ["main"]
 
 env:
@@ -34,7 +34,9 @@ jobs:
       - name: Run npm ci in /functions
         working-directory: functions
         run: npm ci
-      - name: Select project
-        run: firebase use test
-      - name: Launch firestore emulator and test
-        run: firebase emulators:exec --only firestore 'npm run test-ci'
+      - name: Use default firebase project
+        run: firebase use default
+      - name: Deploy firebase project
+        env:
+          PRODUCTION: true
+        run: firebase deploy
