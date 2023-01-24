@@ -1,4 +1,4 @@
-import functions from "firebase-functions";
+import * as functions from "firebase-functions";
 import cors from "cors";
 import putFileOSF from "./put-file-osf.js";
 import { db } from "./app.js";
