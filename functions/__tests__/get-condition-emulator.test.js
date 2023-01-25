@@ -5,9 +5,11 @@
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 
+process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080';
+
 async function getCondition(body) {
   const response = await fetch(
-    "http://127.0.0.1:5001/datapipe-test/us-central1/apiCondition",
+    "http://localhost:5001/datapipe-test/us-central1/apiCondition",
     {
       method: "POST",
       headers: {
@@ -30,10 +32,14 @@ jest.setTimeout(30000);
 beforeAll(async () => {
   initializeApp(config);
   const db = getFirestore();
-  const ref = await db
+  await db
     .collection("experiments")
     .doc("testexp")
     .set({ activeConditionAssignment: false });
+  await db
+    .collection("experiments")
+    .doc("testexp-active")
+    .set({ activeConditionAssignment: true, nConditions: 4, currentCondition: 0 });
 });
 
 describe("getCondition", () => {
@@ -53,4 +59,12 @@ describe("getCondition", () => {
       "Condition assignment is not active for this experiment"
     );
   });
+
+  it("should return sequential conditions when condition assignment is active", async () => {
+    for(let i = 0; i < 8; i++) {
+      const condition = await getCondition({ experimentID: "testexp-active" });
+      expect(parseInt(condition)).toBe(i % 4);
+    }
+  });
+
 });
