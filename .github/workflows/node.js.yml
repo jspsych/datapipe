@@ -6,6 +6,8 @@ name: Test
 on:
   pull_request:
     branches: ["main"]
+  push:
+    branches: ["test"]
 
 env:
   FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
