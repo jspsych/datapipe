@@ -3,6 +3,7 @@ import cors from "cors";
 import putFileOSF from "./put-file-osf.js";
 import { db } from "./app.js";
 import writeLog from "./write-log.js";
+import isBase64 from "is-base64";
 
 const corsHandler = cors({ origin: true });
 
@@ -41,6 +42,11 @@ export const apiBase64 = functions.https.onRequest(async (req, res) => {
       return;
     }
 
+    if(!isBase64(data)){
+      res.status(400).send("Invalid base64 data");
+      return;
+    }
+    
     let buffer;
     try {
       buffer = Buffer.from(data, "base64");
