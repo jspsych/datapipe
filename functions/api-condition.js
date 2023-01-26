@@ -1,4 +1,4 @@
-import functions from "firebase-functions";
+import * as functions from "firebase-functions";
 import cors from "cors";
 import { db } from "./app.js";
 import writeLog from "./write-log.js";
