@@ -6,6 +6,7 @@ import validateCSV from "./validate-csv.js";
 import putFileOSF from "./put-file-osf.js";
 import { db } from "./app.js";
 import writeLog from "./write-log.js";
+import MESSAGES from "./api-messages.js";
 
 const corsHandler = cors({ origin: true });
 
@@ -13,38 +14,30 @@ export const apiData = functions.https.onRequest(async (req, res) => {
   corsHandler(req, res, async () => {
     const { experimentID, data, filename } = req.body;
 
-    if (!experimentID) {
-      res.status(400).send("Missing parameter experimentID");
+    if (!experimentID || !data || !filename) {
+      res.status(400).json(MESSAGES.MISSING_PARAMETER);
       return;
     }
-    if (!data) {
-      res.status(400).send("Missing parameter data");
-      return;
-    }
-    if (!filename) {
-      res.status(400).send("Missing parameter filename");
-      return;
-    }
-
+    
     await writeLog(experimentID, "saveData");
 
     const exp_doc_ref = db.collection("experiments").doc(experimentID);
     const exp_doc = await exp_doc_ref.get();
 
     if (!exp_doc.exists) {
-      res.status(400).send("Experiment does not exist");
+      res.status(400).json(MESSAGES.EXPERIMENT_NOT_FOUND);
       return;
     }
 
     const exp_data = exp_doc.data();
     if (!exp_data.active) {
-      res.status(400).send("Experiment is not active");
+      res.status(400).json(MESSAGES.DATA_COLLECTION_NOT_ACTIVE);
       return;
     }
 
     if (exp_data.limitSessions) {
       if (exp_data.sessions >= exp_data.maxSessions) {
-        res.status(400).send("Experiment has reached its session limit");
+        res.status(400).json(MESSAGES.SESSION_LIMIT_REACHED);
         return;
       }
     }
@@ -64,7 +57,7 @@ export const apiData = functions.https.onRequest(async (req, res) => {
         }
       }
       if (!valid) {
-        res.status(400).send("Data are not valid");
+        res.status(400).json(MESSAGES.INVALID_DATA);
         return;
       }
     }
@@ -72,13 +65,13 @@ export const apiData = functions.https.onRequest(async (req, res) => {
     const user_doc = await db.doc(`users/${exp_data.owner}`).get();
 
     if (!user_doc.exists) {
-      res.status(400).send("User does not exist");
+      res.status(400).json(MESSAGES.INVALID_OWNER);
       return;
     }
 
     const user_data = user_doc.data();
     if (!user_data.osfTokenValid) {
-      res.status(400).send("User does not have a valid OSF token");
+      res.status(400).json(MESSAGES.INVALID_OSF_TOKEN);
       return;
     }
 
@@ -105,6 +98,6 @@ export const apiData = functions.https.onRequest(async (req, res) => {
       { merge: true }
     );
 
-    res.status(201).send(`Success`);
+    res.status(201).json(MESSAGES.SUCCESS)
   });
 });

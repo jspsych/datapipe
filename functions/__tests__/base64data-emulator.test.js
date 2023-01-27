@@ -4,6 +4,7 @@
 
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
+import MESSAGES from "../api-messages";
 
 process.env.FIRESTORE_EMULATOR_HOST = "localhost:8080";
 
@@ -19,7 +20,7 @@ async function saveData(body) {
       body: JSON.stringify(body),
     }
   );
-  const message = await response.text();
+  const message = await response.json();
   return message;
 }
 
@@ -32,14 +33,14 @@ jest.setTimeout(30000);
 beforeAll(async () => {
   initializeApp(config);
   const db = getFirestore();
-  await db.collection("experiments").doc("testexp").set({ activeBase64: false });
+  await db.collection("experiments").doc("base64-testexp").set({ activeBase64: false });
   await db.collection("users").doc("testuser").set({
     osfTokenValid: false,
   });
-  await db.collection("experiments").doc("testexp-active-no-owner").set({
+  await db.collection("experiments").doc("base64-testexp-active-no-owner").set({
     activeBase64: true,
   });
-  await db.collection("experiments").doc("testexp-active").set({
+  await db.collection("experiments").doc("base64-testexp-active").set({
     activeBase64: true,
     owner: "testuser",
   });
@@ -48,17 +49,17 @@ beforeAll(async () => {
 describe("apiData", () => {
   it("should return error message when there is no experimentID in the body", async () => {
     const response = await saveData({});
-    expect(response).toBe("Missing parameter experimentID");
+    expect(response).toEqual(MESSAGES.MISSING_PARAMETER);
   });
 
   it("should return error message when there is no data in the body", async () => {
     const response = await saveData({ experimentID: "test" });
-    expect(response).toBe("Missing parameter data");
+    expect(response).toEqual(MESSAGES.MISSING_PARAMETER);
   });
 
   it("should return error message when there is no filename in the body", async () => {
     const response = await saveData({ experimentID: "test", data: "test" });
-    expect(response).toBe("Missing parameter filename");
+    expect(response).toEqual(MESSAGES.MISSING_PARAMETER);
   });
 
   it("should increment the write request log for the experiment when there is a complete request", async () => {
@@ -83,11 +84,11 @@ describe("apiData", () => {
 
   it("should reject the request when the data are not valid base64 data", async () => {
     const response = await saveData({
-      experimentID: "testexp-active",
+      experimentID: "base64-testexp-active",
       data: "{'test': 21}",
       filename: "test",
     });
-    expect(response).toBe("Invalid base64 data");
+    expect(response).toEqual(MESSAGES.INVALID_BASE64_DATA);
   });
 
   it("should return error message when the experimentID does not match an experiment", async () => {
@@ -96,33 +97,33 @@ describe("apiData", () => {
       data: "test",
       filename: "test",
     });
-    expect(response).toBe("Experiment does not exist");
+    expect(response).toEqual(MESSAGES.EXPERIMENT_NOT_FOUND);
   });
 
   it("should return error message when condition assignment is not active", async () => {
     const response = await saveData({
-      experimentID: "testexp",
+      experimentID: "base64-testexp",
       data: "test",
       filename: "test",
     });
-    expect(response).toBe("Base64 data collection is not active for this experiment");
+    expect(response).toEqual(MESSAGES.BASE64DATA_COLLECTION_NOT_ACTIVE);
   });
 
   it("should reject a request when there is no corresponding user", async () => {
     const response = await saveData({
-      experimentID: "testexp-active-no-owner",
+      experimentID: "base64-testexp-active-no-owner",
       data: "test",
       filename: "test",
     });
-    expect(response).toBe("This experiment has an invalid owner ID");
+    expect(response).toEqual(MESSAGES.INVALID_OWNER);
   });
 
   it("should reject a request when there is no valid OSF token", async () => {
     const response = await saveData({
-      experimentID: "testexp-active",
+      experimentID: "base64-testexp-active",
       data: "test",
       filename: "test",
     });
-    expect(response).toBe("This experiment does not have a valid OSF token");
+    expect(response).toEqual(MESSAGES.INVALID_OSF_TOKEN);
   });
 });
