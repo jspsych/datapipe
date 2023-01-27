@@ -4,6 +4,7 @@
 
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
+import MESSAGES from "../api-messages";
 
 process.env.FIRESTORE_EMULATOR_HOST = "localhost:8080";
 
@@ -19,7 +20,7 @@ async function saveData(body) {
       body: JSON.stringify(body),
     }
   );
-  const message = await response.text();
+  const message = await response.json();
   return message;
 }
 
@@ -32,14 +33,14 @@ jest.setTimeout(30000);
 beforeAll(async () => {
   initializeApp(config);
   const db = getFirestore();
-  await db.collection("experiments").doc("testexp").set({ active: false });
+  await db.collection("experiments").doc("data-testexp").set({ active: false });
   await db.collection("users").doc("testuser").set({
     osfTokenValid: false,
   });
-  await db.collection("experiments").doc("testexp-active-no-owner").set({
+  await db.collection("experiments").doc("data-testexp-active-no-owner").set({
     active: true,
   });
-  await db.collection("experiments").doc("testexp-active").set({
+  await db.collection("experiments").doc("data-testexp-active").set({
     active: true,
     owner: "testuser",
   });
@@ -48,23 +49,23 @@ beforeAll(async () => {
 describe("apiData", () => {
   it("should return error message when there is no experimentID in the body", async () => {
     const response = await saveData({});
-    expect(response).toBe("Missing parameter experimentID");
+    expect(response).toEqual(MESSAGES.MISSING_PARAMETER);
   });
 
   it("should return error message when there is no data in the body", async () => {
-    const response = await saveData({ experimentID: "test" });
-    expect(response).toBe("Missing parameter data");
+    const response = await saveData({ experimentID: "data-test" });
+    expect(response).toEqual(MESSAGES.MISSING_PARAMETER);
   });
 
   it("should return error message when there is no filename in the body", async () => {
-    const response = await saveData({ experimentID: "test", data: "test" });
-    expect(response).toBe("Missing parameter filename");
+    const response = await saveData({ experimentID: "data-test", data: "test" });
+    expect(response).toEqual(MESSAGES.MISSING_PARAMETER);
   });
 
   it("should increment the write request log for the experiment when there is a complete request", async () => {
     const db = getFirestore();
     await db.collection("logs").doc("testlog").delete();
-    let response = await saveData({
+    await saveData({
       experimentID: "testlog",
       data: "test",
       filename: "test",
@@ -72,7 +73,7 @@ describe("apiData", () => {
     let doc = await db.collection("logs").doc("testlog").get();
     expect(doc.data().saveData).toBe(1);
 
-    response = await saveData({
+    await saveData({
       experimentID: "testlog",
       data: "test",
       filename: "test",
@@ -87,21 +88,21 @@ describe("apiData", () => {
       data: "test",
       filename: "test",
     });
-    expect(response).toBe("Experiment does not exist");
+    expect(response).toEqual(MESSAGES.EXPERIMENT_NOT_FOUND);
   });
 
   it("should return error message when condition assignment is not active", async () => {
     const response = await saveData({
-      experimentID: "testexp",
+      experimentID: "data-testexp",
       data: "test",
       filename: "test",
     });
-    expect(response).toBe("Experiment is not active");
+    expect(response).toEqual(MESSAGES.DATA_COLLECTION_NOT_ACTIVE);
   });
 
   it("should return error message when the experiment has reached its session limit", async () => {
     const db = getFirestore();
-    await db.collection("experiments").doc("testexp-active").set(
+    await db.collection("experiments").doc("data-testexp-active").set(
       {
         limitSessions: true,
         sessions: 2,
@@ -110,12 +111,12 @@ describe("apiData", () => {
       { merge: true }
     );
     const response = await saveData({
-      experimentID: "testexp-active",
+      experimentID: "data-testexp-active",
       data: "test",
       filename: "test",
     });
-    expect(response).toBe("Experiment has reached its session limit");
-    await db.collection("experiments").doc("testexp-active").set(
+    expect(response).toEqual(MESSAGES.SESSION_LIMIT_REACHED);
+    await db.collection("experiments").doc("data-testexp-active").set(
       {
         limitSessions: false,
       },
@@ -125,7 +126,7 @@ describe("apiData", () => {
 
   it("should reject invalid JSON data when validation is on", async () => {
     const db = getFirestore();
-    await db.collection("experiments").doc("testexp-active").set(
+    await db.collection("experiments").doc("data-testexp-active").set(
       {
         useValidation: true,
         allowJSON: true,
@@ -134,12 +135,12 @@ describe("apiData", () => {
       { merge: true }
     );
     const response = await saveData({
-      experimentID: "testexp-active",
+      experimentID: "data-testexp-active",
       data: "test",
       filename: "test",
     });
-    expect(response).toBe("Data are not valid");
-    await db.collection("experiments").doc("testexp-active").set(
+    expect(response).toEqual(MESSAGES.INVALID_DATA);
+    await db.collection("experiments").doc("data-testexp-active").set(
       {
         useValidation: false,
       },
@@ -149,7 +150,7 @@ describe("apiData", () => {
 
   it("should reject invalid CSV data when validation is on", async () => {
     const db = getFirestore();
-    await db.collection("experiments").doc("testexp-active").set(
+    await db.collection("experiments").doc("data-testexp-active").set(
       {
         useValidation: true,
         allowJSON: false,
@@ -158,12 +159,12 @@ describe("apiData", () => {
       { merge: true }
     );
     const response = await saveData({
-      experimentID: "testexp-active",
+      experimentID: "data-testexp-active",
       data: "test",
       filename: "test",
     });
-    expect(response).toBe("Data are not valid");
-    await db.collection("experiments").doc("testexp-active").set(
+    expect(response).toEqual(MESSAGES.INVALID_DATA);
+    await db.collection("experiments").doc("data-testexp-active").set(
       {
         useValidation: false,
       },
@@ -173,19 +174,26 @@ describe("apiData", () => {
 
   it("should reject a request when there is no corresponding user", async () => {
     const response = await saveData({
-      experimentID: "testexp-active-no-owner",
+      experimentID: "data-testexp-active-no-owner",
       data: "test",
       filename: "test",
     });
-    expect(response).toBe("User does not exist");
+    expect(response).toEqual(MESSAGES.INVALID_OWNER);
   });
 
   it("should reject a request when there is no valid OSF token", async () => {
+    const db = getFirestore();
+    await db.collection("experiments").doc("data-testexp-active").set(
+      {
+        useValidation: false,
+      },
+      { merge: true }
+    );
     const response = await saveData({
-      experimentID: "testexp-active",
+      experimentID: "data-testexp-active",
       data: "test",
       filename: "test",
     });
-    expect(response).toBe("User does not have a valid OSF token");
+    expect(response).toEqual(MESSAGES.INVALID_OSF_TOKEN);
   });
 });

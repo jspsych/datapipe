@@ -4,6 +4,7 @@
 
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
+import MESSAGES from "../api-messages";
 
 process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080';
 
@@ -19,7 +20,7 @@ async function getCondition(body) {
       body: JSON.stringify(body),
     }
   );
-  const condition = await response.text();
+  const condition = await response.json();
   return condition;
 }
 
@@ -45,25 +46,24 @@ beforeAll(async () => {
 describe("getCondition", () => {
   it("should return error message when there is no experimentID in the body", async () => {
     const condition = await getCondition({});
-    expect(condition).toBe("Missing parameter experimentID");
+    expect(condition).toEqual(MESSAGES.MISSING_PARAMETER);
   });
 
   it("should return error message when the experimentID does not match an experiment", async () => {
     const condition = await getCondition({ experimentID: "doesnotexist" });
-    expect(condition).toBe("Experiment does not exist");
+    expect(condition).toEqual(MESSAGES.EXPERIMENT_NOT_FOUND);
   });
 
   it("should return error message when condition assignment is not active", async () => {
     const condition = await getCondition({ experimentID: "testexp" });
-    expect(condition).toBe(
-      "Condition assignment is not active for this experiment"
-    );
+    expect(condition).toEqual(MESSAGES.CONDITION_ASSIGNMENT_NOT_ACTIVE);
   });
 
   it("should return sequential conditions when condition assignment is active", async () => {
     for(let i = 0; i < 8; i++) {
       const condition = await getCondition({ experimentID: "testexp-active" });
-      expect(parseInt(condition)).toBe(i % 4);
+      expect(condition.message).toBe('Success');
+      expect(condition.condition).toBe(i % 4);
     }
   });
 

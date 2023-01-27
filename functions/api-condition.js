@@ -2,6 +2,7 @@ import * as functions from "firebase-functions";
 import cors from "cors";
 import { db } from "./app.js";
 import writeLog from "./write-log.js";
+import MESSAGES from "./api-messages.js";
 
 const corsHandler = cors({ origin: true });
 
@@ -10,7 +11,7 @@ export const apiCondition = functions.https.onRequest((req, res) => {
     const { experimentID } = req.body;
 
     if (!experimentID) {
-      res.status(400).send("Missing parameter experimentID");
+      res.status(400).json(MESSAGES.MISSING_PARAMETER);
       return;
     }
 
@@ -20,21 +21,19 @@ export const apiCondition = functions.https.onRequest((req, res) => {
     const exp_doc = await exp_doc_ref.get();
 
     if (!exp_doc.exists) {
-      res.status(400).send("Experiment does not exist");
+      res.status(400).json(MESSAGES.EXPERIMENT_NOT_FOUND);
       return;
     }
 
     const exp_data = exp_doc.data();
     if (!exp_data.activeConditionAssignment) {
-      res
-        .status(400)
-        .send("Condition assignment is not active for this experiment");
+      res.status(400).json(MESSAGES.CONDITION_ASSIGNMENT_NOT_ACTIVE);
       return;
     }
 
     // if there is only 1 condition, just send 0
     if (exp_data.nConditions === 1) {
-      res.status(200).send("0");
+      res.status(200).json({message: 'Success', condition: 0});
       return;
     }
 
@@ -55,11 +54,11 @@ export const apiCondition = functions.https.onRequest((req, res) => {
         return currentCondition;
       });
     } catch (error) {
-      res.status(400).send("Error getting condition");
+      res.status(400).json(MESSAGES.UNKNOWN_ERROR_GETTING_CONDITION);
       return;
     }
 
-    res.status(200).send(condition.toString());
+    res.status(200).json({ message: "Success", condition: condition });
     return;
   });
 });
