@@ -33,11 +33,11 @@ export const apiBase64 = functions.https.onRequest(async (req, res) => {
       return;
     }
 
-    if(!isBase64(data)){
+    if (!isBase64(data)) {
       res.status(400).json(MESSAGES.INVALID_BASE64_DATA);
       return;
     }
-    
+
     let buffer;
     try {
       buffer = Buffer.from(data, "base64");
@@ -67,11 +67,9 @@ export const apiBase64 = functions.https.onRequest(async (req, res) => {
 
     if (!result.success) {
       if (result.errorCode === 409 && result.errorText === "Conflict") {
-        res
-          .status(400)
-          .send("Error uploading file to OSF: File already exists");
+        res.status(400).json(MESSAGES.OSF_FILE_EXISTS);
       } else {
-        res.status(400).send("Error uploading file to OSF");
+        res.status(400).json(MESSAGES.OSF_UPLOAD_ERROR);
       }
       return;
     }

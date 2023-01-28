@@ -33,7 +33,8 @@ const MESSAGES = {
   },
   INVALID_DATA: {
     error: "INVALID_DATA",
-    message: "The data are not valid according to the validation parameters set for this experiment."
+    message:
+      "The data are not valid according to the validation parameters set for this experiment.",
   },
   SESSION_LIMIT_REACHED: {
     error: "SESSION_LIMIT_REACHED",
@@ -41,11 +42,20 @@ const MESSAGES = {
   },
   UNKNOWN_ERROR_GETTING_CONDITION: {
     error: "UNKNOWN_ERROR_GETTING_CONDITION",
-    message: "An unknown error occurred while getting the condition for this experiment",
+    message:
+      "An unknown error occurred while getting the condition for this experiment",
+  },
+  OSF_FILE_EXISTS: {
+    error: "OSF_FILE_EXISTS",
+    message: "The OSF file already exists. File names must be unique.",
+  },
+  OSF_UPLOAD_ERROR: {
+    error: "OSF_UPLOAD_ERROR",
+    message: "An error occurred while uploading the data to OSF",
   },
   SUCCESS: {
     message: "Success",
-  }
+  },
 };
 
 export default MESSAGES;

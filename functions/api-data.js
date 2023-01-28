@@ -18,7 +18,7 @@ export const apiData = functions.https.onRequest(async (req, res) => {
       res.status(400).json(MESSAGES.MISSING_PARAMETER);
       return;
     }
-    
+
     await writeLog(experimentID, "saveData");
 
     const exp_doc_ref = db.collection("experiments").doc(experimentID);
@@ -84,11 +84,9 @@ export const apiData = functions.https.onRequest(async (req, res) => {
 
     if (!result.success) {
       if (result.errorCode === 409 && result.errorText === "Conflict") {
-        res
-          .status(400)
-          .send("Error uploading file to OSF: File already exists");
+        res.status(400).json(MESSAGES.OSF_FILE_EXISTS);
       } else {
-        res.status(400).send("Error uploading file to OSF");
+        res.status(400).json(MESSAGES.OSF_UPLOAD_ERROR);
       }
       return;
     }
@@ -98,6 +96,6 @@ export const apiData = functions.https.onRequest(async (req, res) => {
       { merge: true }
     );
 
-    res.status(201).json(MESSAGES.SUCCESS)
+    res.status(201).json(MESSAGES.SUCCESS);
   });
 });
