@@ -68,9 +68,9 @@ export const apiBase64 = functions.https.onRequest(async (req, res) => {
     if (!result.success) {
       if (result.errorCode === 409 && result.errorText === "Conflict") {
         res.status(400).json(MESSAGES.OSF_FILE_EXISTS);
-      } else {
-        res.status(400).json(MESSAGES.OSF_UPLOAD_ERROR);
+        return;
       }
+      res.status(400).json(MESSAGES.OSF_UPLOAD_ERROR);
       return;
     }
 
