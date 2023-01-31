@@ -255,7 +255,7 @@ export default function CodeHints({ expId }) {
                 <Text>Use fetch to request the next condition number.</Text>
                 <CodeBlock>
                   {`
-            const condition = await fetch("https://pipe.jspsych.org/api/condition/", {
+            const response = await fetch("https://pipe.jspsych.org/api/condition/", {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
@@ -268,8 +268,17 @@ export default function CodeHints({ expId }) {
                 </CodeBlock>
                 <Text>
                   This request is asynchronous, so you will need to wrap this in
-                  an async function. The value of condition will be a string.
+                  an async function. If the request is successful, the response
+                  will be a JSON object with a condition property. The value of
+                  this property will be the condition number.
                 </Text>
+                <CodeBlock>
+                  {`
+                  if(!response.error){
+                    const condition = response.condition;
+                  }
+                `}
+                </CodeBlock>
               </VStack>
             </TabPanel>
           </TabPanels>
