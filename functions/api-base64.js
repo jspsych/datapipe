@@ -31,7 +31,7 @@ export const apiBase64 = onRequest({cors:true},
       return;
     }
 
-    if (!isBase64(data)) {
+    if (!isBase64(data, {allowMime: true})) {
       res.status(400).json(MESSAGES.INVALID_BASE64_DATA);
       return;
     }
