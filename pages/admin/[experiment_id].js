@@ -4,7 +4,7 @@ import { useDocumentData } from "react-firebase-hooks/firestore";
 import { db } from "../../lib/firebase";
 import { doc } from "firebase/firestore";
 
-import { Spinner, Flex, VStack } from "@chakra-ui/react";
+import { Spinner, Flex, VStack, Text } from "@chakra-ui/react";
 
 import Title from "../../components/dashboard/Title";
 import ExperimentInfo from "../../components/dashboard/ExperimentInfo";
@@ -31,6 +31,7 @@ function ExperimentPageDashboard({ experiment_id }) {
   return (
     <>
       {loading && <Spinner color="green.500" size={"xl"} />}
+      {error && <Text>This experiment does not exist.</Text>}
       {data && (
         <VStack alignSelf="flex-start" align="flex-start" w={["99vw", 1200]}>
           <Title data={data} />

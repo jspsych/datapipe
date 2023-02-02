@@ -9,15 +9,15 @@
     "rewrites": [
       {
         "source": "/api/data",
-        "function": "apiData"
+        "function": "apidata"
       },
       {
         "source": "/api/condition",
-        "function": "apiCondition"
+        "function": "apicondition"
       },
       {
         "source": "/api/base64",
-        "function": "apiBase64"
+        "function": "apibase64"
       }
     ]
   },

@@ -6,6 +6,8 @@ name: Test
 on:
   pull_request:
     branches: ["main"]
+  push:
+    branches: ["test"]
 
 env:
   FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
@@ -37,4 +39,4 @@ jobs:
       - name: Select project
         run: firebase use test
       - name: Launch firestore emulator and test
-        run: firebase emulators:exec --only firestore 'npm run test-ci'
+        run: firebase emulators:exec 'npm run test-ci'

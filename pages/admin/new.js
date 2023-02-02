@@ -32,6 +32,7 @@ import {
   CheckboxGroup,
   Checkbox,
   FormErrorMessage,
+  FormHelperText,
   VStack,
   Text,
 } from "@chakra-ui/react";
@@ -48,18 +49,14 @@ function NewExperimentForm() {
   const { user } = useContext(UserContext);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [osfError, setOsfError] = useState(false);
-  const [conditionToggle, setConditionToggle] = useState(false);
-  const [sessionToggle, setSessionToggle] = useState(false);
-  const [validationToggle, setValidationToggle] = useState(true);
-  const [validationSettings, setValidationSettings] = useState(["json"]);
-
+ 
   const [data, loading, error] = useDocumentData(doc(db, "users", user.uid));
 
   return (
     <>
       {loading && <Spinner color="green.500" size={"xl"} />}
       {data && data.osfTokenValid && (
-        <Stack>
+        <Stack spacing={6} maxWidth="540px">
           <Heading>Create a New Experiment</Heading>
           <FormControl id="title">
             <FormLabel>Title</FormLabel>
@@ -80,72 +77,13 @@ function NewExperimentForm() {
           <FormControl id="osf-component-name">
             <FormLabel>New OSF Data Component Name</FormLabel>
             <Input type="text" />
+            <FormHelperText color="gray">DataPipe will create a new component with this name in the OSF project and store all data in it.</FormHelperText>
           </FormControl>
-          <FormControl id="enable-condition-assignment">
-            <FormLabel>Enable condition assignment?</FormLabel>
-            <Switch
-              colorScheme={"brandTeal"}
-              onChange={(e) => setConditionToggle(e.target.checked)}
-            />
-          </FormControl>
-          {conditionToggle && (
-            <FormControl id="condition-assignment">
-              <FormLabel>How many conditions?</FormLabel>
-              <NumberInput defaultValue={2} min={2}>
-                <NumberInputField />
-                <NumberInputStepper>
-                  <NumberIncrementStepper />
-                  <NumberDecrementStepper />
-                </NumberInputStepper>
-              </NumberInput>
-            </FormControl>
-          )}
-          <FormControl id="enable-validation">
-            <FormLabel>Enable data validation?</FormLabel>
-            <Switch
-              colorScheme={"brandTeal"}
-              defaultChecked
-              onChange={(e) => setValidationToggle(e.target.checked)}
-            />
-          </FormControl>
-          {validationToggle && (
-            <CheckboxGroup
-              id="validation-settings"
-              defaultValue={["json"]}
-              onChange={setValidationSettings}
-              colorScheme="brandTeal"
-            >
-              <Stack spacing={5} direction="row">
-                <Checkbox value="json">Allow JSON</Checkbox>
-                <Checkbox value="csv">Allow CSV</Checkbox>
-              </Stack>
-            </CheckboxGroup>
-          )}
-          <FormControl id="enable-session-limit">
-            <FormLabel>Enable session limit?</FormLabel>
-            <Switch
-              colorScheme={"brandTeal"}
-              onChange={(e) => setSessionToggle(e.target.checked)}
-            />
-          </FormControl>
-          {sessionToggle && (
-            <FormControl id="session-limit">
-              <FormLabel>How many total sessions?</FormLabel>
-              <NumberInput defaultValue={100} min={1}>
-                <NumberInputField />
-                <NumberInputStepper>
-                  <NumberIncrementStepper />
-                  <NumberDecrementStepper />
-                </NumberInputStepper>
-              </NumberInput>
-            </FormControl>
-          )}
           <Button
             onClick={() =>
               handleCreateExperiment(
                 setIsSubmitting,
-                setOsfError,
-                validationSettings
+                setOsfError
               )
             }
             isLoading={isSubmitting}
@@ -175,8 +113,7 @@ function NewExperimentForm() {
 
 async function handleCreateExperiment(
   setIsSubmitting,
-  setOsfError,
-  validationSettings
+  setOsfError
 ) {
   setIsSubmitting(true);
   setOsfError(false);
@@ -185,19 +122,12 @@ async function handleCreateExperiment(
   const title = document.querySelector("#title").value;
   let osfRepo = document.querySelector("#osf-repo").value;
   const osfComponentName = document.querySelector("#osf-component-name").value;
-  const nConditions = document.querySelector("#enable-condition-assignment")
-    .checked
-    ? document.querySelector("#condition-assignment").value
-    : 1;
-  const useValidation = document.querySelector("#enable-validation").checked;
-  const allowJSON = validationSettings.includes("json");
-  const allowCSV = validationSettings.includes("csv");
-  const useSessionLimit = document.querySelector(
-    "#enable-session-limit"
-  ).checked;
-  const maxSessions = document.querySelector("#enable-session-limit").checked
-    ? document.querySelector("#session-limit").value
-    : 0;
+  const nConditions = 1;
+  const useValidation = true;
+  const allowJSON = true;
+  const allowCSV = true;
+  const useSessionLimit = false;
+  const maxSessions = 1;
 
   const nanoid = customAlphabet(
     "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
@@ -270,7 +200,7 @@ async function handleCreateExperiment(
       osfFilesLink: uploadLink,
       active: false,
       activeBase64: false,
-      activeConditionAssignment: nConditions > 1,
+      activeConditionAssignment: false,
       sessions: 0,
       limitSessions: useSessionLimit,
       maxSessions: maxSessions,

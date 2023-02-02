@@ -72,8 +72,15 @@ export default function GettingStarted() {
         name you would like to use for the Data component.
       </Text>
       <Text>
+        Click the create experiment button to finish. You will be sent to the
+        experiment dashboard where you can edit the experiment settings.
+      </Text>
+      <Heading as="h2" size="lg">
+        Configure the experiment
+      </Heading>
+      <Text>
         There are three optional features that you can enable for your
-        experiment. (These can be adjusted later if you change your mind.)
+        experiment via the experiment dashboard.
       </Text>
       <Text>
         <span style={{ fontWeight: "bold" }}>Condition assignment</span> will
@@ -181,9 +188,9 @@ export default function GettingStarted() {
         Activate your experiment
       </Heading>
       <Text>
-        The final step is to activate your experiment. On the DataPipe
-        experiment page, you can activate three different features of DataPipe
-        for each experiment.
+        The final step is to activate your experiment. On the experiment
+        dashboard, you can activate three different features of DataPipe for
+        each experiment.
       </Text>
 
       <Text>
