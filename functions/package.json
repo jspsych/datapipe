@@ -18,7 +18,7 @@
     "csv-string": "^4.1.1",
     "express": "^4.18.2",
     "firebase-admin": "^11.5.0",
-    "firebase-functions": "^4.1.1",
+    "firebase-functions": "^4.2.0",
     "is-base64": "^1.1.0",
     "joi": "^17.7.0",
     "node-fetch": "^3.2.10"

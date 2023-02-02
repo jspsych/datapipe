@@ -1,15 +1,13 @@
-import * as functions from "firebase-functions";
-import cors from "cors";
+import { onRequest } from "firebase-functions/v2/https";
 import putFileOSF from "./put-file-osf.js";
 import { db } from "./app.js";
 import writeLog from "./write-log.js";
 import isBase64 from "is-base64";
 import MESSAGES from "./api-messages.js";
 
-const corsHandler = cors({ origin: true });
-
-export const apiBase64 = functions.https.onRequest(async (req, res) => {
-  corsHandler(req, res, async () => {
+export const apiBase64 = onRequest({cors:true},
+  async (req, res) => {
+  
     const { experimentID, data, filename } = req.body;
 
     if (!experimentID || !data || !filename) {
@@ -76,4 +74,3 @@ export const apiBase64 = functions.https.onRequest(async (req, res) => {
 
     res.status(201).json(MESSAGES.SUCCESS);
   });
-});
