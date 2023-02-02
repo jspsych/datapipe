@@ -12,7 +12,7 @@ export default function Contact() {
         questions and issues.
       </Text>
       <Text>
-        We ask that if you have a question or issue, you first check the
+        We ask that if you have a question or issue, you first check the{" "}
         <Link href="https://github.com/jspsych/datapipe/issues" isExternal>
           GitHub repository issues
         </Link>{" "}
