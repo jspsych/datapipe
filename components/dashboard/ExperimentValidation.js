@@ -13,7 +13,7 @@ import {
   requiredChakraThemeKeys,
 } from "@chakra-ui/react";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { doc, setDoc } from "firebase/firestore";
 import { db } from "../../lib/firebase";
@@ -32,13 +32,36 @@ export default function ExperimentValidation({ data }) {
   const [validationEnabled, setValidationEnabled] = useState(
     data.useValidation
   );
-  const [isSaving, setIsSaving] = useState(false);
+
+  const [fieldsArray, setFieldsArray] = useState(data.requiredFields);
+
+  useEffect(() => {
+    async function handleSave() {
+      // split array and remove all whitespace
+
+      const settings = {
+        useValidation: validationEnabled,
+        allowJSON: validationSettings.includes("json"),
+        allowCSV: validationSettings.includes("csv"),
+        requiredFields: fieldsArray,
+      };
+
+      try {
+        await setDoc(doc(db, `experiments/${data.id}`), settings, {
+          merge: true,
+        });
+      } catch (error) {
+        console.error(error);
+      }
+    }
+    handleSave();
+  }, [validationEnabled, validationSettings, fieldsArray, data]);
 
   return (
     <Stack
       w="100%"
       pr={8}
-      spacing={2}
+      spacing={3}
       bgColor={"black"}
       borderRadius={16}
       p={6}
@@ -55,7 +78,9 @@ export default function ExperimentValidation({ data }) {
           colorScheme="green"
           size="md"
           isChecked={validationEnabled}
-          onChange={(e) => setValidationEnabled(e.target.checked)}
+          onChange={(e) => {
+            setValidationEnabled(e.target.checked);
+          }}
         />
       </FormControl>
       {validationEnabled && (
@@ -63,7 +88,9 @@ export default function ExperimentValidation({ data }) {
           <CheckboxGroup
             id="validation-settings"
             defaultValue={validationSettings}
-            onChange={setValidationSettings}
+            onChange={(e) => {
+              setValidationSettings(e);
+            }}
             colorScheme="brandTeal"
           >
             <Stack spacing={5} direction="row">
@@ -78,57 +105,18 @@ export default function ExperimentValidation({ data }) {
               onChange={(e) => {
                 setRequiredFields(e.target.value);
               }}
+              onBlur={() => {
+                setFieldsArray(
+                  requiredFields.split(",").map((field) => field.trim())
+                );
+              }}
             />
-            <FormHelperText>
+            <FormHelperText color="gray">
               Enter a comma-separated list of required fields
             </FormHelperText>
           </FormControl>
         </>
       )}
-      <Button
-        variant={"solid"}
-        colorScheme={"green"}
-        size={"md"}
-        onClick={() =>
-          handleSaveSubmit(
-            data.id,
-            validationEnabled,
-            validationSettings,
-            requiredFields,
-            setIsSaving
-          )
-        }
-        isLoading={isSaving}
-      >
-        Save Validation Settings
-      </Button>
     </Stack>
   );
-}
-
-async function handleSaveSubmit(
-  expId,
-  validationEnabled,
-  validationSettings,
-  requiredFields,
-  setIsSaving
-) {
-  // split array and remove all whitespace
-  const fieldsArray = requiredFields.split(",").map((field) => field.trim());
-
-  const settings = {
-    useValidation: validationEnabled,
-    allowJSON: validationSettings.includes("json"),
-    allowCSV: validationSettings.includes("csv"),
-    requiredFields: fieldsArray,
-  };
-
-  setIsSaving(true);
-  try {
-    await setDoc(doc(db, `experiments/${expId}`), settings, { merge: true });
-    setIsSaving(false);
-  } catch (error) {
-    console.error(error);
-    setIsSaving(false);
-  }
 }

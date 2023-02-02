@@ -20,7 +20,7 @@ export default function FAQ() {
         FAQ
       </Heading>
       <Accordion defaultIndex={[0]} allowMultiple>
-        <FAQItem question="How do I use this service?">
+        <FAQItem question="How do I use DataPipe?">
           <Text>
             DataPipe serves as a connection between an experiment and the Open
             Science Framework. To use DataPipe, you will need to use a webhost
@@ -35,7 +35,7 @@ export default function FAQ() {
             has more information about how to use DataPipe.
           </Text>
         </FAQItem>
-        <FAQItem question="Will this host my experiment?">
+        <FAQItem question="Will DataPipe host my experiment?">
           <Text mb={2}>
             No, you will need to use a different service to make the experiment
             available online. The benefit of using this service is that you do
@@ -53,7 +53,7 @@ export default function FAQ() {
             quickly.
           </Text>
         </FAQItem>
-        <FAQItem question="Will this store my data?">
+        <FAQItem question="Will DataPipe store my data?">
           <Text>
             Not directly. DataPipe helps you store your data on the Open Science
             Framework. When you use DataPipe, the data is routed through our
@@ -61,10 +61,10 @@ export default function FAQ() {
             the OSF. DataPipe does not store a copy of the data.
           </Text>
         </FAQItem>
-        <FAQItem question="How much does this cost?">
+        <FAQItem question="How much does it cost?">
           <Text>DataPipe is free to use.</Text>
         </FAQItem>
-        <FAQItem question="Why is this service free?">
+        <FAQItem question="Why is DataPipe free?">
           <Text>
             The expensive parts of hosting an experiment are providing storage
             and bandwidth for the experiment files and data. Fortunately there
@@ -77,7 +77,7 @@ export default function FAQ() {
             storage provider.
           </Text>
         </FAQItem>
-        <FAQItem question="How much does this service cost to run?">
+        <FAQItem question="How expensive is it to run DataPipe?">
           <Text>
             We host DataPipe using Google Firebase, so the cost of DataPipe
             depends on how much usage it gets. Currently our resource
@@ -104,7 +104,7 @@ export default function FAQ() {
             you should cover the lifetime cost of providing this service to you.
           </Text>
         </FAQItem>
-        <FAQItem question="Who can see the data that I collect using this service?">
+        <FAQItem question="Who can see the data that I collect using DataPipe?">
           <Text>
             The data that you send to DataPipe are not stored anywhere on our
             servers and we do not log any information about the data when it is
@@ -113,7 +113,7 @@ export default function FAQ() {
             component is public, then anyone can see the data.
           </Text>
         </FAQItem>
-        <FAQItem question="What are the risks of using this service and how can I mitigate them?">
+        <FAQItem question="What are the risks of using DataPipe and how can I mitigate them?">
           <Text mb={2}>
             There are a few risks that you should be aware of before using
             DataPipe.
