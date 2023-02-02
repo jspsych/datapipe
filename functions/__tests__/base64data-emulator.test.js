@@ -10,7 +10,7 @@ process.env.FIRESTORE_EMULATOR_HOST = "localhost:8080";
 
 async function saveData(body) {
   const response = await fetch(
-    "http://localhost:5001/datapipe-test/us-central1/apiBase64",
+    "http://localhost:5001/datapipe-test/us-central1/apibase64",
     {
       method: "POST",
       headers: {
