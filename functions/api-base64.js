@@ -38,7 +38,13 @@ export const apiBase64 = onRequest({cors:true},
 
     let buffer;
     try {
-      buffer = Buffer.from(data, "base64");
+      // this safely removes the mime type from the base64 data
+      const split_data = data.split(",");
+      if(split_data.length > 1){
+        buffer = Buffer.from(split_data[1], "base64");
+      } else {
+        buffer = Buffer.from(data, "base64");
+      }
     } catch (e) {
       res.status(400).json(MESSAGES.INVALID_BASE64_DATA);
       return;
