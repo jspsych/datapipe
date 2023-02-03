@@ -9,6 +9,7 @@ on:
 
 env:
   FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+  FIREBASE_CONFIG: ${{ secrets.FIREBASE_TEST_CONFIG }}
 
 jobs:
   deploy:
@@ -37,6 +38,4 @@ jobs:
       - name: Use test firebase project
         run: firebase use test
       - name: Deploy firebase project
-        env:
-          FIREBASE_CONFIG: ${{ secrets.FIREBASE_TEST_CONFIG }}
         run: firebase deploy
