@@ -9,6 +9,8 @@ on:
 
 env:
   FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+  NEXT_PUBLIC_FIREBASE_CONFIG: ${{ secrets.FIREBASE_PRODUCTION_CONFIG }}
+
 
 jobs:
   build:
@@ -37,6 +39,4 @@ jobs:
       - name: Use default firebase project
         run: firebase use default
       - name: Deploy firebase project
-        env:
-          PRODUCTION: true
         run: firebase deploy

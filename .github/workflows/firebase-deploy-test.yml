@@ -9,9 +9,10 @@ on:
 
 env:
   FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+  NEXT_PUBLIC_FIREBASE_CONFIG: ${{ secrets.FIREBASE_TEST_CONFIG }}
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
 
     strategy:
