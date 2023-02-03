@@ -9,6 +9,8 @@ on:
 
 env:
   FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+  NEXT_PUBLIC_FIREBASE_CONFIG: ${{ secrets.FIREBASE_PRODUCTION_CONFIG }}
+
 
 jobs:
   build:
