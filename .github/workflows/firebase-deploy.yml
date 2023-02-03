@@ -39,6 +39,4 @@ jobs:
       - name: Use default firebase project
         run: firebase use default
       - name: Deploy firebase project
-        env:
-          PRODUCTION: true
         run: firebase deploy
