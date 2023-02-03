@@ -11,7 +11,7 @@ env:
   FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
 
     strategy:
@@ -37,4 +37,6 @@ jobs:
       - name: Use test firebase project
         run: firebase use test
       - name: Deploy firebase project
+        env:
+          FIREBASE_CONFIG: ${{ secrets.FIREBASE_TEST_CONFIG }}
         run: firebase deploy
