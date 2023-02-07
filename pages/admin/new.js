@@ -53,7 +53,7 @@ function NewExperimentForm() {
           <Heading>Create a New Experiment</Heading>
           <FormControl id="title" isInvalid={titleError}>
             <FormLabel>Title</FormLabel>
-            <Input type="text" onChange={setTitleError(false)} />
+            <Input type="text" onChange={()=>setTitleError(false)} />
             <FormErrorMessage color={"red"}>This field is required</FormErrorMessage>
           </FormControl>
           <FormControl id="osf-repo" isInvalid={osfError}>
@@ -70,7 +70,7 @@ function NewExperimentForm() {
           </FormControl>
           <FormControl id="osf-component-name" isInvalid={dataComponentError}>
             <FormLabel>New OSF Data Component Name</FormLabel>
-            <Input type="text" onChange={setDataComponentError(false)}/>
+            <Input type="text" onChange={()=>setDataComponentError(false)}/>
             <FormErrorMessage color={"red"}>This field is required</FormErrorMessage>
             <FormHelperText color="gray">DataPipe will create a new component with this name in the OSF project and store all data in it.</FormHelperText>
           </FormControl>
