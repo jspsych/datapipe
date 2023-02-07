@@ -2,7 +2,6 @@ import { customAlphabet } from "nanoid";
 import AuthCheck from "../../components/AuthCheck";
 import {
   doc,
-  setDoc,
   getDoc,
   writeBatch,
   arrayUnion,
@@ -23,14 +22,6 @@ import {
   Spinner,
   InputGroup,
   InputLeftAddon,
-  Switch,
-  NumberInputStepper,
-  NumberInputField,
-  NumberIncrementStepper,
-  NumberDecrementStepper,
-  NumberInput,
-  CheckboxGroup,
-  Checkbox,
   FormErrorMessage,
   FormHelperText,
   VStack,
@@ -49,6 +40,8 @@ function NewExperimentForm() {
   const { user } = useContext(UserContext);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [osfError, setOsfError] = useState(false);
+  const [titleError, setTitleError] = useState(false);
+  const [dataComponentError, setDataComponentError] = useState(false);
  
   const [data, loading, error] = useDocumentData(doc(db, "users", user.uid));
 
@@ -58,9 +51,10 @@ function NewExperimentForm() {
       {data && data.osfTokenValid && (
         <Stack spacing={6} maxWidth="540px">
           <Heading>Create a New Experiment</Heading>
-          <FormControl id="title">
+          <FormControl id="title" isInvalid={titleError}>
             <FormLabel>Title</FormLabel>
-            <Input type="text" />
+            <Input type="text" onChange={()=>setTitleError(false)} />
+            <FormErrorMessage color={"red"}>This field is required</FormErrorMessage>
           </FormControl>
           <FormControl id="osf-repo" isInvalid={osfError}>
             <FormLabel>Existing OSF Project</FormLabel>
@@ -74,16 +68,19 @@ function NewExperimentForm() {
               Cannot connect to this OSF component
             </FormErrorMessage>
           </FormControl>
-          <FormControl id="osf-component-name">
+          <FormControl id="osf-component-name" isInvalid={dataComponentError}>
             <FormLabel>New OSF Data Component Name</FormLabel>
-            <Input type="text" />
+            <Input type="text" onChange={()=>setDataComponentError(false)}/>
+            <FormErrorMessage color={"red"}>This field is required</FormErrorMessage>
             <FormHelperText color="gray">DataPipe will create a new component with this name in the OSF project and store all data in it.</FormHelperText>
           </FormControl>
           <Button
             onClick={() =>
               handleCreateExperiment(
                 setIsSubmitting,
-                setOsfError
+                setOsfError,
+                setTitleError,
+                setDataComponentError
               )
             }
             isLoading={isSubmitting}
@@ -113,7 +110,9 @@ function NewExperimentForm() {
 
 async function handleCreateExperiment(
   setIsSubmitting,
-  setOsfError
+  setOsfError,
+  setTitleError,
+  setDataComponentError
 ) {
   setIsSubmitting(true);
   setOsfError(false);
@@ -128,6 +127,18 @@ async function handleCreateExperiment(
   const allowCSV = true;
   const useSessionLimit = false;
   const maxSessions = 1;
+
+  if(title.length === 0) {
+    setTitleError(true);
+    setIsSubmitting(false);
+    return;
+  }
+
+  if(osfComponentName.length === 0) {
+    setDataComponentError(true);
+    setIsSubmitting(false);
+    return;
+  }
 
   const nanoid = customAlphabet(
     "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
