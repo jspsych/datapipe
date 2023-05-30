@@ -102,7 +102,7 @@ export default function ApiDocs() {
           Get condition assignment
         </Heading>
         <Text>
-          <Badge colorScheme="blue">GET</Badge> /api/condition
+          <Badge colorScheme="green">POST</Badge> /api/condition
         </Text>
         <Text>
           Get the next condition assignment in an experiment. The condition is a numerical value from 0 to n-1, where n
