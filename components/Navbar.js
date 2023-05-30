@@ -65,6 +65,9 @@ export default function Navbar() {
             <Link color="white" as={NextLink} href="/getting-started">
               Getting Started
             </Link>
+            <Link color="white" as={NextLink} href="/api-docs">
+              API Docs
+            </Link>
             <Link color="white" as={NextLink} href="/faq">
               FAQ
             </Link>
@@ -143,6 +146,9 @@ export default function Navbar() {
             <MenuList w="90vw" bg="greyBackground">
               <MenuItem bg="greyBackground">
                 <NextLink href="/getting-started">Getting Started</NextLink>
+              </MenuItem>
+              <MenuItem bg="greyBackground">
+                <NextLink href="/api-docs">API Docs</NextLink>
               </MenuItem>
               <MenuItem bg="greyBackground">
                 <NextLink href="/faq">FAQ</NextLink>

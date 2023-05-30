@@ -116,8 +116,8 @@ export default function GettingStarted() {
       </Heading>
       <Text>
         In order to send data to DataPipe, you need to add code to your
-        experiment. If you are using jsPsych, then you can use the jsPsychPipe
-        plugin. If you are not using jsPsych, then you can use the DataPipe API
+        experiment to communicate with DataPipe. If you are using jsPsych,
+        then you can use the <Link isExternal href="https://github.com/jspsych/jspsych-contrib/tree/main/packages/plugin-pipe">jsPsychPipe plugin</Link>. If you are not using jsPsych, then you can use the DataPipe API
         directly via fetch requests.
       </Text>
       <Text>
@@ -126,7 +126,7 @@ export default function GettingStarted() {
         My Experiments in the top menu and selecting the experiment you want to
         view. On this page, there are code snippets for sending data to
         DataPipe. Select the code snippet for the language that you are using in
-        your experiment and follow the guide to add the code to your experiment.
+        your experiment and follow the instructions provided on the dashboard to add the code to your experiment.
       </Text>
 
       <Heading as="h2" size="lg">
