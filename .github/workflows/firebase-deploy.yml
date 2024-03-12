@@ -8,7 +8,7 @@ on:
     branches: ["main"]
 
 env:
-  FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+  #FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
   NEXT_PUBLIC_FIREBASE_CONFIG: ${{ secrets.FIREBASE_PRODUCTION_CONFIG }}
 
 
@@ -18,7 +18,7 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [16.x]
+        node-version: [20.x]
         # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
 
     steps:
@@ -28,6 +28,9 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: "npm"
+      - uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: '${{ secrets.GOOGLE_PRODUCTION_CREDENTIALS }}'
       - name: Install firebase tools
         run: npm install -g firebase-tools@12.1.0
       - name: Enable firebase webframeworks
