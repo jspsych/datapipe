@@ -1,11 +1,6 @@
 import { customAlphabet } from "nanoid";
 import AuthCheck from "../../components/AuthCheck";
-import {
-  doc,
-  getDoc,
-  writeBatch,
-  arrayUnion,
-} from "firebase/firestore";
+import { doc, getDoc, writeBatch, arrayUnion } from "firebase/firestore";
 import { db, auth } from "../../lib/firebase";
 import { useContext, useState } from "react";
 import { UserContext } from "../../lib/context";
@@ -26,6 +21,7 @@ import {
   FormHelperText,
   VStack,
   Text,
+  Select,
 } from "@chakra-ui/react";
 
 export default function NewExperimentPage({}) {
@@ -42,7 +38,7 @@ function NewExperimentForm() {
   const [osfError, setOsfError] = useState(false);
   const [titleError, setTitleError] = useState(false);
   const [dataComponentError, setDataComponentError] = useState(false);
- 
+
   const [data, loading, error] = useDocumentData(doc(db, "users", user.uid));
 
   return (
@@ -53,8 +49,10 @@ function NewExperimentForm() {
           <Heading>Create a New Experiment</Heading>
           <FormControl id="title" isInvalid={titleError}>
             <FormLabel>Title</FormLabel>
-            <Input type="text" onChange={()=>setTitleError(false)} />
-            <FormErrorMessage color={"red"}>This field is required</FormErrorMessage>
+            <Input type="text" onChange={() => setTitleError(false)} />
+            <FormErrorMessage color={"red"}>
+              This field is required
+            </FormErrorMessage>
           </FormControl>
           <FormControl id="osf-repo" isInvalid={osfError}>
             <FormLabel>Existing OSF Project</FormLabel>
@@ -70,9 +68,26 @@ function NewExperimentForm() {
           </FormControl>
           <FormControl id="osf-component-name" isInvalid={dataComponentError}>
             <FormLabel>New OSF Data Component Name</FormLabel>
-            <Input type="text" onChange={()=>setDataComponentError(false)}/>
-            <FormErrorMessage color={"red"}>This field is required</FormErrorMessage>
-            <FormHelperText color="gray">DataPipe will create a new component with this name in the OSF project and store all data in it.</FormHelperText>
+            <Input type="text" onChange={() => setDataComponentError(false)} />
+            <FormErrorMessage color={"red"}>
+              This field is required
+            </FormErrorMessage>
+            <FormHelperText color="gray">
+              DataPipe will create a new component with this name in the OSF
+              project and store all data in it.
+            </FormHelperText>
+          </FormControl>
+          <FormControl id="osf-component-region">
+            <FormLabel>Storage Location</FormLabel>
+            <Select defaultValue="us" sx={{'> option': {background: 'black', color: 'white'}}}>
+              <option value="us">United States</option>
+              <option value="de-1">Germany - Frankfurt</option>
+              <option value="au-1">Australia - Sydney</option>
+              <option value="ca-1">Canada - Montreal</option>
+            </Select>
+            <FormHelperText color="gray">
+              Choose the region where the data will be stored.
+            </FormHelperText>
           </FormControl>
           <Button
             onClick={() =>
@@ -120,6 +135,7 @@ async function handleCreateExperiment(
   const user = auth.currentUser;
   const title = document.querySelector("#title").value;
   let osfRepo = document.querySelector("#osf-repo").value;
+  const region = document.querySelector("#osf-component-region").value;
   const osfComponentName = document.querySelector("#osf-component-name").value;
   const nConditions = 1;
   const useValidation = true;
@@ -128,13 +144,13 @@ async function handleCreateExperiment(
   const useSessionLimit = false;
   const maxSessions = 1;
 
-  if(title.length === 0) {
+  if (title.length === 0) {
     setTitleError(true);
     setIsSubmitting(false);
     return;
   }
 
-  if(osfComponentName.length === 0) {
+  if (osfComponentName.length === 0) {
     setDataComponentError(true);
     setIsSubmitting(false);
     return;
@@ -160,7 +176,7 @@ async function handleCreateExperiment(
     }
 
     const osfResult = await fetch(
-      `https://api.osf.io/v2/nodes/${osfRepo}/children/`,
+      `https://api.osf.io/v2/nodes/${osfRepo}/children/?region=${region}`,
       {
         method: "POST",
         headers: {
