@@ -10,7 +10,7 @@ on:
     branches: ["test"]
 
 env:
-  FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+  #FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
   NEXT_PUBLIC_FIREBASE_CONFIG: ${{ secrets.FIREBASE_TEST_CONFIG }}
 
 jobs:
@@ -19,7 +19,7 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [16.x]
+        node-version: [20.x]
         # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
 
     steps:
@@ -29,6 +29,9 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: "npm"
+      - uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: '${{ secrets.GOOGLE_TEST_CREDENTIALS }}' # Replace with the name of your GitHub Actions secret
       - name: Install firebase tools
         run: npm install -g firebase-tools
       - name: Enable firebase webframeworks
