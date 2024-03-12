@@ -79,9 +79,11 @@ function NewExperimentForm() {
           </FormControl>
           <FormControl id="osf-component-region">
             <FormLabel>Storage Location</FormLabel>
-            <Select placeholder="Select region">
-              <option value="us">US</option>
-              <option value="de-1">EU</option>
+            <Select defaultValue="us" sx={{'> option': {background: 'black', color: 'white'}}}>
+              <option value="us">United States</option>
+              <option value="de-1">Germany - Frankfurt</option>
+              <option value="au-1">Australia - Sydney</option>
+              <option value="ca-1">Canada - Montreal</option>
             </Select>
             <FormHelperText color="gray">
               Choose the region where the data will be stored.
@@ -133,6 +135,7 @@ async function handleCreateExperiment(
   const user = auth.currentUser;
   const title = document.querySelector("#title").value;
   let osfRepo = document.querySelector("#osf-repo").value;
+  const region = document.querySelector("#osf-component-region").value;
   const osfComponentName = document.querySelector("#osf-component-name").value;
   const nConditions = 1;
   const useValidation = true;
@@ -173,7 +176,7 @@ async function handleCreateExperiment(
     }
 
     const osfResult = await fetch(
-      `https://api.osf.io/v2/nodes/${osfRepo}/children/`,
+      `https://api.osf.io/v2/nodes/${osfRepo}/children/?region=${region}`,
       {
         method: "POST",
         headers: {
