@@ -1,13 +1,6 @@
-### Live Server
+# DataPipe
+
+Send your experiment data directly to the OSF, for free.
 
 https://pipe.jspsych.org
 
-### Development
-
-```
-npm install -g firebase-tools
-npm install
-npm run emulators
-```
-
-The local site will be available at localhost:5000.

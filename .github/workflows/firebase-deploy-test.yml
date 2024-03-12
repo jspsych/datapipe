@@ -29,7 +29,7 @@ jobs:
           cache: "npm"
       - uses: 'google-github-actions/auth@v2'
         with:
-          credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}' # Replace with the name of your GitHub Actions secret
+          credentials_json: '${{ secrets.GOOGLE_TEST_CREDENTIALS }}' # Replace with the name of your GitHub Actions secret
       - name: Install firebase tools
         run: npm install -g firebase-tools@12.1.0
       - name: Enable firebase webframeworks
