@@ -41,6 +41,15 @@ const info = <const>{
       type: ParameterType.STRING,
       default: null,
     },
+
+    /**
+     * A string-based representation of the metadata to save if such metadata is not available for the experiment,
+     * passed as a dynamic parameter.
+     */
+    metadata_string: {
+      type: ParameterType.STRING,
+      default: null,
+    }
   },
 };
 
@@ -117,18 +126,21 @@ class PipePlugin implements JsPsychPlugin<Info> {
 
     let result: any;
     if (trial.action === "save") {
-      result = await PipePlugin.saveData(trial.experiment_id, trial.filename, trial.data_string);
+      console.log(trial.metadata_string);
+      result = await PipePlugin.saveData(trial.experiment_id, trial.filename, trial.data_string, trial.metadata_string);
     }
     if (trial.action === "saveBase64") {
       result = await PipePlugin.saveBase64Data(
         trial.experiment_id,
         trial.filename,
-        trial.data_string
+        trial.data_string,
+        //trial.metadata_string - has to be added
       );
     }
     if (trial.action === "condition") {
       result = await PipePlugin.getCondition(trial.experiment_id);
     }
+
 
     display_element.innerHTML = "";
 
@@ -150,7 +162,7 @@ class PipePlugin implements JsPsychPlugin<Info> {
    * @param data The data as a string. Any text-basd format (e.g., JSON, CSV, TXT) is acceptable.
    * @returns The response from the server.
    */
-  static async saveData(expID: string, filename: string, data: string): Promise<any> {
+  static async saveData(expID: string, filename: string, data: string, metadata: string): Promise<any> {
     if (!expID || !filename || !data) {
       throw new Error("Missing required parameter(s).");
     }
@@ -166,6 +178,7 @@ class PipePlugin implements JsPsychPlugin<Info> {
           experimentID: expID,
           filename: filename,
           data: data,
+          metadata: metadata
         }),
       });
     } catch (error) {
@@ -188,7 +201,7 @@ class PipePlugin implements JsPsychPlugin<Info> {
     }
     let response: Response;
     try {
-      response = await fetch("https://127.0.0.1:5005/api/base64/", {
+      response = await fetch("http://127.0.0.1:5005/api/base64/", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -218,7 +231,7 @@ class PipePlugin implements JsPsychPlugin<Info> {
     }
     let response: Response;
     try {
-      response = await fetch("https://127.0.0.1:5005/api/condition/", {
+      response = await fetch("http://127.0.0.1:5005/api/condition/", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

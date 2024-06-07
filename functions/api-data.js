@@ -7,9 +7,12 @@ import putFileOSF from "./put-file-osf.js";
 import { db } from "./app.js";
 import writeLog from "./write-log.js";
 import MESSAGES from "./api-messages.js";
+import metadataProcess from "./metadata.js";
+import metadataUpdate from "./metadata-update.js";
+import updateFileOSF from "./update-file-osf.js";
 
 export const apiData = onRequest({ cors: true }, async (req, res) => {
-  const { experimentID, data, filename } = req.body;
+  const { experimentID, data, filename, metadata} = req.body;
 
   if (!experimentID || !data || !filename) {
     res.status(400).json(MESSAGES.MISSING_PARAMETER);
@@ -79,6 +82,33 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
     filename
   );
 
+  const meta = await metadataProcess(exp_data.osfFilesLink, user_data.osfToken, filename);
+
+  if (meta.success) {
+    var oldMetadata = meta.metadataString;
+
+    const updatingMetadata = await metadataUpdate(oldMetadata, metadata);
+
+    const updateMetadata = await updateFileOSF(
+      exp_data.osfFilesLink,
+      user_data.osfToken,
+      JSON.stringify(updatingMetadata),
+      meta.metaId
+    )
+
+    console.log(updateMetadata);
+  }
+  else {
+    console.log(meta.errorText);
+    const metaResult = await putFileOSF(
+      exp_data.osfFilesLink,
+      user_data.osfToken,
+      metadata,
+      `dataset-description.json`
+    );
+  }
+
+  
   if (!result.success) {
     if (result.errorCode === 409 && result.errorText === "Conflict") {
       res.status(400).json(MESSAGES.OSF_FILE_EXISTS);

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <script src="https://unpkg.com/jspsych@7.3.4"></script>
+    <script src="jspsychDist/index.browser.js"></script>
     <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@1.1.3"></script>
     <script src="https://unpkg.com/@jspsych/plugin-image-keyboard-response@1.1.3"></script>
     <script src="plugin-pipe/dist/index.browser.js"></script>
@@ -13,12 +13,13 @@
 
     var jsPsych = initJsPsych({
       on_finish: function() {
+        //jsPsych.data.displayData();
         // jsPsych.data.get().localSave('csv', 'timeline-variables.csv');
-        // jsPsych.metadata.saveAsJsonFile();
-        // jsPsych.metadata.displayMetadata(); // documentation code
+        //jsPsych.metadata.saveAsJsonFile();
+        jsPsych.metadata.displayMetadata(); // documentation code
         // jsPsych.data.displayData();
 
-        jsPsych.displayDataAndMetadata();
+       
       },
       default_iti: 250
     });
@@ -32,9 +33,13 @@
     const save_data = {
                 type: jsPsychPipe,
                 action: "save",
-                experiment_id: "GCMqeLMy5HXs", //"YkDJUrfJPMyC",
+                experiment_id: "mNN5hmvG8KRG", //"YkDJUrfJPMyC",
                 filename: filename,
-                data_string: ()=>jsPsych.data.get().csv()
+                data_string: ()=>jsPsych.data.get().csv(),
+                metadata_string: () => {
+                    jsPsych.getAutomaticMetaData();
+                    return JSON.stringify(jsPsych.metadata.getMetadata());
+                }
               };
             
 

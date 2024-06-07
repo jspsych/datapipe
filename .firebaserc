@@ -1,6 +1,6 @@
 {
   "projects": {
-    "default": "osf-relay",
+    "default": "datapipe-test",
     "test": "datapipe-test"
   },
   "targets": {},
