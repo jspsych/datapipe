@@ -44,9 +44,16 @@ declare const info: {
          * A string-based representation of the metadata to save if such metadata is not available for the experiment,
          * passed as a dynamic parameter.
          */
-        readonly metadata_string: {
-            readonly type: ParameterType.STRING;
+        readonly metadataOptions: {
+            readonly type: ParameterType.OBJECT;
             readonly default: any;
+        };
+        /**
+         * An html message to be displayed above the loading graphics in the experiment during data save.
+         */
+        readonly wait_message: {
+            readonly type: ParameterType.HTML_STRING;
+            readonly default: "<p>Saving data. Please do not close this page.</p>";
         };
     };
 };
@@ -108,9 +115,16 @@ declare class PipePlugin implements JsPsychPlugin<Info> {
              * A string-based representation of the metadata to save if such metadata is not available for the experiment,
              * passed as a dynamic parameter.
              */
-            readonly metadata_string: {
-                readonly type: ParameterType.STRING;
+            readonly metadataOptions: {
+                readonly type: ParameterType.OBJECT;
                 readonly default: any;
+            };
+            /**
+             * An html message to be displayed above the loading graphics in the experiment during data save.
+             */
+            readonly wait_message: {
+                readonly type: ParameterType.HTML_STRING;
+                readonly default: "<p>Saving data. Please do not close this page.</p>";
             };
         };
     };
@@ -125,7 +139,7 @@ declare class PipePlugin implements JsPsychPlugin<Info> {
      * @param data The data as a string. Any text-basd format (e.g., JSON, CSV, TXT) is acceptable.
      * @returns The response from the server.
      */
-    static saveData(expID: string, filename: string, data: string, metadata: string): Promise<any>;
+    static saveData(expID: string, filename: string, data: string, options?: any): Promise<any>;
     /**
      * Save base64-encoded data to the OSF using pipe.jspsych.org.
      *

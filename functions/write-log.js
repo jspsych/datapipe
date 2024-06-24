@@ -1,3 +1,4 @@
+import { log } from "firebase-functions/logger";
 import { db } from "./app.js";
 import { FieldValue } from "firebase-admin/firestore";
 

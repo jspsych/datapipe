@@ -53,9 +53,25 @@ const MESSAGES = {
     error: "OSF_UPLOAD_ERROR",
     message: "An error occurred while uploading the data to OSF",
   },
+  METADATA_ERROR: {
+    error: "METADATA_ERROR",
+    message: "An error occurred while processing metadata"
+  },
+  METADATA_IN_OSF_NOT_IN_FIRESTORE: {
+    metadataMessage : "Metadata is in OSF but not in Firestore",
+  },
+  METADATA_IN_FIRESTORE_NOT_IN_OSF: {
+    metadataMessage : "Metadata is in Firestore but not in OSF",
+  },
+  METADATA_NOT_IN_FIRESTORE_OR_OSF: {
+    metadataMessage : "Metadata is not in Firestore or OSF",
+  },
+  METADATA_IN_OSF_AND_FIRESTORE: {
+    metadataMessage : "Metadata is in OSF and in Firestore",
+  },
   SUCCESS: {
     message: "Success",
-  },
+  }
 };
 
 export default MESSAGES;

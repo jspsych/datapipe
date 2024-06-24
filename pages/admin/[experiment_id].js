@@ -10,6 +10,7 @@ import Title from "../../components/dashboard/Title";
 import ExperimentInfo from "../../components/dashboard/ExperimentInfo";
 import ExperimentActive from "../../components/dashboard/ExperimentActive";
 import ExperimentValidation from "../../components/dashboard/ExperimentValidation";
+import MetadataControl from "../../components/dashboard/MetadataControl";
 import CodeHints from "../../components/dashboard/CodeHints";
 
 export default function ExperimentPage() {
@@ -43,6 +44,7 @@ function ExperimentPageDashboard({ experiment_id }) {
           >
             <VStack w={["100%", "38%"]}>
               <ExperimentInfo data={data} />
+              <MetadataControl data={data} />
               <ExperimentActive data={data} />
               <ExperimentValidation data={data} />
             </VStack>

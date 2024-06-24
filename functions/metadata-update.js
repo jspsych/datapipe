@@ -1,76 +1,133 @@
-import fetch from "node-fetch";
+/**
+ * Updates the existing metadata with the new metadata.
+ * @param {string} existingMetadata - The existing metadata in Psych-DS format.
+ * @param {string} newMetadata - The new metadata in Psych-DS format.
+ * @returns {Promise} A promise that resolves when the update is complete.
+ */
+export default async function updateMetadata(existingMetadata, newMetadata) {
 
-export default async function metadataUpdate(
-  existingMetadata,
-  newMetadata,
-) {
+  /**
+   * Parses the metadata and returns the 'variableMeasured' list.
+   * @param {string} metadata - The metadata to parse.
+   * @returns {Object[]} The 'variableMeasured' array of variable objects.
+   * @throws {Error} If the metadata cannot be parsed.
+   */
+  const parseMetadata = (metadata) => {
+    if (typeof metadata !== 'object' || metadata === null) {
+      throw new Error('Invalid metadata format');
+    }
+    return metadata['variableMeasured'];
+  };
 
-  const existingVariables = JSON.parse(existingMetadata)['variableMeasured'];
-  const existVariablesToUpdate = existingVariables.filter((variable)=> !(['trial_type', 'trial_index', 'time_elapsed', 'internal_node_id'].includes(variable.name)))
-  const existVariablesToNotUpdate = existingVariables.filter((variable)=> (['trial_type', 'trial_index', 'time_elapsed', 'internal_node_id'].includes(variable.name)))
+  /**
+   * Provides a list of variables which are either included or excluded from excludeList.
+   * @param {Array} variables - The variables to filter.
+   * @param {Array} excludeList - The list of variable names to exclude or include.
+   * @param {boolean} exclude - Whether to exclude or include the variables in the excludeList.
+   * @returns {Array} The filtered variables.
+   */
+  const filterVariables = (variables, excludeList, exclude) => 
+    variables.filter(variable => exclude === excludeList.includes(variable.name));
 
+  /**
+   * Finds the index of a variable in a list of variables.
+   * @param {string} variableName - The name of the variable to find.
+   * @param {Array} variableList - The list of variables to search.
+   * @returns {number} The index of the variable in the list, or -1 if the variable is not found.
+   */
+  const findVariableIndex = (variableName, variableList) => 
+    variableList.findIndex(variable => variable['name'] === variableName);
 
-  const newVariables = JSON.parse(newMetadata)['variableMeasured'];
-  const newVariablesToUpdate = newVariables.filter((variable)=> !(['trial_type', 'trial_index', 'time_elapsed', 'internal_node_id'].includes(variable.name)))
+  /**
+   * Updates the levels of an existing variable with the levels of a new variable,
+   * by adding if it doesn't exist, or pushing to if it is incomplete.
+   * @param {Object} existingVariable - The existing variable.
+   * @param {Object} newVariable - The new variable.
+   */
+  const updateLevels = (existingVariable, newVariable) => {
+    // If newVariable doesn't have levels, there's nothing to update
+    if (!newVariable.levels) return;
 
-  function findVariableIndex(variableName, variableList) {
-    let index = 0;
-    for (const variable of variableList){
-    
-      //HANDLE IMPORTANT EDGE CASE: NAME IS SAME BUT NOT EXACTLY THE SAME
-      if (variable['name'] === variableName){
-        return index
+    // If existingVariable doesn't have levels, just assign newVariable's levels to it
+    if (!existingVariable.levels) {
+        existingVariable.levels = newVariable.levels;
+        return;
+    }
+    // If existingVariable does have levels, add newVariable's levels that aren't already present
+    newVariable.levels.forEach(newLevel => {
+        if (!existingVariable.levels.includes(newLevel)) {
+            existingVariable.levels.push(newLevel);
+        }
+    });
+};
+
+  /**
+   * Updates the minValue of an existing variable with the minValue of a new variable,
+   * by creating it if it doesn't exist, or updating it if it is lower.
+   * @param {Object} existingVariable - The existing variable.
+   * @param {Object} newVariable - The new variable.
+   */
+  const updateMinValue = (existingVariable, newVariable) => {
+    if (newVariable.minValue !== undefined) {
+      if (existingVariable.minValue === undefined || newVariable.minValue < existingVariable.minValue) {
+        existingVariable.minValue = newVariable.minValue;
       }
-      index++
-    } 
+    }
+  };
+
+  /**
+   * Updates the maxValue of an existing variable with the minValue of a new variable,
+   * by creating it if it doesn't exist, or updating it if it is higher.
+   * @param {Object} existingVariable - The existing variable.
+   * @param {Object} newVariable - The new variable.
+   */
+  const updateMaxValue = (existingVariable, newVariable) => {
+    if (newVariable.maxValue !== undefined) {
+      if (existingVariable.maxValue === undefined || newVariable.maxValue > existingVariable.maxValue) {
+        existingVariable.maxValue = newVariable.maxValue;
+      }
+    }
+  };
+
+  // Gets variableMeasured list in OSF database and for the latest data.
+  const existingVariables = parseMetadata(existingMetadata);
+  const newVariables = parseMetadata(newMetadata);
+
+
+  // Splits variableMeasured list into two: one without default variables and one with.
+  const excludeList = ['trial_type', 'trial_index', 'time_elapsed', 'internal_node_id'];
+  const variablesToUpdate = filterVariables(existingVariables, excludeList, false);
+  const variablesNotToUpdate = filterVariables(existingVariables, excludeList, true);
+  
+  const newVariablesNonDefault = filterVariables(newVariables, excludeList, false);
+
+
+  for (const existingVariable of variablesToUpdate) {
+
+    
+    const newVariableIndex = findVariableIndex(existingVariable.name, newVariablesNonDefault);
+
+    if (newVariableIndex === -1) continue; // Handle case when newVariable doesn't exist - for now it doesn't do anything.
+
+    // Accesses the variable object in the latest data, that corresponds to the existingVariable being updated.
+    const newVariable = newVariablesNonDefault[newVariableIndex];
+
+    // Updates all fields, may add more later.
+    updateLevels(existingVariable, newVariable);
+    updateMinValue(existingVariable, newVariable);
+    updateMaxValue(existingVariable, newVariable);
   }
 
-  for (const existingVariable of existVariablesToUpdate) {
-    var newVariable = newVariablesToUpdate[findVariableIndex(existingVariable.name, newVariablesToUpdate)];
-    //console.log('newVariable', newVariable);
-    //console.log('existingVariable', existingVariable);
-    if (newVariable['levels'] && existingVariable['levels']){
-      console.log(newVariable['levels'], existingVariable['levels']);
-      if (newVariable['levels'] === existingVariable['levels']){
-        continue;
-      }
-      else{
-        newVariable['levels'].map((level) => existingVariable['levels'].includes(level) ? null : existingVariable['levels'].push(level));
-      }
-    } else if (newVariable['levels'] && !existingVariable['levels']){
-      existingVariable['levels'] = newVariable['levels'];
-    }
-    
-    if (newVariable['minValue'] && existingVariable['minValue']){
-      if (newVariable['minValue'] >= existingVariable['minValue']){
-        continue;
-      }
-      else if (newVariable['minValue'] < existingVariable['minValue']) {
-        existingVariable['minValue'] = newVariable['minValue'];
-      }
-    } else if (newVariable['minValue'] && !existingVariable['minValue']){
-      existingVariable['minValue'] = newVariable['minValue'];
-    }
-    
-    if (newVariable['maxValue'] && existingVariable['maxValue']){
-      if (newVariable['maxValue'] <= existingVariable['maxValue']){
-        continue;
-      }
-      else if (newVariable['maxValue'] > existingVariable['maxValue']){
-        existingVariable['maxValue'] = newVariable['maxValue'];
-      }
-    } else if (newVariable['maxValue'] && !existingVariable['maxValue']){
-      existingVariable['maxValue'] = newVariable['maxValue'];
-    }
-  }
+  // Adds any new variables that don't exist to existing variables.
+ newVariablesNonDefault.forEach(((newVariable) => {
+    if (findVariableIndex(newVariable.name, variablesToUpdate) === -1) variablesToUpdate.push(newVariable);
+  }))
 
-  //console.log(existVariablesToUpdate);
+ // Combines the updated non-default variables with the untouched default variables.
+  const updatedVariables = [...variablesNotToUpdate, ...variablesToUpdate];
 
-  //what happens if the format doesnt match? rewrite? IMPORTANT
+  // Updates the variableMeasured property of the existingMetadata with the updated list.
+  const returnMetadata = { ...existingMetadata, variableMeasured: updatedVariables };
 
-  existVariablesToNotUpdate.push(...existVariablesToUpdate);
-
-  var returnMetadata = JSON.parse(existingMetadata);
-  returnMetadata['variableMeasured'] = existVariablesToNotUpdate;
- return returnMetadata;
+  return returnMetadata;
 }

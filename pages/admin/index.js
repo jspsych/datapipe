@@ -76,7 +76,7 @@ function ExperimentList() {
   return (
     <>
       <TableContainer w="100%">
-        <Table size="md">
+        <Table size="md" w="100%">
           <Thead>
             <Tr>
               <Th color="white">Name</Th>
@@ -85,6 +85,9 @@ function ExperimentList() {
               </Th>
               <Th color="white" display={["none", "table-cell"]}>
                 Base 64?
+              </Th>
+              <Th color="white" display={["none", "table-cell"]}>
+                Metadata?
               </Th>
               <Th color="white" display={["none", "table-cell"]}>
                 Conditions?
@@ -121,6 +124,12 @@ function ExperimentItem({ exp }) {
         <ExperimentStatusTag
           prepend="Base 64 data collection"
           active={exp.activeBase64}
+        />
+      </Td>
+      <Td display={["none", "table-cell"]}>
+        <ExperimentStatusTag
+          prepend="Metadata production"
+          active={exp.metadataActive}
         />
       </Td>
       <Td display={["none", "table-cell"]}>

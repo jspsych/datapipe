@@ -79,9 +79,16 @@ const info = {
          * A string-based representation of the metadata to save if such metadata is not available for the experiment,
          * passed as a dynamic parameter.
          */
-        metadata_string: {
-            type: jspsych.ParameterType.STRING,
+        metadataOptions: {
+            type: jspsych.ParameterType.OBJECT,
             default: null,
+        },
+        /**
+         * An html message to be displayed above the loading graphics in the experiment during data save.
+         */
+        wait_message: {
+            type: jspsych.ParameterType.HTML_STRING,
+            default: `<p>Saving data. Please do not close this page.</p>`
         }
     },
 };
@@ -106,6 +113,12 @@ class PipePlugin {
         return __awaiter(this, void 0, void 0, function* () {
             // show circular progress bar
             const progressCSS = `
+
+      div.message {
+        font-size: 25px;
+        position: relative;
+        bottom: 100px;
+      }
       .spinner {
         animation: rotate 2s linear infinite;
         z-index: 2;
@@ -145,6 +158,7 @@ class PipePlugin {
       }
     `;
             const progressHTML = `
+      <div class=message>${trial.wait_message}</div>
       <style>${progressCSS}</style>
       <svg class="spinner" viewBox="0 0 50 50">
         <circle class="path" cx="25" cy="25" r="20" fill="none" stroke-width="5"></circle>
@@ -152,8 +166,7 @@ class PipePlugin {
             display_element.innerHTML = progressHTML;
             let result;
             if (trial.action === "save") {
-                console.log(trial.metadata_string);
-                result = yield PipePlugin.saveData(trial.experiment_id, trial.filename, trial.data_string, trial.metadata_string);
+                result = yield PipePlugin.saveData(trial.experiment_id, trial.filename, trial.data_string, trial.metadataOptions);
             }
             if (trial.action === "saveBase64") {
                 result = yield PipePlugin.saveBase64Data(trial.experiment_id, trial.filename, trial.data_string);
@@ -179,8 +192,8 @@ class PipePlugin {
      * @param data The data as a string. Any text-basd format (e.g., JSON, CSV, TXT) is acceptable.
      * @returns The response from the server.
      */
-    static saveData(expID, filename, data, metadata) {
-        return __awaiter(this, void 0, void 0, function* () {
+    static saveData(expID_1, filename_1, data_1) {
+        return __awaiter(this, arguments, void 0, function* (expID, filename, data, options = null) {
             if (!expID || !filename || !data) {
                 throw new Error("Missing required parameter(s).");
             }
@@ -196,7 +209,7 @@ class PipePlugin {
                         experimentID: expID,
                         filename: filename,
                         data: data,
-                        metadata: metadata
+                        options: options
                     }),
                 });
             }
