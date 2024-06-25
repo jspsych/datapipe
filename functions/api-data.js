@@ -84,14 +84,20 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
   let metadataMessage;
 
  try {
+ 
   //Only run if metadata collection is enabled.
   if (exp_data.metadataActive) {
 
   //All metadata processing is done within a transaction to ensure consistency.
   await db.runTransaction(async (t) => {
 
+
+    console.log('METADATA BLOCK START')
+
       //Metadata is produced from the incoming data using the metdata module.
       const incomingMetadata = (await produceMetadata(data, metadataOptions));
+
+      console.log('INCOMING METADATA')
 
       //Retrieves the metadata from the Firestore metadata document.
       const firestoreMetadataObj = (await t.get(metadata_doc_ref)).data();
@@ -110,20 +116,27 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
         if (osfMetadataId) metadataMessage = MESSAGES.METADATA_IN_OSF_AND_FIRESTORE;
         else metadataMessage = MESSAGES.METADATA_IN_FIRESTORE_NOT_IN_OSF;
 
+        console.log(metadataMessage);
+
         // Incoming metadata is used to update firestore metadata.
         const updatedMetadata = await updateMetadata(firestoreMetadata, incomingMetadata);
 
         t.update(metadata_doc_ref, {metadata: updatedMetadata}, {merge: true});
 
         //If a metadata file exists in OSF, it is updated with the above metadata.
+        console.log(updatedMetadata) 
         if (osfMetadataId){
 
           await updateFileOSF(
           exp_data.osfFilesLink,
           user_data.osfToken,
-          JSON.stringify(updatedMetadata),
+          JSON.stringify(updatedMetadata, null, 2),
           osfMetadataId
         )
+
+        console.log('STRINGIFIED INCOMING')
+
+        console.log(JSON.stringify(updatedMetadata, null, 2))
       
         }
         //If a metadata file does not exist in OSF, it is created with the above metadata.
@@ -132,7 +145,7 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
           await putFileOSF(
             exp_data.osfFilesLink,
             user_data.osfToken,
-            JSON.stringify(updatedMetadata),
+            JSON.stringify(updatedMetadata, null, 2),
             `dataset_description.json`
           );
           
@@ -143,6 +156,8 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
       if (osfMetadataId && !firestoreMetadata) {
 
         metadataMessage = MESSAGES.METADATA_IN_OSF_NOT_IN_FIRESTORE;
+        console.log(metadataMessage);
+
 
         //Metadata is downloaded from OSF, and is compared to incoming metadata to produce an updated version.
         const osfMetadata = (await downloadMetadata(exp_data.osfFilesLink, user_data.osfToken, osfMetadataId)).metaString;
@@ -156,7 +171,7 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
         await updateFileOSF(
           exp_data.osfFilesLink,
           user_data.osfToken,
-          JSON.stringify(incomingMetadata),
+          JSON.stringify(incomingMetadata, null, 2),
           osfMetadataId
         );
 
@@ -166,6 +181,8 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
       if (!osfMetadataId && !firestoreMetadata) {
 
         metadataMessage = MESSAGES.METADATA_NOT_IN_FIRESTORE_OR_OSF;
+        console.log(metadataMessage);
+
 
         //Incoming metadata is uploaded to firestore and OSF.
 
@@ -174,7 +191,7 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
         await putFileOSF( 
             exp_data.osfFilesLink,
             user_data.osfToken,
-            JSON.stringify(incomingMetadata),
+            JSON.stringify(incomingMetadata, null, 2),
             `dataset_description.json`
           );
 
@@ -183,10 +200,20 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
       console.log('TRANSACTION SUCCESS! WHOOPEE!');
   });
 }
-} catch (error) {
+else metadataMessage = MESSAGES.METADATA_NOT_ACTIVE;
+ }
+catch (error) {
+  if (error === 'Invalid metadata format') {
+    res.status(400).json({...MESSAGES.INVALD_METADATA_ERROR, ...metadataMessage});
+    return;
+  }
+  if (error.status && error.status !== 201) {
+    res.status(400).json({...MESSAGES.OSF_METADATA_UPLOAD_ERROR, ...metadataMessage});
+    return;
+  }
   //If transaction fails, error is sent with info on what the status of the dataset's metadata was;
   //Helpful for unit testing.
-  res.status(400).json({...MESSAGES.METADATA_ERROR, ...metadataMessage});
+  res.status(400).json({...MESSAGES.METADATA_ERROR,...{message: error.message}, ...metadataMessage});
   return;
 }
 //METADATA BLOCK END

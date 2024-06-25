@@ -28,11 +28,11 @@ async function saveData(body) {
   return message;
 }
 
-const sampleData = [{
+const sampleData = `[{
   "trial_type": "html-keyboard-response",
   "trial_index": 1,
   "time_elapsed": 776
-}]
+}]`
 
 let mockServerInstance;
 
@@ -63,7 +63,7 @@ describe('runTransaction', () => {
       filename: "test",
     });
 
-   // console.log(response);
+   console.log(response);
 
     expect(response.metadataMessage).toEqual(MESSAGES.METADATA_IN_OSF_NOT_IN_FIRESTORE.metadataMessage);
   });

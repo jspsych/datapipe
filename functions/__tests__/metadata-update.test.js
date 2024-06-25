@@ -104,4 +104,12 @@ describe('updateMetadata', () => {
 
     expect(result).toEqual({variableMeasured: [{ name: 'var3', levels: ['level1', 'level2', 'level3'] }]});
   });
+  it('variableMeasured should be the last property', async () => {
+    const existingMetadata = {schemaVersion: "Psych-DS 0.4.0", "@type" : "Dataset", author: [], name: "title", variableMeasured: [{ name: 'var3', levels: ['level1', 'level2'] }]};
+    const newMetadata = {schemaVersion: "Psych-DS 0.4.0", "@type" : "Dataset", author: [], name: "title",variableMeasured: [{ name: 'var3', levels: ['level3', 'level2'] }]};
+
+    const result = await updateMetadata(existingMetadata, newMetadata);
+
+    expect(result).toEqual({schemaVersion: "Psych-DS 0.4.0", "@type" : "Dataset", author: [], name: "title", variableMeasured: [{ name: 'var3', levels: ['level1', 'level2', 'level3'] }]});
+  });
 });

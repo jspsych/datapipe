@@ -11,8 +11,10 @@ export default async function produceMetadata(data, options = null) {
 
     const csvFlag = isCsv(data);
 
-    // Generates the metadata, using the options if they are provided.
+    // Parses the data if it is JSON object in string format.
+    !csvFlag ? data = JSON.parse(data) : data = data;
 
+    // Generates the metadata, using the options if they are provided.
     options ? await metadata.generate(data, options, csvFlag) : await metadata.generate(data, {}, csvFlag);
     
     return metadata.getMetadata();

@@ -1,6 +1,5 @@
 import fetch from "node-fetch";
 import validateJSON from "./validate-json.js";
-import axios from "axios";
 
 export default async function downloadMetadata(
   osfComponent,
@@ -35,20 +34,21 @@ export default async function downloadMetadata(
    * @param {string} fileUrl - The URL of the file to fetch.
    * @returns {Promise} A promise that resolves to the data from the file.
    */
-
   async function fetchMetadata(fileUrl) {
     try {
-        const response = await axios.get(fileUrl);
-        return response.data;
+        const response = await fetch(fileUrl);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return await response.json();
     } catch (error) {
         throw error;
     }
-  }
-
+}
   // Download the metadata file and convert it to a string.
   const metadata = await fetchMetadata(fileUrl);
 
-  console.log(typeof metadata);
+  console.log('DOWNLOADED:', metadata);
 
   // Checks if the existing metadata is in valid JSON format, and that it contains the Psych-DS proper fields.
   const success = validateJSON(JSON.stringify(metadata), ["name", "schemaVersion", "@context", "@type", "description", "author", "variableMeasured"]);

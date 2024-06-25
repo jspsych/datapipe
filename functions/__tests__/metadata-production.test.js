@@ -5,11 +5,11 @@ import jsPsychMetadata from '@jspsych/metadata';
 
 //jest.mock('@jspsych/metadata');
 
-var sampleData = [{
+var sampleData = `[{
   "trial_type": "html-keyboard-response",
   "trial_index": 1,
   "time_elapsed": 776
-}]
+}]`
 
 var sampleMetadata =
   {
@@ -47,8 +47,6 @@ var sampleMetadata =
     ]
   }
 
-
-
 describe('produceMetadata', () => {
   it('should generate metadata with default options if none are provided', async () => {
 
@@ -61,7 +59,7 @@ describe('produceMetadata', () => {
     const options = { randomField: "this is a field" };
 
     const result = await produceMetadata(sampleData, options);
-    
+
     //console.log(result);
 
     const optionMetadata = sampleMetadata;
