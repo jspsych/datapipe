@@ -6,6 +6,7 @@ describe("JsPsychMetadata", () => {
 
   beforeEach(() => {
     jsPsychMetadata = new JsPsychMetadata();
+    jsPsychMetadata.generateDefaultMetadata();
   });
 
   test("#setAndGetField", () => {

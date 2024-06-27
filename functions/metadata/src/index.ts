@@ -1,6 +1,7 @@
-import { AuthorFields, AuthorsMap } from "./AuthorsMap";
-import { PluginCache } from "./PluginCache";
-import { VariableFields, VariablesMap } from "./VariablesMap";
+import { AuthorFields } from "./AuthorsMap";
+import { AuthorsMap } from "./AuthorsMap";
+import { VariableFields } from "./VariablesMap";
+import { VariablesMap } from "./VariablesMap";
 
 /**
  * Class that handles the storage, update and retrieval of Metadata.
@@ -24,7 +25,7 @@ export default class JsPsychMetadata {
    * @type {AuthorsMap}
    */
   private authors: AuthorsMap;
-  /**;
+  /**
    * Custom class that stores and handles the storage, update and retrieval of variable metadata.
    *
    * @private
@@ -32,7 +33,14 @@ export default class JsPsychMetadata {
    */
   private variables: VariablesMap;
 
-  private pluginCache: PluginCache;
+  /** The cache is a dictionary of dictionaries, with the outer dictionary keyed by type of plugin
+   * and the inner dictionary keyed by variableName. This is so that even if we have two variables
+   * with the same name in different plugins, we can store their descriptions separately.
+   * @private
+   * @type {{}}
+   */
+  private cache: {};
+  private requests_cache: {}; // temporary requests cache before implementing faster method
 
   /**
    * Creates an instance of JsPsychMetadata while passing in JsPsych object to have access to context
@@ -42,8 +50,15 @@ export default class JsPsychMetadata {
    * @param {JsPsych} JsPsych
    */
   constructor() {
+    this.generateDefaultMetadata();
+  }
+  /**
+   * Method that fills in JsPsychMetadata class with all the universal fields with default information.
+   * This is automatically called whenever creating an instance of JsPsychMetadata and indicates all
+   * the required fields that need to filled in to be Psych-DS compliant.
+   */
+  generateDefaultMetadata(): void {
     this.metadata = {};
-    // generates default metadata
     this.setMetadataField("name", "title");
     this.setMetadataField("schemaVersion", "Psych-DS 0.4.0");
     this.setMetadataField("@context", "https://schema.org");
@@ -51,7 +66,8 @@ export default class JsPsychMetadata {
     this.setMetadataField("description", "Dataset generated using JsPsych");
     this.authors = new AuthorsMap();
     this.variables = new VariablesMap();
-    this.pluginCache = new PluginCache();
+    this.cache = {};
+    this.requests_cache = {};
   }
 
   /**
@@ -303,7 +319,6 @@ export default class JsPsychMetadata {
 
     for (const variable in observation) {
       const value = observation[variable];
-      // console.log("pluginType:", pluginType, "variable:", variable, "value:", value);
 
       if (value === null) continue;
 
@@ -314,8 +329,7 @@ export default class JsPsychMetadata {
 
   private async generateMetadata(variable, value, pluginType) {
     // probably should work in a call to the plugin here
-    const pluginInfo = await this.getPluginInfo(pluginType, variable);
-    const description = pluginInfo["description"];
+    const description = await this.getPluginInfo(pluginType, variable);
     const new_description = description
       ? { [pluginType]: description }
       : { [pluginType]: "unknown" };
@@ -414,15 +428,94 @@ export default class JsPsychMetadata {
    * @returns {Promise<string|null>} The description of the plugin variable if found, otherwise null.
    * @throws Will throw an error if the fetch operation fails.
    */
-  // private async getPluginInfo(pluginType: string, variableName: string) {
-  //   const cache_request = this.checkCache(pluginType, variableName);
-  //   if (cache_request) return cache_request;
-
-  //   const description = await this.fetchAPI(pluginType, variableName);
-  //   return description;
-  // }
-
   private async getPluginInfo(pluginType: string, variableName: string) {
-    return this.pluginCache.getPluginInfo(pluginType, variableName);
+    // Check if the cache for the pluginType exists, if not initialize it
+    if (!this.cache[pluginType]) this.cache[pluginType] = {};
+    else if (variableName in this.cache[pluginType]) {
+      // If the variable already exists in the cache for the plugin, return the cached value
+      return this.cache[pluginType][variableName];
+    }
+
+    // If not, we proceed to fetch script:
+    // Construct the URL for the unpkg service
+    const unpkgUrl = `https://unpkg.com/@jspsych/plugin-${pluginType}/src/index.ts`;
+
+    try {
+      let description = "unknown";
+      // check requests cache
+      if (pluginType in this.requests_cache) {
+        const scriptContent = this.requests_cache[pluginType];
+        description = this.getJsdocsDescription(scriptContent, variableName);
+        this.cache[pluginType][variableName] = description;
+      } else {
+        // Fetch the script content from the unpkg URL
+        const response = await fetch(unpkgUrl);
+        const scriptContent = await response.text();
+        this.requests_cache[pluginType] = scriptContent;
+        console.log(scriptContent);
+
+        // Extract the JSDoc description for the variable from the script content
+        description = this.getJsdocsDescription(scriptContent, variableName);
+
+        // Check again if the cache for the pluginType exists, if not initialize it
+        if (!this.cache[pluginType]) this.cache[pluginType] = {}; // don't think this ever returns true, might be able delete
+
+        // Cache the description for the variable in the pluginType cache
+        this.cache[pluginType][variableName] = description;
+        // Return the description
+      }
+
+      return description;
+    } catch (error) {
+      console.error(`Failed to fetch info from ${unpkgUrl}:`, error); // DISABLING to test other features
+      // Error is likely due to 1)a fetch failure, or 2)no JSDoc comments in the script content matched.
+      //HANDLE FETCH FAILURE CASES
+      // In case of the latter, we cache the null value to prevent repeated fetch attempts.
+
+      if (!this.cache[pluginType]) this.cache[pluginType] = {};
+
+      this.cache[pluginType][variableName] = null;
+
+      return "failed with error";
+    }
+  }
+
+  /**
+   * Extracts the description for a variable of a plugin from the JSDoc comments present in the script of the plugin. The script content is
+   * drawn from the remotely hosted source file of the plugin through getPluginInfo. The script content is taken
+   * as a string and Regex is used to extract the description.
+   *
+   *
+   * @param {string} scriptContent - The content of the script from which the JSDoc description is to be extracted.
+   * @param {string} variableName - The name of the variable for which the JSDoc description is to be extracted.
+   * @returns {string} The extracted JSDoc description, cleaned and trimmed.
+   */
+  private getJsdocsDescription(scriptContent: string, variableName: string) {
+    // Regex to match part of the content that starts with 'parameters:' and ends with '};', which
+    // is parameters info. THIS MUST BE CHANGED TO data FOR NEW PLUGIN LAYOUT
+    const paramRegex = scriptContent.match(/parameters:\s*{([\s\S]*?)};\s*/).join();
+
+    // Regex that matches everything up to the variable name
+    const regex = new RegExp(`((.|\n)*)(?=${variableName}:)`);
+
+    // Regex on paramRegex, to get everything from 'paramaters:' to the variable name.
+    const variableRegex = paramRegex.match(regex)[0];
+
+    // Finds the index of the last occurence of `/**` in the variableRegex string, and slices it from there
+    // to give the JSDoc comment for our variable.
+    const descrip = variableRegex.slice(variableRegex.lastIndexOf("/**"));
+
+    // Regex to remove the leading and trailing '/**' and '*/' characters.
+    const clean = descrip.match(/(?<=\*\*)([\s\S]*?)(?=\*\/)/)[1];
+
+    //CLEANING:
+    // Regex to remove all newline characters.
+    const cleaner = clean.replace(/(\r\n|\n|\r)/gm, "");
+
+    // Remove all '*' characters from the JSDoc comment.
+    const cleanest = cleaner.replace(/\*/gm, "");
+
+    // Return the cleaned JSDoc comment, trimmed of leading and trailing whitespace
+    return cleanest.trim();
   }
 }

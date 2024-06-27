@@ -9,8 +9,6 @@ import {
 
 import { useState, useEffect } from "react";
 
-import validateJSON from "../../functions/validate-json.js";
-
 import { setDoc, getDoc, doc } from "firebase/firestore";
 
 import { db } from "../../lib/firebase";

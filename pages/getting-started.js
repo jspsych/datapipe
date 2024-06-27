@@ -212,6 +212,14 @@ export default function GettingStarted() {
         the next condition from DataPipe.
       </Text>
       <Text>
+        <span style={{ fontWeight: "bold" }}>Enable Psych-DS metadata production</span> will 
+        activate the production of metadata adhering to {" "}
+              <Link isExternal href="https://github.com/psych-ds/psych-DS">
+                Psych-DS
+              </Link>{" "} from your experiment data. DataPipe creates 
+        a dataset_description.json file in OSF and updates it as necessary after every session.
+      </Text>
+      <Text>
         We strongly recommend that you only activate the minimum features that
         you need for your experiment and that you only activate features during
         active data collection. This will reduce the risk of malicious use of

@@ -65,14 +65,21 @@ declare class JsPsychMetadata {
      * @type {AuthorsMap}
      */
     private authors;
-    /**;
+    /**
      * Custom class that stores and handles the storage, update and retrieval of variable metadata.
      *
      * @private
      * @type {VariablesMap}
      */
     private variables;
-    private pluginCache;
+    /** The cache is a dictionary of dictionaries, with the outer dictionary keyed by type of plugin
+     * and the inner dictionary keyed by variableName. This is so that even if we have two variables
+     * with the same name in different plugins, we can store their descriptions separately.
+     * @private
+     * @type {{}}
+     */
+    private cache;
+    private requests_cache;
     /**
      * Creates an instance of JsPsychMetadata while passing in JsPsych object to have access to context
      *  allowing it to access the screen printing information.
@@ -81,6 +88,12 @@ declare class JsPsychMetadata {
      * @param {JsPsych} JsPsych
      */
     constructor();
+    /**
+     * Method that fills in JsPsychMetadata class with all the universal fields with default information.
+     * This is automatically called whenever creating an instance of JsPsychMetadata and indicates all
+     * the required fields that need to filled in to be Psych-DS compliant.
+     */
+    generateDefaultMetadata(): void;
     /**
      * Method that sets simple metadata fields. This method can also be used to update/overwrite existing fields.
      *
@@ -219,6 +232,17 @@ declare class JsPsychMetadata {
      * @throws Will throw an error if the fetch operation fails.
      */
     private getPluginInfo;
+    /**
+     * Extracts the description for a variable of a plugin from the JSDoc comments present in the script of the plugin. The script content is
+     * drawn from the remotely hosted source file of the plugin through getPluginInfo. The script content is taken
+     * as a string and Regex is used to extract the description.
+     *
+     *
+     * @param {string} scriptContent - The content of the script from which the JSDoc description is to be extracted.
+     * @param {string} variableName - The name of the variable for which the JSDoc description is to be extracted.
+     * @returns {string} The extracted JSDoc description, cleaned and trimmed.
+     */
+    private getJsdocsDescription;
 }
 
 export { JsPsychMetadata as default };

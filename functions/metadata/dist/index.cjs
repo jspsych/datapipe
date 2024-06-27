@@ -48,61 +48,6 @@ class AuthorsMap {
   }
 }
 
-class PluginCache {
-  constructor() {
-    this.pluginFields = {};
-  }
-  async getPluginInfo(pluginType, variableName) {
-    if (pluginType in this.pluginFields) {
-      return this.pluginFields[pluginType][variableName];
-    } else {
-      console.log("doesn't exist -- plugintype:", pluginType, "variableName:", variableName);
-      const fields = await this.generatePluginFields(pluginType);
-      this.pluginFields[pluginType] = fields;
-      console.log(fields);
-      return fields[variableName];
-    }
-  }
-  async generatePluginFields(pluginType) {
-    const script = await this.fetchScript(pluginType);
-    const fields = this.parseJavadocString(script);
-    return fields;
-  }
-  async fetchScript(pluginType) {
-    const unpkgUrl = `http://localhost:3000/plugin/${pluginType}/index.ts`;
-    try {
-      const response = await fetch(unpkgUrl);
-      const scriptContent = await response.text();
-      return scriptContent;
-    } catch (error) {
-      console.error(`Unexpected error occurred:`, error);
-      return void 0;
-    }
-  }
-  parseJavadocString(script) {
-    const dataString = script.match(/data:\s*{([\s\S]*?)};\s*/).join();
-    const result = {};
-    const varRegex = /\/\*\*\s*([\s\S]*?)\s*\*\/\s*(\w+):\s*{\s*([\s\S]*?)\s*},?/gs;
-    const propRegex = /\s*(\w+):\s*([^,\s]+)/g;
-    let match;
-    while ((match = varRegex.exec(dataString)) !== null) {
-      let [, description, varName, props] = match;
-      description = description.trim().replace(/\s+/g, " ");
-      const propsObj = {};
-      let propMatch;
-      while ((propMatch = propRegex.exec(props)) !== null) {
-        let [, propName, propValue] = propMatch;
-        propsObj[propName] = propValue;
-      }
-      result[varName] = {
-        description,
-        ...propsObj
-      };
-    }
-    return result;
-  }
-}
-
 class VariablesMap {
   constructor() {
     this.generateDefaultVariables();
@@ -285,6 +230,9 @@ class VariablesMap {
 
 class JsPsychMetadata {
   constructor() {
+    this.generateDefaultMetadata();
+  }
+  generateDefaultMetadata() {
     this.metadata = {};
     this.setMetadataField("name", "title");
     this.setMetadataField("schemaVersion", "Psych-DS 0.4.0");
@@ -293,7 +241,8 @@ class JsPsychMetadata {
     this.setMetadataField("description", "Dataset generated using JsPsych");
     this.authors = new AuthorsMap();
     this.variables = new VariablesMap();
-    this.pluginCache = new PluginCache();
+    this.cache = {};
+    this.requests_cache = {};
   }
   setMetadataField(key, value) {
     this.metadata[key] = value;
@@ -411,8 +360,7 @@ class JsPsychMetadata {
     }
   }
   async generateMetadata(variable, value, pluginType) {
-    const pluginInfo = await this.getPluginInfo(pluginType, variable);
-    const description = pluginInfo["description"];
+    const description = await this.getPluginInfo(pluginType, variable);
     const new_description = description ? { [pluginType]: description } : { [pluginType]: "unknown" };
     const type = typeof value;
     if (!this.containsVariable(variable)) {
@@ -482,7 +430,47 @@ class JsPsychMetadata {
       this.setMetadataField(key, value);
   }
   async getPluginInfo(pluginType, variableName) {
-    return this.pluginCache.getPluginInfo(pluginType, variableName);
+    if (!this.cache[pluginType])
+      this.cache[pluginType] = {};
+    else if (variableName in this.cache[pluginType]) {
+      return this.cache[pluginType][variableName];
+    }
+    const unpkgUrl = `https://unpkg.com/@jspsych/plugin-${pluginType}/src/index.ts`;
+    try {
+      let description = "unknown";
+      if (pluginType in this.requests_cache) {
+        const scriptContent = this.requests_cache[pluginType];
+        description = this.getJsdocsDescription(scriptContent, variableName);
+        this.cache[pluginType][variableName] = description;
+      } else {
+        const response = await fetch(unpkgUrl);
+        const scriptContent = await response.text();
+        this.requests_cache[pluginType] = scriptContent;
+        console.log(scriptContent);
+        description = this.getJsdocsDescription(scriptContent, variableName);
+        if (!this.cache[pluginType])
+          this.cache[pluginType] = {};
+        this.cache[pluginType][variableName] = description;
+      }
+      return description;
+    } catch (error) {
+      console.error(`Failed to fetch info from ${unpkgUrl}:`, error);
+      if (!this.cache[pluginType])
+        this.cache[pluginType] = {};
+      this.cache[pluginType][variableName] = null;
+      return "failed with error";
+    }
+  }
+  getJsdocsDescription(scriptContent, variableName) {
+    const paramRegex = scriptContent.match(/parameters:\s*{([\s\S]*?)};\s*/).join();
+    const regex = new RegExp(`((.|
+)*)(?=${variableName}:)`);
+    const variableRegex = paramRegex.match(regex)[0];
+    const descrip = variableRegex.slice(variableRegex.lastIndexOf("/**"));
+    const clean = descrip.match(/(?<=\*\*)([\s\S]*?)(?=\*\/)/)[1];
+    const cleaner = clean.replace(/(\r\n|\n|\r)/gm, "");
+    const cleanest = cleaner.replace(/\*/gm, "");
+    return cleanest.trim();
   }
 }
 
