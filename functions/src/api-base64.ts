@@ -24,6 +24,7 @@ export const apiBase64 = onRequest({cors:true},
 
     if (!exp_doc.exists) {
       res.status(400).json(MESSAGES.EXPERIMENT_NOT_FOUND);
+      await writeLog(experimentID, "logError", MESSAGES.EXPERIMENT_NOT_FOUND);
       return;
     }
 
@@ -31,16 +32,19 @@ export const apiBase64 = onRequest({cors:true},
 
     if (!exp_data) {
       res.status(400).json(MESSAGES.EXPERIMENT_DATA_NOT_FOUND);
+      await writeLog(experimentID, "logError", MESSAGES.EXPERIMENT_DATA_NOT_FOUND);
       return;
     }
 
     if (!exp_data.activeBase64) {
       res.status(400).json(MESSAGES.BASE64DATA_COLLECTION_NOT_ACTIVE);
+      await writeLog(experimentID, "logError", MESSAGES.BASE64DATA_COLLECTION_NOT_ACTIVE);
       return;
     }
 
     if (!isBase64(data, {allowMime: true})) {
       res.status(400).json(MESSAGES.INVALID_BASE64_DATA);
+      await writeLog(experimentID, "logError", MESSAGES.INVALID_BASE64_DATA);
       return;
     }
 
@@ -56,12 +60,14 @@ export const apiBase64 = onRequest({cors:true},
       }
     } catch (e) {
       res.status(400).json(MESSAGES.INVALID_BASE64_DATA);
+      await writeLog(experimentID, "logError", MESSAGES.INVALID_BASE64_DATA);
       return;
     }
 
     const user_doc = await db.doc(`users/${exp_data.owner}`).get();
     if (!user_doc.exists) {
       res.status(400).json(MESSAGES.INVALID_OWNER);
+      await writeLog(experimentID, "logError", MESSAGES.INVALID_OWNER);
       return;
     }
 
@@ -69,11 +75,13 @@ export const apiBase64 = onRequest({cors:true},
 
     if (!user_data) {
       res.status(400).json(MESSAGES.USER_DATA_NOT_FOUND);
+      await writeLog(experimentID, "logError", MESSAGES.USER_DATA_NOT_FOUND);
       return;
     }
 
     if (!user_data.osfToken) {
       res.status(400).json(MESSAGES.INVALID_OSF_TOKEN);
+      await writeLog(experimentID, "logError", MESSAGES.INVALID_OSF_TOKEN);
       return;
     }
 
@@ -87,9 +95,11 @@ export const apiBase64 = onRequest({cors:true},
     if (!result.success) {
       if (result.errorCode === 409 && result.errorText === "Conflict") {
         res.status(400).json(MESSAGES.OSF_FILE_EXISTS);
+        await writeLog(experimentID, "logError", MESSAGES.OSF_FILE_EXISTS);
         return;
       }
       res.status(400).json(MESSAGES.OSF_UPLOAD_ERROR);
+      await writeLog(experimentID, "logError", MESSAGES.OSF_UPLOAD_ERROR);
       return;
     }
 

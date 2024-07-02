@@ -16,7 +16,7 @@ export default async function updateFileOSF(
     body: filedata,
   });
 
-  if (osfResult.status !== 201) {
+  if (osfResult.status !== 200) {
     throw Error(`Error updating file in OSF with code: ${osfResult.status}, and message: ${osfResult.statusText}`);
   }
   return { success: true, errorCode: null, errorText: null, file: filedata};

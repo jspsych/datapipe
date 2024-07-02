@@ -23,5 +23,8 @@ service cloud.firestore {
     match /metadata/{experimentId} {
       allow read: if true;
     }
+    match /logs/{experimentId} {
+      allow read: if true;
+    }
   }
 }

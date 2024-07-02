@@ -3,31 +3,8 @@ import { DocumentReference, DocumentData, DocumentSnapshot } from "firebase-admi
 import { db } from "./app.js";
 import writeLog from "./write-log.js";
 import MESSAGES from "./api-messages.js";
+import { ExperimentData, UserData } from './interfaces';
 
-interface ExperimentData {
-  active: boolean;
-  activeBase64: boolean;
-  activeConditionAssignment: boolean;
-  limitSessions: boolean;
-  sessions: number;
-  maxSessions: number;
-  nConditions: number;
-  currentCondition: number;
-  useValidation: boolean;
-  allowJSON: boolean;
-  allowCSV: boolean;
-  requiredFields: string[];
-  owner: string;
-  osfFilesLink: string;
-}
-
-interface UserData {
-  email: string;
-  uid: string;
-  osfToken: string;
-  osfTokenValid: boolean;
-  experiments: string[];
-} 
 
 export const apiCondition = onRequest({ cors: true }, async (req, res) => {
   const { experimentID } = req.body;
@@ -44,6 +21,7 @@ export const apiCondition = onRequest({ cors: true }, async (req, res) => {
 
   if (!exp_doc.exists) {
     res.status(400).json(MESSAGES.EXPERIMENT_NOT_FOUND);
+    writeLog(experimentID, "logError", MESSAGES.EXPERIMENT_NOT_FOUND);
     return;
   }
 
@@ -51,11 +29,13 @@ export const apiCondition = onRequest({ cors: true }, async (req, res) => {
 
   if (!exp_data) {
     res.status(400).json(MESSAGES.EXPERIMENT_DATA_NOT_FOUND);
+    await writeLog(experimentID, "logError", MESSAGES.EXPERIMENT_DATA_NOT_FOUND);
     return;
   }
 
   if (!exp_data.activeConditionAssignment) {
     res.status(400).json(MESSAGES.CONDITION_ASSIGNMENT_NOT_ACTIVE);
+    await writeLog(experimentID, "logError", MESSAGES.CONDITION_ASSIGNMENT_NOT_ACTIVE);
     return;
   }
 
@@ -79,6 +59,7 @@ export const apiCondition = onRequest({ cors: true }, async (req, res) => {
     });
   } catch (error) {
     res.status(400).json(MESSAGES.UNKNOWN_ERROR_GETTING_CONDITION);
+    await writeLog(experimentID, "logError", MESSAGES.UNKNOWN_ERROR_GETTING_CONDITION);
     return;
   }
 

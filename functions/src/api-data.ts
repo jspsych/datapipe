@@ -1,4 +1,5 @@
 import { onRequest } from "firebase-functions/v2/https";
+import { Timestamp } from "@firebase/firestore";
 import { FieldValue, DocumentReference, DocumentData, DocumentSnapshot } from "firebase-admin/firestore";
 import validateJSON from "./validate-json.js";
 import validateCSV from "./validate-csv.js";
@@ -24,24 +25,29 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
 
   if (!exp_doc.exists) {
     res.status(400).json(MESSAGES.EXPERIMENT_NOT_FOUND);
+    await writeLog(experimentID, "logError", MESSAGES.EXPERIMENT_NOT_FOUND);
     return;
   }
+  
 
   const exp_data: ExperimentData = exp_doc.data() as ExperimentData;
 
   if (!exp_data) {
     res.status(400).json(MESSAGES.EXPERIMENT_DATA_NOT_FOUND);
+    await writeLog(experimentID, "logError", MESSAGES.EXPERIMENT_DATA_NOT_FOUND);
     return;
   }
 
   if (!exp_data.active) {
     res.status(400).json(MESSAGES.DATA_COLLECTION_NOT_ACTIVE);
+    await writeLog(experimentID, "logError", MESSAGES.DATA_COLLECTION_NOT_ACTIVE);
     return;
   }
 
   if (exp_data.limitSessions) {
     if (exp_data.sessions >= exp_data.maxSessions) {
       res.status(400).json(MESSAGES.SESSION_LIMIT_REACHED);
+      await writeLog(experimentID, "logError", MESSAGES.SESSION_LIMIT_REACHED);
       return;
     }
   }
@@ -55,13 +61,14 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
       }
     }
     if (exp_data.allowCSV && !valid) {
-      const validCSV:boolean = validateCSV(data, exp_data.requiredFields);
+      const validCSV: boolean = validateCSV(data, exp_data.requiredFields);
       if (validCSV) {
         valid = true;
       }
     }
     if (!valid) {
       res.status(400).json(MESSAGES.INVALID_DATA);
+      await writeLog(experimentID, "logError", MESSAGES.INVALID_DATA);
       return;
     }
   }
@@ -70,6 +77,7 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
 
   if (!user_doc.exists) {
     res.status(400).json(MESSAGES.INVALID_OWNER);
+    await writeLog(experimentID, "logError", MESSAGES.INVALID_OWNER);
     return;
   }
 
@@ -77,11 +85,13 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
 
   if (!user_data) {
     res.status(400).json(MESSAGES.USER_DATA_NOT_FOUND);
+    await writeLog(experimentID, "logError", MESSAGES.USER_DATA_NOT_FOUND);
     return;
   }
 
   if (!user_data.osfTokenValid) {
     res.status(400).json(MESSAGES.INVALID_OSF_TOKEN);
+    await writeLog(experimentID, "logError", MESSAGES.INVALID_OSF_TOKEN);
     return;
   }
 
@@ -110,9 +120,11 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
   if (!result.success) {
     if (result.errorCode === 409 && result.errorText === "Conflict") {
       res.status(400).json({...MESSAGES.OSF_FILE_EXISTS, metadataMessage});
+      await writeLog(experimentID, "logError", MESSAGES.OSF_FILE_EXISTS);
       return;
     }
     res.status(400).json({...MESSAGES.OSF_UPLOAD_ERROR, metadataMessage});
+    await writeLog(experimentID, "logError", MESSAGES.OSF_UPLOAD_ERROR);
     return;
   }
 

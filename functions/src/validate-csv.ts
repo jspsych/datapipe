@@ -8,6 +8,7 @@ export default function validateCSV(csv: string, requiredFields: string[]) {
     } catch (error) {
       return false;
     }
+
     if (requiredFields.every((field: string) => parsedCSV[0].includes(field))) {
       return true;
     } else {

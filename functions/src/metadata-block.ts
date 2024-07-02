@@ -67,12 +67,14 @@ try {
         //If a metadata file does not exist in OSF, it is created with the above metadata.
         else {
 
-          await putFileOSF(
+          const response = await putFileOSF(
             exp_data.osfFilesLink,
             user_data.osfToken,
             JSON.stringify(updatedMetadata, null, 2),
             `dataset_description.json`
           );
+
+          if (response.errorCode !== 210) throw new Error(MESSAGES.OSF_UPLOAD_ERROR.message);
           
         }
       }

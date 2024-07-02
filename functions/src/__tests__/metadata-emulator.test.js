@@ -43,9 +43,9 @@ beforeAll(async () => {
   initializeApp(config);
   const db = getFirestore();
 
-  await db.collection("experiments").doc('test-exp').set({active: true, metadataActive: true, owner: 'test-user', osfFilesLink: "http://localhost:3000/endpoint"});
+  await db.collection("experiments").doc('testexp').set({active: true, metadataActive: true, owner: 'test-user', osfFilesLink: "http://localhost:3000/endpoint"});
   await db.collection('users').doc('test-user').set({osfTokenValid: true, osfToken: 'valid'});
-  await db.collection("metadata").doc('test-exp').set({});
+  await db.collection("metadata").doc('testexp').set({});
 });
 
 afterAll(async () => {
@@ -58,7 +58,7 @@ describe('runTransaction', () => {
   it('should handle the case when metadata is present in OSF but not in firestore', async () => {
 
     const response = await saveData({
-      experimentID: "test-exp",
+      experimentID: "testexp",
       data: sampleData,
       filename: "test",
     });
@@ -71,12 +71,12 @@ describe('runTransaction', () => {
     const db = getFirestore();
     await db.collection("users").doc("test-user").set({osfToken: 'invalid'}, {merge: true});
 
-    await db.collection("experiments").doc("test-exp").get()
+    await db.collection("experiments").doc("testexp").get()
     await db.collection("users").doc('test-user').get()
-    await db.collection("metadata").doc("test-exp").get()
+    await db.collection("metadata").doc("testexp").get()
 
     const response = await saveData({
-      experimentID: "test-exp",
+      experimentID: "testexp",
       data: sampleData,
       filename: "test",
     });
@@ -91,12 +91,12 @@ describe('runTransaction', () => {
 
     const db = getFirestore();
     await db.collection("users").doc("test-user").set({osfToken: 'valid'}, {merge: true});
-    await db.collection("metadata").doc("test-exp").set({metadata: "test-metadata"}, {merge: true});
+    await db.collection("metadata").doc("testexp").set({metadata: "test-metadata"}, {merge: true});
 
 
     // Call your function
     const response = await saveData({
-      experimentID: "test-exp",
+      experimentID: "testexp",
       data: sampleData,
       filename: "test",
     });
@@ -109,10 +109,10 @@ describe('runTransaction', () => {
 
     const db = getFirestore();
     await db.collection("users").doc("test-user").set({osfToken: 'invalid'}, {merge: true});
-    await db.collection("metadata").doc("test-exp").set({metadata: "test-metadata"}, {merge: true})
+    await db.collection("metadata").doc("testexp").set({metadata: "test-metadata"}, {merge: true})
 
     const response = await saveData({
-      experimentID: "test-exp",
+      experimentID: "testexp",
       data: sampleData,
       filename: "test",
     });

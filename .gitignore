@@ -147,3 +147,6 @@ osf-token-info.txt
 .emulator-data
 
 testServiceAccount.json
+
+# TypeScript build artifacts
+functions/lib/

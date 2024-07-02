@@ -12,6 +12,7 @@ import ExperimentActive from "../../components/dashboard/ExperimentActive";
 import ExperimentValidation from "../../components/dashboard/ExperimentValidation";
 import MetadataControl from "../../components/dashboard/MetadataControl";
 import CodeHints from "../../components/dashboard/CodeHints";
+import ErrorPanel from "../../components/dashboard/ErrorPanel";
 
 export default function ExperimentPage() {
   const router = useRouter();
@@ -28,6 +29,13 @@ function ExperimentPageDashboard({ experiment_id }) {
   const [data, loading, error, snapshot, reload] = useDocumentData(
     doc(db, `experiments/${experiment_id}`)
   );
+  const logs = useDocumentData(
+    doc(db, `logs/${experiment_id}`))?.[0] || null;
+
+  const uploadError = logs?.logError;
+  const errorLog = logs?.errors;
+
+  console.log(errorLog);
 
   return (
     <>
@@ -49,6 +57,7 @@ function ExperimentPageDashboard({ experiment_id }) {
               <ExperimentValidation data={data} />
             </VStack>
             <VStack w={["100%", "60%"]}>
+            {uploadError && <ErrorPanel errors={errorLog} />}
               <CodeHints expId={experiment_id} />
             </VStack>
           </Flex>
