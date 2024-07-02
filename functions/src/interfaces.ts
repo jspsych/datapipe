@@ -1,6 +1,7 @@
 export interface ExperimentData {
     active: boolean;
     activeBase64: boolean;
+    activeConditionAssignment: boolean;
     metadataActive?: boolean;
     limitSessions: boolean;
     sessions: number;
@@ -8,6 +9,8 @@ export interface ExperimentData {
     useValidation: boolean;
     allowJSON: boolean;
     allowCSV: boolean;
+    nConditions: number;
+    currentCondition: number;
     requiredFields: string[];
     owner: string;
     osfFilesLink: string;
