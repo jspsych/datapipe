@@ -196,7 +196,8 @@ describe("apiData", () => {
     );
     const response = await saveData({
       experimentID: "data-testexp-active",
-      data: "test",
+      data: "foo, bar, quz\nfoo, bar", // previously "test" was throwing an error not because it was invalid CSV but because the requiredFields was undefined.
+      // Now validate CSV checks for row length uniformity, and can work without requiredFields, so this error is thrown because of the former reason.
       filename: "test",
     });
     expect(response).toEqual(MESSAGES.INVALID_DATA);

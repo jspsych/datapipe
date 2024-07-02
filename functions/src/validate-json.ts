@@ -1,4 +1,4 @@
-export default function validateJSON(json: string, requiredFields: string[]) {
+export default function validateJSON(json: string, requiredFields: string[] | undefined) {
   try {
     let parsedJSON: object | null = null;
     try {
@@ -6,6 +6,8 @@ export default function validateJSON(json: string, requiredFields: string[]) {
     } catch (error) {
       return false;
     }
+
+    if (!requiredFields) return true; // If JSON is in valid format, and there is nothing more to check return true.
 
     if (Array.isArray(parsedJSON)) {
       const keys = new Set();
