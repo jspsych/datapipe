@@ -1,17 +1,4 @@
-//import fetch from "node-fetch";
-interface OSFFile{
-  id: string;
-  attributes: {
-    name: string;
-  };
-}
-
-interface OSFResult {
-  success: boolean;
-  errorCode: number | null;
-  errorText: string | null;
-}
-
+import { OSFFile } from './interfaces';
 
 export default async function processMetadata(
   osfComponent: string,

@@ -75,3 +75,12 @@ export interface ExperimentData {
     filename: string;
     metadataOptions: any; // Consider specifying a more detailed type
   }
+
+  export interface OSFFile{
+    id: string;
+    attributes: {
+      name: string;
+      kind: string;
+    };
+    links: {move: string};
+  }
