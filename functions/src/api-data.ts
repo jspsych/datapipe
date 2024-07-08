@@ -1,5 +1,4 @@
 import { onRequest } from "firebase-functions/v2/https";
-import { Timestamp } from "@firebase/firestore";
 import { FieldValue, DocumentReference, DocumentData, DocumentSnapshot } from "firebase-admin/firestore";
 import validateJSON from "./validate-json.js";
 import validateCSV from "./validate-csv.js";
