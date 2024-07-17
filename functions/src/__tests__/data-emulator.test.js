@@ -82,6 +82,42 @@ describe("apiData", () => {
     expect(doc.data().saveData).toBe(2);
   });
 
+  it("should increment the error log for an experiment when errors are caught", async () => {
+    const db = getFirestore();
+
+    await db.collection("logs").doc("data-testexp").delete();
+
+    await saveData({
+      experimentID: "data-testexp",
+      data: "test",
+      filename: "test",
+    });
+
+    let doc = await db.collection("logs").doc("data-testexp").get();
+
+    expect(doc.data().logError).toBe(1);
+
+    await db.collection("experiments").doc("data-testexp").set(
+      {
+        limitSessions: true,
+        sessions: 2,
+        maxSessions: 2,
+      },
+      { merge: true }
+    );
+
+    await saveData({
+      experimentID: "data-testexp",
+      data: "test",
+      filename: "test",
+    });
+
+    doc = await db.collection("logs").doc("data-testexp").get();
+
+    expect(doc.data().logError).toBe(2);
+
+  });
+
   it("should return error message when the experimentID does not match an experiment", async () => {
     const response = await saveData({
       experimentID: "doesnotexist",
@@ -91,7 +127,7 @@ describe("apiData", () => {
     expect(response).toEqual(MESSAGES.EXPERIMENT_NOT_FOUND);
   });
 
-  it("should return error message when condition assignment is not active", async () => {
+  it("should return error message when data collection is not active", async () => {
     const response = await saveData({
       experimentID: "data-testexp",
       data: "test",
@@ -160,7 +196,8 @@ describe("apiData", () => {
     );
     const response = await saveData({
       experimentID: "data-testexp-active",
-      data: "test",
+      data: "foo, bar, quz\nfoo, bar", // previously "test" was throwing an error not because it was invalid CSV but because the requiredFields was undefined.
+      // Now validate CSV checks for row length uniformity, and can work without requiredFields, so this error is thrown because of the former reason.
       filename: "test",
     });
     expect(response).toEqual(MESSAGES.INVALID_DATA);

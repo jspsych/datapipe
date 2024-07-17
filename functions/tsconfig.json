@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2018", // Compile to ES6
+    "module": "ES6", // Use CommonJS module system
+    "outDir": "./lib", // Output compiled files to the lib directory
+    "rootDir": "./src", // Specify the root directory of input files
+    "moduleResolution": "node", // Use Node.js module resolution mechanism
+    "sourceMap": true, // Generate corresponding '.map' file
+    "esModuleInterop": true, // Enables compatibility with non-ES module spec compliant imports
+    "strict": true, // Enable all strict type-checking options
+    "skipLibCheck": true // Skip type checking of declaration files
+  },
+  "include": ["src/**/*"], // Include all files in the src directory
+  "exclude": ["node_modules", "**/*.spec.ts"], // Exclude node_modules and test files
+  "compileOnSave": true
+}

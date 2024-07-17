@@ -215,6 +215,18 @@ export default function FAQ() {
             then the cycle will repeat.
           </Text>
         </FAQItem>
+        <FAQItem question="How does metadata production work?">
+          <Text>
+            When you enable metadata production, DataPipe will use the data from
+            your experiment to create a metadata file that describes the data and 
+            its variables. This metadata file is generated according to {" "}
+              <Link isExternal href="https://github.com/psych-ds/psych-DS">
+                Psych-DS
+              </Link>{" "}
+            and stored in OSF as dataset_description.json. With every subsequent 
+            session, DataPipe will update the metadata as necessary. 
+          </Text>
+        </FAQItem>
       </Accordion>
     </Stack>
   );

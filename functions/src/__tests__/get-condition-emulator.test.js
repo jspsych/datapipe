@@ -59,6 +59,26 @@ describe("getCondition", () => {
     expect(condition).toEqual(MESSAGES.CONDITION_ASSIGNMENT_NOT_ACTIVE);
   });
 
+  it("should increment the error log for an experiment when errors are caught", async () => {
+
+    const db = getFirestore();
+    await db.collection("logs").doc("testexp").delete();
+
+    await getCondition({ experimentID: "testexp" });
+
+    let doc = await db.collection("logs").doc("testexp").get();
+
+    expect(doc.data().logError).toBe(1);
+
+    await getCondition({ experimentID: "testexp" });
+
+    doc = await db.collection("logs").doc("testexp").get();
+
+    expect(doc.data().logError).toBe(2);
+
+
+  });
+
   it("should return sequential conditions when condition assignment is active", async () => {
     for(let i = 0; i < 8; i++) {
       const condition = await getCondition({ experimentID: "testexp-active" });
