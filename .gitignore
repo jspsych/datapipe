@@ -80,7 +80,7 @@ typings/
 
 # Nuxt.js build / generate output
 .nuxt
-#dist
+dist
 
 # Gatsby files
 .cache/
@@ -150,3 +150,9 @@ testServiceAccount.json
 
 # TypeScript build artifacts
 functions/lib/
+
+#vscode local testing
+.vscode/settings.json
+
+#metadata build artifacts
+functions/metadata/dist

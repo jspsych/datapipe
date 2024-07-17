@@ -5,7 +5,7 @@ import { Metadata } from './interfaces';
 export default async function produceMetadata(data: string, options: object | null = null) {
   
     // Initializes the metadata object.
-    var metadata = new jsPsychMetadata();
+    var metadata = new jsPsychMetadata(); // eslint-disable-line no-var
 
     // Checks if the data is in CSV format.
     const isCsv = (str: string) => { try { JSON.parse(str); return false; } catch (e) { return true; } };
@@ -13,7 +13,7 @@ export default async function produceMetadata(data: string, options: object | nu
     const csvFlag: boolean = isCsv(data);
 
     // Parses the data if it is JSON object in string format.
-    !csvFlag ? data = JSON.parse(data) : data = data;
+    if(!csvFlag) data = JSON.parse(data);
 
     // Generates the metadata, using the options if they are provided.
     options ? await metadata.generate(data, options, csvFlag) : await metadata.generate(data, {}, csvFlag);

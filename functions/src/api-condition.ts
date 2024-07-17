@@ -3,7 +3,7 @@ import { DocumentReference, DocumentData, DocumentSnapshot } from "firebase-admi
 import { db } from "./app.js";
 import writeLog from "./write-log.js";
 import MESSAGES from "./api-messages.js";
-import { ExperimentData, UserData } from './interfaces';
+import { ExperimentData } from './interfaces';
 
 
 export const apiCondition = onRequest({ cors: true }, async (req, res) => {

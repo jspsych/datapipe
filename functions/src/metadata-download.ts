@@ -27,7 +27,7 @@ export default async function downloadMetadata(
  * Extracts the URL of the metadata file from the download object.
  * @type {string}
  */ 
-  var fileUrl: string = downloadMetadata.url;
+  const fileUrl: string = downloadMetadata.url;
 
   /**
    * Uses the download link provided by OSF to get the metadata file as a string.

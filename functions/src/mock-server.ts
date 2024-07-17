@@ -10,7 +10,6 @@ app.use((req, res, next) => {
     // Check if all required headers are present
     const areHeadersPresent = requiredHeaders.every(header => req.headers[header]);
 
-    const bearerValid = (`Bearer valid` === req.headers['authorization']);
     const bearerInvalid = (`Bearer invalid` === req.headers['authorization']);
   
     if (!areHeadersPresent) {

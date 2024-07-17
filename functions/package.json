@@ -9,7 +9,7 @@
     "build": "tsc",
     "watch": "tsc --watch",
     "deploy": "npm run build && firebase deploy --only functions",
-    "lint": "echo 'Linting is turned off, if you want to turn it on change this script to eslint '**/*.js''"
+    "lint": "eslint . "
   },
   "engines": {
     "node": "20"

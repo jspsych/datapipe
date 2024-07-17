@@ -4,7 +4,7 @@ import updateMetadata from "./metadata-update.js";
 import produceMetadata from "./metadata-production.js";
 import updateFileOSF from "./update-file-osf.js";
 import downloadMetadata from "./metadata-download.js";
-import { DocumentReference, DocumentData, DocumentSnapshot } from "firebase-admin/firestore";
+import { DocumentReference, DocumentData } from "firebase-admin/firestore";
 import putFileOSF from "./put-file-osf.js";
 import { db } from "./app.js";
 import { ExperimentData, UserData, Metadata, MetadataResponse } from './interfaces';

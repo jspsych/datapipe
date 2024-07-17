@@ -26,9 +26,9 @@ export interface ExperimentData {
   
   export interface RequestBody {
     experimentID: string;
-    data: any; // Consider specifying a more detailed type
+    data: string; // Consider specifying a more detailed type
     filename: string;
-    metadataOptions: any; // Consider specifying a more detailed type
+    metadataOptions: object; // Consider specifying a more detailed type
   }
 
   export interface Variable {
@@ -67,13 +67,6 @@ export interface ExperimentData {
     success: boolean;
     errorCode: number | null;
     errorText: string | null;
-  }
-
-  export interface RequestBody {
-    experimentID: string;
-    data: any; // Consider specifying a more detailed type
-    filename: string;
-    metadataOptions: any; // Consider specifying a more detailed type
   }
 
   export interface OSFFile{
