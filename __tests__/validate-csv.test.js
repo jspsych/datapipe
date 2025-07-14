@@ -2,7 +2,7 @@
  * @jest-environment node
  */
 
-import validateCSV from "../functions/validate-csv";
+import validateCSV from "../functions/lib/validate-csv.js";
 
 describe("validateCSV", () => {
   it("should return true when all required fields are present", () => {

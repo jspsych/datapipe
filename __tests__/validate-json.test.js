@@ -2,7 +2,7 @@
  * @jest-environment node
  */
 
-import validateJSON from "../functions/validate-json";
+import validateJSON from "../functions/lib/validate-json.js";
 
 describe("validateJSON", () => {
   it("should return true when all required fields are present", () => {
