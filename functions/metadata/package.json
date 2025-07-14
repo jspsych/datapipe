@@ -34,10 +34,10 @@
   },
   "homepage": "https://www.jspsych.org/latest/metadata",
   "peerDependencies": {
-    "jspsych": ">=7.1.0"
+    "jspsych": "^8.0.0"
   },
   "devDependencies": {
-    "@jspsych/config": "^2.0.0",
+    "@jspsych/config": "^3.2.2",
     "@jspsych/test-utils": "^1.1.2",
     "@types/jest": "^29.5.12",
     "ts-jest": "^29.1.4"
