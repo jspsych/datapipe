@@ -35,9 +35,16 @@ jobs:
       - name: Enable firebase webframeworks
         run: firebase experiments:enable webframeworks
       - run: npm ci
-      - name: Run npm ci in /functions
+      - name: Install dependencies and build metadata
+        working-directory: functions/metadata
+        run: |
+          npm ci
+          npm run build
+      - name: Install dependencies and build functions
         working-directory: functions
-        run: npm ci
+        run: |
+          npm ci
+          npm run build
       - name: Use test firebase project
         run: firebase use test
       - name: Deploy firebase project
