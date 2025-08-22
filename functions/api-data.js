@@ -1,6 +1,5 @@
 import { onRequest } from "firebase-functions/v2/https";
 import { FieldValue } from "firebase-admin/firestore";
-import cors from "cors";
 import validateJSON from "./validate-json.js";
 import validateCSV from "./validate-csv.js";
 import putFileOSF from "./put-file-osf.js";
@@ -10,29 +9,8 @@ import { db } from "./app.js";
 import writeLog from "./write-log.js";
 import MESSAGES from "./api-messages.js";
 
-// Configure CORS with specific options
-const corsHandler = cors({
-  origin: true, // Allow all origins for testing
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
-});
-
 export const apiData = onRequest(async (req, res) => {
-  // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    res.set('Access-Control-Allow-Origin', '*');
-    res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    res.set('Access-Control-Max-Age', '3600');
-    res.status(204).send('');
-    return;
-  }
 
-  // Set CORS headers for actual request
-  res.set('Access-Control-Allow-Origin', '*');
-  res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   // Handle GET request to list experiments (for debugging)
   if (req.method === 'GET') {

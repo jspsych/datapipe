@@ -5,19 +5,8 @@ import MESSAGES from "./api-messages.js";
 
 export const apiCondition = onRequest(async (req, res) => {
   // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    res.set('Access-Control-Allow-Origin', '*');
-    res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    res.set('Access-Control-Max-Age', '3600');
-    res.status(204).send('');
-    return;
-  }
 
   // Set CORS headers for actual request
-  res.set('Access-Control-Allow-Origin', '*');
-  res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   const { experimentID } = req.body;
 
