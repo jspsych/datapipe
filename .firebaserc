@@ -1,7 +1,7 @@
 {
   "projects": {
-    "default": "osf-relay",
-    "test": "datapipe-test"
+    "default": "datapipe-test-595ab",
+    "test": "datapipe-test-595ab"
   },
   "targets": {},
   "etags": {}
