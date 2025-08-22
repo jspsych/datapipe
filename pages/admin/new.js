@@ -22,6 +22,8 @@ import {
   VStack,
   Text,
   Select,
+  Alert,
+  AlertIcon,
 } from "@chakra-ui/react";
 
 export default function NewExperimentPage({}) {
@@ -47,6 +49,26 @@ function NewExperimentForm() {
       {data && data.osfTokenValid && (
         <Stack spacing={6} maxWidth="540px">
           <Heading>Create a New Experiment</Heading>
+          
+          {/* Google Drive Status */}
+          {data.googleDriveEnabled && data.googleDriveFolderId && (
+            <Alert status="success">
+              <AlertIcon />
+              Google Drive export is enabled and will provide backup to your OSF export.
+            </Alert>
+          )}
+          
+          {data.googleDriveEnabled && !data.googleDriveFolderId && (
+            <Alert status="warning">
+              <AlertIcon />
+              Google Drive export is enabled but no folder is configured. 
+              <Link href="/admin/account" ml={2}>
+                <Button size="sm" colorScheme="blue">
+                  Configure Folder
+                </Button>
+              </Link>
+            </Alert>
+          )}
           <FormControl id="title" isInvalid={titleError}>
             <FormLabel>Title</FormLabel>
             <Input type="text" onChange={() => setTitleError(false)} />
