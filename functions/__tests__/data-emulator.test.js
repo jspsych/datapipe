@@ -34,6 +34,14 @@ beforeAll(async () => {
   initializeApp(config);
   const db = getFirestore();
   await db.collection("experiments").doc("data-testexp").set({ active: false });
+  await db.collection("experiments").doc("testlog").set({ 
+    active: true, 
+    owner: "testuser"
+  });
+  await db.collection("experiments").doc("data-test").set({ 
+    active: true, 
+    owner: "testuser"
+  });
   await db.collection("users").doc("testuser").set({
     osfTokenValid: false,
   });
@@ -43,10 +51,6 @@ beforeAll(async () => {
   await db.collection("experiments").doc("data-testexp-active").set({
     active: true,
     owner: "testuser",
-    useValidation: true,
-    requiredFields: ["trial_type"],
-    limitSessions: true,
-    maxSessions: 1,
   });
 });
 
