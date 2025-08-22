@@ -7,10 +7,23 @@ import writeLog from "./write-log.js";
 import isBase64 from "is-base64";
 import MESSAGES from "./api-messages.js";
 
-export const apiBase64 = onRequest({cors:true},
-  async (req, res) => {
-  
-    const { experimentID, data, filename } = req.body;
+export const apiBase64 = onRequest(async (req, res) => {
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.set('Access-Control-Max-Age', '3600');
+    res.status(204).send('');
+    return;
+  }
+
+  // Set CORS headers for actual request
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  const { experimentID, data, filename } = req.body;
 
     if (!experimentID || !data || !filename) {
       res.status(400).json(MESSAGES.MISSING_PARAMETER);
