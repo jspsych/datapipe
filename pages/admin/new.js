@@ -175,9 +175,24 @@ async function handleCreateExperiment(
 
   const user = auth.currentUser;
   const title = document.querySelector("#title").value;
-  let osfRepo = document.querySelector("#osf-repo").value;
-  const region = document.querySelector("#osf-component-region").value;
-  const osfComponentName = document.querySelector("#osf-component-name").value;
+  
+  // Only get OSF field values if OSF is configured
+  let osfRepo = "";
+  let region = "us";
+  let osfComponentName = "";
+  
+  // Check if user has OSF configured by looking for the form fields
+  const osfRepoField = document.querySelector("#osf-repo");
+  const regionField = document.querySelector("#osf-component-region");
+  const componentNameField = document.querySelector("#osf-component-name");
+  
+  if (osfRepoField && regionField && componentNameField) {
+    // OSF fields exist, so get their values
+    osfRepo = osfRepoField.value;
+    region = regionField.value;
+    osfComponentName = componentNameField.value;
+  }
+  
   const nConditions = 1;
   const useValidation = true;
   const allowJSON = true;
@@ -191,8 +206,8 @@ async function handleCreateExperiment(
     return;
   }
 
-  // Only validate OSF fields if OSF is configured
-  if (data.osfTokenValid) {
+  // Only validate OSF fields if they exist (user has OSF configured)
+  if (osfRepoField && regionField && componentNameField) {
     if (osfComponentName.length === 0) {
       setDataComponentError(true);
       setIsSubmitting(false);
@@ -208,7 +223,7 @@ async function handleCreateExperiment(
 
   // check if OSF repo string contains https://osf.io/
   // and remove it if it does
-  if (osfRepo.includes("https://osf.io/")) {
+  if (osfRepo && osfRepo.includes("https://osf.io/")) {
     osfRepo = osfRepo.replace("https://osf.io/", "");
   }
 
@@ -281,9 +296,9 @@ async function handleCreateExperiment(
     const experimentDoc = doc(db, "experiments", id);
     batch.set(experimentDoc, {
       title: title,
-      osfRepo: osfRepo,
-      osfComponent: osfComponentId,
-      osfFilesLink: osfFilesLink,
+      osfRepo: osfRepo || null,
+      osfComponent: osfComponentId || null,
+      osfFilesLink: osfFilesLink || null,
       active: false,
       activeBase64: false,
       activeConditionAssignment: false,
