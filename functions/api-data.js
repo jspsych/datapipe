@@ -83,7 +83,7 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
   let exportError = null;
 
   // Try OSF export if configured
-  if (hasOSF) {
+  if (hasOSF && exp_data.osfFilesLink) {
     const osfResult = await putFileOSF(
       exp_data.osfFilesLink,
       user_data.osfToken,
