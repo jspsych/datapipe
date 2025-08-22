@@ -3,10 +3,7 @@ import { db } from "./app.js";
 import writeLog from "./write-log.js";
 import MESSAGES from "./api-messages.js";
 
-export const apiCondition = onRequest(async (req, res) => {
-  // Handle CORS preflight
-
-  // Set CORS headers for actual request
+export const apiCondition = onRequest({ cors: true }, async (req, res) => {
 
   const { experimentID } = req.body;
 

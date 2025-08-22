@@ -9,7 +9,7 @@ import { db } from "./app.js";
 import writeLog from "./write-log.js";
 import MESSAGES from "./api-messages.js";
 
-export const apiData = onRequest(async (req, res) => {
+export const apiData = onRequest({ cors: true }, async (req, res) => {
 
 
   // Handle GET request to list experiments (for debugging)

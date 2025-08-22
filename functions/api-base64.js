@@ -7,10 +7,7 @@ import writeLog from "./write-log.js";
 import isBase64 from "is-base64";
 import MESSAGES from "./api-messages.js";
 
-export const apiBase64 = onRequest(async (req, res) => {
-  // Handle CORS preflight
-
-  // Set CORS headers for actual request
+export const apiBase64 = onRequest({ cors: true },async (req, res) => {
 
   const { experimentID, data, filename } = req.body;
 

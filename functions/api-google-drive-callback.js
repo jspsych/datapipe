@@ -2,10 +2,7 @@ import { onRequest } from "firebase-functions/v2/https";
 import { db } from "./app.js";
 import { exchangeCodeForTokens } from "./google-drive-auth.js";
 
-export const apiGoogleDriveCallback = onRequest(async (req, res) => {
-  // Handle CORS preflight
-
-  // Set CORS headers for actual request
+export const apiGoogleDriveCallback = onRequest({ cors: true }, async (req, res) => {
 
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
