@@ -2,7 +2,6 @@
  * @jest-environment node
  */
 
-import { jest } from '@jest/globals';
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import MESSAGES from "../api-messages";
@@ -11,7 +10,7 @@ process.env.FIRESTORE_EMULATOR_HOST = "localhost:8080";
 
 async function saveData(body) {
   const response = await fetch(
-    "http://localhost:5001/demo-project/us-central1/apidata",
+    "http://localhost:5001/datapipe-test/us-central1/apidata",
     {
       method: "POST",
       headers: {
@@ -26,7 +25,7 @@ async function saveData(body) {
 }
 
 const config = {
-  projectId: "demo-project",
+  projectId: "datapipe-test",
 };
 
 jest.setTimeout(30000);
@@ -34,28 +33,10 @@ jest.setTimeout(30000);
 beforeAll(async () => {
   initializeApp(config);
   const db = getFirestore();
-  
-  // Create test experiments
   await db.collection("experiments").doc("data-testexp").set({ active: false });
-  await db.collection("experiments").doc("testlog").set({ 
-    active: true, 
-    owner: "testuser",
-    useValidation: false,
-    limitSessions: false 
-  });
-  await db.collection("experiments").doc("data-test").set({ 
-    active: true, 
-    owner: "testuser",
-    useValidation: false,
-    limitSessions: false 
-  });
-  
-  // Create test users
   await db.collection("users").doc("testuser").set({
-    osfTokenValid: true,
+    osfTokenValid: false,
   });
-  
-  // Create experiments with various states
   await db.collection("experiments").doc("data-testexp-active-no-owner").set({
     active: true,
   });
@@ -65,7 +46,7 @@ beforeAll(async () => {
     useValidation: true,
     requiredFields: ["trial_type"],
     limitSessions: true,
-    maxSessions: 1
+    maxSessions: 1,
   });
 });
 
