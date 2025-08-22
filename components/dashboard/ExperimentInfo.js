@@ -1,6 +1,5 @@
 import { Stack, HStack, Text, Link, Heading } from "@chakra-ui/react";
-
-import { ExternalLinkIcon } from "@chakra-ui/react";
+import { ExternalLinkIcon } from "@chakra-ui/icons";
 
 export default function ExperimentInfo({ data }) {
   return (
