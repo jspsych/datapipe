@@ -1,7 +1,10 @@
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 
-const app = initializeApp();
+// Use the same project ID as the emulator
+const app = initializeApp({
+  projectId: "demo-project"
+});
 const db = getFirestore(app);
 
 export { db };

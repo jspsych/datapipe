@@ -34,6 +34,47 @@ export const apiData = onRequest(async (req, res) => {
   res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
+  // Handle GET request to list experiments (for debugging)
+  if (req.method === 'GET') {
+    try {
+      const experimentsSnapshot = await db.collection('experiments').get();
+      const experiments = [];
+      experimentsSnapshot.forEach(doc => {
+        experiments.push({
+          id: doc.id,
+          title: doc.data().title,
+          owner: doc.data().owner
+        });
+      });
+      res.status(200).json({ experiments });
+      return;
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch experiments', message: error.message });
+      return;
+    }
+  }
+
+  // Handle PUT request to update experiment settings
+  if (req.method === 'PUT') {
+    try {
+      const { experimentID, updates } = req.body;
+      if (!experimentID || !updates) {
+        res.status(400).json({ error: 'Missing experimentID or updates' });
+        return;
+      }
+      
+      const expDocRef = db.collection("experiments").doc(experimentID);
+      await expDocRef.update(updates);
+      
+      res.status(200).json({ message: 'Experiment updated successfully' });
+      return;
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to update experiment', message: error.message });
+      return;
+    }
+  }
+
+  // Handle POST request (existing logic)
   const { experimentID, data, filename } = req.body;
 
   if (!experimentID || !data || !filename) {
