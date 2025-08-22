@@ -69,20 +69,69 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
   }
 
   const user_data = user_doc.data();
-  if (!user_data.osfTokenValid) {
+  
+  // Check if user has either OSF or Google Drive configured
+  const hasOSF = user_data.osfTokenValid;
+  const hasGoogleDrive = user_data.googleDriveEnabled && user_data.googleDriveFolderId && user_data.googleDriveRefreshToken;
+  
+  if (!hasOSF && !hasGoogleDrive) {
     res.status(400).json(MESSAGES.INVALID_OSF_TOKEN);
     return;
   }
 
-  const result = await putFileOSF(
-    exp_data.osfFilesLink,
-    user_data.osfToken,
-    data,
-    filename
-  );
+  let exportSuccess = false;
+  let exportError = null;
 
-  if (!result.success) {
-    if (result.errorCode === 409 && result.errorText === "Conflict") {
+  // Try OSF export if configured
+  if (hasOSF) {
+    const osfResult = await putFileOSF(
+      exp_data.osfFilesLink,
+      user_data.osfToken,
+      data,
+      filename
+    );
+
+    if (osfResult.success) {
+      exportSuccess = true;
+    } else {
+      exportError = osfResult;
+    }
+  }
+
+  // Try Google Drive export if configured
+  if (hasGoogleDrive) {
+    try {
+      // Get fresh access token
+      const tokenData = await getGoogleDriveAccessToken(user_data.googleDriveRefreshToken);
+      
+      const googleDriveResult = await putFileGoogleDrive(
+        user_data.googleDriveFolderId,
+        filename,
+        data,
+        tokenData.access_token
+      );
+
+      if (googleDriveResult.success) {
+        // Update user's access token and expiry
+        await user_doc.ref.update({
+          googleDriveAccessToken: tokenData.access_token,
+          googleDriveTokenExpiry: new Date(Date.now() + tokenData.expires_in * 1000),
+        });
+        
+        // If OSF failed but Google Drive succeeded, we still consider it a success
+        if (!exportSuccess) {
+          exportSuccess = true;
+          exportError = null;
+        }
+      }
+    } catch (error) {
+      console.error("Google Drive export error:", error);
+      // Don't fail the entire request if Google Drive fails
+    }
+  }
+
+  if (!exportSuccess) {
+    if (exportError && exportError.errorCode === 409 && exportError.errorText === "Conflict") {
       res.status(400).json(MESSAGES.OSF_FILE_EXISTS);
       return;
     }
