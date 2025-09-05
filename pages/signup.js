@@ -54,6 +54,11 @@ export default function SignUpPage() {
         uid: user.uid,
         osfToken: "",
         osfTokenValid: false,
+        usingPersonalToken: true,
+        refreshToken: "",
+        refreshTokenExpires: 0,
+        authToken: "",
+        authTokenExpires: 0,
         experiments: [],
       });
 

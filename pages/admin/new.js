@@ -41,10 +41,12 @@ function NewExperimentForm() {
 
   const [data, loading, error] = useDocumentData(doc(db, "users", user.uid));
 
+  const isValid = data && (data.usingPersonalToken ? data.osfTokenValid : data.refreshToken !== "");
+
   return (
     <>
       {loading && <Spinner color="green.500" size={"xl"} />}
-      {data && data.osfTokenValid && (
+      {isValid && (
         <Stack spacing={6} maxWidth="540px">
           <Heading>Create a New Experiment</Heading>
           <FormControl id="title" isInvalid={titleError}>
@@ -105,7 +107,7 @@ function NewExperimentForm() {
           </Button>
         </Stack>
       )}
-      {data && !data.osfTokenValid && (
+      {!isValid && (
         <VStack>
           <Heading as="h2">Connect your OSF Account</Heading>
           <Text>
@@ -171,8 +173,30 @@ async function handleCreateExperiment(
   try {
     const userdoc = await getDoc(doc(db, `users/${user.uid}`));
     let osfToken = null;
+
     if (userdoc.exists()) {
-      osfToken = userdoc.data().osfToken;
+      const data = userdoc.data();
+      if (data.usingPersonalToken) {
+        osfToken = data.osfToken;
+      } else {
+        if (data.authTokenExpires > Date.now()) {
+          osfToken = data.authToken;
+        } else {
+          // TODO: errors with a JSON parse
+          const regenResult = await fetch(process.env.NEXT_PUBLIC_OAUTH_REGEN, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              uid: user.uid,
+            })
+          });
+
+          const regenData = await regenResult.json();
+          osfToken = regenData.access_token;
+        }
+      }
     }
 
     const osfResult = await fetch(
@@ -250,6 +274,7 @@ async function handleCreateExperiment(
 
     Router.push(`/admin/${id}`);
   } catch (error) {
+    console.log(error);
     setIsSubmitting(false);
     //TODO: are there other errors that could be thrown here?
     setOsfError(true);

@@ -35,6 +35,10 @@ const MESSAGES = {
     error: "INVALID_OSF_TOKEN",
     message: "The OSF token for this experiment is not valid",
   },
+  INVALID_REFRESH_TOKEN: {
+    error: "INVALID_REFRESH_TOKEN",
+    message: "The experiment owner's refresh token is not valid",
+  },
   INVALID_BASE64_DATA: {
     error: "INVALID_BASE64_DATA",
     message: "The data are not valid base64 data",
@@ -43,6 +47,15 @@ const MESSAGES = {
     error: "INVALID_DATA",
     message:
       "The data are not valid according to the validation parameters set for this experiment.",
+  },
+  NOT_USING_OAUTH: {
+    error: "NOT_USING_OAUTH",
+    message:
+      "The user is not using OAuth for OSF API verification"
+  },
+  OAUTH_NOT_SETUP: {
+    error: "OAUTH_NOT_SETUP",
+    message: "OAuth is not set up for this user"
   },
   SESSION_LIMIT_REACHED: {
     error: "SESSION_LIMIT_REACHED",

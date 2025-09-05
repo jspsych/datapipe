@@ -10,7 +10,7 @@ import blockMetadata from "./metadata-block.js";
 import { ExperimentData, UserData, MetadataResponse, OSFResult, RequestBody } from './interfaces';
 
 export const apiData = onRequest({ cors: true }, async (req, res) => {
-  const { experimentID, data, filename, metadataOptions}: RequestBody = req.body;
+  const { experimentID, data, filename, metadataOptions }: RequestBody = req.body;
 
   if (!experimentID || !data || !filename) {
     res.status(400).json(MESSAGES.MISSING_PARAMETER);
@@ -88,10 +88,63 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
     return;
   }
 
-  if (!user_data.osfTokenValid) {
-    res.status(400).json(MESSAGES.INVALID_OSF_TOKEN);
-    await writeLog(experimentID, "logError", MESSAGES.INVALID_OSF_TOKEN);
-    return;
+  let token: string = "";
+  if (user_data.usingPersonalToken) {
+    if (!user_data.osfTokenValid) {
+      res.status(400).json(MESSAGES.INVALID_OSF_TOKEN);
+      await writeLog(experimentID, "logError", MESSAGES.INVALID_OSF_TOKEN);
+      return;
+    }
+    else {
+      token = user_data.osfToken;
+    }
+  }
+
+  if (!user_data.usingPersonalToken) {
+    if (Date.now() > user_data.refreshTokenExpires) {
+      res.status(400).json(MESSAGES.INVALID_REFRESH_TOKEN);
+      await writeLog(experimentID, "logError", MESSAGES.INVALID_REFRESH_TOKEN);
+      return;
+    }
+
+    if (Date.now() > user_data.authTokenExpires) {
+      const params = new URLSearchParams({
+        code: user_data.refreshToken,
+        client_id: process.env.NEXT_PUBLIC_CLIENT_ID as string,
+        client_secret: process.env.NEXT_PUBLIC_CLIENT_SECRET as string,
+        grant_type: "refresh_token"
+      })
+
+      const tokenResponse = await fetch('https://accounts.osf.io/oauth2/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: params.toString()
+      });
+
+      if (!tokenResponse.ok) {
+        const errorData = await tokenResponse.text();
+        console.error('Token exchange failed:', errorData);
+        res.status(400).json({ 
+          error: 'Authorization token regeneration failed',
+          details: errorData,
+          status: tokenResponse.status
+        });
+        return;
+      }
+
+      const tokenData = await tokenResponse.json();
+
+      await db.doc(`users/${exp_data.owner}`).update({
+        authToken: tokenData.access_token,
+        authTokenExpires: Date.now() + tokenData.expires_in * 1000
+      });
+
+      token = tokenData.access_token;
+    } else {
+      token = user_data.authToken;
+    }
   }
 
   //METADATA BLOCK START
@@ -101,9 +154,9 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
 
   const metadataResponse: MetadataResponse = await blockMetadata(exp_data, user_data, metadata_doc_ref, data, metadataOptions);
 
-  if (metadataResponse.success === false)  {
-  res.status(400).json(metadataResponse);
-  return;
+  if (metadataResponse.success === false) {
+    res.status(400).json(metadataResponse);
+    return;
   }
 
   const metadataMessage: string = metadataResponse.metadataMessage;
@@ -111,7 +164,7 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
 
   const result: OSFResult = await putFileOSF(
     exp_data.osfFilesLink,
-    user_data.osfToken,
+    token,
     data,
     filename
   );  
@@ -130,5 +183,4 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
   await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
 
   res.status(201).json({...MESSAGES.SUCCESS, metadataMessage});
-
 });

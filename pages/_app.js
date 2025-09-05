@@ -19,7 +19,7 @@ function MyApp({ Component, pageProps }) {
 
   return (
     <ChakraProvider theme={newTheme}>
-      <UserContext.Provider value={{ user }}>
+      <UserContext.Provider value={{ user, loading }}>
         <Head>
           <title>DataPipe</title>
           <meta name="viewport" content="width=device-width, initial-scale=1" />
