@@ -72,6 +72,9 @@ typings/
 .env
 .env.test
 
+# Firebase Functions environment variables
+functions/.env
+
 # parcel-bundler cache (https://parceljs.org/)
 .cache
 
@@ -156,3 +159,5 @@ functions/lib/
 
 #metadata build artifacts
 functions/metadata/dist
+
+CLAUDE.md
