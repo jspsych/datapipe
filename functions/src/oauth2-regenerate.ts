@@ -4,7 +4,7 @@ import MESSAGES from "./api-messages.js";
 import { UserData } from "./interfaces.js";
 
 const clientId = process.env.NEXT_PUBLIC_CLIENT_ID as string;
-const clientSecret = process.env.NEXT_PUBLIC_CLIENT_SECRET as string;
+const clientSecret = process.env.CLIENT_SECRET as string; // Remove NEXT_PUBLIC_ prefix for security
 
 export const oauth2Regenerate = onRequest({ cors: true }, async (req, res) => {
 try {

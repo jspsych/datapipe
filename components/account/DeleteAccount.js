@@ -41,7 +41,7 @@ export default function DeleteAccount({ setDeleting }) {
 
   return (
     <HStack justifyContent="space-between" w="100%">
-      <Text fontSize={"lg"}>Delete Account</Text>
+      <Text fontSize={"lg"}>Delete DataPipe Account</Text>
       <Button isLoading={isSubmitting} onClick={onOpen} colorScheme="red">
         Delete Account
       </Button>

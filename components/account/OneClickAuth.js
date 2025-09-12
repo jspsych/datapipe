@@ -13,7 +13,7 @@ export default function OneClickAuth() {
     useEffect(() => {
         localStorage.setItem('latestCSRFToken', redirectState);
         console.log('OneClickAuth - CSRF Token set:', redirectState);
-    }, []);
+    }, [redirectState]);
 
     const { user } = useContext(UserContext);
 
@@ -22,6 +22,8 @@ export default function OneClickAuth() {
     );
 
     const handleAuthClick = () => {
+        localStorage.setItem('osfAuthFlow', 'linking'); // Mark this as linking flow for existing users
+        
         const clientId = process.env.NEXT_PUBLIC_CLIENT_ID;
         const redirectUri = process.env.NEXT_PUBLIC_REDIRECT_URI;
         const scope = "osf.full_write"
@@ -35,7 +37,7 @@ export default function OneClickAuth() {
                 <Text fontSize={"lg"}>One-Click Authentication</Text>
             </HStack>
             <Button colorScheme="blue" leftIcon={<OsfIcon />} onClick={handleAuthClick}>
-                Authenticate with OSF
+                Link OSF Account
             </Button>
         </HStack>
     );

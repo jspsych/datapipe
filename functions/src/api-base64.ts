@@ -100,7 +100,7 @@ export const apiBase64 = onRequest({ cors: true }, async (req, res) => {
       const params = new URLSearchParams({
         code: user_data.refreshToken,
         client_id: process.env.NEXT_PUBLIC_CLIENT_ID as string,
-        client_secret: process.env.NEXT_PUBLIC_CLIENT_SECRET as string,
+        client_secret: process.env.CLIENT_SECRET as string,
         grant_type: "refresh_token"
       })
 

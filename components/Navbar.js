@@ -110,7 +110,7 @@ export default function Navbar() {
                   New Experiment
                 </Button>
               </NextLink>
-              <Menu>
+              <Menu gutter={0}>
                 <MenuButton
                   as={Button}
                   colorScheme={"white"}
@@ -123,7 +123,7 @@ export default function Navbar() {
                 </MenuButton>
                 <MenuList bg="greyBackground">
                   <MenuItem bg="greyBackground">
-                    <NextLink href="/admin/account">Settings</NextLink>
+                    <Link as={NextLink} href="/admin/account">Settings</Link>
                   </MenuItem>
                   <MenuDivider />
                   <MenuItem bg="greyBackground" onClick={() => auth.signOut()}>
@@ -135,7 +135,7 @@ export default function Navbar() {
           )}
         </HStack>
         <HStack display={{ base: "flex", md: "none" }} spacing={8}>
-          <Menu>
+          <Menu gutter={0}>
             <MenuButton
               as={IconButton}
               colorScheme={"white"}
@@ -145,28 +145,28 @@ export default function Navbar() {
             ></MenuButton>
             <MenuList w="90vw" bg="greyBackground">
               <MenuItem bg="greyBackground">
-                <NextLink href="/getting-started">Getting Started</NextLink>
+                <Link as={NextLink} href="/getting-started">Getting Started</Link>
               </MenuItem>
               <MenuItem bg="greyBackground">
-                <NextLink href="/api-docs">API Docs</NextLink>
+                <Link as={NextLink} href="/api-docs">API Docs</Link>
               </MenuItem>
               <MenuItem bg="greyBackground">
-                <NextLink href="/faq">FAQ</NextLink>
+                <Link as={NextLink} href="/faq">FAQ</Link>
               </MenuItem>
               <MenuItem bg="greyBackground">
-                <NextLink href="/admin">My Experiments</NextLink>
+                <Link as={NextLink} href="/admin">My Experiments</Link>
               </MenuItem>
               <MenuItem bg="greyBackground">
-                <NextLink href="/admin/new">New Experiment</NextLink>
+                <Link as={NextLink} href="/admin/new">New Experiment</Link>
               </MenuItem>
               <MenuDivider />
               {!user && (
                 <>
                   <MenuItem bg="greyBackground">
-                    <NextLink href="/signup">Sign Up</NextLink>
+                    <Link as={NextLink} href="/signup">Sign Up</Link>
                   </MenuItem>
                   <MenuItem bg="greyBackground">
-                    <NextLink href="/signin">Sign In</NextLink>
+                    <Link as={NextLink} href="/signin">Sign In</Link>
                   </MenuItem>
                 </>
               )}
