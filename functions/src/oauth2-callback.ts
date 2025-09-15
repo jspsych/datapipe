@@ -26,7 +26,7 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
       return;
     }
 
-    const { code, uid, isSignup, state } = req.body;
+    const { code, uid, isSignup, state, osfEntryComponentId, osfEntryUserId } = req.body;
     
     // Clean up old processed codes
     cleanupProcessedCodes();
@@ -75,7 +75,6 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
 
     if (!tokenResponse.ok) {
       const errorData = await tokenResponse.text();
-      console.error('Token exchange failed:', errorData);
       res.status(400).json({ 
         error: 'Token exchange failed',
         details: errorData,
@@ -96,7 +95,6 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
 
     if (!profileResponse.ok) {
       const errorData = await profileResponse.text();
-      console.error('OSF profile fetch failed:', errorData);
       res.status(400).json({ 
         error: 'Failed to fetch OSF profile',
         details: errorData,
@@ -110,6 +108,14 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
     
     if (!osfUserId) {
       res.status(400).json({ error: 'Failed to get OSF user ID from profile' });
+      return;
+    }
+    
+    // For OSF entry flow, validate that the authenticated user matches the expected user
+    if (osfEntryUserId && osfUserId !== osfEntryUserId) {
+      res.status(400).json({ 
+        error: 'OSF user mismatch. The authenticated user does not match the expected user for this entry point.' 
+      });
       return;
     }
     
@@ -148,8 +154,6 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
           osfEmail = primaryEmail?.attributes?.email_address || `user-${osfUserId}@osf.io`;
         }
       }
-    } else {
-      console.warn('Failed to fetch detailed user info from OSF API, using fallbacks');
     }
 
     if (isSignup) {
@@ -284,7 +288,6 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
     }
 
   } catch (error) {
-    console.error('OAuth callback error:', error);
     res.status(500).json({ 
       error: 'Internal server error',
       message: error instanceof Error ? error.message : 'Unknown error'

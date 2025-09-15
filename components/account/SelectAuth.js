@@ -252,11 +252,11 @@ export default function SelectAuth() {
                                 >
                                     https://osf.io/settings/tokens/
                                 </Link>{" "}
-                                and click "Create Token".
+                                and click &quot;Create Token&quot;.
                             </Text>
                             <Text>
-                                Select osf.full_write under scopes and click "Create
-                                token". Copy the token and paste it below.
+                                Select osf.full_write under scopes and click &quot;Create
+                                token&quot;. Copy the token and paste it below.
                             </Text>
 
                             {data && (

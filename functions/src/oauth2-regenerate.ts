@@ -43,10 +43,10 @@ try {
     return;
   }
 
-  const code = user_data.refreshToken;
+  const refreshToken = user_data.refreshToken;
 
   const params = new URLSearchParams({
-    code,
+    refresh_token: refreshToken,
     client_id: clientId,
     client_secret: clientSecret,
     grant_type: 'refresh_token',

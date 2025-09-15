@@ -54,6 +54,11 @@ function useOAuthCallback() {
       return; // Wait for user context
     }
 
+    // For osf-entry flow, no need to wait for user context
+    if (authFlow === 'osf-entry') {
+      // Continue processing
+    }
+
     // Process OAuth callback directly in useEffect
     const processCallback = async () => {
       // Prevent duplicate processing
@@ -69,12 +74,17 @@ function useOAuthCallback() {
         const isSignup = authFlow === 'signup';
         const isSignin = authFlow === 'signin';
         const isLinking = authFlow === 'linking';
+        const isOsfEntry = authFlow === 'osf-entry';
 
         const requestBody = {
           code: urlCode,
           state: urlState,
-          isSignup: isSignup || isSignin,
-          ...(isLinking && { uid: user?.uid })
+          isSignup: isSignup || isSignin || isOsfEntry,
+          ...(isLinking && { uid: user?.uid }),
+          ...(isOsfEntry && { 
+            osfEntryComponentId: localStorage.getItem('osfEntryComponentId'),
+            osfEntryUserId: localStorage.getItem('osfEntryUserId')
+          })
         };
 
         const res = await fetch(process.env.NEXT_PUBLIC_OAUTH_CALLBACK, {
@@ -97,11 +107,18 @@ function useOAuthCallback() {
           
           // Clean up localStorage
           localStorage.removeItem('latestCSRFToken');
-          localStorage.removeItem('osfAuthFlow');
           
-          // Redirect immediately on success (industry standard)
-          const redirectPath = json.customToken ? '/admin' : (process.env.NEXT_PUBLIC_OAUTH_FINAL || '/admin');
-          router.push(redirectPath);
+          // Handle different auth flows
+          if (isOsfEntry) {
+            // For OSF entry, redirect back to osf-entry page
+            localStorage.removeItem('osfAuthFlow');
+            router.push('/osf-entry' + (typeof window !== 'undefined' ? window.location.search : ''));
+          } else {
+            localStorage.removeItem('osfAuthFlow');
+            // Redirect immediately on success
+            const redirectPath = json.customToken ? '/admin' : (process.env.NEXT_PUBLIC_OAUTH_FINAL || '/admin');
+            router.push(redirectPath);
+          }
         } else {
           throw new Error('OAuth authentication failed');
         }

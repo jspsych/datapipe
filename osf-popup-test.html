@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OSF DataPipe Integration Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            background: #f5f5f5;
+            padding: 30px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        button {
+            background: #0366d6;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 10px;
+        }
+        button:hover {
+            background: #0256cc;
+        }
+        .info {
+            background: #e1f5fe;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+            text-align: left;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            display: none;
+        }
+        .success {
+            background: #e8f5e8;
+            color: #2e7d32;
+        }
+        .error {
+            background: #ffebee;
+            color: #c62828;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>OSF DataPipe Integration Test</h1>
+        <p>This page simulates how OSF would link to DataPipe's experiment creation entry point.</p>
+        
+        <div class="info">
+            <h3>Test Parameters:</h3>
+            <ul>
+                <li><strong>OSF User ID:</strong> er6mg</li>
+                <li><strong>OSF Component ID:</strong> gt43x</li>
+                <li><strong>DataPipe URL:</strong> http://localhost:5000/osf-entry</li>
+            </ul>
+        </div>
+
+        <button onclick="openDataPipePopup()">
+            🚀 Create DataPipe Experiment (Popup)
+        </button>
+
+        <button onclick="openDataPipeTab()">
+            📝 Open in New Tab (for testing)
+        </button>
+
+        <div id="result" class="result">
+            <h4>Result:</h4>
+            <p id="resultText"></p>
+        </div>
+    </div>
+
+    <script>
+        let popup = null;
+
+        function openDataPipePopup() {
+            const osfUserId = 'er6mg';
+            const osfComponentId = 'gt43x';
+            const dataPipeUrl = `http://localhost:5000/osf-entry?osf_user_id=${osfUserId}&osf_component_id=${osfComponentId}`;
+            
+            // Close existing popup if open
+            if (popup && !popup.closed) {
+                popup.close();
+            }
+
+            // Open DataPipe in popup window
+            popup = window.open(
+                dataPipeUrl,
+                'dataPipeEntry',
+                'width=500,height=700,scrollbars=yes,resizable=yes,toolbar=no,menubar=no,location=no,status=no'
+            );
+
+            if (popup) {
+                showResult('Popup opened successfully! Complete the experiment creation in the popup window.', 'success');
+                
+                // Listen for messages from the popup
+                window.addEventListener('message', handleDataPipeMessage);
+                
+                // Check if popup is closed manually
+                const checkClosed = setInterval(() => {
+                    if (popup.closed) {
+                        clearInterval(checkClosed);
+                        showResult('Popup was closed manually.', 'error');
+                    }
+                }, 1000);
+            } else {
+                showResult('Failed to open popup. Please check popup blockers.', 'error');
+            }
+        }
+
+        function openDataPipeTab() {
+            const osfUserId = 'er6mg';
+            const osfComponentId = 'gt43x';
+            const dataPipeUrl = `http://localhost:5000/osf-entry?osf_user_id=${osfUserId}&osf_component_id=${osfComponentId}`;
+            
+            window.open(dataPipeUrl, '_blank');
+            showResult('Opened DataPipe in new tab for testing.', 'success');
+        }
+
+        function handleDataPipeMessage(event) {
+            // For security, you would normally check event.origin
+            // if (event.origin !== "http://localhost:5000") return;
+            
+            if (event.data.type === 'DATAPIPE_SUCCESS') {
+                showResult(`Success! Experiment created: "${event.data.title}" (ID: ${event.data.experimentId}). Choose an action in the popup.`, 'success');
+                
+            } else if (event.data.type === 'DATAPIPE_OPEN_EXPERIMENT') {
+                showResult(`Experiment opened in new tab: "${event.data.url}"`, 'success');
+                
+                // Close the popup since user opened experiment
+                if (popup && !popup.closed) {
+                    popup.close();
+                }
+                
+                // Remove event listener
+                window.removeEventListener('message', handleDataPipeMessage);
+                
+            } else if (event.data.type === 'DATAPIPE_ERROR') {
+                showResult(`Error: ${event.data.error}`, 'error');
+            }
+        }
+
+        function showResult(message, type) {
+            const resultDiv = document.getElementById('result');
+            const resultText = document.getElementById('resultText');
+            
+            resultDiv.className = `result ${type}`;
+            resultText.textContent = message;
+            resultDiv.style.display = 'block';
+        }
+
+        // Clean up on page unload
+        window.addEventListener('beforeunload', () => {
+            if (popup && !popup.closed) {
+                popup.close();
+            }
+        });
+    </script>
+</body>
+</html>
