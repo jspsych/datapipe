@@ -94,13 +94,16 @@ export default function SelectAuth() {
 
     const usingPersonalToken = data?.usingPersonalToken;
     const hasOAuthToken = data?.authToken && data?.refreshToken;
-    const hasPersonalToken = data?.osfToken && data?.osfTokenValid;
+    const hasPersonalToken = data?.osfToken;
+    const hasValidPersonalToken = data?.osfTokenValid;
 
     // Show status text
     const getStatusText = () => {
         if (usingPersonalToken) {
             return hasPersonalToken 
-                ? "Connected to OSF via personal access token"
+                ? hasValidPersonalToken
+                    ? "Connected to OSF via personal access token"
+                    : "Personal access token invalid - please update"
                 : "Not connected - personal access token required";
         } else {
             return hasOAuthToken 
@@ -110,7 +113,7 @@ export default function SelectAuth() {
     };
 
     const getStatusColor = () => {
-        const isConnected = usingPersonalToken ? hasPersonalToken : hasOAuthToken;
+        const isConnected = usingPersonalToken ? hasValidPersonalToken : hasOAuthToken;
         return isConnected ? "green.600" : "orange.600";
     };
 
@@ -146,11 +149,15 @@ export default function SelectAuth() {
                             </Link>
                             <IconButton
                                 icon={<QuestionIcon />}
+                                isRound={true}
                                 size="xs"
                                 variant="ghost"
                                 colorScheme="gray"
                                 onClick={onHelpOpen}
                                 aria-label="Help with authentication methods"
+                                _hover={{
+                                    bg: "gray",
+                                }}
                             />
                         </HStack>
                     </VStack>
@@ -177,11 +184,15 @@ export default function SelectAuth() {
                             </Link>
                             <IconButton
                                 icon={<QuestionIcon />}
+                                isRound={true}
                                 size="xs"
                                 variant="ghost"
                                 colorScheme="gray"
                                 onClick={onHelpOpen}
                                 aria-label="Help with authentication methods"
+                                _hover={{
+                                    bg: "gray",
+                                }}
                             />
                         </HStack>
                     </VStack>
@@ -191,7 +202,7 @@ export default function SelectAuth() {
             {/* Help Modal */}
             <Modal isOpen={isHelpOpen} onClose={onHelpClose} size="lg">
                 <ModalOverlay />
-                <ModalContent>
+                <ModalContent bg="blackAlpha.800">
                     <ModalHeader>OSF Authentication Methods</ModalHeader>
                     <ModalCloseButton />
                     <ModalBody>
@@ -204,10 +215,9 @@ export default function SelectAuth() {
                                 </Text>
                                 <Text fontSize="sm" fontWeight="medium">Benefits:</Text>
                                 <Text fontSize="sm" ml={4}>
-                                    • No need to copy/paste tokens<br/>
-                                    • Automatic token renewal<br/>
-                                    • More secure<br/>
-                                    • Easier to use
+                                    • Easier to use: no need to copy/paste tokens<br/>
+                                    • Automatic token renewal handled by DataPipe<br/>
+                                    • More secure
                                 </Text>
                             </VStack>
                             
