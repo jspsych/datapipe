@@ -8,22 +8,22 @@ import { auth, db } from "../lib/firebase";
 import {
   Card,
   CardBody,
-  CardHeader,
   Heading,
   Link as ChakraLink,
   Text,
   FormControl,
-  Stack,
   Input,
   FormLabel,
   Button,
   FormErrorMessage,
-  Alert,
-  AlertIcon,
   VStack,
   FormHelperText,
+  HStack,
+  Divider,
+  Box,
 } from "@chakra-ui/react";
 import { ERROR, getError } from "../lib/utils";
+import SignUpWithOSF from "../components/SignUpWithOSF";
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -42,6 +42,24 @@ export default function SignUpPage() {
     setIsSubmitting(true);
 
     try {
+      // Check if this email is already used by an OAuth user
+      const checkResponse = await fetch('/api/checkemailconflict', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email })
+      });
+
+      if (checkResponse.ok) {
+        const checkResult = await checkResponse.json();
+        if (checkResult.conflict) {
+          setErrorEmail("This email is already registered via OSF authentication. Please sign in with OSF instead.");
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         email,
@@ -54,6 +72,11 @@ export default function SignUpPage() {
         uid: user.uid,
         osfToken: "",
         osfTokenValid: false,
+        usingPersonalToken: true,
+        refreshToken: "",
+        refreshTokenExpires: 0,
+        authToken: "",
+        authTokenExpires: 0,
         experiments: [],
       });
 
@@ -71,13 +94,20 @@ export default function SignUpPage() {
   };
 
   return (
-    <VStack w={["100%", 660]} spacing={8}>
-      <Card w={360}>
-        <CardHeader>
-          <Heading size="lg">Sign Up</Heading>
-        </CardHeader>
-        <CardBody>
-          <Stack>
+    <Card w={400} mx="auto">
+      <CardBody p={8}>
+        <VStack spacing={6}>
+          <Heading size="lg" textAlign="center">Create Account</Heading>
+          
+          <SignUpWithOSF />
+
+          <HStack w="full">
+            <Divider />
+            <Text fontSize="sm" color="gray.500" px={3}>or</Text>
+            <Divider />
+          </HStack>
+
+          <VStack spacing={4} w="full">
             <FormControl id="email" isInvalid={errorEmail}>
               <FormLabel>Email</FormLabel>
               <Input
@@ -89,7 +119,8 @@ export default function SignUpPage() {
               />
               <FormErrorMessage>{errorEmail}</FormErrorMessage>
             </FormControl>
-            <FormControl id="password" pb={4} isInvalid={errorPassword}>
+            
+            <FormControl id="password" isInvalid={errorPassword}>
               <FormLabel>Password</FormLabel>
               <Input
                 type="password"
@@ -103,23 +134,26 @@ export default function SignUpPage() {
               </FormHelperText>
               <FormErrorMessage>{errorPassword}</FormErrorMessage>
             </FormControl>
-            <Text>&nbsp;</Text>
+
             <Button
-              colorScheme={"brandTeal"}
+              colorScheme="brandTeal"
               isLoading={isSubmitting}
               onClick={onSubmit}
+              w="full"
+              size="lg"
             >
               Create Account
             </Button>
-            <Text pt={4}>
+
+            <Text fontSize="sm" color="gray.600">
               Have an account?{" "}
-              <Link href="/signin" passHref>
-                <ChakraLink>Sign In!</ChakraLink>
-              </Link>
+              <ChakraLink as={Link} href="/signin" color="blue.500">
+                Sign In
+              </ChakraLink>
             </Text>
-          </Stack>
-        </CardBody>
-      </Card>
-    </VStack>
+          </VStack>
+        </VStack>
+      </CardBody>
+    </Card>
   );
 }

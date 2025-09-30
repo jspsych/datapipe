@@ -17,30 +17,35 @@ const newTheme = extendTheme(theme);
 function MyApp({ Component, pageProps }) {
   const [user, loading, error] = useAuthState(auth);
 
+  // Use the layout defined at the page level, if available
+  const getLayout = Component.getLayout || ((page) => (
+    <Box
+      minH="100vh"
+      display="flex"
+      flexDirection="column"
+      justifyContent="space-between"
+    >
+      <Navbar />
+      <Center
+        flexGrow={1}
+        flexShrink={0}
+        flexBasis="auto"
+        justifySelf="flex-start"
+      >
+        {page}
+      </Center>
+      <Footer />
+    </Box>
+  ));
+
   return (
     <ChakraProvider theme={newTheme}>
-      <UserContext.Provider value={{ user }}>
+      <UserContext.Provider value={{ user, loading }}>
         <Head>
           <title>DataPipe</title>
           <meta name="viewport" content="width=device-width, initial-scale=1" />
         </Head>
-        <Box
-          minH="100vh"
-          display="flex"
-          flexDirection="column"
-          justifyContent="space-between"
-        >
-          <Navbar />
-          <Center
-            flexGrow={1}
-            flexShrink={0}
-            flexBasis="auto"
-            justifySelf="flex-start"
-          >
-            <Component {...pageProps} />
-          </Center>
-          <Footer />
-        </Box>
+        {getLayout(<Component {...pageProps} />)}
       </UserContext.Provider>
     </ChakraProvider>
   );

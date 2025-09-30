@@ -22,6 +22,11 @@ export interface ExperimentData {
     osfToken: string;
     osfTokenValid: boolean;
     experiments: string[];
+    usingPersonalToken: boolean;
+    refreshToken: string;
+    refreshTokenExpires: number; 
+    authToken: string;
+    authTokenExpires: number;
   } 
   
   export interface RequestBody {

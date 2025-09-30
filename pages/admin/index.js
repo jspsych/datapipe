@@ -32,6 +32,9 @@ import {
   Text,
   Tooltip,
   Stack,
+  Center,
+  Card,
+  CardBody,
 } from "@chakra-ui/react";
 import {
   CheckIcon,
@@ -44,23 +47,6 @@ export default function AdminPage({}) {
   return (
     <AuthCheck>
       <VStack spacing={8} w={["100%", "960px"]}>
-        <Stack
-          justifyContent="space-between"
-          w="100%"
-          direction={["column", "row"]}
-        >
-          <Heading>Your Experiments</Heading>
-          <Link href="/admin/new">
-            <Button
-              variant={"solid"}
-              colorScheme={"brandTeal"}
-              size={"md"}
-              mr={4}
-            >
-              Create New Experiment
-            </Button>
-          </Link>
-        </Stack>
         <ExperimentList />
       </VStack>
     </AuthCheck>
@@ -73,8 +59,75 @@ function ExperimentList() {
   const q = query(experiments, where("owner", "==", user.uid));
   const [querySnapshot, loading] = useCollectionData(q);
 
+  if (loading) {
+    return (
+      <Center w="100%" py={8}>
+        <Spinner color="green.500" size={"xl"} />
+      </Center>
+    );
+  }
+
+  // Show empty state if no experiments
+  if (!querySnapshot || querySnapshot.length === 0) {
+    return (
+      <VStack spacing={8} w="100%">
+        <Stack
+          justifyContent="space-between"
+          w="100%"
+          direction={["column", "row"]}
+        >
+          <Heading>Your Experiments</Heading>
+        </Stack>
+        
+        <Center w="100%" py={12}>
+          <Card maxW="md" w="100%">
+            <CardBody>
+              <VStack spacing={6} textAlign="center">
+                <VStack spacing={3}>
+                  <Heading size="md">
+                    No experiments yet
+                  </Heading>
+                  
+                </VStack>
+                
+                <Link href="/admin/new">
+                  <Button
+                    colorScheme="brandTeal"
+                    size="lg"
+                    width="full"
+                  >
+                    Create Your First Experiment
+                  </Button>
+                </Link>
+              </VStack>
+            </CardBody>
+          </Card>
+        </Center>
+      </VStack>
+    );
+  }
+
+  // Show table if experiments exist
   return (
-    <>
+    <VStack spacing={8} w="100%">
+      <Stack
+        justifyContent="space-between"
+        w="100%"
+        direction={["column", "row"]}
+      >
+        <Heading>Your Experiments</Heading>
+        <Link href="/admin/new">
+          <Button
+            variant={"solid"}
+            colorScheme={"brandTeal"}
+            size={"md"}
+            mr={4}
+          >
+            Create New Experiment
+          </Button>
+        </Link>
+      </Stack>
+      
       <TableContainer w="100%">
         <Table size="md" w="100%">
           <Thead>
@@ -99,15 +152,13 @@ function ExperimentList() {
             </Tr>
           </Thead>
           <Tbody>
-            {querySnapshot &&
-              querySnapshot.map((exp) => (
-                <ExperimentItem key={exp.id} exp={exp} />
-              ))}
+            {querySnapshot.map((exp) => (
+              <ExperimentItem key={exp.id} exp={exp} />
+            ))}
           </Tbody>
         </Table>
       </TableContainer>
-      {loading && <Spinner color="green.500" size={"xl"} />}
-    </>
+    </VStack>
   );
 }
 

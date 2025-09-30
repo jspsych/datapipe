@@ -26,6 +26,18 @@
       {
         "source": "/api/base64",
         "function": "apibase64"
+      },
+      {
+        "source": "/api/oauth2callback",
+        "function": "oauth2callback"
+      },
+      {
+        "source": "/api/oauth2regenerate",
+        "function": "oauth2regenerate"
+      },
+      {
+        "source": "/api/checkemailconflict",
+        "function": "checkemailconflict"
       }
     ]
   },

@@ -2,15 +2,16 @@ import {
   Button,
   Card,
   CardBody,
-  CardHeader,
   Input,
   Text,
   Link,
-  Stack,
   Heading,
   FormControl,
   FormLabel,
   FormErrorMessage,
+  VStack,
+  HStack,
+  Divider,
 } from "@chakra-ui/react";
 import { auth } from "../lib/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
@@ -18,6 +19,7 @@ import { useState } from "react";
 import { useRouter } from "next/router";
 import NextLink from "next/link";
 import { ERROR, getError } from "../lib/utils";
+import SignInWithOSF from "./SignInWithOSF";
 
 export default function SignInForm({ routeAfterSignIn }) {
   const router = useRouter();
@@ -46,53 +48,68 @@ export default function SignInForm({ routeAfterSignIn }) {
   };
 
   return (
-    <Card w={360}>
-      <CardHeader>
-        <Heading size="lg">Sign In</Heading>
-      </CardHeader>
-      <CardBody>
-        <Stack>
-          <FormControl isInvalid={errorEmail}>
-            <FormLabel>Email</FormLabel>
-            <Input
-              type="email"
-              onChange={(e) => {
-                setEmail(e.target.value);
-                setErrorEmail("");
-              }}
-            />
-            <FormErrorMessage>{errorEmail}</FormErrorMessage>
-          </FormControl>
-          <FormControl pb={4} isInvalid={errorPassword}>
-            <FormLabel>Password</FormLabel>
-            <Input
-              type="password"
-              onChange={(e) => {
-                setPassword(e.target.value);
-                setErrorPassword("");
-              }}
-            />
-            <FormErrorMessage>{errorPassword}</FormErrorMessage>
-          </FormControl>
-          <Text>
-            <Link as={NextLink} href="/reset-password">
-              Forgot password?
-            </Link>
-          </Text>
-          <Button
-            colorScheme={"brandTeal"}
-            isLoading={isSubmitting}
-            onClick={onSubmit}
-          >
-            Sign In
-          </Button>
-          <Text pt={4}>
-            Need an account?{" "}
-            <Link as={NextLink} href="/signup">
-              Sign Up!
-            </Link>
-          </Text>
-        </Stack>
+    <Card w={400} mx="auto">
+      <CardBody p={8}>
+        <VStack spacing={6}>
+          <Heading size="lg" textAlign="center">Sign In</Heading>
+          
+          <SignInWithOSF />
+
+          <HStack w="full">
+            <Divider />
+            <Text fontSize="sm" color="gray.500" px={3}>or</Text>
+            <Divider />
+          </HStack>
+
+          <VStack spacing={4} w="full">
+            <FormControl isInvalid={errorEmail}>
+              <FormLabel>Email</FormLabel>
+              <Input
+                type="email"
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setErrorEmail("");
+                }}
+              />
+              <FormErrorMessage>{errorEmail}</FormErrorMessage>
+            </FormControl>
+            
+            <FormControl isInvalid={errorPassword}>
+              <FormLabel>Password</FormLabel>
+              <Input
+                type="password"
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setErrorPassword("");
+                }}
+              />
+              <FormErrorMessage>{errorPassword}</FormErrorMessage>
+            </FormControl>
+
+            <Button
+              colorScheme="brandTeal"
+              isLoading={isSubmitting}
+              onClick={onSubmit}
+              w="full"
+              size="lg"
+            >
+              Sign In
+            </Button>
+
+            <VStack spacing={2} w="full">
+              <Link as={NextLink} href="/reset-password" fontSize="sm" color="blue.500">
+                Forgot password?
+              </Link>
+              
+              <Text fontSize="sm" color="gray.600">
+                Need an account?{" "}
+                <Link as={NextLink} href="/signup" color="blue.500">
+                  Sign Up
+                </Link>
+              </Text>
+            </VStack>
+          </VStack>
+        </VStack>
       </CardBody>
     </Card>
   );

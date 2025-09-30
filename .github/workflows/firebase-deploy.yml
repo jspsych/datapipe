@@ -10,7 +10,13 @@ on:
 env:
   #FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
   NEXT_PUBLIC_FIREBASE_CONFIG: ${{ secrets.FIREBASE_PRODUCTION_CONFIG }}
-
+  NEXT_PUBLIC_CLIENT_ID: ${{ secrets.PROD_CLIENT_ID }}
+  CLIENT_SECRET: ${{ secrets.PROD_CLIENT_SECRET }}
+  NEXT_PUBLIC_REDIRECT_URI: ${{ secrets.PROD_REDIRECT_URI }}
+  NEXT_PUBLIC_OAUTH_CALLBACK: ${{ secrets.PROD_OAUTH_CALLBACK }}
+  NEXT_PUBLIC_OAUTH_FINAL: ${{ secrets.PROD_OAUTH_FINAL }}
+  NEXT_PUBLIC_OAUTH_REGENERATE: ${{ secrets.PROD_OAUTH_REGENERATE }}
+  # do we need to do this? or should we just put the links cause we probably don't need them to be secret or anything
 
 jobs:
   build:

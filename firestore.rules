@@ -2,14 +2,28 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /users/{userId} {
+      function isAccountCreation() {
+        return request.resource.data.keys().hasOnly(['email', 'experiments', 'osfToken', 'osfTokenValid', 'uid', 'usingPersonalToken', 'refreshToken', 'refreshTokenExpires', 'authToken', 'authTokenExpires', 'osfUserId', 'displayName', 'authMethod', 'createdAt']);
+      }
+      function isUpdateRefreshToken() {
+        return request.resource.data.keys().hasOnly(['refreshToken', 'refreshTokenExpires', 'authToken', 'authTokenExpires']);
+      }
+      function isUpdateAuthToken() {
+        return request.resource.data.keys().hasOnly(['authToken', 'authTokenExpires']);
+      }
+      function isTokenMethodUpdate() {
+        return request.resource.data.keys().hasOnly(['usingPersonalToken']);
+      }
+      function isExperimentsUpdate() {
+        return request.resource.data.keys().hasOnly(['experiments']);
+      }
       allow read: if(request.auth.uid == userId);
       allow write: if(request.auth.uid == userId) && 
-        request.resource.data.keys().hasOnly(['email', 'experiments', 'osfToken', 'osfTokenValid', 'uid']) &&
-        (request.resource.data.uid == userId);
+        (isAccountCreation() || isUpdateRefreshToken() || isUpdateAuthToken() || isTokenMethodUpdate() || isExperimentsUpdate());
     }
     match /experiments/{experimentId} {
-      function verifyFields(){
-        return request.resource.data.keys().hasOnly(['active', 'activeBase64', 'activeConditionAssignment', 'id', 'osfRepo', 'osfComponent', 'osfFilesLink', 'owner', 'title', 'sessions', 'nConditions', 'currentCondition', 'useValidation', 'allowJSON', 'allowCSV', 'requiredFields', 'maxSessions', 'limitSessions', 'metadata', 'metadataActive', 'incorrectMetadata'])
+      function verifyFields() {
+        return request.resource.data.keys().hasAll(['active', 'activeBase64', 'activeConditionAssignment', 'id', 'osfRepo', 'osfComponent', 'osfFilesLink', 'owner', 'title', 'sessions', 'nConditions', 'currentCondition', 'useValidation', 'allowJSON', 'allowCSV', 'requiredFields', 'maxSessions', 'limitSessions'])
       }
       allow read: if(request.auth.uid != null) &&
         resource.data.owner == request.auth.uid;
