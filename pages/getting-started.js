@@ -35,9 +35,9 @@ export default function GettingStarted() {
       </Heading>
       <Text>
         In order to link your OSF account to DataPipe, you need to authorize DataPipe 
-        to work with your OSF account. If you've created your account or sign into 
+        to work with your OSF account. If you&apos;ve created your account or sign into 
         DataPipe with your OSF account, then you have already authorized DataPipe to work
-        with the OSF. If not, you can authorize DataPipe by going to your account's settings,
+        with the OSF. If not, you can authorize DataPipe by going to your account&apos;s settings,
         clicking the Switch to one-click authentication if not already done, and then clicking 
         the Link OSF Account button. This will take you to the OSF website where you can 
         authorize DataPipe to work with your OSF account. After authorizing, you will be 
