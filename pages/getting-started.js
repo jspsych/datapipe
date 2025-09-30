@@ -2,10 +2,7 @@ import {
   Stack,
   Heading,
   Text,
-  Button,
   Link,
-  OrderedList,
-  ListItem,
 } from "@chakra-ui/react";
 
 export default function GettingStarted() {
@@ -37,9 +34,21 @@ export default function GettingStarted() {
         Link your OSF account to DataPipe
       </Heading>
       <Text>
-        In order for DataPipe to have permission to send files to your OSF
-        account, you need to create an authorization token on the OSF and add
-        the token to your DataPipe account. To create an authorization token, go
+        In order to link your OSF account to DataPipe, you need to authorize DataPipe 
+        to work with your OSF account. If you've created your account or sign into 
+        DataPipe with your OSF account, then you have already authorized DataPipe to work
+        with the OSF. If not, you can authorize DataPipe by going to your account's settings,
+        clicking the Switch to one-click authentication if not already done, and then clicking 
+        the Link OSF Account button. This will take you to the OSF website where you can 
+        authorize DataPipe to work with your OSF account. After authorizing, you will be 
+        redirected back to DataPipe.
+      </Text>
+      <Heading as="h3" size="md">
+        Create an OSF authorization token (Legacy)
+      </Heading>
+      <Text>
+        If you are not using one-click authorization, you will need to authenticate to
+        the OSF via a personal access token. To create a personal access token, go
         to your OSF account settings by clicking your name in the top right
         corner of the screen and selecting Settings. Then click the Personal
         Access Tokens tab. Click the Create Token button. Give the token a name
