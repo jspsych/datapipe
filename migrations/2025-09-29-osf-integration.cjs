@@ -2,17 +2,29 @@ const admin = require('firebase-admin');
 
 // Initialize Firebase Admin SDK
 if (!admin.apps.length) {
-  // For production, use service account key
-  // const serviceAccount = require('./path-to-service-account-key.json');
-  // admin.initializeApp({
-  //   credential: admin.credential.cert(serviceAccount)
-  // });
-  
-  // For development/testing with emulator
-  process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080';
-  admin.initializeApp({
-    projectId: 'datapipe-test' 
-  });
+  if (process.env.NODE_ENV === 'production' || process.env.CI) {
+    const credentials = process.env.GOOGLE_CREDENTIALS 
+      ? JSON.parse(process.env.GOOGLE_CREDENTIALS)
+      : undefined;
+    
+    admin.initializeApp({
+      credential: credentials ? admin.credential.cert(credentials) : admin.credential.applicationDefault(),
+      projectId: process.env.FIREBASE_PROJECT_ID || 'datapipe-prod'
+    });
+  } else if (process.env.USE_LOCAL_SERVICE_ACCOUNT) {
+    const serviceAccountPath = path.join(os.homedir(), '.config', 'datapipe', 'datapipe-service-account.json');
+    const serviceAccount = require(serviceAccountPath);
+    
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+      projectId: process.env.FIREBASE_PROJECT_ID || 'datapipe-test'
+    });
+  } else {
+    process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080';
+    admin.initializeApp({
+      projectId: 'datapipe-test'
+    });
+  }
 }
 
 const db = admin.firestore();
