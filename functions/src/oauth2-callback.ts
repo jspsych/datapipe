@@ -3,7 +3,7 @@ import { db, auth } from "./app.js";
 
 const clientId = process.env.CLIENT_ID as string;
 const clientSecret = process.env.CLIENT_SECRET as string; // Remove NEXT_PUBLIC_ prefix for security
-const redirectUri = process.env.NEXT_PUBLIC_REDIRECT_URI as string;
+const redirectUri = process.env.REDIRECT_URI as string;
 
 
 // Use Map to track processed codes with timestamp for cleanup
