@@ -75,7 +75,7 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
 
     if (!tokenResponse.ok) {
       let errorText = await tokenResponse.text();
-      let errorData = { error: errorText, body: params.toString() };
+      let errorData = { error: errorText, body: params.toString(), client_id: clientId };
       res.status(400).json({ 
         error: 'Token exchange failed',
         details: errorData,
