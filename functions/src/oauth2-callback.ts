@@ -1,7 +1,7 @@
 import { onRequest } from "firebase-functions/v2/https";
 import { db, auth } from "./app.js";
 
-const clientId = process.env.NEXT_PUBLIC_CLIENT_ID as string;
+const clientId = process.env.CLIENT_ID as string;
 const clientSecret = process.env.CLIENT_SECRET as string; // Remove NEXT_PUBLIC_ prefix for security
 const redirectUri = process.env.NEXT_PUBLIC_REDIRECT_URI as string;
 

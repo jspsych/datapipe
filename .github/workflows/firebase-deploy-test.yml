@@ -50,7 +50,7 @@ jobs:
       - name: Create functions environment file
         working-directory: functions
         run: |
-          echo "CLIENT_SECRET=${{ secrets.TEST_CLIENT_SECRET }}" > .env
+          echo "CLIENT_SECRET=${{ secrets.TEST_CLIENT_SECRET }}\nCLIENT_ID=${{ secrets.TEST_CLIENT_ID }}" > .env
       - name: Install dependencies and build functions
         working-directory: functions
         run: |
