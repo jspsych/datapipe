@@ -5,6 +5,13 @@ const clientId = process.env.CLIENT_ID as string;
 const clientSecret = process.env.CLIENT_SECRET as string; // Remove NEXT_PUBLIC_ prefix for security
 const redirectUri = process.env.REDIRECT_URI as string;
 
+console.log('Environment check:', {
+  hasClientId: !!clientId,
+  hasClientSecret: !!clientSecret,
+  hasRedirectUri: !!redirectUri,
+  clientIdValue: clientId,
+  redirectUriValue: redirectUri
+});
 
 // Use Map to track processed codes with timestamp for cleanup
 const processedCodes = new Map(); 
@@ -289,7 +296,9 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
     }
 
   } catch (error) {
-    res.status(500).json({ 
+    console.error('OAuth callback error:', error);
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    res.status(500).json({
       error: 'Internal server error',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
