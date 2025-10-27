@@ -1,0 +1,50 @@
+name: Run Migration
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to migrate'
+        required: true
+        default: 'test'
+        type: choice
+        options:
+        - test
+        - prod
+      migration_name:
+        description: 'Migration file name'
+        required: true
+        default: '2025-09-29-osf-integration.cjs'
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Use Node.js 20.x
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20.x
+          cache: "npm"
+          
+      - name: Set credentials based on environment
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: ${{ github.event.inputs.environment == 'prod' && secrets.GOOGLE_PRODUCTION_CREDENTIALS || secrets.GOOGLE_TEST_CREDENTIALS }}
+          
+      - name: Set environment variables
+        run: |
+          if [ "${{ github.event.inputs.environment }}" == "prod" ]; then
+            echo "FIREBASE_PROJECT_ID=datapipe-prod" >> $GITHUB_ENV
+          else
+            echo "FIREBASE_PROJECT_ID=datapipe-test" >> $GITHUB_ENV
+          fi
+          echo "NODE_ENV=production" >> $GITHUB_ENV
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Run migration
+        run: node migrations/${{ github.event.inputs.migration_name }}
