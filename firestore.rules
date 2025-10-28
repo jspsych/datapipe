@@ -4,12 +4,12 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if(request.auth.uid == userId);
       allow write: if(request.auth.uid == userId) && 
-        request.resource.data.keys().hasOnly(['email', 'experiments', 'osfToken', 'osfTokenValid', 'uid']) &&
+        request.resource.data.keys().hasOnly(['email', 'experiments', 'uid']) &&
         (request.resource.data.uid == userId);
     }
     match /experiments/{experimentId} {
       function verifyFields(){
-        return request.resource.data.keys().hasOnly(['active', 'activeBase64', 'activeConditionAssignment', 'id', 'osfRepo', 'osfComponent', 'osfFilesLink', 'owner', 'title', 'sessions', 'nConditions', 'currentCondition', 'useValidation', 'allowJSON', 'allowCSV', 'requiredFields', 'maxSessions', 'limitSessions'])
+        return request.resource.data.keys().hasOnly(['active', 'activeBase64', 'activeConditionAssignment', 'id', 'owner', 'title', 'sessions', 'nConditions', 'currentCondition', 'useValidation', 'allowJSON', 'allowCSV', 'requiredFields', 'maxSessions', 'limitSessions'])
       }
       allow read: if(request.auth.uid != null) &&
         resource.data.owner == request.auth.uid;

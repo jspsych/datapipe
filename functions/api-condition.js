@@ -4,6 +4,7 @@ import writeLog from "./write-log.js";
 import MESSAGES from "./api-messages.js";
 
 export const apiCondition = onRequest({ cors: true }, async (req, res) => {
+
   const { experimentID } = req.body;
 
   if (!experimentID) {

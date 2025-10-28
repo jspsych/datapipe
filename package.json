@@ -2,14 +2,15 @@
   "name": "osf-fire-relay",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "export": "next export",
-    "test": "jest --watch",
-    "test-ci": "jest --ci",
+    "test": "node --experimental-vm-modules node_modules/.bin/jest --watch",
+    "test-ci": "node --experimental-vm-modules node_modules/.bin/jest --ci",
     "emulators": "firebase emulators:start --import=./.emulator-data --export-on-exit"
   },
   "dependencies": {
@@ -29,9 +30,12 @@
     "react-icons": "^4.6.0"
   },
   "devDependencies": {
+    "@babel/preset-env": "^7.28.3",
+    "@babel/preset-react": "^7.27.1",
     "@firebase/rules-unit-testing": "^2.0.4",
     "@testing-library/jest-dom": "^5.16.5",
     "@testing-library/react": "^13.4.0",
+    "babel-jest": "^30.0.5",
     "eslint": "8.25.0",
     "eslint-config-next": "^13.0.6",
     "eslint-config-prettier": "^8.5.0",
