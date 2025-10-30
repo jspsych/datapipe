@@ -62,7 +62,9 @@ export default function OAuthTokenStatus() {
 
 
   // Construct OSF profile URL from user ID
-  const osfProfileUrl = data.osfUserId ? `https://osf.io/${data.osfUserId}/` : 'https://osf.io/';
+  const osfProfileUrl = data.osfUserId ? 
+    `https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/${data.osfUserId}/` : 
+    `https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/`;
 
   return (
     <VStack spacing={4} w="100%" align="stretch">

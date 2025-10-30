@@ -104,7 +104,7 @@ export const apiBase64 = onRequest({ cors: true }, async (req, res) => {
         grant_type: "refresh_token"
       })
 
-      const tokenResponse = await fetch('https://accounts.osf.io/oauth2/token', {
+      const tokenResponse = await fetch(`https://accounts.${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/oauth2/token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',

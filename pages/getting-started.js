@@ -23,7 +23,7 @@ export default function GettingStarted() {
       <Text>
         The first step is to create an OSF project for your experiment. You can
         create an OSF project at{" "}
-        <Link isExternal href="https://osf.io">
+        <Link isExternal href={`https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io`}>
           https://osf.io
         </Link>
         . You will need to create an account if you do not already have one.
