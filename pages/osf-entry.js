@@ -15,14 +15,16 @@ function useOSFEntry() {
   const { user, loading: userLoading } = useContext(UserContext);
   const searchParams = useSearchParams();
   const [state, setState] = useState({
-    status: 'loading', // 'loading' | 'ready' | 'authenticating' | 'creating' | 'success' | 'error'
+    // regular: 'loading' | 'ready' | 'authenticating' | 'creating' | 'success' | 'error'
+    // link:    'link-ready' | 'link-error' | 'link-success' | 'link-already-done'
+    status: 'loading', 
     error: null,
     projectInfo: null
   });
   const processingRef = useRef(false);
 
-  const osfUserId = searchParams?.get('osf_user_id');
-  const osfComponentId = searchParams?.get('osf_component_id');
+  const osfUserId = searchParams?.get('userIri');
+  const osfComponentId = searchParams?.get('nodeIri');
 
   // Load full user data from Firestore
   const [userData, userDataLoading] = useDocumentData(
@@ -30,18 +32,41 @@ function useOSFEntry() {
   );
 
   useEffect(() => {
+    console.log('OSF Entry Params:', { osfUserId, osfComponentId });
     if (userLoading || userDataLoading) return;
 
     // Validate required parameters
-    if (!osfUserId || !osfComponentId) {
+    if (!osfUserId) {
       setState({
         status: 'error',
-        error: 'Missing required parameters. This page must be accessed with valid OSF user and component IDs.',
+        error: 'Missing required parameters. This page must be accessed with a valid OSF user.',
         projectInfo: null
       });
       return;
     }
 
+    // not using nodeIri -> accessing through OSF settings so just set up account w/ osf
+    if (!osfComponentId) {
+      // user already auth, linked to correct OSF, so nothing needs to be done
+      if (user?.uid && userData?.osfUserId === osfUserId) {
+        setState(prev => ({ ...prev, status: 'link-already-done' }));
+        return;
+      }
+
+      // user auth but linked to different OSF, show error
+      if (user?.uid && userData?.osfUserId && userData?.osfUserId !== osfUserId) {
+        setState({
+          status: 'link-error',
+          error: `You are signed in with OSF account ${userData.osfUserId}, but this link is for ${osfUserId}. Please sign out and try again.`,
+          projectInfo: null
+        });
+        return;
+      }
+
+      // user needs to authenticate (no user, or user without OSF linked)
+      setState(prev => ({ ...prev, status: 'link-ready' }));
+      return;
+    }
 
     // If user is already authenticated and has the correct OSF linked, proceed to experiment creation
     if (user?.uid && userData?.osfUserId === osfUserId) {
@@ -79,7 +104,7 @@ function useOSFEntry() {
     localStorage.setItem('latestCSRFToken', state);
     
     const clientId = process.env.NEXT_PUBLIC_CLIENT_ID;
-    const redirectUri = "https://pipe.jspsych.org/login";
+    const redirectUri = process.env.NEXT_PUBLIC_REDIRECT_URI;
     const scope = "osf.full_write";
     const url = `https://accounts.osf.io/oauth2/authorize?response_type=code&client_id=${clientId}&redirect_uri=${redirectUri}&state=${state}&scope=${scope}&access_type=offline`;
     
@@ -358,6 +383,70 @@ function OSFEntryPage() {
                 You can safely close this window and try again from OSF.
               </Text>
             </VStack>
+          </VStack>
+        );
+
+      case 'link-ready':
+        return (
+          <VStack spacing={6}>
+            <Heading size="lg" textAlign="center">
+              Link Your OSF Account
+            </Heading>
+            <Text textAlign="center" color="gray.300">
+              To proceed, please link your OSF account to DataPipe.
+            </Text>
+            <Button 
+              colorScheme="brandTeal"
+              onClick={handleAuthenticate}
+              size="lg"
+              w="full"
+            >
+              Sign in with OSF
+            </Button>
+          </VStack>
+        );
+        
+      case 'link-already-done':
+        return (
+          <VStack spacing={6}>
+            <Alert status="success" borderRadius="md" bg="green.800" borderColor="green.600" borderWidth={1}>
+              <AlertIcon color="green.300" />
+              <VStack spacing={2} align="start">
+                <Text fontWeight="medium" color="white">Your OSF account is already linked!</Text>
+                <Text fontSize="sm" color="gray.100">
+                  You can now close this window and return to the OSF.
+                </Text>
+              </VStack>
+            </Alert>
+            <Button 
+              colorScheme="blue"
+              variant="outline"
+              onClick={() => window.close()}
+              size="md"
+            >
+              Close Window
+            </Button>
+          </VStack>
+        );
+        
+      case 'link-error':
+        return (
+          <VStack spacing={6}>
+            <Alert status="error" borderRadius="md">
+              <AlertIcon />
+              <VStack spacing={2} align="start">
+                <Text fontWeight="medium">Linking Error</Text>
+                <Text fontSize="sm">{state.error}</Text>
+              </VStack>
+            </Alert>
+            <Button
+              colorScheme="blue"
+              variant="outline"
+              onClick={() => window.close()}
+              size="md"
+            >
+              Close Window
+            </Button>
           </VStack>
         );
 

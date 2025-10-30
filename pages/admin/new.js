@@ -60,7 +60,7 @@ function NewExperimentForm() {
             <FormLabel>Existing OSF Project</FormLabel>
             <InputGroup>
               <InputLeftAddon bgColor={"greyBackground"}>
-                https://osf.io/
+                {`https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/`}
               </InputLeftAddon>
               <Input type="text" />
             </InputGroup>

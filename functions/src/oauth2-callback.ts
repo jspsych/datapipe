@@ -72,7 +72,7 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
 
 
     // Exchange authorization code for access token
-    const tokenResponse = await fetch('https://accounts.osf.io/oauth2/token', {
+    const tokenResponse = await fetch(`https://accounts.${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/oauth2/token`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -94,7 +94,7 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
     const tokenData = await tokenResponse.json();
 
     // Fetch user profile from OSF OAuth endpoint
-    const profileResponse = await fetch('https://accounts.osf.io/oauth2/profile', {
+    const profileResponse = await fetch(`https://accounts.${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/oauth2/profile`, {
       headers: {
         'Authorization': `Bearer ${tokenData.access_token}`,
         'Accept': 'application/json'
@@ -128,7 +128,7 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
     }
     
     // OAuth profile doesn't include email, so we'll use the full API
-    const userApiResponse = await fetch(`https://api.osf.io/v2/users/${osfUserId}/`, {
+    const userApiResponse = await fetch(`https://api.${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/v2/users/${osfUserId}/`, {
       headers: {
         'Authorization': `Bearer ${tokenData.access_token}`,
         'Accept': 'application/vnd.api+json'
@@ -146,7 +146,7 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
                    'OSF User';
 
       // Try to fetch email from the emails endpoint
-      const emailsResponse = await fetch(`https://api.osf.io/v2/users/${osfUserId}/settings/emails/`, {
+      const emailsResponse = await fetch(`https://api.${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/v2/users/${osfUserId}/settings/emails/`, {
         headers: {
           'Authorization': `Bearer ${tokenData.access_token}`,
           'Accept': 'application/vnd.api+json'

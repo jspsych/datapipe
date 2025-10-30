@@ -56,7 +56,8 @@ export default function SelectAuth() {
         const clientId = process.env.NEXT_PUBLIC_CLIENT_ID;
         const redirectUri = process.env.NEXT_PUBLIC_REDIRECT_URI;
         const scope = "osf.full_write"
-        const url = `https://accounts.osf.io/oauth2/authorize?response_type=code&client_id=${clientId}&redirect_uri=${redirectUri}&state=${redirectState}&scope=${scope}&access_type=offline&approval_prompt=force`;
+        const base_url = `https://accounts.${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/oauth2/authorize`;
+        const url = `${base_url}?response_type=code&client_id=${clientId}&redirect_uri=${redirectUri}&state=${redirectState}&scope=${scope}&access_type=offline&approval_prompt=force`;
         window.location.href = url;
     }
 
@@ -80,7 +81,7 @@ export default function SelectAuth() {
     }
 
     const checkOSFToken = async (token) => {
-        const response = await fetch("https://api.osf.io/v2/", {
+        const response = await fetch(`https://api.${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/v2/`, {
             method: "GET",
             headers: {
                 Authorization: `Bearer ${token}`,
@@ -257,7 +258,7 @@ export default function SelectAuth() {
                                 To generate an OSF token, go to{" "}
                                 <Link
                                     color="brandOrange.100"
-                                    href="https://osf.io/settings/tokens/"
+                                    href={`https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/settings/tokens/`}
                                     isExternal
                                 >
                                     https://osf.io/settings/tokens/
