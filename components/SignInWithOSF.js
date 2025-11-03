@@ -24,8 +24,9 @@ export default function SignInWithOSF() {
       const clientId = process.env.NEXT_PUBLIC_CLIENT_ID;
       const redirectUri = process.env.NEXT_PUBLIC_REDIRECT_URI;
       const scope = "osf.full_write";
-      const url = `https://accounts.osf.io/oauth2/authorize?response_type=code&client_id=${clientId}&redirect_uri=${redirectUri}&state=${state}&scope=${scope}&access_type=offline&approval_prompt=force`;
-      
+      const base_url = `https://accounts.${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/oauth2/authorize`;
+      const url = `${base_url}?response_type=code&client_id=${clientId}&redirect_uri=${redirectUri}&state=${state}&scope=${scope}&access_type=offline&approval_prompt=force`;
+
       window.location.href = url;
     } catch (err) {
       console.error('OSF signin error:', err);

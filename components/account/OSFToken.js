@@ -64,7 +64,7 @@ export default function OSFToken() {
                 To generate an OSF token, go to{" "}
                 <Link
                   color="brandOrange.100"
-                  href="https://osf.io/settings/tokens/"
+                  href={`https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/settings/tokens/`}
                   isExternal
                 >
                   https://osf.io/settings/tokens/
@@ -126,7 +126,7 @@ async function handleSaveButton(setIsSubmitting, closeHandler) {
 }
 
 async function checkOSFToken(token) {
-  const data = await fetch("https://api.osf.io/v2/", {
+  const data = await fetch(`https://api.${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/v2/`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,

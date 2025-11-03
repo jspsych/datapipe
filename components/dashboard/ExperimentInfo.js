@@ -19,18 +19,18 @@ export default function ExperimentInfo({ data }) {
       </HStack>
       <HStack justify="space-between">
         <Text>OSF Project</Text>
-        <Link color="white" href={`https://osf.io/${data.osfRepo}`} isExternal>
-          {`https://osf.io/${data.osfRepo}`} <ExternalLinkIcon mx="2px" />
+        <Link color="white" href={`https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/${data.osfRepo}`} isExternal>
+          {`https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/${data.osfRepo}`} <ExternalLinkIcon mx="2px" />
         </Link>
       </HStack>
       <HStack justify="space-between">
         <Text>OSF Data Component</Text>
         <Link
           color="white"
-          href={`https://osf.io/${data.osfComponent}`}
+          href={`https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/${data.osfComponent}`}
           isExternal
         >
-          {`https://osf.io/${data.osfComponent}`} <ExternalLinkIcon mx="2px" />
+          {`https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/${data.osfComponent}`} <ExternalLinkIcon mx="2px" />
         </Link>
       </HStack>
       <HStack justify="space-between">

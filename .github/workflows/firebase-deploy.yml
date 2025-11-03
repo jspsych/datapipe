@@ -16,7 +16,7 @@ env:
   NEXT_PUBLIC_OAUTH_CALLBACK: ${{ secrets.PROD_OAUTH_CALLBACK }}
   NEXT_PUBLIC_OAUTH_FINAL: ${{ secrets.PROD_OAUTH_FINAL }}
   NEXT_PUBLIC_OAUTH_REGENERATE: ${{ secrets.PROD_OAUTH_REGENERATE }}
-  # do we need to do this? or should we just put the links cause we probably don't need them to be secret or anything
+  NEXT_PUBLIC_OSF_ENV: ${{ secrets.PROD_OSF_ENV }}
 
 jobs:
   build:
