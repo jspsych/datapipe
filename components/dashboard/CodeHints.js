@@ -178,7 +178,7 @@ export default function CodeHints({ expId }) {
                   Use the static method of the pipe plugin to request the
                   condition. This is an asynchronous request so we need to wait
                   for the response before using the condition value. An easy
-                  wait to do this is to put your experiment creation code inside
+                  way to do this is to put your experiment creation code inside
                   an async function.
                 </Text>
                 <CodeBlock>
