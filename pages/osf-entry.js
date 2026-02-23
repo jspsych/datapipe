@@ -341,11 +341,11 @@ function OSFEntryPage() {
       case 'error':
         return (
           <VStack spacing={6}>
-            <Alert status="error" borderRadius="md">
-              <AlertIcon />
+            <Alert status="error" borderRadius="md" bg="red.800" borderColor="red.600" borderWidth={1}>
+              <AlertIcon color="red.300" />
               <VStack spacing={2} align="start">
-                <Text fontWeight="medium">Error</Text>
-                <Text fontSize="sm">{state.error}</Text>
+                <Text fontWeight="medium" color="white">Error</Text>
+                <Text fontSize="sm" color="gray.100">{state.error}</Text>
               </VStack>
             </Alert>
             
@@ -407,11 +407,11 @@ function OSFEntryPage() {
       case 'link-error':
         return (
           <VStack spacing={6}>
-            <Alert status="error" borderRadius="md">
-              <AlertIcon />
+            <Alert status="error" borderRadius="md" bg="red.800" borderColor="red.600" borderWidth={1}>
+              <AlertIcon color="red.300" />
               <VStack spacing={2} align="start">
-                <Text fontWeight="medium">Linking Error</Text>
-                <Text fontSize="sm">{state.error}</Text>
+                <Text fontWeight="medium" color="white">Linking Error</Text>
+                <Text fontSize="sm" color="gray.100">{state.error}</Text>
               </VStack>
             </Alert>
             <Text fontSize="sm" color="gray.400" textAlign="center">
