@@ -149,7 +149,7 @@ function useOSFEntry() {
         title: experimentTitle,
         osfRepo: osfComponentId,
         osfComponentName: dataComponentName,
-        region: 'us',
+        region: componentInfo.region,
         uid: userData.uid,
         nConditions: 1,
         useValidation: true,
