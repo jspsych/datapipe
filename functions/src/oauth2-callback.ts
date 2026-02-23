@@ -120,7 +120,9 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
     }
     
     // For OSF entry flow, validate that the authenticated user matches the expected user
-    if (osfEntryUserId && osfUserId !== osfEntryUserId) {
+    // Clean the entry user ID in case it's a full IRI (e.g., https://osf.io/er6mg)
+    const cleanedEntryUserId = osfEntryUserId?.replace(/^https:\/\/osf\.io\//, '').replace(/\/$/, '');
+    if (cleanedEntryUserId && osfUserId !== cleanedEntryUserId) {
       res.status(400).json({ 
         error: 'OSF user mismatch. The authenticated user does not match the expected user for this entry point.' 
       });

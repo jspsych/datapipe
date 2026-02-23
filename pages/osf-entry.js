@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { useEffect, useContext, useState, useRef } from "react";
 import { UserContext } from "../lib/context";
 import { createExperiment, getUserOsfToken } from "../lib/experiment-creation";
-import { validateOsfAccess, getOsfComponentInfo, generateOsfComponentName } from "../lib/osf-utils";
+import { validateOsfAccess, getOsfComponentInfo, generateOsfComponentName, cleanOsfUrl } from "../lib/osf-utils";
 import { useDocumentData } from "react-firebase-hooks/firestore";
 import { doc } from "firebase/firestore";
 import { db } from "../lib/firebase";
@@ -23,8 +23,8 @@ function useOSFEntry() {
   });
   const processingRef = useRef(false);
 
-  const osfUserId = searchParams?.get('userIri');
-  const osfComponentId = searchParams?.get('nodeIri');
+  const osfUserId = cleanOsfUrl(searchParams?.get('userIri'));
+  const osfComponentId = cleanOsfUrl(searchParams?.get('nodeIri'));
 
   // Load full user data from Firestore
   const [userData, userDataLoading] = useDocumentData(
