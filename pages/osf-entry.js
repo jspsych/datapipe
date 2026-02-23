@@ -321,29 +321,17 @@ function OSFEntryPage() {
                 Your DataPipe experiment is now ready to collect data.
               </Text>
               <VStack spacing={2} w="full">
-                <Button 
+                <Button
                   colorScheme="brandTeal"
-                  size="md" 
+                  size="md"
                   w="full"
                   onClick={() => {
                     const baseUrl = process.env.NODE_ENV === 'production' ? 'https://pipe.jspsych.org' : 'http://localhost:5000';
                     const experimentUrl = `${baseUrl}/admin/${state.projectInfo.experimentId}`;
-                    // Add small delay to ensure experiment is fully created before opening
-                    setTimeout(() => {
-                      window.open(experimentUrl, '_blank');
-                      window.close();
-                    }, 500);
+                    window.location.href = experimentUrl;
                   }}
                 >
                   Open Experiment in DataPipe
-                </Button>
-                <Button 
-                  variant="outline"
-                  size="md"
-                  w="full"
-                  onClick={() => window.close()}
-                >
-                  Close
                 </Button>
               </VStack>
             </VStack>
@@ -371,16 +359,8 @@ function OSFEntryPage() {
                   Re-authenticate with OSF
                 </Button>
               ) : null}
-              <Button 
-                colorScheme="blue" 
-                variant="outline"
-                onClick={() => window.close()}
-                size="sm"
-              >
-                Close Window
-              </Button>
               <Text fontSize="xs" color="gray.400" textAlign="center">
-                You can safely close this window and try again from OSF.
+                You can safely close this tab and try again from OSF.
               </Text>
             </VStack>
           </VStack>
@@ -418,17 +398,12 @@ function OSFEntryPage() {
                 </Text>
               </VStack>
             </Alert>
-            <Button 
-              colorScheme="blue"
-              variant="outline"
-              onClick={() => window.close()}
-              size="md"
-            >
-              Close Window
-            </Button>
+            <Text fontSize="sm" color="gray.400" textAlign="center">
+              You can safely close this tab and return to OSF.
+            </Text>
           </VStack>
         );
-        
+
       case 'link-error':
         return (
           <VStack spacing={6}>
@@ -439,14 +414,9 @@ function OSFEntryPage() {
                 <Text fontSize="sm">{state.error}</Text>
               </VStack>
             </Alert>
-            <Button
-              colorScheme="blue"
-              variant="outline"
-              onClick={() => window.close()}
-              size="md"
-            >
-              Close Window
-            </Button>
+            <Text fontSize="sm" color="gray.400" textAlign="center">
+              You can safely close this tab and try again from OSF.
+            </Text>
           </VStack>
         );
 
