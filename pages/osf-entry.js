@@ -412,7 +412,7 @@ function OSFEntryPage() {
             <Alert status="success" borderRadius="md" bg="green.800" borderColor="green.600" borderWidth={1}>
               <AlertIcon color="green.300" />
               <VStack spacing={2} align="start">
-                <Text fontWeight="medium" color="white">Your OSF account is already linked!</Text>
+                <Text fontWeight="medium" color="white">Your OSF account is linked!</Text>
                 <Text fontSize="sm" color="gray.100">
                   You can now close this window and return to the OSF.
                 </Text>
