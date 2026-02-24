@@ -87,27 +87,37 @@ function useOSFEntry() {
     setState(prev => ({ ...prev, status: 'ready' }));
   }, [user, userLoading, userData, userDataLoading, osfUserId, osfComponentId]);
 
-  const handleAuthenticate = () => {
+  const handleAuthenticate = async () => {
     if (processingRef.current) return;
     processingRef.current = true;
 
     setState(prev => ({ ...prev, status: 'authenticating' }));
-    
-    // Store the OSF entry context for OAuth callback
-    localStorage.setItem('osfAuthFlow', 'osf-entry');
-    localStorage.setItem('osfEntryComponentId', osfComponentId);
-    localStorage.setItem('osfEntryUserId', osfUserId);
-    
-    // Generate CSRF state
-    const state = crypto.randomUUID();
-    localStorage.setItem('latestCSRFToken', state);
-    
-    const clientId = process.env.NEXT_PUBLIC_CLIENT_ID;
-    const redirectUri = process.env.NEXT_PUBLIC_REDIRECT_URI;
-    const scope = "osf.full_write";
-    const url = `https://accounts.osf.io/oauth2/authorize?response_type=code&client_id=${clientId}&redirect_uri=${redirectUri}&state=${state}&scope=${scope}&access_type=offline`;
-    
-    window.location.href = url;
+
+    try {
+      const stateRes = await fetch(process.env.NEXT_PUBLIC_GENERATE_STATE, { method: 'POST' });
+      if (!stateRes.ok) throw new Error('Failed to generate state');
+      const { state } = await stateRes.json();
+
+      // Store the OSF entry context for OAuth callback
+      localStorage.setItem('osfAuthFlow', 'osf-entry');
+      localStorage.setItem('osfEntryComponentId', osfComponentId);
+      localStorage.setItem('osfEntryUserId', osfUserId);
+      localStorage.setItem('latestCSRFToken', state);
+
+      const clientId = process.env.NEXT_PUBLIC_CLIENT_ID;
+      const redirectUri = process.env.NEXT_PUBLIC_REDIRECT_URI;
+      const scope = "osf.full_write";
+      const url = `https://accounts.osf.io/oauth2/authorize?response_type=code&client_id=${clientId}&redirect_uri=${redirectUri}&state=${state}&scope=${scope}&access_type=offline`;
+
+      window.location.href = url;
+    } catch (err) {
+      setState(prev => ({
+        ...prev,
+        status: 'error',
+        error: 'Failed to initiate authentication. Please try again.'
+      }));
+      processingRef.current = false;
+    }
   };
 
   const handleCreateExperiment = async () => {

@@ -48,6 +48,21 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
       return;
     }
 
+    // Server-side CSRF validation: verify the state was issued by our server
+    const stateDoc = await db.collection('oauth_states').doc(state).get();
+    if (!stateDoc.exists) {
+      res.status(400).json({ error: 'Invalid state parameter' });
+      return;
+    }
+    const stateData = stateDoc.data();
+    if (stateData && stateData.expiresAt < Date.now()) {
+      await db.collection('oauth_states').doc(state).delete();
+      res.status(400).json({ error: 'State parameter has expired' });
+      return;
+    }
+    // Delete after use — each state token is single-use
+    await db.collection('oauth_states').doc(state).delete();
+
     // For existing users linking their OSF account, verify Firebase Auth
     if (!isSignup && !uid) {
       res.status(400).json({ error: 'User ID is required for account linking' });

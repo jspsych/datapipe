@@ -38,6 +38,10 @@
       {
         "source": "/api/checkemailconflict",
         "function": "checkemailconflict"
+      },
+      {
+        "source": "/api/generateoauthstate",
+        "function": "generateoauthstate"
       }
     ]
   },

@@ -7,6 +7,7 @@ import { oauth2Callback } from "./oauth2-callback.js";
 import { oauth2Regenerate } from "./oauth2-regenerate.js";
 import { checkEmailConflict } from "./check-email-conflict.js";
 import { scheduledTokenRefresh } from "./scheduled-token-refresh.js";
+import { generateOAuthState } from "./generate-oauth-state.js";
 
 setGlobalOptions({
   maxInstances: 20
@@ -19,5 +20,6 @@ export {
   oauth2Callback as oauth2callback,
   oauth2Regenerate as oauth2regenerate,
   checkEmailConflict as checkemailconflict,
-  scheduledTokenRefresh as scheduledtokenrefresh
+  scheduledTokenRefresh as scheduledtokenrefresh,
+  generateOAuthState as generateoauthstate
 };
