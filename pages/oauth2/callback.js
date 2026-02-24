@@ -76,12 +76,18 @@ function useOAuthCallback() {
         const isLinking = authFlow === 'linking';
         const isOsfEntry = authFlow === 'osf-entry';
 
+        // For linking flows, get the Firebase ID token to prove ownership
+        let idToken = null;
+        if (isLinking && user) {
+          idToken = await user.getIdToken();
+        }
+
         const requestBody = {
           code: urlCode,
           state: urlState,
           isSignup: isSignup || isSignin || isOsfEntry,
-          ...(isLinking && { uid: user?.uid }),
-          ...(isOsfEntry && { 
+          ...(isLinking && { uid: user?.uid, idToken }),
+          ...(isOsfEntry && {
             osfEntryComponentId: localStorage.getItem('osfEntryComponentId'),
             osfEntryUserId: localStorage.getItem('osfEntryUserId')
           })

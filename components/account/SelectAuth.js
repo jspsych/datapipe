@@ -49,7 +49,7 @@ export default function SelectAuth() {
     }
 
     const handleAuthClick = () => {
-        const redirectState = crypto.randomUUID().substring(0, 6);
+        const redirectState = crypto.randomUUID();
         localStorage.setItem('latestCSRFToken', redirectState);
         localStorage.setItem('osfAuthFlow', 'linking');
         

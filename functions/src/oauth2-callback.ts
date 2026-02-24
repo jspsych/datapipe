@@ -5,12 +5,6 @@ const clientId = process.env.CLIENT_ID as string;
 const clientSecret = process.env.CLIENT_SECRET as string; // Remove NEXT_PUBLIC_ prefix for security
 const redirectUri = process.env.REDIRECT_URI as string;
 
-console.log('Environment check:', {
-  hasClientId: !!clientId,
-  hasClientSecret: !!clientSecret,
-  hasRedirectUri: !!redirectUri,
-});
-
 // Use Map to track processed codes with timestamp for cleanup
 const processedCodes = new Map(); 
 
@@ -31,18 +25,18 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
       return;
     }
 
-    const { code, uid, isSignup, state, osfEntryComponentId, osfEntryUserId } = req.body;
-    
+    const { code, uid, idToken, isSignup, state, osfEntryComponentId, osfEntryUserId } = req.body;
+
     // Clean up old processed codes
     cleanupProcessedCodes();
-    
+
     // Prevent duplicate processing of the same authorization code
     if (processedCodes.has(code)) {
       res.status(400).json({ error: 'Authorization code already processed' });
       return;
     }
     processedCodes.set(code, Date.now());
-    
+
 
     if (!code) {
       res.status(400).json({ error: 'Authorization code is required' });
@@ -54,10 +48,28 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
       return;
     }
 
-    // For existing users linking their OSF account
+    // For existing users linking their OSF account, verify Firebase Auth
     if (!isSignup && !uid) {
       res.status(400).json({ error: 'User ID is required for account linking' });
       return;
+    }
+
+    // Verify that the caller owns the UID they claim (for account linking)
+    if (!isSignup && uid) {
+      if (!idToken) {
+        res.status(401).json({ error: 'Authentication required for account linking' });
+        return;
+      }
+      try {
+        const decodedToken = await auth.verifyIdToken(idToken);
+        if (decodedToken.uid !== uid) {
+          res.status(403).json({ error: 'User ID does not match authenticated user' });
+          return;
+        }
+      } catch {
+        res.status(401).json({ error: 'Invalid authentication token' });
+        return;
+      }
     }
 
     const params = new URLSearchParams({
@@ -104,11 +116,9 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
     });
 
     if (!profileResponse.ok) {
-      const errorData = await profileResponse.text();
-      res.status(400).json({ 
-        error: 'Failed to fetch OSF profile',
-        details: errorData,
-        status: profileResponse.status
+      console.error('OSF profile fetch failed with status:', profileResponse.status);
+      res.status(400).json({
+        error: 'Failed to fetch OSF profile'
       });
       return;
     }
@@ -292,16 +302,12 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
 
       res.status(200).json({
         success: true,
-        refreshToken: tokenData.refresh_token,
-        accessToken: tokenData.access_token,
-        expiresIn: tokenData.expires_in,
         isNewUser: false
       });
     }
 
   } catch (error) {
-    console.error('OAuth callback error:', error);
-    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    console.error('OAuth callback error:', error instanceof Error ? error.message : 'Unknown error');
     res.status(500).json({
       error: 'Internal server error'
     });

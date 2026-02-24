@@ -32,7 +32,6 @@ function useOSFEntry() {
   );
 
   useEffect(() => {
-    console.log('OSF Entry Params:', { osfUserId, osfComponentId });
     if (userLoading || userDataLoading) return;
 
     // Validate required parameters
@@ -100,7 +99,7 @@ function useOSFEntry() {
     localStorage.setItem('osfEntryUserId', osfUserId);
     
     // Generate CSRF state
-    const state = crypto.randomUUID().substring(0, 6);
+    const state = crypto.randomUUID();
     localStorage.setItem('latestCSRFToken', state);
     
     const clientId = process.env.NEXT_PUBLIC_CLIENT_ID;

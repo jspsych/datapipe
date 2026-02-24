@@ -17,7 +17,7 @@ export default function SignInWithOSF() {
     setError("");
 
     try {
-      const state = crypto.randomUUID().substring(0, 6);
+      const state = crypto.randomUUID();
       localStorage.setItem('latestCSRFToken', state);
       localStorage.setItem('osfAuthFlow', 'signin'); // Mark this as signin flow
       

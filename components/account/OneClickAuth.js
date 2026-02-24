@@ -9,10 +9,9 @@ import { OsfIcon } from "../OsfIcon";
 
 
 export default function OneClickAuth() {
-    const [redirectState] = useState(() => crypto.randomUUID().substring(0, 6));
+    const [redirectState] = useState(() => crypto.randomUUID());
     useEffect(() => {
         localStorage.setItem('latestCSRFToken', redirectState);
-        console.log('OneClickAuth - CSRF Token set:', redirectState);
     }, [redirectState]);
 
     const { user } = useContext(UserContext);
