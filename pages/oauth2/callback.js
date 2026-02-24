@@ -79,7 +79,7 @@ function useOAuthCallback() {
         // For linking flows, get the Firebase ID token to prove ownership
         let idToken = null;
         if (isLinking && user) {
-          idToken = await user.getIdToken();
+          idToken = await user.id;
         }
 
         const requestBody = {
