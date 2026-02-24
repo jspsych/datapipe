@@ -9,8 +9,6 @@ console.log('Environment check:', {
   hasClientId: !!clientId,
   hasClientSecret: !!clientSecret,
   hasRedirectUri: !!redirectUri,
-  clientIdValue: clientId,
-  redirectUriValue: redirectUri
 });
 
 // Use Map to track processed codes with timestamp for cleanup
@@ -81,17 +79,21 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
     });
 
     if (!tokenResponse.ok) {
-      let errorText = await tokenResponse.text();
-      let errorData = { error: errorText, body: params.toString(), client_id: clientId };
-      res.status(400).json({ 
+      const errorText = await tokenResponse.text();
+      console.error('Token exchange failed:', errorText);
+      res.status(400).json({
         error: 'Token exchange failed',
-        details: errorData,
         status: tokenResponse.status
       });
       return;
     }
 
     const tokenData = await tokenResponse.json();
+
+    if (!tokenData.access_token || !tokenData.refresh_token || !tokenData.expires_in) {
+      res.status(400).json({ error: 'Invalid token response from OSF' });
+      return;
+    }
 
     // Fetch user profile from OSF OAuth endpoint
     const profileResponse = await fetch(`https://accounts.${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/oauth2/profile`, {
@@ -301,8 +303,7 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
     console.error('OAuth callback error:', error);
     console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     res.status(500).json({
-      error: 'Internal server error',
-      message: error instanceof Error ? error.message : 'Unknown error'
+      error: 'Internal server error'
     });
   }
 });

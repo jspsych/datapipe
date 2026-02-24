@@ -1,5 +1,5 @@
 import { onRequest } from "firebase-functions/v2/https";
-import { db } from "./app.js";
+import { db, auth } from "./app.js";
 import MESSAGES from "./api-messages.js";
 import { refreshAndUpdateUser } from "./refresh-token.js";
 import { UserData } from "./interfaces.js";
@@ -15,6 +15,25 @@ try {
 
     if (!uid) {
       res.status(400).json({ error: 'User ID is required, are you not authenticated?' });
+      return;
+    }
+
+    // Verify Firebase Auth token to ensure the caller is the actual user
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+
+    try {
+      const idToken = authHeader.split('Bearer ')[1];
+      const decodedToken = await auth.verifyIdToken(idToken);
+      if (decodedToken.uid !== uid) {
+        res.status(403).json({ error: 'User ID does not match authenticated user' });
+        return;
+      }
+    } catch {
+      res.status(401).json({ error: 'Invalid authentication token' });
       return;
     }
 
@@ -57,10 +76,9 @@ try {
   });
 
   } catch (error) {
-    console.error('OAuth callback error:', error);
+    console.error('OAuth regenerate error:', error);
     res.status(500).json({
-      error: 'Internal server error',
-      message: error instanceof Error ? error.message : 'Unknown error'
+      error: 'Internal server error'
     });
   }
 });

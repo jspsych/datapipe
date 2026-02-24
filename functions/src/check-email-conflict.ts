@@ -27,9 +27,8 @@ export const checkEmailConflict = onRequest({ cors: true }, async (req, res) => 
 
   } catch (error) {
     console.error('Email conflict check error:', error);
-    res.status(500).json({ 
-      error: 'Internal server error',
-      message: error instanceof Error ? error.message : 'Unknown error'
+    res.status(500).json({
+      error: 'Internal server error'
     });
   }
 });
