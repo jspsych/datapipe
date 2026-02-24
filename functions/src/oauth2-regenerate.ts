@@ -2,6 +2,7 @@ import { onRequest } from "firebase-functions/v2/https";
 import { db, auth } from "./app.js";
 import MESSAGES from "./api-messages.js";
 import { refreshAndUpdateUser } from "./refresh-token.js";
+import { decrypt } from "./crypto-utils.js";
 import { UserData } from "./interfaces.js";
 
 export const oauth2Regenerate = onRequest({ cors: true }, async (req, res) => {
@@ -60,7 +61,7 @@ try {
     return;
   }
 
-  const refreshResult = await refreshAndUpdateUser(uid, user_data.refreshToken);
+  const refreshResult = await refreshAndUpdateUser(uid, decrypt(user_data.refreshToken));
 
   if (!refreshResult.success) {
     res.status(400).json({

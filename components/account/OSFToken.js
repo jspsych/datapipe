@@ -22,7 +22,7 @@ import {
 } from "@chakra-ui/react";
 
 import { useDocumentData } from "react-firebase-hooks/firestore";
-import { doc, setDoc } from "firebase/firestore";
+import { doc } from "firebase/firestore";
 
 import { db, auth } from "../../lib/firebase";
 import { CheckCircleIcon, WarningIcon } from "@chakra-ui/icons";
@@ -80,7 +80,7 @@ export default function OSFToken() {
                 <VStack spacing={4} w="100%">
                   <FormControl id="osf-token">
                     <FormLabel>OSF Token</FormLabel>
-                    <Input type="text" defaultValue={data.osfToken} />
+                    <Input type="text" placeholder="Paste your OSF token here" />
                   </FormControl>
                 </VStack>
               )}
@@ -110,32 +110,22 @@ async function handleSaveButton(setIsSubmitting, closeHandler) {
   const token = document.querySelector("#osf-token").value;
   setIsSubmitting(true);
   try {
-    const isTokenValid = await checkOSFToken(token);
-    const userDoc = doc(db, "users", auth.currentUser.uid);
-    await setDoc(
-      userDoc,
-      { osfToken: token, osfTokenValid: isTokenValid },
-      { merge: true }
-    );
+    const idToken = await auth.currentUser.getIdToken();
+    const response = await fetch("/api/saveosftoken", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${idToken}`,
+      },
+      body: JSON.stringify({ token }),
+    });
+    if (!response.ok) {
+      throw new Error("Failed to save token");
+    }
     setIsSubmitting(false);
     closeHandler();
   } catch (error) {
     setIsSubmitting(false);
     console.log(error);
-  }
-}
-
-async function checkOSFToken(token) {
-  const data = await fetch(`https://api.${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/v2/`, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  if (data.status === 200) {
-    return true;
-  } else {
-    return false;
   }
 }

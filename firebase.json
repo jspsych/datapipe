@@ -42,6 +42,14 @@
       {
         "source": "/api/generateoauthstate",
         "function": "generateoauthstate"
+      },
+      {
+        "source": "/api/saveosftoken",
+        "function": "saveosftoken"
+      },
+      {
+        "source": "/api/getosftoken",
+        "function": "getosftoken"
       }
     ]
   },

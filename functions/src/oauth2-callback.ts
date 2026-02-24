@@ -1,5 +1,6 @@
 import { onRequest } from "firebase-functions/v2/https";
 import { db, auth } from "./app.js";
+import { encrypt } from "./crypto-utils.js";
 
 const clientId = process.env.CLIENT_ID as string;
 const clientSecret = process.env.CLIENT_SECRET as string; // Remove NEXT_PUBLIC_ prefix for security
@@ -204,9 +205,9 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
         
         // Update their OAuth tokens and sign them in
         await db.doc(`users/${existingUser.id}`).update({
-          authToken: tokenData.access_token,
+          authToken: encrypt(tokenData.access_token),
           authTokenExpires: Date.now() + tokenData.expires_in * 1000,
-          refreshToken: tokenData.refresh_token,
+          refreshToken: encrypt(tokenData.refresh_token),
           refreshTokenExpires: Date.now() + 2_629_746_000, // 1 month
         });
 
@@ -269,9 +270,9 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
         osfTokenValid: false,
         // OAuth token management
         usingPersonalToken: false, // OAuth users don't need personal tokens
-        refreshToken: tokenData.refresh_token,
+        refreshToken: encrypt(tokenData.refresh_token),
         refreshTokenExpires: Date.now() + 2_629_746_000, // 1 month in milliseconds
-        authToken: tokenData.access_token, // OAuth access token - auto-refreshed
+        authToken: encrypt(tokenData.access_token), // OAuth access token - auto-refreshed
         authTokenExpires: Date.now() + tokenData.expires_in * 1000,
         experiments: [],
         createdAt: Date.now()
@@ -308,8 +309,8 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
         osfUserId: osfUserId,
         authMethod: 'osf',
         usingPersonalToken: false, // Switch to OAuth token management
-        refreshToken: tokenData.refresh_token,
-        authToken: tokenData.access_token, // OAuth access token - auto-refreshed
+        refreshToken: encrypt(tokenData.refresh_token),
+        authToken: encrypt(tokenData.access_token), // OAuth access token - auto-refreshed
         refreshTokenExpires: Date.now() + 2_629_746_000, // 1 month in milliseconds
         authTokenExpires: Date.now() + tokenData.expires_in * 1000
       });

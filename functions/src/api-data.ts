@@ -8,6 +8,7 @@ import writeLog from "./write-log.js";
 import MESSAGES from "./api-messages.js";
 import blockMetadata from "./metadata-block.js";
 import { refreshAndUpdateUser } from "./refresh-token.js";
+import { decrypt } from "./crypto-utils.js";
 import { ExperimentData, UserData, MetadataResponse, OSFResult, RequestBody } from './interfaces';
 
 export const apiData = onRequest({ cors: true }, async (req, res) => {
@@ -97,13 +98,13 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
       return;
     }
     else {
-      token = user_data.osfToken;
+      token = decrypt(user_data.osfToken);
     }
   }
 
   if (!user_data.usingPersonalToken) {
     if (Date.now() > user_data.authTokenExpires) {
-      const refreshResult = await refreshAndUpdateUser(exp_data.owner, user_data.refreshToken);
+      const refreshResult = await refreshAndUpdateUser(exp_data.owner, decrypt(user_data.refreshToken));
 
       if (!refreshResult.success) {
         res.status(400).json(MESSAGES.INVALID_REFRESH_TOKEN);
@@ -113,7 +114,7 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
 
       token = refreshResult.accessToken!;
     } else {
-      token = user_data.authToken;
+      token = decrypt(user_data.authToken);
     }
   }
 
