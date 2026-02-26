@@ -27,7 +27,7 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [20.x]
+        node-version: [22.x]
         # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
 
     steps:
@@ -66,4 +66,4 @@ jobs:
       - name: Use test firebase project
         run: firebase use test
       - name: Deploy firebase project
-        run: firebase deploy
+        run: firebase deploy --force
