@@ -1,6 +1,6 @@
 'use client';
 
-import { VStack, Heading, Text, Button, Alert, AlertIcon, Card, CardBody, Spinner, Center, Box, Input } from "@chakra-ui/react";
+import { VStack, Heading, Text, Button, Alert, AlertIcon, Card, CardBody, Spinner, Center, Box, Input, FormLabel } from "@chakra-ui/react";
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useContext, useState, useRef } from "react";
 import { UserContext } from "../lib/context";
@@ -238,12 +238,15 @@ function OSFEntryPage() {
                 <strong>OSF User:</strong> {osfUserId}
               </Text>
             </Box>
-            <Input
-              ref={titleRef}
-              placeholder="DataPipe Data"
-              size="md"
-              w="full"
-            />
+            <Box w="full">
+              <FormLabel mb={1}>Experiment Name</FormLabel>
+              <Input
+                ref={titleRef}
+                placeholder="DataPipe Data"
+                size="md"
+                w="full"
+              />
+            </Box>
 
             {userData?.uid && userData?.osfUserId === osfUserId ? (
               <Button 
