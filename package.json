@@ -36,7 +36,7 @@
     "eslint": "^8.57.0",
     "eslint-config-next": "^14.2.4",
     "eslint-config-prettier": "^8.5.0",
-    "firebase-tools": "^13.11.4",
+    "firebase-tools": "^15.8.0",
     "husky": "^8.0.0",
     "jest": "^29.2.2",
     "jest-environment-jsdom": "^29.2.2",
