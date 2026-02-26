@@ -11,6 +11,7 @@ import { useAuthState } from "react-firebase-hooks/auth";
 import { extendTheme } from "@chakra-ui/react";
 import { theme } from "../lib/theme";
 import Head from "next/head";
+import TestEnvironmentWarning from "../components/TestEnvironmentWarning";
 
 const newTheme = extendTheme(theme);
 
@@ -35,6 +36,9 @@ function MyApp({ Component, pageProps }) {
         {page}
       </Center>
       <Footer />
+      {
+        process.env.NEXT_PUBLIC_OSF_ENV !== "" && <TestEnvironmentWarning />
+      }
     </Box>
   ));
 

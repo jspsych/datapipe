@@ -18,6 +18,8 @@ env:
   NEXT_PUBLIC_OAUTH_CALLBACK: ${{ secrets.TEST_OAUTH_CALLBACK }}
   NEXT_PUBLIC_OAUTH_FINAL: ${{ secrets.TEST_OAUTH_FINAL }}
   NEXT_PUBLIC_OAUTH_REGENERATE: ${{ secrets.TEST_OAUTH_REGENERATE }}
+  NEXT_PUBLIC_GENERATE_STATE: "https://datapipe-test.web.app/api/generateoauthstate"
+  NEXT_PUBLIC_OSF_ENV: ${{ secrets.TEST_OSF_ENV }}
 
 jobs:
   deploy:
@@ -55,6 +57,7 @@ jobs:
           echo "CLIENT_SECRET=${{ secrets.TEST_CLIENT_SECRET }}" > .env
           echo "CLIENT_ID=${{ secrets.TEST_CLIENT_ID }}" >> .env
           echo "REDIRECT_URI=${{ secrets.TEST_REDIRECT_URI }}" >> .env
+          echo "TOKEN_ENCRYPTION_KEY=${{ secrets.FIRESTORE_KEY_TEST }}" >> .env
       - name: Install dependencies and build functions
         working-directory: functions
         run: |

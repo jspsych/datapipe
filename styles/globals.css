@@ -38,3 +38,29 @@ a {
     transform: rotate(360deg);
   }
 }
+
+/* hide Firebase Emulator warning banner, we are using custom one */
+.firebase-emulator-warning {
+  display: none;
+}
+
+.sticky-alert {
+  position: fixed; 
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  display: flex;
+  justify-content: center; 
+  pointer-events: none; 
+}
+
+.sticky-alert__content {
+  pointer-events: auto; 
+  width: 100%;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.9); 
+  color: #800000;
+  text-align: center;
+  font-size: 1rem;
+}

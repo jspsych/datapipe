@@ -76,12 +76,18 @@ function useOAuthCallback() {
         const isLinking = authFlow === 'linking';
         const isOsfEntry = authFlow === 'osf-entry';
 
+        // For linking flows, get the Firebase ID token to prove ownership
+        let idToken = null;
+        if (isLinking && user) {
+          idToken = await user.id;
+        }
+
         const requestBody = {
           code: urlCode,
           state: urlState,
           isSignup: isSignup || isSignin || isOsfEntry,
-          ...(isLinking && { uid: user?.uid }),
-          ...(isOsfEntry && { 
+          ...(isLinking && { uid: user?.uid, idToken }),
+          ...(isOsfEntry && {
             osfEntryComponentId: localStorage.getItem('osfEntryComponentId'),
             osfEntryUserId: localStorage.getItem('osfEntryUserId')
           })
@@ -110,9 +116,17 @@ function useOAuthCallback() {
           
           // Handle different auth flows
           if (isOsfEntry) {
-            // For OSF entry, redirect back to osf-entry page
+            // For OSF entry, redirect back to osf-entry page with original params
             localStorage.removeItem('osfAuthFlow');
-            router.push('/osf-entry' + (typeof window !== 'undefined' ? window.location.search : ''));
+            const entryParams = new URLSearchParams();
+            const entryUserId = localStorage.getItem('osfEntryUserId');
+            const entryComponentId = localStorage.getItem('osfEntryComponentId');
+            if (entryUserId && entryUserId !== 'null') entryParams.set('userIri', entryUserId);
+            if (entryComponentId && entryComponentId !== 'null') entryParams.set('nodeIri', entryComponentId);
+            localStorage.removeItem('osfEntryUserId');
+            localStorage.removeItem('osfEntryComponentId');
+            const entryQuery = entryParams.toString();
+            router.push('/osf-entry' + (entryQuery ? '?' + entryQuery : ''));
           } else {
             localStorage.removeItem('osfAuthFlow');
             // Redirect immediately on success

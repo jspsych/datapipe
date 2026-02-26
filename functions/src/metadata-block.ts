@@ -7,6 +7,7 @@ import downloadMetadata from "./metadata-download.js";
 import { DocumentReference, DocumentData } from "firebase-admin/firestore";
 import putFileOSF from "./put-file-osf.js";
 import { db } from "./app.js";
+import { decrypt } from "./crypto-utils.js";
 import { ExperimentData, UserData, Metadata, MetadataResponse } from './interfaces';
 
 
@@ -21,8 +22,10 @@ export default async function blockMetadata(
 
 let metadataMessage: {metadataMessage: string} = {metadataMessage: ''};
 
+const decryptedOsfToken = decrypt(user_data.osfToken);
+
 try {
- 
+
   //Only run if metadata collection is enabled.
   if (exp_data.metadataActive) {
 
@@ -39,7 +42,7 @@ try {
     
       //Retrieves the metadata ID from the OSF metadata file. If an ID exists, then a metadata file with name:
       //dataset_description.json exists in the OSF project.
-      const osfMetadataId: string | undefined = (await processMetadata(exp_data.osfFilesLink, user_data.osfToken)).metadataId;
+      const osfMetadataId: string | undefined = (await processMetadata(exp_data.osfFilesLink, decryptedOsfToken)).metadataId;
         
       //When firestore and OSF both have metadata, updating is done with respect to firestore.
       //When firestore has metadata but OSF does not, updating is done with respect to firestore.
@@ -58,7 +61,7 @@ try {
         if (osfMetadataId){
           await updateFileOSF(
           exp_data.osfFilesLink,
-          user_data.osfToken,
+          decryptedOsfToken,
           JSON.stringify(updatedMetadata, null, 2),
           osfMetadataId
         )
@@ -69,7 +72,7 @@ try {
 
           const response = await putFileOSF(
             exp_data.osfFilesLink,
-            user_data.osfToken,
+            decryptedOsfToken,
             JSON.stringify(updatedMetadata, null, 2),
             `dataset_description.json`
           );
@@ -86,7 +89,7 @@ try {
         //Metadata is downloaded from OSF, and is compared to incoming metadata to produce an updated version.
         // ********[IMPORTANT]***********
         // Since Metadata is in OSF as evidenced by the metadata ID, it is downloaded, and the type is asserted.
-        const downloadResponse = await downloadMetadata(exp_data.osfFilesLink, user_data.osfToken, osfMetadataId);
+        const downloadResponse = await downloadMetadata(exp_data.osfFilesLink, decryptedOsfToken, osfMetadataId);
 
         const osfMetadata: Metadata  = downloadResponse.metadata;
 
@@ -98,7 +101,7 @@ try {
         //Since metadata exists in OSF, it is updated and not set.
         await updateFileOSF(
           exp_data.osfFilesLink,
-          user_data.osfToken,
+          decryptedOsfToken,
           JSON.stringify(incomingMetadata, null, 2),
           osfMetadataId
         );
@@ -115,7 +118,7 @@ try {
 
         await putFileOSF( 
             exp_data.osfFilesLink,
-            user_data.osfToken,
+            decryptedOsfToken,
             JSON.stringify(incomingMetadata, null, 2),
             `dataset_description.json`
           );

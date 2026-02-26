@@ -1,17 +1,10 @@
 import { onRequest } from "firebase-functions/v2/https";
 import { db, auth } from "./app.js";
+import { encrypt } from "./crypto-utils.js";
 
 const clientId = process.env.CLIENT_ID as string;
 const clientSecret = process.env.CLIENT_SECRET as string; // Remove NEXT_PUBLIC_ prefix for security
 const redirectUri = process.env.REDIRECT_URI as string;
-
-console.log('Environment check:', {
-  hasClientId: !!clientId,
-  hasClientSecret: !!clientSecret,
-  hasRedirectUri: !!redirectUri,
-  clientIdValue: clientId,
-  redirectUriValue: redirectUri
-});
 
 // Use Map to track processed codes with timestamp for cleanup
 const processedCodes = new Map(); 
@@ -33,18 +26,18 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
       return;
     }
 
-    const { code, uid, isSignup, state, osfEntryComponentId, osfEntryUserId } = req.body;
-    
+    const { code, uid, idToken, isSignup, state, osfEntryComponentId, osfEntryUserId } = req.body;
+
     // Clean up old processed codes
     cleanupProcessedCodes();
-    
+
     // Prevent duplicate processing of the same authorization code
     if (processedCodes.has(code)) {
       res.status(400).json({ error: 'Authorization code already processed' });
       return;
     }
     processedCodes.set(code, Date.now());
-    
+
 
     if (!code) {
       res.status(400).json({ error: 'Authorization code is required' });
@@ -56,10 +49,43 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
       return;
     }
 
-    // For existing users linking their OSF account
+    // Server-side CSRF validation: verify the state was issued by our server
+    const stateDoc = await db.collection('oauth_states').doc(state).get();
+    if (!stateDoc.exists) {
+      res.status(400).json({ error: 'Invalid state parameter' });
+      return;
+    }
+    const stateData = stateDoc.data();
+    if (stateData && stateData.expiresAt < Date.now()) {
+      await db.collection('oauth_states').doc(state).delete();
+      res.status(400).json({ error: 'State parameter has expired' });
+      return;
+    }
+    // Delete after use — each state token is single-use
+    await db.collection('oauth_states').doc(state).delete();
+
+    // For existing users linking their OSF account, verify Firebase Auth
     if (!isSignup && !uid) {
       res.status(400).json({ error: 'User ID is required for account linking' });
       return;
+    }
+
+    // Verify that the caller owns the UID they claim (for account linking)
+    if (!isSignup && uid) {
+      if (!idToken) {
+        res.status(401).json({ error: 'Authentication required for account linking' });
+        return;
+      }
+      try {
+        const decodedToken = await auth.verifyIdToken(idToken);
+        if (decodedToken.uid !== uid) {
+          res.status(403).json({ error: 'User ID does not match authenticated user' });
+          return;
+        }
+      } catch {
+        res.status(401).json({ error: 'Invalid authentication token' });
+        return;
+      }
     }
 
     const params = new URLSearchParams({
@@ -72,7 +98,7 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
 
 
     // Exchange authorization code for access token
-    const tokenResponse = await fetch('https://accounts.osf.io/oauth2/token', {
+    const tokenResponse = await fetch(`https://accounts.${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/oauth2/token`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -81,11 +107,10 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
     });
 
     if (!tokenResponse.ok) {
-      let errorText = await tokenResponse.text();
-      let errorData = { error: errorText, body: params.toString(), client_id: clientId };
-      res.status(400).json({ 
+      const errorText = await tokenResponse.text();
+      console.error('Token exchange failed:', errorText);
+      res.status(400).json({
         error: 'Token exchange failed',
-        details: errorData,
         status: tokenResponse.status
       });
       return;
@@ -93,8 +118,13 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
 
     const tokenData = await tokenResponse.json();
 
+    if (!tokenData.access_token || !tokenData.refresh_token || !tokenData.expires_in) {
+      res.status(400).json({ error: 'Invalid token response from OSF' });
+      return;
+    }
+
     // Fetch user profile from OSF OAuth endpoint
-    const profileResponse = await fetch('https://accounts.osf.io/oauth2/profile', {
+    const profileResponse = await fetch(`https://accounts.${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/oauth2/profile`, {
       headers: {
         'Authorization': `Bearer ${tokenData.access_token}`,
         'Accept': 'application/json'
@@ -102,11 +132,9 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
     });
 
     if (!profileResponse.ok) {
-      const errorData = await profileResponse.text();
-      res.status(400).json({ 
-        error: 'Failed to fetch OSF profile',
-        details: errorData,
-        status: profileResponse.status
+      console.error('OSF profile fetch failed with status:', profileResponse.status);
+      res.status(400).json({
+        error: 'Failed to fetch OSF profile'
       });
       return;
     }
@@ -120,7 +148,9 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
     }
     
     // For OSF entry flow, validate that the authenticated user matches the expected user
-    if (osfEntryUserId && osfUserId !== osfEntryUserId) {
+    // Clean the entry user ID in case it's a full IRI (e.g., https://osf.io/er6mg)
+    const cleanedEntryUserId = osfEntryUserId?.replace(/^https:\/\/osf\.io\//, '').replace(/\/$/, '');
+    if (cleanedEntryUserId && osfUserId !== cleanedEntryUserId) {
       res.status(400).json({ 
         error: 'OSF user mismatch. The authenticated user does not match the expected user for this entry point.' 
       });
@@ -128,7 +158,7 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
     }
     
     // OAuth profile doesn't include email, so we'll use the full API
-    const userApiResponse = await fetch(`https://api.osf.io/v2/users/${osfUserId}/`, {
+    const userApiResponse = await fetch(`https://api.${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/v2/users/${osfUserId}/`, {
       headers: {
         'Authorization': `Bearer ${tokenData.access_token}`,
         'Accept': 'application/vnd.api+json'
@@ -146,7 +176,7 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
                    'OSF User';
 
       // Try to fetch email from the emails endpoint
-      const emailsResponse = await fetch(`https://api.osf.io/v2/users/${osfUserId}/settings/emails/`, {
+      const emailsResponse = await fetch(`https://api.${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/v2/users/${osfUserId}/settings/emails/`, {
         headers: {
           'Authorization': `Bearer ${tokenData.access_token}`,
           'Accept': 'application/vnd.api+json'
@@ -175,9 +205,9 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
         
         // Update their OAuth tokens and sign them in
         await db.doc(`users/${existingUser.id}`).update({
-          authToken: tokenData.access_token,
+          authToken: encrypt(tokenData.access_token),
           authTokenExpires: Date.now() + tokenData.expires_in * 1000,
-          refreshToken: tokenData.refresh_token,
+          refreshToken: encrypt(tokenData.refresh_token),
           refreshTokenExpires: Date.now() + 2_629_746_000, // 1 month
         });
 
@@ -240,9 +270,9 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
         osfTokenValid: false,
         // OAuth token management
         usingPersonalToken: false, // OAuth users don't need personal tokens
-        refreshToken: tokenData.refresh_token,
+        refreshToken: encrypt(tokenData.refresh_token),
         refreshTokenExpires: Date.now() + 2_629_746_000, // 1 month in milliseconds
-        authToken: tokenData.access_token, // OAuth access token - auto-refreshed
+        authToken: encrypt(tokenData.access_token), // OAuth access token - auto-refreshed
         authTokenExpires: Date.now() + tokenData.expires_in * 1000,
         experiments: [],
         createdAt: Date.now()
@@ -279,8 +309,8 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
         osfUserId: osfUserId,
         authMethod: 'osf',
         usingPersonalToken: false, // Switch to OAuth token management
-        refreshToken: tokenData.refresh_token,
-        authToken: tokenData.access_token, // OAuth access token - auto-refreshed
+        refreshToken: encrypt(tokenData.refresh_token),
+        authToken: encrypt(tokenData.access_token), // OAuth access token - auto-refreshed
         refreshTokenExpires: Date.now() + 2_629_746_000, // 1 month in milliseconds
         authTokenExpires: Date.now() + tokenData.expires_in * 1000
       });
@@ -288,19 +318,14 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
 
       res.status(200).json({
         success: true,
-        refreshToken: tokenData.refresh_token,
-        accessToken: tokenData.access_token,
-        expiresIn: tokenData.expires_in,
         isNewUser: false
       });
     }
 
   } catch (error) {
-    console.error('OAuth callback error:', error);
-    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    console.error('OAuth callback error:', error instanceof Error ? error.message : 'Unknown error');
     res.status(500).json({
-      error: 'Internal server error',
-      message: error instanceof Error ? error.message : 'Unknown error'
+      error: 'Internal server error'
     });
   }
 });

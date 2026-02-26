@@ -12,23 +12,26 @@ export default function SignUpWithOSF() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const handleOSFSignup = () => {
+  const handleOSFSignup = async () => {
     setIsLoading(true);
     setError("");
 
     try {
-      const state = crypto.randomUUID().substring(0, 6);
+      const stateRes = await fetch(process.env.NEXT_PUBLIC_GENERATE_STATE, { method: 'POST' });
+      if (!stateRes.ok) throw new Error('Failed to generate state');
+      const { state } = await stateRes.json();
+
       localStorage.setItem('latestCSRFToken', state);
-      localStorage.setItem('osfAuthFlow', 'signup'); // Mark this as signup flow
-      
+      localStorage.setItem('osfAuthFlow', 'signup');
+
       const clientId = process.env.NEXT_PUBLIC_CLIENT_ID;
       const redirectUri = process.env.NEXT_PUBLIC_REDIRECT_URI;
       const scope = "osf.full_write";
-      const url = `https://accounts.osf.io/oauth2/authorize?response_type=code&client_id=${clientId}&redirect_uri=${redirectUri}&state=${state}&scope=${scope}&access_type=offline&approval_prompt=force`;
-      
+      const base_url = `https://accounts.${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/oauth2/authorize`;
+      const url = `${base_url}?response_type=code&client_id=${clientId}&redirect_uri=${redirectUri}&state=${state}&scope=${scope}&access_type=offline&approval_prompt=force`;
+
       window.location.href = url;
     } catch (err) {
-      console.error('OSF signup error:', err);
       setError("Failed to initiate OSF signup. Please try again.");
       setIsLoading(false);
     }

@@ -7,6 +7,8 @@ import { db } from "./app.js";
 import writeLog from "./write-log.js";
 import MESSAGES from "./api-messages.js";
 import blockMetadata from "./metadata-block.js";
+import { refreshAndUpdateUser } from "./refresh-token.js";
+import { decrypt } from "./crypto-utils.js";
 import { ExperimentData, UserData, MetadataResponse, OSFResult, RequestBody } from './interfaces';
 
 export const apiData = onRequest({ cors: true }, async (req, res) => {
@@ -96,54 +98,23 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
       return;
     }
     else {
-      token = user_data.osfToken;
+      token = decrypt(user_data.osfToken);
     }
   }
 
   if (!user_data.usingPersonalToken) {
-    if (Date.now() > user_data.refreshTokenExpires) {
-      res.status(400).json(MESSAGES.INVALID_REFRESH_TOKEN);
-      await writeLog(experimentID, "logError", MESSAGES.INVALID_REFRESH_TOKEN);
-      return;
-    }
-
     if (Date.now() > user_data.authTokenExpires) {
-      const params = new URLSearchParams({
-        code: user_data.refreshToken,
-        client_id: process.env.NEXT_PUBLIC_CLIENT_ID as string,
-        client_secret: process.env.CLIENT_SECRET as string,
-        grant_type: "refresh_token"
-      })
+      const refreshResult = await refreshAndUpdateUser(exp_data.owner, decrypt(user_data.refreshToken));
 
-      const tokenResponse = await fetch('https://accounts.osf.io/oauth2/token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: params.toString()
-      });
-
-      if (!tokenResponse.ok) {
-        const errorData = await tokenResponse.text();
-        console.error('Token exchange failed:', errorData);
-        res.status(400).json({ 
-          error: 'Authorization token regeneration failed',
-          details: errorData,
-          status: tokenResponse.status
-        });
+      if (!refreshResult.success) {
+        res.status(400).json(MESSAGES.INVALID_REFRESH_TOKEN);
+        await writeLog(experimentID, "logError", MESSAGES.INVALID_REFRESH_TOKEN);
         return;
       }
 
-      const tokenData = await tokenResponse.json();
-
-      await db.doc(`users/${exp_data.owner}`).update({
-        authToken: tokenData.access_token,
-        authTokenExpires: Date.now() + tokenData.expires_in * 1000
-      });
-
-      token = tokenData.access_token;
+      token = refreshResult.accessToken!;
     } else {
-      token = user_data.authToken;
+      token = decrypt(user_data.authToken);
     }
   }
 

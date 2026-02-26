@@ -1,10 +1,9 @@
 import { onRequest } from "firebase-functions/v2/https";
-import { db } from "./app.js";
+import { db, auth } from "./app.js";
 import MESSAGES from "./api-messages.js";
+import { refreshAndUpdateUser } from "./refresh-token.js";
+import { decrypt } from "./crypto-utils.js";
 import { UserData } from "./interfaces.js";
-
-const clientId = process.env.NEXT_PUBLIC_CLIENT_ID as string;
-const clientSecret = process.env.CLIENT_SECRET as string; // Remove NEXT_PUBLIC_ prefix for security
 
 export const oauth2Regenerate = onRequest({ cors: true }, async (req, res) => {
 try {
@@ -17,6 +16,25 @@ try {
 
     if (!uid) {
       res.status(400).json({ error: 'User ID is required, are you not authenticated?' });
+      return;
+    }
+
+    // Verify Firebase Auth token to ensure the caller is the actual user
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+
+    try {
+      const idToken = authHeader.split('Bearer ')[1];
+      const decodedToken = await auth.verifyIdToken(idToken);
+      if (decodedToken.uid !== uid) {
+        res.status(403).json({ error: 'User ID does not match authenticated user' });
+        return;
+      }
+    } catch {
+      res.status(401).json({ error: 'Invalid authentication token' });
       return;
     }
 
@@ -43,57 +61,25 @@ try {
     return;
   }
 
-  const refreshToken = user_data.refreshToken;
+  const refreshResult = await refreshAndUpdateUser(uid, decrypt(user_data.refreshToken));
 
-  const params = new URLSearchParams({
-    refresh_token: refreshToken,
-    client_id: clientId,
-    client_secret: clientSecret,
-    grant_type: 'refresh_token',
-  });
-
-  // Exchange authorization code for access token
-  const tokenResponse = await fetch('https://accounts.osf.io/oauth2/token', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: params.toString()
-  });
-
-  console.log('Token response status:', tokenResponse.status);
-  console.log('Token response headers:', Object.fromEntries(tokenResponse.headers.entries()));
-
-  if (!tokenResponse.ok) {
-    const errorData = await tokenResponse.text();
-    console.error('Token exchange failed:', errorData);
-    res.status(400).json({ 
+  if (!refreshResult.success) {
+    res.status(400).json({
       error: 'Token exchange failed',
-      details: errorData,
-      status: tokenResponse.status
+      details: refreshResult.error,
     });
     return;
   }
 
-  const tokenData = await tokenResponse.json();
-
-  let x = await db.doc(`users/${uid}`).update({
-    authToken: tokenData.access_token,
-    authTokenExpires: Date.now() + tokenData.expires_in * 1000
-  });
-
-  console.log('User document updated:', x);
-
   res.status(200).json({
     success: true,
-    accessToken: tokenData.access_token
+    accessToken: refreshResult.accessToken,
   });
 
   } catch (error) {
-    console.error('OAuth callback error:', error);
-    res.status(500).json({ 
-      error: 'Internal server error',
-      message: error instanceof Error ? error.message : 'Unknown error'
+    console.error('OAuth regenerate error:', error);
+    res.status(500).json({
+      error: 'Internal server error'
     });
   }
 });
