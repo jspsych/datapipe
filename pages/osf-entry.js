@@ -1,6 +1,6 @@
 'use client';
 
-import { VStack, Heading, Text, Button, Alert, AlertIcon, Card, CardBody, Spinner, Center, Box } from "@chakra-ui/react";
+import { VStack, Heading, Text, Button, Alert, AlertIcon, Card, CardBody, Spinner, Center, Box, Input } from "@chakra-ui/react";
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useContext, useState, useRef } from "react";
 import { UserContext } from "../lib/context";
@@ -22,6 +22,7 @@ function useOSFEntry() {
     projectInfo: null
   });
   const processingRef = useRef(false);
+  const titleRef = useRef(null);
 
   const osfUserId = cleanOsfUrl(searchParams?.get('userIri'));
   const osfComponentId = cleanOsfUrl(searchParams?.get('nodeIri'));
@@ -124,6 +125,8 @@ function useOSFEntry() {
     if (processingRef.current) return;
     processingRef.current = true;
 
+    const experimentTitle = titleRef.current?.value || 'DataPipe Data';
+
     setState(prev => ({ ...prev, status: 'creating' }));
 
     try {
@@ -146,12 +149,10 @@ function useOSFEntry() {
       // Validate access to the OSF component
       await validateOsfAccess(osfToken, osfComponentId);
 
-      // Get component info for experiment title
+      // Get component info for region
       const componentInfo = await getOsfComponentInfo(osfToken, osfComponentId);
-      
-      // Generate experiment title and component name
-      const experimentTitle = `${componentInfo.title} - DataPipe Experiment`;
-      const dataComponentName = generateOsfComponentName();
+
+      const dataComponentName = generateOsfComponentName(experimentTitle);
 
       // Create the experiment using frontend utilities
       const result = await createExperiment({
@@ -197,13 +198,14 @@ function useOSFEntry() {
     osfComponentId,
     handleAuthenticate,
     handleCreateExperiment,
+    titleRef,
     isAuthenticated: user?.uid && userData?.osfUserId === osfUserId,
     user: userData
   };
 }
 
 function OSFEntryPage() {
-  const { state, osfUserId, osfComponentId, handleAuthenticate, handleCreateExperiment, isAuthenticated, user: userData } = useOSFEntry();
+  const { state, osfUserId, osfComponentId, handleAuthenticate, handleCreateExperiment, titleRef, isAuthenticated, user: userData } = useOSFEntry();
 
   const renderContent = () => {
     switch (state.status) {
@@ -236,7 +238,13 @@ function OSFEntryPage() {
                 <strong>OSF User:</strong> {osfUserId}
               </Text>
             </Box>
-            
+            <Input
+              ref={titleRef}
+              placeholder="DataPipe Data"
+              size="md"
+              w="full"
+            />
+
             {userData?.uid && userData?.osfUserId === osfUserId ? (
               <Button 
                 colorScheme="brandTeal" 
