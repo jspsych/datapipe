@@ -66,4 +66,4 @@ jobs:
       - name: Use test firebase project
         run: firebase use test
       - name: Deploy firebase project
-        run: firebase deploy --force
+        run: firebase deploy --only firestore,functions,hosting --force

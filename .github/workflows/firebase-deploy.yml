@@ -62,4 +62,4 @@ jobs:
       - name: Use default firebase project
         run: firebase use default
       - name: Deploy firebase project
-        run: firebase deploy --force
+        run: firebase deploy --only firestore,functions,hosting --force
