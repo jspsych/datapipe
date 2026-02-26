@@ -125,7 +125,7 @@ function useOSFEntry() {
     if (processingRef.current) return;
     processingRef.current = true;
 
-    const experimentTitle = titleRef.current?.value || '';
+    const experimentTitle = titleRef.current?.value || 'DataPipe Data';
 
     setState(prev => ({ ...prev, status: 'creating' }));
 
