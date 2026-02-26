@@ -22,6 +22,7 @@ import { UserContext } from "../../lib/context";
 import { useDocumentData } from "react-firebase-hooks/firestore";
 import { doc, setDoc } from "firebase/firestore";
 import { db, auth } from "../../lib/firebase";
+
 import { CheckCircleIcon, WarningIcon, QuestionIcon } from "@chakra-ui/icons";
 import { OsfIcon } from "../OsfIcon";
 
@@ -72,29 +73,24 @@ export default function SelectAuth() {
         const token = document.querySelector("#osf-token").value;
         setIsSubmittingToken(true);
         try {
-            const isTokenValid = await checkOSFToken(token);
-            const userDoc = doc(db, "users", user.uid);
-            await setDoc(
-                userDoc,
-                { osfToken: token, osfTokenValid: isTokenValid },
-                { merge: true }
-            );
+            const idToken = await auth.currentUser.getIdToken();
+            const response = await fetch("/api/saveosftoken", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${idToken}`,
+                },
+                body: JSON.stringify({ token }),
+            });
+            if (!response.ok) {
+                throw new Error("Failed to save token");
+            }
             setIsSubmittingToken(false);
             onTokenClose();
         } catch (error) {
             setIsSubmittingToken(false);
             console.log(error);
         }
-    }
-
-    const checkOSFToken = async (token) => {
-        const response = await fetch(`https://api.${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/v2/`, {
-            method: "GET",
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
-        });
-        return response.status === 200;
     }
 
     if (loading) return <div>Loading...</div>;
@@ -281,7 +277,7 @@ export default function SelectAuth() {
                                 <VStack spacing={4} w="100%">
                                     <FormControl id="osf-token">
                                         <FormLabel>OSF Token</FormLabel>
-                                        <Input type="text" defaultValue={data.osfToken} />
+                                        <Input type="text" placeholder="Paste your OSF token here" />
                                     </FormControl>
                                 </VStack>
                             )}

@@ -1,4 +1,5 @@
 import { db } from "./app.js";
+import { encrypt } from "./crypto-utils.js";
 
 interface RefreshResult {
   success: boolean;
@@ -45,14 +46,14 @@ export async function refreshAndUpdateUser(
   const tokenData = await tokenResponse.json();
 
   const updateData: Record<string, unknown> = {
-    authToken: tokenData.access_token,
+    authToken: encrypt(tokenData.access_token),
     authTokenExpires: Date.now() + tokenData.expires_in * 1000,
   };
 
   // Handle refresh token rotation: if OSF returns a new refresh token,
   // save it and reset the expiration window.
   if (tokenData.refresh_token) {
-    updateData.refreshToken = tokenData.refresh_token;
+    updateData.refreshToken = encrypt(tokenData.refresh_token);
     updateData.refreshTokenExpires = Date.now() + REFRESH_TOKEN_LIFETIME_MS;
   }
 

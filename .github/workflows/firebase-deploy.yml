@@ -53,6 +53,7 @@ jobs:
         working-directory: functions
         run: |
           echo "CLIENT_SECRET=${{ secrets.TEST_CLIENT_SECRET }}" > .env
+          echo "TOKEN_ENCRYPTION_KEY=${{ secrets.FIRESTORE_KEY_PRODUCTION }}" >> .env
       - name: Install dependencies and build functions
         working-directory: functions
         run: |

@@ -3,13 +3,8 @@ service cloud.firestore {
   match /databases/{database}/documents {
     match /users/{userId} {
       function isAccountCreation() {
-        return request.resource.data.keys().hasOnly(['email', 'experiments', 'osfToken', 'osfTokenValid', 'uid', 'usingPersonalToken', 'refreshToken', 'refreshTokenExpires', 'authToken', 'authTokenExpires', 'osfUserId', 'displayName', 'authMethod', 'createdAt']);
-      }
-      function isUpdateRefreshToken() {
-        return request.resource.data.keys().hasOnly(['refreshToken', 'refreshTokenExpires', 'authToken', 'authTokenExpires']);
-      }
-      function isUpdateAuthToken() {
-        return request.resource.data.keys().hasOnly(['authToken', 'authTokenExpires']);
+        return request.resource.data.keys().hasOnly(['email', 'experiments', 'osfToken', 'osfTokenValid', 'uid', 'usingPersonalToken', 'refreshToken', 'refreshTokenExpires', 'authToken', 'authTokenExpires', 'osfUserId', 'displayName', 'authMethod', 'createdAt'])
+          && request.resource.data.osfToken == '';
       }
       function isTokenMethodUpdate() {
         return request.resource.data.keys().hasOnly(['usingPersonalToken']);
@@ -18,8 +13,8 @@ service cloud.firestore {
         return request.resource.data.keys().hasOnly(['experiments']);
       }
       allow read: if(request.auth.uid == userId);
-      allow write: if(request.auth.uid == userId) && 
-        (isAccountCreation() || isUpdateRefreshToken() || isUpdateAuthToken() || isTokenMethodUpdate() || isExperimentsUpdate());
+      allow write: if(request.auth.uid == userId) &&
+        (isAccountCreation() || isTokenMethodUpdate() || isExperimentsUpdate());
     }
     match /experiments/{experimentId} {
       function verifyFields() {

@@ -1,6 +1,7 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { db } from "./app.js";
 import { refreshAndUpdateUser } from "./refresh-token.js";
+import { decrypt } from "./crypto-utils.js";
 import { UserData } from "./interfaces.js";
 
 const TWO_WEEKS_MS = 14 * 24 * 60 * 60 * 1000;
@@ -49,7 +50,7 @@ export const scheduledTokenRefresh = onSchedule("0 2 * * 0", async () => {
     }
 
     try {
-      const result = await refreshAndUpdateUser(userId, userData.refreshToken);
+      const result = await refreshAndUpdateUser(userId, decrypt(userData.refreshToken));
 
       if (result.success) {
         console.log(`Successfully refreshed token for user ${userId}.`);
