@@ -8,7 +8,7 @@ import { createExperiment, getUserOsfToken } from "../lib/experiment-creation";
 import { validateOsfAccess, getOsfComponentInfo, generateOsfComponentName, cleanOsfUrl } from "../lib/osf-utils";
 import { useDocumentData } from "react-firebase-hooks/firestore";
 import { doc } from "firebase/firestore";
-import { db } from "../lib/firebase";
+import { db, auth } from "../lib/firebase";
 
 // Custom hook for OSF entry point logic
 function useOSFEntry() {
@@ -141,7 +141,7 @@ function useOSFEntry() {
       }
 
       // Get OSF token for validation
-      const osfToken = await getUserOsfToken({ uid: userData.uid });
+      const osfToken = await getUserOsfToken(auth.currentUser);
       if (!osfToken) {
         throw new Error('Your OSF authentication has expired. Please sign out and sign in again with OSF.');
       }
