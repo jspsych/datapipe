@@ -21,7 +21,7 @@ export const apiCondition = onRequest({ cors: true }, async (req, res) => {
 
   if (!exp_doc.exists) {
     res.status(400).json(MESSAGES.EXPERIMENT_NOT_FOUND);
-    writeLog(experimentID, "logError", MESSAGES.EXPERIMENT_NOT_FOUND);
+    await writeLog(experimentID, "logError", MESSAGES.EXPERIMENT_NOT_FOUND);
     return;
   }
 
