@@ -71,6 +71,8 @@ describe("apiData", () => {
       data: "test",
       filename: "test",
     });
+    // Wait for in-flight log writes to settle before reading
+    await new Promise((resolve) => setTimeout(resolve, 500));
     let doc = await db.collection("logs").doc("testlog").get();
     expect(doc.data().saveData).toBe(1);
 
@@ -79,6 +81,7 @@ describe("apiData", () => {
       data: "test",
       filename: "test",
     });
+    await new Promise((resolve) => setTimeout(resolve, 500));
     doc = await db.collection("logs").doc("testlog").get();
     expect(doc.data().saveData).toBe(2);
   });
@@ -94,6 +97,8 @@ describe("apiData", () => {
       filename: "test",
     });
 
+    // Wait for in-flight log writes to settle before reading
+    await new Promise((resolve) => setTimeout(resolve, 500));
     let doc = await db.collection("logs").doc("data-testexp").get();
 
     expect(doc.data().logError).toBe(1);
@@ -113,6 +118,7 @@ describe("apiData", () => {
       filename: "test",
     });
 
+    await new Promise((resolve) => setTimeout(resolve, 500));
     doc = await db.collection("logs").doc("data-testexp").get();
 
     expect(doc.data().logError).toBe(2);
