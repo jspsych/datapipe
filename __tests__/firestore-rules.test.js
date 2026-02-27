@@ -68,7 +68,7 @@ describe('/users', () => {
   it('should deny writes when uid does not match authenticated user id', async () => {
     const user123 = testEnv.authenticatedContext('user123');
 
-    await assertFails(setDoc(doc(user123.firestore(), 'users/user123'), {
+    await assertFails(setDoc(doc(user123.firestore(), 'users/user456'), {
       email: 'john@doe.com',
       experiments: ['exp1', 'exp2'],
       osfToken: '',

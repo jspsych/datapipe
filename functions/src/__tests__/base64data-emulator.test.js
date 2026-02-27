@@ -36,6 +36,7 @@ beforeAll(async () => {
   await db.collection("experiments").doc("base64-testexp").set({ activeBase64: false });
   await db.collection("users").doc("testuser").set({
     osfTokenValid: false,
+    usingPersonalToken: true,
   });
   await db.collection("experiments").doc("base64-testexp-active-no-owner").set({
     activeBase64: true,

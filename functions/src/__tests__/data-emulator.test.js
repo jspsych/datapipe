@@ -36,6 +36,7 @@ beforeAll(async () => {
   await db.collection("experiments").doc("data-testexp").set({ active: false });
   await db.collection("users").doc("testuser").set({
     osfTokenValid: false,
+    usingPersonalToken: true,
   });
   await db.collection("experiments").doc("data-testexp-active-no-owner").set({
     active: true,

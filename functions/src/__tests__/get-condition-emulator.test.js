@@ -62,6 +62,8 @@ describe("getCondition", () => {
   it("should increment the error log for an experiment when errors are caught", async () => {
 
     const db = getFirestore();
+    // Wait briefly for any in-flight writes from previous tests to settle
+    await new Promise((resolve) => setTimeout(resolve, 500));
     await db.collection("logs").doc("testexp").delete();
 
     await getCondition({ experimentID: "testexp" });
