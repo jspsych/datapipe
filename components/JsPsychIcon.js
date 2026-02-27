@@ -1,11 +1,7 @@
-import { createIcon } from "@chakra-ui/icons";
+import { Icon } from "@chakra-ui/react";
 
-// using `path`
-export const JsPsychIcon = createIcon({
-  displayName: "jsPsychIcon",
-  viewBox: "0 0 333 333",
-  // path can also be an array of elements, if you have multiple paths, lines, shapes, etc.
-  path: [
+export const JsPsychIcon = (props) => (
+  <Icon viewBox="0 0 333 333" {...props}>
     <path
       key="1"
       d="M0 0c0-7.729-6.267-13.997-14-13.997-7.732 0-14.001 6.268-14.001 13.997 0 7.733 6.269 14.002 14.001 14.002C-6.267 14.002 0 7.733 0 0"
@@ -378,8 +374,8 @@ export const JsPsychIcon = createIcon({
       fill="#13b24b"
       transform="matrix(1.33333 0 0 -1.33333 198.366 100.603)"
     />,
-  ],
-});
+  </Icon>
+);
 
 /*
 <svg

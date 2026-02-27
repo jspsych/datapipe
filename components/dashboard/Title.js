@@ -1,71 +1,57 @@
 import {
   Editable,
-  EditableInput,
-  EditablePreview,
-  useEditableControls,
   HStack,
   IconButton,
-  Input,
   Flex,
 } from "@chakra-ui/react";
 
-import { CheckIcon, CloseIcon, EditIcon } from "@chakra-ui/icons";
+import { Check, X, Pencil } from "lucide-react";
 
 import { db } from "../../lib/firebase";
 import { doc, setDoc } from "firebase/firestore";
 
 export default function ExperimentTitle({ data }) {
-  function EditableControls() {
-    const {
-      isEditing,
-      getSubmitButtonProps,
-      getCancelButtonProps,
-      getEditButtonProps,
-    } = useEditableControls();
-
-    return isEditing ? (
-      <HStack spacing={2}>
-        <IconButton
-          size="sm"
-          variant="outline"
-          colorScheme={"brandTeal"}
-          icon={<CheckIcon />}
-          {...getSubmitButtonProps()}
-        />
-        <IconButton
-          size="sm"
-          variant="outline"
-          colorScheme={"red"}
-          icon={<CloseIcon />}
-          {...getCancelButtonProps()}
-        />
-      </HStack>
-    ) : (
-      <IconButton
-        variant="outline"
-        colorScheme={"whiteAlpha"}
-        size="sm"
-        icon={<EditIcon />}
-        {...getEditButtonProps()}
-      />
-    );
-  }
-
   return (
-    <Editable
+    <Editable.Root
       textAlign="left"
       defaultValue={data.title}
       fontSize="4xl"
-      isPreviewFocusable={false}
-      onSubmit={(value) => updateExperimentTitle(value, data.id, data.title)}
+      onValueCommit={(details) => updateExperimentTitle(details.value, data.id, data.title)}
       as={Flex}
       align="center"
     >
-      <EditablePreview mr={8} />
-      {/* Here is the custom input */}
-      <Input as={EditableInput} size="lg" mr={8} />
-      <EditableControls />
-    </Editable>
+      <Editable.Preview mr={8} />
+      <Editable.Input size="lg" mr={8} />
+      <Editable.Control>
+        <Editable.EditTrigger asChild>
+          <IconButton
+            variant="outline"
+            colorPalette={"whiteAlpha"}
+            size="sm"
+          >
+            <Pencil />
+          </IconButton>
+        </Editable.EditTrigger>
+        <Editable.SubmitTrigger asChild>
+          <IconButton
+            size="sm"
+            variant="outline"
+            colorPalette={"brandTeal"}
+          >
+            <Check />
+          </IconButton>
+        </Editable.SubmitTrigger>
+        <Editable.CancelTrigger asChild>
+          <IconButton
+            size="sm"
+            variant="outline"
+            colorPalette={"red"}
+          >
+            <X />
+          </IconButton>
+        </Editable.CancelTrigger>
+      </Editable.Control>
+    </Editable.Root>
   );
 }
 

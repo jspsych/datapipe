@@ -22,20 +22,20 @@ export default function Home() {
       flexDirection={["column-reverse", "row"]}
       align="center"
     >
-      <VStack spacing={4} align="start" flexBasis="66%">
+      <VStack gap={4} align="start" flexBasis="66%">
         <Text fontSize={["2xl", "4xl"]} fontWeight="semibold">
           Send data from your behavioral experiments to the Open Science
           Framework, for free.
         </Text>
         {user ? (
           <Link href="/admin">
-            <Button variant={"outline"} colorScheme={"brandOrange"} size={"lg"}>
+            <Button variant={"outline"} colorPalette={"brandOrange"} size={"lg"}>
               Go to Dashboard
             </Button>
           </Link>
         ) : (
           <Link href="/signup">
-            <Button variant={"outline"} colorScheme={"brandOrange"} size={"lg"}>
+            <Button variant={"outline"} colorPalette={"brandOrange"} size={"lg"}>
               Create an account
             </Button>
           </Link>
@@ -45,7 +45,6 @@ export default function Home() {
         src="/homepipe.png"
         alt="Decorative illustration of a pipe with data flowing through it"
         boxSize={["100%", "768px"]}
-        quality={100}
       />
     </Stack>
   );

@@ -1,13 +1,13 @@
 import { Stack, HStack, Text, Link, Heading } from "@chakra-ui/react";
 
-import { ExternalLinkIcon } from "@chakra-ui/icons";
+import { ExternalLink } from "lucide-react";
 
 export default function ExperimentInfo({ data }) {
   return (
     <Stack
       w="100%"
       pr={8}
-      spacing={2}
+      gap={2}
       bgColor={"black"}
       borderRadius={16}
       p={6}
@@ -19,8 +19,8 @@ export default function ExperimentInfo({ data }) {
       </HStack>
       <HStack justify="space-between">
         <Text>OSF Project</Text>
-        <Link color="white" href={`https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/${data.osfRepo}`} isExternal>
-          {`https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/${data.osfRepo}`} <ExternalLinkIcon mx="2px" />
+        <Link color="white" href={`https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/${data.osfRepo}`} target="_blank" rel="noopener noreferrer">
+          {`https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/${data.osfRepo}`} <ExternalLink style={{ display: "inline", width: "1em", height: "1em" }} />
         </Link>
       </HStack>
       <HStack justify="space-between">
@@ -28,9 +28,10 @@ export default function ExperimentInfo({ data }) {
         <Link
           color="white"
           href={`https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/${data.osfComponent}`}
-          isExternal
+          target="_blank"
+          rel="noopener noreferrer"
         >
-          {`https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/${data.osfComponent}`} <ExternalLinkIcon mx="2px" />
+          {`https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/${data.osfComponent}`} <ExternalLink style={{ display: "inline", width: "1em", height: "1em" }} />
         </Link>
       </HStack>
       <HStack justify="space-between">

@@ -7,7 +7,7 @@ import {
 
 export default function GettingStarted() {
   return (
-    <Stack w={["95%", 960]} spacing={6}>
+    <Stack w={["95%", 960]} gap={6}>
       <Heading as="h1" size="2xl">
         Getting Started
       </Heading>
@@ -23,7 +23,7 @@ export default function GettingStarted() {
       <Text>
         The first step is to create an OSF project for your experiment. You can
         create an OSF project at{" "}
-        <Link isExternal href={`https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io`}>
+        <Link href={`https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io`} target="_blank" rel="noopener noreferrer">
           https://osf.io
         </Link>
         . You will need to create an account if you do not already have one.
@@ -34,13 +34,13 @@ export default function GettingStarted() {
         Link your OSF account to DataPipe
       </Heading>
       <Text>
-        In order to link your OSF account to DataPipe, you need to authorize DataPipe 
-        to work with your OSF account. If you&apos;ve created your account or sign into 
+        In order to link your OSF account to DataPipe, you need to authorize DataPipe
+        to work with your OSF account. If you&apos;ve created your account or sign into
         DataPipe with your OSF account, then you have already authorized DataPipe to work
         with the OSF. If not, you can authorize DataPipe by going to your account&apos;s settings,
-        clicking the Switch to one-click authentication if not already done, and then clicking 
-        the Link OSF Account button. This will take you to the OSF website where you can 
-        authorize DataPipe to work with your OSF account. After authorizing, you will be 
+        clicking the Switch to one-click authentication if not already done, and then clicking
+        the Link OSF Account button. This will take you to the OSF website where you can
+        authorize DataPipe to work with your OSF account. After authorizing, you will be
         redirected back to DataPipe.
       </Text>
       <Heading as="h3" size="md">
@@ -126,7 +126,7 @@ export default function GettingStarted() {
       <Text>
         In order to send data to DataPipe, you need to add code to your
         experiment to communicate with DataPipe. If you are using jsPsych,
-        then you can use the <Link isExternal href="https://github.com/jspsych/jspsych-contrib/tree/main/packages/plugin-pipe">jsPsychPipe plugin</Link>. If you are not using jsPsych, then you can use the DataPipe API
+        then you can use the <Link href="https://github.com/jspsych/jspsych-contrib/tree/main/packages/plugin-pipe" target="_blank" rel="noopener noreferrer">jsPsychPipe plugin</Link>. If you are not using jsPsych, then you can use the DataPipe API
         directly via fetch requests.
       </Text>
       <Text>
@@ -155,11 +155,11 @@ export default function GettingStarted() {
       </Text>
       <Text>
         First, create a GitHub account at{" "}
-        <Link isExternal href="https://www.github.com">
+        <Link href="https://www.github.com" target="_blank" rel="noopener noreferrer">
           https://github.com
         </Link>{" "}
         if you do not already have one. Then go to{" "}
-        <Link isExternal href="https://www.github.com/new">
+        <Link href="https://www.github.com/new" target="_blank" rel="noopener noreferrer">
           https://github.com/new
         </Link>{" "}
         to create a new repository. You can name it whatever you want, but the
@@ -221,11 +221,11 @@ export default function GettingStarted() {
         the next condition from DataPipe.
       </Text>
       <Text>
-        <span style={{ fontWeight: "bold" }}>Enable Psych-DS metadata production</span> will 
+        <span style={{ fontWeight: "bold" }}>Enable Psych-DS metadata production</span> will
         activate the production of metadata adhering to {" "}
-              <Link isExternal href="https://github.com/psych-ds/psych-DS">
+              <Link href="https://github.com/psych-ds/psych-DS" target="_blank" rel="noopener noreferrer">
                 Psych-DS
-              </Link>{" "} from your experiment data. DataPipe creates 
+              </Link>{" "} from your experiment data. DataPipe creates
         a dataset_description.json file in OSF and updates it as necessary after every session.
       </Text>
       <Text>

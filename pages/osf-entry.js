@@ -1,6 +1,4 @@
-'use client';
-
-import { VStack, Heading, Text, Button, Alert, AlertIcon, Card, CardBody, Spinner, Center, Box, Input, FormLabel } from "@chakra-ui/react";
+import { VStack, Heading, Text, Button, Alert, Card, Spinner, Center, Box, Input, Field } from "@chakra-ui/react";
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useContext, useState, useRef } from "react";
 import { UserContext } from "../lib/context";
@@ -10,14 +8,11 @@ import { useDocumentData } from "react-firebase-hooks/firestore";
 import { doc } from "firebase/firestore";
 import { db, auth } from "../lib/firebase";
 
-// Custom hook for OSF entry point logic
 function useOSFEntry() {
   const { user, loading: userLoading } = useContext(UserContext);
   const searchParams = useSearchParams();
   const [state, setState] = useState({
-    // regular: 'loading' | 'ready' | 'authenticating' | 'creating' | 'success' | 'error'
-    // link:    'link-ready' | 'link-error' | 'link-success' | 'link-already-done'
-    status: 'loading', 
+    status: 'loading',
     error: null,
     projectInfo: null
   });
@@ -27,7 +22,6 @@ function useOSFEntry() {
   const osfUserId = cleanOsfUrl(searchParams?.get('userIri'));
   const osfComponentId = cleanOsfUrl(searchParams?.get('nodeIri'));
 
-  // Load full user data from Firestore
   const [userData, userDataLoading] = useDocumentData(
     user?.uid ? doc(db, "users", user.uid) : null
   );
@@ -35,7 +29,6 @@ function useOSFEntry() {
   useEffect(() => {
     if (userLoading || userDataLoading) return;
 
-    // Validate required parameters
     if (!osfUserId) {
       setState({
         status: 'error',
@@ -45,15 +38,12 @@ function useOSFEntry() {
       return;
     }
 
-    // not using nodeIri -> accessing through OSF settings so just set up account w/ osf
     if (!osfComponentId) {
-      // user already auth, linked to correct OSF, so nothing needs to be done
       if (user?.uid && userData?.osfUserId === osfUserId) {
         setState(prev => ({ ...prev, status: 'link-already-done' }));
         return;
       }
 
-      // user auth but linked to different OSF, show error
       if (user?.uid && userData?.osfUserId && userData?.osfUserId !== osfUserId) {
         setState({
           status: 'link-error',
@@ -63,18 +53,15 @@ function useOSFEntry() {
         return;
       }
 
-      // user needs to authenticate (no user, or user without OSF linked)
       setState(prev => ({ ...prev, status: 'link-ready' }));
       return;
     }
 
-    // If user is already authenticated and has the correct OSF linked, proceed to experiment creation
     if (user?.uid && userData?.osfUserId === osfUserId) {
       setState(prev => ({ ...prev, status: 'ready' }));
       return;
     }
 
-    // If user is authenticated but with different OSF account, show authentication option
     if (user?.uid && userData?.osfUserId && userData?.osfUserId !== osfUserId) {
       setState({
         status: 'error',
@@ -84,7 +71,6 @@ function useOSFEntry() {
       return;
     }
 
-    // User needs to authenticate (no user, or user without OSF linked)
     setState(prev => ({ ...prev, status: 'ready' }));
   }, [user, userLoading, userData, userDataLoading, osfUserId, osfComponentId]);
 
@@ -99,7 +85,6 @@ function useOSFEntry() {
       if (!stateRes.ok) throw new Error('Failed to generate state');
       const { state } = await stateRes.json();
 
-      // Store the OSF entry context for OAuth callback
       localStorage.setItem('osfAuthFlow', 'osf-entry');
       localStorage.setItem('osfEntryComponentId', osfComponentId);
       localStorage.setItem('osfEntryUserId', osfUserId);
@@ -130,31 +115,25 @@ function useOSFEntry() {
     setState(prev => ({ ...prev, status: 'creating' }));
 
     try {
-      // Check if user is properly authenticated
       if (!userData?.uid) {
         throw new Error('You are not signed in to DataPipe. Please sign in first.');
       }
 
-      // Check if user has OSF linked
       if (!userData?.osfUserId) {
         throw new Error('Your OSF account is not linked. Please sign in with OSF first.');
       }
 
-      // Get OSF token for validation
       const osfToken = await getUserOsfToken(auth.currentUser);
       if (!osfToken) {
         throw new Error('Your OSF authentication has expired. Please sign out and sign in again with OSF.');
       }
 
-      // Validate access to the OSF component
       await validateOsfAccess(osfToken, osfComponentId);
 
-      // Get component info for region
       const componentInfo = await getOsfComponentInfo(osfToken, osfComponentId);
 
       const dataComponentName = generateOsfComponentName(experimentTitle);
 
-      // Create the experiment using frontend utilities
       const result = await createExperiment({
         title: experimentTitle,
         osfRepo: osfComponentId,
@@ -169,20 +148,20 @@ function useOSFEntry() {
         maxSessions: 1
       });
 
-      setState(prev => ({ 
-        ...prev, 
+      setState(prev => ({
+        ...prev,
         status: 'success',
-        projectInfo: { 
-          experimentId: result.experimentId, 
+        projectInfo: {
+          experimentId: result.experimentId,
           title: result.title,
           osfComponent: result.osfComponent,
-          osfProject: result.osfProject 
+          osfProject: result.osfProject
         }
       }));
     } catch (error) {
       console.error('Experiment creation error:', error);
-      setState(prev => ({ 
-        ...prev, 
+      setState(prev => ({
+        ...prev,
         status: 'error',
         error: error.message || 'Failed to create experiment'
       }));
@@ -211,9 +190,9 @@ function OSFEntryPage() {
     switch (state.status) {
       case 'loading':
         return (
-          <VStack spacing={6}>
+          <VStack gap={6}>
             <Center>
-              <Spinner size="xl" color="blue.500" thickness="4px" />
+              <Spinner size="xl" color="blue.500" borderWidth="4px" />
             </Center>
             <Heading size="md" textAlign="center">
               Loading...
@@ -223,7 +202,7 @@ function OSFEntryPage() {
 
       case 'ready':
         return (
-          <VStack spacing={6}>
+          <VStack gap={6}>
             <Heading size="lg" textAlign="center">
               Create DataPipe Experiment
             </Heading>
@@ -239,18 +218,20 @@ function OSFEntryPage() {
               </Text>
             </Box>
             <Box w="full">
-              <FormLabel mb={1}>Experiment Name</FormLabel>
-              <Input
-                ref={titleRef}
-                placeholder="DataPipe Data"
-                size="md"
-                w="full"
-              />
+              <Field.Root>
+                <Field.Label mb={1}>Experiment Name</Field.Label>
+                <Input
+                  ref={titleRef}
+                  placeholder="DataPipe Data"
+                  size="md"
+                  w="full"
+                />
+              </Field.Root>
             </Box>
 
             {userData?.uid && userData?.osfUserId === osfUserId ? (
-              <Button 
-                colorScheme="brandTeal" 
+              <Button
+                colorPalette="brandTeal"
                 onClick={handleCreateExperiment}
                 size="lg"
                 w="full"
@@ -258,15 +239,15 @@ function OSFEntryPage() {
                 Create Experiment
               </Button>
             ) : userData?.uid ? (
-              <VStack spacing={3}>
+              <VStack gap={3}>
                 <Text fontSize="sm" color="gray.300" textAlign="center">
-                  {userData?.osfUserId ? 
+                  {userData?.osfUserId ?
                     `You're signed in with OSF account ${userData.osfUserId}, but this link is for ${osfUserId}.` :
                     "Your DataPipe account isn't linked to OSF yet."
                   }
                 </Text>
-                <Button 
-                  colorScheme="brandTeal" 
+                <Button
+                  colorPalette="brandTeal"
                   onClick={handleAuthenticate}
                   size="lg"
                   w="full"
@@ -275,12 +256,12 @@ function OSFEntryPage() {
                 </Button>
               </VStack>
             ) : (
-              <VStack spacing={3}>
+              <VStack gap={3}>
                 <Text fontSize="sm" color="gray.300" textAlign="center">
                   You need to sign in to DataPipe with your OSF account.
                 </Text>
-                <Button 
-                  colorScheme="brandTeal" 
+                <Button
+                  colorPalette="brandTeal"
                   onClick={handleAuthenticate}
                   size="lg"
                   w="full"
@@ -294,9 +275,9 @@ function OSFEntryPage() {
 
       case 'authenticating':
         return (
-          <VStack spacing={6}>
+          <VStack gap={6}>
             <Center>
-              <Spinner size="xl" color="blue.500" thickness="4px" />
+              <Spinner size="xl" color="blue.500" borderWidth="4px" />
             </Center>
             <Heading size="md" textAlign="center">
               Redirecting to OSF...
@@ -309,9 +290,9 @@ function OSFEntryPage() {
 
       case 'creating':
         return (
-          <VStack spacing={6}>
+          <VStack gap={6}>
             <Center>
-              <Spinner size="xl" color="green.500" thickness="4px" />
+              <Spinner size="xl" color="green.500" borderWidth="4px" />
             </Center>
             <Heading size="md" textAlign="center">
               Creating Experiment...
@@ -324,10 +305,10 @@ function OSFEntryPage() {
 
       case 'success':
         return (
-          <VStack spacing={6}>
-            <Alert status="success" borderRadius="md" bg="green.800" borderColor="green.600" borderWidth={1}>
-              <AlertIcon color="green.300" />
-              <VStack spacing={2} align="start">
+          <VStack gap={6}>
+            <Alert.Root status="success" borderRadius="md" bg="green.800" borderColor="green.600" borderWidth={1}>
+              <Alert.Indicator color="green.300" />
+              <VStack gap={2} align="start">
                 <Text fontWeight="medium" color="white">Experiment Created Successfully!</Text>
                 {state.projectInfo && (
                   <Text fontSize="sm" color="gray.100">
@@ -335,14 +316,14 @@ function OSFEntryPage() {
                   </Text>
                 )}
               </VStack>
-            </Alert>
-            <VStack spacing={3} w="full">
+            </Alert.Root>
+            <VStack gap={3} w="full">
               <Text fontSize="sm" color="gray.300" textAlign="center">
                 Your DataPipe experiment is now ready to collect data.
               </Text>
-              <VStack spacing={2} w="full">
+              <VStack gap={2} w="full">
                 <Button
-                  colorScheme="brandTeal"
+                  colorPalette="brandTeal"
                   size="md"
                   w="full"
                   onClick={() => {
@@ -360,19 +341,19 @@ function OSFEntryPage() {
 
       case 'error':
         return (
-          <VStack spacing={6}>
-            <Alert status="error" borderRadius="md" bg="red.800" borderColor="red.600" borderWidth={1}>
-              <AlertIcon color="red.300" />
-              <VStack spacing={2} align="start">
+          <VStack gap={6}>
+            <Alert.Root status="error" borderRadius="md" bg="red.800" borderColor="red.600" borderWidth={1}>
+              <Alert.Indicator color="red.300" />
+              <VStack gap={2} align="start">
                 <Text fontWeight="medium" color="white">Error</Text>
                 <Text fontSize="sm" color="gray.100">{state.error}</Text>
               </VStack>
-            </Alert>
-            
-            <VStack spacing={3}>
+            </Alert.Root>
+
+            <VStack gap={3}>
               {state.error.includes('authentication has expired') || state.error.includes('sign out') ? (
-                <Button 
-                  colorScheme="brandTeal" 
+                <Button
+                  colorPalette="brandTeal"
                   onClick={handleAuthenticate}
                   size="sm"
                 >
@@ -388,15 +369,15 @@ function OSFEntryPage() {
 
       case 'link-ready':
         return (
-          <VStack spacing={6}>
+          <VStack gap={6}>
             <Heading size="lg" textAlign="center">
               Link Your OSF Account
             </Heading>
             <Text textAlign="center" color="gray.300">
               To proceed, please link your OSF account to DataPipe.
             </Text>
-            <Button 
-              colorScheme="brandTeal"
+            <Button
+              colorPalette="brandTeal"
               onClick={handleAuthenticate}
               size="lg"
               w="full"
@@ -405,19 +386,19 @@ function OSFEntryPage() {
             </Button>
           </VStack>
         );
-        
+
       case 'link-already-done':
         return (
-          <VStack spacing={6}>
-            <Alert status="success" borderRadius="md" bg="green.800" borderColor="green.600" borderWidth={1}>
-              <AlertIcon color="green.300" />
-              <VStack spacing={2} align="start">
+          <VStack gap={6}>
+            <Alert.Root status="success" borderRadius="md" bg="green.800" borderColor="green.600" borderWidth={1}>
+              <Alert.Indicator color="green.300" />
+              <VStack gap={2} align="start">
                 <Text fontWeight="medium" color="white">Your OSF account is linked!</Text>
                 <Text fontSize="sm" color="gray.100">
                   You can now close this window and return to the OSF.
                 </Text>
               </VStack>
-            </Alert>
+            </Alert.Root>
             <Text fontSize="sm" color="gray.400" textAlign="center">
               You can safely close this tab and return to OSF.
             </Text>
@@ -426,14 +407,14 @@ function OSFEntryPage() {
 
       case 'link-error':
         return (
-          <VStack spacing={6}>
-            <Alert status="error" borderRadius="md" bg="red.800" borderColor="red.600" borderWidth={1}>
-              <AlertIcon color="red.300" />
-              <VStack spacing={2} align="start">
+          <VStack gap={6}>
+            <Alert.Root status="error" borderRadius="md" bg="red.800" borderColor="red.600" borderWidth={1}>
+              <Alert.Indicator color="red.300" />
+              <VStack gap={2} align="start">
                 <Text fontWeight="medium" color="white">Linking Error</Text>
                 <Text fontSize="sm" color="gray.100">{state.error}</Text>
               </VStack>
-            </Alert>
+            </Alert.Root>
             <Text fontSize="sm" color="gray.400" textAlign="center">
               You can safely close this tab and try again from OSF.
             </Text>
@@ -442,7 +423,7 @@ function OSFEntryPage() {
 
       default:
         return (
-          <VStack spacing={6}>
+          <VStack gap={6}>
             <Heading size="md" textAlign="center">
               Loading...
             </Heading>
@@ -453,21 +434,15 @@ function OSFEntryPage() {
 
   return (
     <Box minH="100vh" bg="greyBackground" py={8}>
-      <Card w={400} mx="auto" mt={8}>
-        <CardBody p={8}>
+      <Card.Root w={400} mx="auto" mt={8}>
+        <Card.Body p={8}>
           {renderContent()}
-        </CardBody>
-      </Card>
+        </Card.Body>
+      </Card.Root>
     </Box>
   );
 }
 
-// Disable SSR for this component to avoid hydration issues
-OSFEntryPage.getInitialProps = async () => {
-  return {};
-};
-
-// Opt out of the default layout (navbar/footer) for popup usage
 OSFEntryPage.getLayout = function getLayout(page) {
   return page;
 };

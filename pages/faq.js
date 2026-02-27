@@ -2,14 +2,9 @@ import {
   Stack,
   Heading,
   Accordion,
-  AccordionItem,
-  AccordionButton,
-  AccordionPanel,
-  AccordionIcon,
   Text,
-  OrderedList,
-  ListItem,
   Link,
+  Box,
 } from "@chakra-ui/react";
 import NextLink from "next/link";
 
@@ -19,8 +14,8 @@ export default function FAQ() {
       <Heading as="h1" my={4}>
         FAQ
       </Heading>
-      <Accordion defaultIndex={[0]} allowMultiple>
-        <FAQItem question="How do I use DataPipe?">
+      <Accordion.Root defaultValue={["item-0"]} multiple collapsible>
+        <FAQItem value="item-0" question="How do I use DataPipe?">
           <Text>
             DataPipe serves as a connection between an experiment and the Open
             Science Framework. To use DataPipe, you will need to use a webhost
@@ -29,13 +24,13 @@ export default function FAQ() {
             to have an OSF account to store the data and create an authorization
             token on the OSF to allow DataPipe to write data to your OSF
             account. Our{" "}
-            <Link as={NextLink} href="/getting-started">
-              getting started guide
+            <Link asChild>
+              <NextLink href="/getting-started">getting started guide</NextLink>
             </Link>{" "}
             has more information about how to use DataPipe.
           </Text>
         </FAQItem>
-        <FAQItem question="Will DataPipe host my experiment?">
+        <FAQItem value="item-1" question="Will DataPipe host my experiment?">
           <Text mb={2}>
             No, you will need to use a different service to make the experiment
             available online. The benefit of using this service is that you do
@@ -44,7 +39,7 @@ export default function FAQ() {
             experiment for free.
           </Text>
           <Text>
-            <Link isExternal href="https://pages.github.com/">
+            <Link href="https://pages.github.com/" target="_blank" rel="noopener noreferrer">
               This guide on GitHub Pages
             </Link>{" "}
             describes how to set up a free website using their service. In the
@@ -53,7 +48,7 @@ export default function FAQ() {
             quickly.
           </Text>
         </FAQItem>
-        <FAQItem question="Will DataPipe store my data?">
+        <FAQItem value="item-2" question="Will DataPipe store my data?">
           <Text>
             Not directly. DataPipe helps you store your data on the Open Science
             Framework. When you use DataPipe, the data is routed through our
@@ -61,10 +56,10 @@ export default function FAQ() {
             the OSF. DataPipe does not store a copy of the data.
           </Text>
         </FAQItem>
-        <FAQItem question="How much does it cost?">
+        <FAQItem value="item-3" question="How much does it cost?">
           <Text>DataPipe is free to use.</Text>
         </FAQItem>
-        <FAQItem question="Why is DataPipe free?">
+        <FAQItem value="item-4" question="Why is DataPipe free?">
           <Text>
             The expensive parts of hosting an experiment are providing storage
             and bandwidth for the experiment files and data. Fortunately there
@@ -77,7 +72,7 @@ export default function FAQ() {
             storage provider.
           </Text>
         </FAQItem>
-        <FAQItem question="How expensive is it to run DataPipe?">
+        <FAQItem value="item-5" question="How expensive is it to run DataPipe?">
           <Text>
             We host DataPipe using Google Firebase, so the cost of DataPipe
             depends on how much usage it gets. Currently our resource
@@ -85,8 +80,9 @@ export default function FAQ() {
             running for a while we will post more information about how much it
             costs to run the service. We have funding reserves in the{" "}
             <Link
-              isExternal
               href="https://opencollective.com/jspsych#category-BUDGET"
+              target="_blank"
+              rel="noopener noreferrer"
             >
               Open Collective account for jsPsych development
             </Link>{" "}
@@ -96,15 +92,16 @@ export default function FAQ() {
             keep the service running. We are grateful for donations to help keep
             the service running. If you{" "}
             <Link
-              isExternal
               href="https://opencollective.com/jspsych#category-CONTRIBUTE"
+              target="_blank"
+              rel="noopener noreferrer"
             >
               donate a few dollars to our account
             </Link>{" "}
             you should cover the lifetime cost of providing this service to you.
           </Text>
         </FAQItem>
-        <FAQItem question="Who can see the data that I collect using DataPipe?">
+        <FAQItem value="item-6" question="Who can see the data that I collect using DataPipe?">
           <Text>
             The data that you send to DataPipe are not stored anywhere on our
             servers and we do not log any information about the data when it is
@@ -113,13 +110,13 @@ export default function FAQ() {
             component is public, then anyone can see the data.
           </Text>
         </FAQItem>
-        <FAQItem question="What are the risks of using DataPipe and how can I mitigate them?">
+        <FAQItem value="item-7" question="What are the risks of using DataPipe and how can I mitigate them?">
           <Text mb={2}>
             There are a few risks that you should be aware of before using
             DataPipe.
           </Text>
-          <OrderedList>
-            <ListItem>
+          <ol style={{ paddingLeft: "1.5em" }}>
+            <li style={{ marginBottom: "0.5em" }}>
               In order to use this service you must provide us with an OSF
               authorization token so that we can write data to your OSF account
               on your behalf. This key enables full write access, so if we
@@ -130,8 +127,8 @@ export default function FAQ() {
               done using the service. The strongest security would be to use an
               active token only when you need to collect data through this
               service.
-            </ListItem>
-            <ListItem>
+            </li>
+            <li style={{ marginBottom: "0.5em" }}>
               This service does allow a technically savvy user to potentially
               write fake data to your OSF project. This is almost always a risk
               with online experiments because the data are usually recorded on
@@ -143,21 +140,21 @@ export default function FAQ() {
               risks by allowing you to specify validation rules for the data
               that is sent and to rate limit the amount of data you are
               receiving.
-            </ListItem>
-            <ListItem>
+            </li>
+            <li>
               This service is not a commercial venture with a dedicated user
               support team. If something goes wrong, we may not be able to
               respond quickly. However, the{" "}
-              <Link isExternal href="https://github.com/jspsych/datapipe">
+              <Link href="https://github.com/jspsych/datapipe" target="_blank" rel="noopener noreferrer">
                 code that runs this service is open source
               </Link>{" "}
               and thoroughly tested. The service is hosted using the Google
               Cloud, so we get the benefit of Google&apos;s infrastructure to
               make sure the service is secure and keeps running.
-            </ListItem>
-          </OrderedList>
+            </li>
+          </ol>
         </FAQItem>
-        <FAQItem question="How does data validation work?">
+        <FAQItem value="item-8" question="How does data validation work?">
           <Text mb={2}>
             DataPipe has an optional feature that will validate any incoming
             data before sending it to the OSF. Currently, this feature supports
@@ -182,7 +179,7 @@ export default function FAQ() {
             project.
           </Text>
         </FAQItem>
-        <FAQItem question="How does base 64 data collection work?">
+        <FAQItem value="item-9" question="How does base 64 data collection work?">
           <Text mb={2}>
             DataPipe has an optional feature that will collect data as base 64
             encoded strings. This is useful if you want to collect data that is
@@ -200,7 +197,7 @@ export default function FAQ() {
             are actively collecting data and disabling it when you are not.
           </Text>
         </FAQItem>
-        <FAQItem question="How does condition assignment work?">
+        <FAQItem value="item-10" question="How does condition assignment work?">
           <Text>
             When you enable condition assignment, you can call an API endpoint
             to get the next condition for a participant. DataPipe will send you
@@ -215,35 +212,38 @@ export default function FAQ() {
             then the cycle will repeat.
           </Text>
         </FAQItem>
-        <FAQItem question="How does metadata production work?">
+        <FAQItem value="item-11" question="How does metadata production work?">
           <Text>
             When you enable metadata production, DataPipe will use the data from
-            your experiment to create a metadata file that describes the data and 
+            your experiment to create a metadata file that describes the data and
             its variables. This metadata file is generated according to {" "}
-              <Link isExternal href="https://github.com/psych-ds/psych-DS">
+              <Link href="https://github.com/psych-ds/psych-DS" target="_blank" rel="noopener noreferrer">
                 Psych-DS
               </Link>{" "}
-            and stored in OSF as dataset_description.json. With every subsequent 
-            session, DataPipe will update the metadata as necessary. 
+            and stored in OSF as dataset_description.json. With every subsequent
+            session, DataPipe will update the metadata as necessary.
           </Text>
         </FAQItem>
-      </Accordion>
+      </Accordion.Root>
     </Stack>
   );
 }
 
-function FAQItem({ question, children }) {
+function FAQItem({ question, children, value }) {
   return (
-    <AccordionItem>
-      <AccordionButton>
+    <Accordion.Item value={value}>
+      <Accordion.ItemTrigger>
         <Heading as="h2" size="md" my={2} flex="1" textAlign="left">
           {question}
         </Heading>
-        <AccordionIcon />
-      </AccordionButton>
-      <AccordionPanel pb={4} style={{ whiteSpace: "pre-line" }}>
-        {children}
-      </AccordionPanel>
-    </AccordionItem>
+        <Accordion.ItemIndicator />
+      </Accordion.ItemTrigger>
+      <Accordion.ItemContent>
+        <Box pb={4} style={{ whiteSpace: "pre-line" }}>
+          {children}
+        </Box>
+      </Accordion.ItemContent>
+    </Accordion.Item>
   );
 }
+

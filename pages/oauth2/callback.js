@@ -1,4 +1,4 @@
-import { VStack, Heading, Text, Button, Alert, AlertIcon, Card, CardBody, Spinner, Center } from "@chakra-ui/react";
+import { VStack, Heading, Text, Button, Alert, Card, Spinner, Center } from "@chakra-ui/react";
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useContext, useReducer, useRef } from "react";
 import { useRouter } from "next/router";
@@ -6,9 +6,8 @@ import { UserContext } from "../../lib/context";
 import { auth } from "../../lib/firebase";
 import { signInWithCustomToken } from "firebase/auth";
 
-// State management with reducer pattern
 const initialState = {
-  status: 'processing', // 'processing' | 'error'
+  status: 'processing',
   error: null
 };
 
@@ -23,7 +22,6 @@ function callbackReducer(state, action) {
   }
 }
 
-// Custom hook for OAuth callback logic
 function useOAuthCallback() {
   const { user } = useContext(UserContext);
   const router = useRouter();
@@ -35,7 +33,7 @@ function useOAuthCallback() {
     const urlCode = searchParams.get('code');
     const urlError = searchParams.get('error');
     const urlState = searchParams.get('state');
-    
+
     if (urlError) {
       dispatch({ type: 'ERROR', error: `OAuth error: ${urlError}` });
       return;
@@ -49,24 +47,19 @@ function useOAuthCallback() {
     const storedState = localStorage.getItem('latestCSRFToken') || '';
     const authFlow = localStorage.getItem('osfAuthFlow') || '';
 
-    // For linking flow, wait for user to be loaded
     if (authFlow === 'linking' && !user?.uid) {
-      return; // Wait for user context
+      return;
     }
 
-    // For osf-entry flow, no need to wait for user context
     if (authFlow === 'osf-entry') {
       // Continue processing
     }
 
-    // Process OAuth callback directly in useEffect
     const processCallback = async () => {
-      // Prevent duplicate processing
       if (processingRef.current) return;
       processingRef.current = true;
 
       try {
-        // Validate CSRF token
         if (urlState !== storedState) {
           throw new Error('Invalid state parameter. Possible CSRF attack.');
         }
@@ -76,7 +69,6 @@ function useOAuthCallback() {
         const isLinking = authFlow === 'linking';
         const isOsfEntry = authFlow === 'osf-entry';
 
-        // For linking flows, get the Firebase ID token to prove ownership
         let idToken = null;
         if (isLinking && user) {
           idToken = await user.id;
@@ -110,13 +102,10 @@ function useOAuthCallback() {
           if (json.customToken) {
             await signInWithCustomToken(auth, json.customToken);
           }
-          
-          // Clean up localStorage
+
           localStorage.removeItem('latestCSRFToken');
-          
-          // Handle different auth flows
+
           if (isOsfEntry) {
-            // For OSF entry, redirect back to osf-entry page with original params
             localStorage.removeItem('osfAuthFlow');
             const entryParams = new URLSearchParams();
             const entryUserId = localStorage.getItem('osfEntryUserId');
@@ -129,7 +118,6 @@ function useOAuthCallback() {
             router.push('/osf-entry' + (entryQuery ? '?' + entryQuery : ''));
           } else {
             localStorage.removeItem('osfAuthFlow');
-            // Redirect immediately on success
             const redirectPath = json.customToken ? '/admin' : (process.env.NEXT_PUBLIC_OAUTH_FINAL || '/admin');
             router.push(redirectPath);
           }
@@ -157,9 +145,9 @@ function OAuth2CallbackPage() {
     switch (status) {
       case 'processing':
         return (
-          <VStack spacing={6}>
+          <VStack gap={6}>
             <Center>
-              <Spinner size="xl" color="blue.500" thickness="4px" />
+              <Spinner size="xl" color="blue.500" borderWidth="4px" />
             </Center>
             <Heading size="md" textAlign="center">
               Completing authentication...
@@ -172,17 +160,17 @@ function OAuth2CallbackPage() {
 
       case 'error':
         return (
-          <VStack spacing={6}>
-            <Alert status="error" borderRadius="md" bg="red.800" borderColor="red.600" borderWidth={1}>
-              <AlertIcon color="red.300" />
-              <VStack spacing={2} align="start">
+          <VStack gap={6}>
+            <Alert.Root status="error" borderRadius="md" bg="red.800" borderColor="red.600" borderWidth={1}>
+              <Alert.Indicator color="red.300" />
+              <VStack gap={2} align="start">
                 <Text fontWeight="medium" color="white">Authentication Failed</Text>
                 <Text fontSize="sm" color="gray.100">{error}</Text>
               </VStack>
-            </Alert>
-            
-            <VStack spacing={3} w="full">
-              <Button colorScheme="blue" onClick={() => router.push('/signin')} w="full">
+            </Alert.Root>
+
+            <VStack gap={3} w="full">
+              <Button colorPalette="blue" onClick={() => router.push('/signin')} w="full">
                 Sign In
               </Button>
             </VStack>
@@ -191,9 +179,9 @@ function OAuth2CallbackPage() {
 
       default:
         return (
-          <VStack spacing={6}>
+          <VStack gap={6}>
             <Center>
-              <Spinner size="xl" color="blue.500" thickness="4px" />
+              <Spinner size="xl" color="blue.500" borderWidth="4px" />
             </Center>
             <Heading size="md" textAlign="center">
               Completing authentication...
@@ -204,20 +192,15 @@ function OAuth2CallbackPage() {
   };
 
   return (
-    <Card w={400} mx="auto">
-      <CardBody p={8}>
-        <VStack spacing={6}>
+    <Card.Root w={400} mx="auto">
+      <Card.Body p={8}>
+        <VStack gap={6}>
           <Heading size="lg" textAlign="center">OSF Authentication</Heading>
           {renderContent()}
         </VStack>
-      </CardBody>
-    </Card>
+      </Card.Body>
+    </Card.Root>
   );
 }
-
-// Disable SSR for this component to avoid Firebase auth issues
-OAuth2CallbackPage.getInitialProps = async () => {
-  return {};
-};
 
 export default OAuth2CallbackPage;

@@ -1,10 +1,9 @@
 import { useState } from "react";
-import { 
-  Button, 
+import {
+  Button,
   Text,
   VStack,
   Alert,
-  AlertIcon
 } from "@chakra-ui/react";
 import { OsfIcon } from "./OsfIcon";
 
@@ -38,24 +37,23 @@ export default function SignUpWithOSF() {
   };
 
   return (
-    <VStack spacing={4} w="full">
+    <VStack gap={4} w="full">
       {error && (
-        <Alert status="error" borderRadius="md">
-          <AlertIcon />
+        <Alert.Root status="error" borderRadius="md">
+          <Alert.Indicator />
           <Text fontSize="sm">{error}</Text>
-        </Alert>
+        </Alert.Root>
       )}
 
       <Button
-        colorScheme="blue"
-        leftIcon={<OsfIcon />}
-        isLoading={isLoading}
+        colorPalette="blue"
+        loading={isLoading}
         loadingText="Redirecting to OSF..."
         onClick={handleOSFSignup}
         width="full"
         size="lg"
       >
-        Sign Up with OSF
+        <OsfIcon /> Sign Up with OSF
       </Button>
     </VStack>
   );

@@ -29,7 +29,7 @@ export default function CodeBlock({ children, ...props }) {
 
   return (
     <Box w="100%" bg="gray.800" color="white" p={4} rounded="md" {...props}>
-      <HStack alignItems="start" justifyContent="space-between" spacing={6}>
+      <HStack alignItems="start" justifyContent="space-between" gap={6}>
         <Box
           as="pre"
           fontFamily="monospace"

@@ -1,17 +1,14 @@
 import {
   Button,
   Card,
-  CardBody,
   Input,
   Text,
   Link,
   Heading,
-  FormControl,
-  FormLabel,
-  FormErrorMessage,
+  Field,
   VStack,
   HStack,
-  Divider,
+  Separator,
 } from "@chakra-ui/react";
 import { auth } from "../lib/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
@@ -48,22 +45,22 @@ export default function SignInForm({ routeAfterSignIn }) {
   };
 
   return (
-    <Card w={400} mx="auto">
-      <CardBody p={8}>
-        <VStack spacing={6}>
+    <Card.Root w={400} mx="auto">
+      <Card.Body p={8}>
+        <VStack gap={6}>
           <Heading size="lg" textAlign="center">Sign In</Heading>
-          
+
           <SignInWithOSF />
 
           <HStack w="full">
-            <Divider />
+            <Separator />
             <Text fontSize="sm" color="gray.500" px={3}>or</Text>
-            <Divider />
+            <Separator />
           </HStack>
 
-          <VStack spacing={4} w="full">
-            <FormControl isInvalid={errorEmail}>
-              <FormLabel>Email</FormLabel>
+          <VStack gap={4} w="full">
+            <Field.Root invalid={!!errorEmail}>
+              <Field.Label>Email</Field.Label>
               <Input
                 type="email"
                 onChange={(e) => {
@@ -71,11 +68,11 @@ export default function SignInForm({ routeAfterSignIn }) {
                   setErrorEmail("");
                 }}
               />
-              <FormErrorMessage>{errorEmail}</FormErrorMessage>
-            </FormControl>
-            
-            <FormControl isInvalid={errorPassword}>
-              <FormLabel>Password</FormLabel>
+              <Field.ErrorText>{errorEmail}</Field.ErrorText>
+            </Field.Root>
+
+            <Field.Root invalid={!!errorPassword}>
+              <Field.Label>Password</Field.Label>
               <Input
                 type="password"
                 onChange={(e) => {
@@ -83,12 +80,12 @@ export default function SignInForm({ routeAfterSignIn }) {
                   setErrorPassword("");
                 }}
               />
-              <FormErrorMessage>{errorPassword}</FormErrorMessage>
-            </FormControl>
+              <Field.ErrorText>{errorPassword}</Field.ErrorText>
+            </Field.Root>
 
             <Button
-              colorScheme="brandTeal"
-              isLoading={isSubmitting}
+              colorPalette="brandTeal"
+              loading={isSubmitting}
               onClick={onSubmit}
               w="full"
               size="lg"
@@ -96,21 +93,21 @@ export default function SignInForm({ routeAfterSignIn }) {
               Sign In
             </Button>
 
-            <VStack spacing={2} w="full">
-              <Link as={NextLink} href="/reset-password" fontSize="sm" color="blue.500">
-                Forgot password?
+            <VStack gap={2} w="full">
+              <Link asChild fontSize="sm" color="blue.500">
+                <NextLink href="/reset-password">Forgot password?</NextLink>
               </Link>
-              
+
               <Text fontSize="sm" color="gray.600">
                 Need an account?{" "}
-                <Link as={NextLink} href="/signup" color="blue.500">
-                  Sign Up
+                <Link asChild color="blue.500">
+                  <NextLink href="/signup">Sign Up</NextLink>
                 </Link>
               </Text>
             </VStack>
           </VStack>
         </VStack>
-      </CardBody>
-    </Card>
+      </Card.Body>
+    </Card.Root>
   );
 }

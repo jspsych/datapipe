@@ -1,7 +1,6 @@
 import {
   Box,
   Container,
-  SimpleGrid,
   HStack,
   VStack,
   Link,
@@ -21,7 +20,7 @@ export default function Footer() {
           direction={["column", "row"]}
           justifyContent={["flex-start", "space-between"]}
           alignItems={["flex-end", "center"]}
-          spacing={[4, 1]}
+          gap={[4, 1]}
           borderTopWidth={1}
           borderColor="gray.700"
           pt={3}
@@ -34,7 +33,8 @@ export default function Footer() {
             <Link
               color="gray.300"
               href={"https://github.com/jspsych/datapipe/issues/new"}
-              isExternal
+              target="_blank"
+              rel="noopener noreferrer"
             >
               Report an Issue
             </Link>
@@ -43,28 +43,28 @@ export default function Footer() {
             <Link
               color="gray.300"
               href={"https://github.com/jspsych/datapipe"}
-              isExternal
+              target="_blank"
+              rel="noopener noreferrer"
             >
               GitHub
             </Link>
           </Text>
           <Text>
-            <Link color="gray.300" as={NextLink} href="/contact">
-              Contact Us
+            <Link color="gray.300" asChild>
+              <NextLink href="/contact">Contact Us</NextLink>
             </Link>
           </Text>
           <Stack align={"flex-start"}>
             <Button
-              rightIcon={<OpenCollectiveIcon boxSize={8} />}
               variant="outline"
               color="white"
-              colorScheme="white"
+              colorPalette="white"
               size="sm"
               onClick={() => {
                 window.open("https://opencollective.com/jspsych");
               }}
             >
-              Donate on Open Collective
+              Donate on Open Collective <OpenCollectiveIcon boxSize={8} />
             </Button>
           </Stack>
         </Stack>

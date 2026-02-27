@@ -2,51 +2,31 @@ import AuthCheck from "../../components/AuthCheck";
 import { collection, query, where, doc, deleteDoc } from "firebase/firestore";
 import { db, auth } from "../../lib/firebase";
 import { useCollectionData } from "react-firebase-hooks/firestore";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import {
   Heading,
   Box,
   Button,
   Table,
-  Thead,
-  Tbody,
-  Tfoot,
-  Tr,
-  Th,
-  Td,
   Tag,
-  TagLabel,
-  TableContainer,
   IconButton,
   HStack,
   VStack,
   Spinner,
-  AlertDialog,
-  AlertDialogBody,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogContent,
-  AlertDialogOverlay,
-  useDisclosure,
+  Dialog,
   Text,
   Tooltip,
   Stack,
   Center,
   Card,
-  CardBody,
 } from "@chakra-ui/react";
-import {
-  CheckIcon,
-  NotAllowedIcon,
-  DeleteIcon,
-  EditIcon,
-} from "@chakra-ui/icons";
+import { Check, Ban, Trash2, Pencil } from "lucide-react";
 
 export default function AdminPage({}) {
   return (
     <AuthCheck>
-      <VStack spacing={8} w={["100%", "960px"]}>
+      <VStack gap={8} w={["100%", "960px"]}>
         <ExperimentList />
       </VStack>
     </AuthCheck>
@@ -67,10 +47,9 @@ function ExperimentList() {
     );
   }
 
-  // Show empty state if no experiments
   if (!querySnapshot || querySnapshot.length === 0) {
     return (
-      <VStack spacing={8} w="100%">
+      <VStack gap={8} w="100%">
         <Stack
           justifyContent="space-between"
           w="100%"
@@ -78,21 +57,20 @@ function ExperimentList() {
         >
           <Heading>Your Experiments</Heading>
         </Stack>
-        
+
         <Center w="100%" py={12}>
-          <Card maxW="md" w="100%">
-            <CardBody>
-              <VStack spacing={6} textAlign="center">
-                <VStack spacing={3}>
+          <Card.Root maxW="md" w="100%">
+            <Card.Body>
+              <VStack gap={6} textAlign="center">
+                <VStack gap={3}>
                   <Heading size="md">
                     No experiments yet
                   </Heading>
-                  
                 </VStack>
-                
+
                 <Link href="/admin/new">
                   <Button
-                    colorScheme="brandTeal"
+                    colorPalette="brandTeal"
                     size="lg"
                     width="full"
                   >
@@ -100,16 +78,15 @@ function ExperimentList() {
                   </Button>
                 </Link>
               </VStack>
-            </CardBody>
-          </Card>
+            </Card.Body>
+          </Card.Root>
         </Center>
       </VStack>
     );
   }
 
-  // Show table if experiments exist
   return (
-    <VStack spacing={8} w="100%">
+    <VStack gap={8} w="100%">
       <Stack
         justifyContent="space-between"
         w="100%"
@@ -119,7 +96,7 @@ function ExperimentList() {
         <Link href="/admin/new">
           <Button
             variant={"solid"}
-            colorScheme={"brandTeal"}
+            colorPalette={"brandTeal"}
             size={"md"}
             mr={4}
           >
@@ -127,85 +104,92 @@ function ExperimentList() {
           </Button>
         </Link>
       </Stack>
-      
-      <TableContainer w="100%">
-        <Table size="md" w="100%">
-          <Thead>
-            <Tr>
-              <Th color="white">Name</Th>
-              <Th color="white" display={["none", "table-cell"]}>
+
+      <Box w="100%" overflowX="auto">
+        <Table.Root size="md" w="100%">
+          <Table.Header>
+            <Table.Row>
+              <Table.ColumnHeader color="white">Name</Table.ColumnHeader>
+              <Table.ColumnHeader color="white" display={["none", "table-cell"]}>
                 Data collection?
-              </Th>
-              <Th color="white" display={["none", "table-cell"]}>
+              </Table.ColumnHeader>
+              <Table.ColumnHeader color="white" display={["none", "table-cell"]}>
                 Base 64?
-              </Th>
-              <Th color="white" display={["none", "table-cell"]}>
+              </Table.ColumnHeader>
+              <Table.ColumnHeader color="white" display={["none", "table-cell"]}>
                 Metadata?
-              </Th>
-              <Th color="white" display={["none", "table-cell"]}>
+              </Table.ColumnHeader>
+              <Table.ColumnHeader color="white" display={["none", "table-cell"]}>
                 Conditions?
-              </Th>
-              <Th color="white" display={["none", "table-cell"]}>
+              </Table.ColumnHeader>
+              <Table.ColumnHeader color="white" display={["none", "table-cell"]}>
                 Sessions
-              </Th>
-              <Th></Th>
-            </Tr>
-          </Thead>
-          <Tbody>
+              </Table.ColumnHeader>
+              <Table.ColumnHeader></Table.ColumnHeader>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
             {querySnapshot.map((exp) => (
               <ExperimentItem key={exp.id} exp={exp} />
             ))}
-          </Tbody>
-        </Table>
-      </TableContainer>
+          </Table.Body>
+        </Table.Root>
+      </Box>
     </VStack>
   );
 }
 
 function ExperimentItem({ exp }) {
   return (
-    <Tr id={exp.id}>
-      <Td fontSize="lg">
+    <Table.Row id={exp.id}>
+      <Table.Cell fontSize="lg">
         <Link href={`/admin/${exp.id}`}>{exp.title}</Link>
-      </Td>
-      <Td display={["none", "table-cell"]}>
+      </Table.Cell>
+      <Table.Cell display={["none", "table-cell"]}>
         <ExperimentStatusTag prepend="Data collection" active={exp.active} />
-      </Td>
-      <Td display={["none", "table-cell"]}>
+      </Table.Cell>
+      <Table.Cell display={["none", "table-cell"]}>
         <ExperimentStatusTag
           prepend="Base 64 data collection"
           active={exp.activeBase64}
         />
-      </Td>
-      <Td display={["none", "table-cell"]}>
+      </Table.Cell>
+      <Table.Cell display={["none", "table-cell"]}>
         <ExperimentStatusTag
           prepend="Metadata production"
           active={exp.metadataActive}
         />
-      </Td>
-      <Td display={["none", "table-cell"]}>
+      </Table.Cell>
+      <Table.Cell display={["none", "table-cell"]}>
         <ExperimentStatusTag
           prepend="Condition assignment "
           active={exp.activeConditionAssignment}
         />
-      </Td>
-      <Td display={["none", "table-cell"]}>{exp.sessions}</Td>
-      <Td>
+      </Table.Cell>
+      <Table.Cell display={["none", "table-cell"]}>{exp.sessions}</Table.Cell>
+      <Table.Cell>
         <ExperimentActions exp={exp} />
-      </Td>
-    </Tr>
+      </Table.Cell>
+    </Table.Row>
   );
 }
 
 function ExperimentStatusTag({ active, prepend }) {
   return (
-    <Tooltip label={active ? `${prepend} is active` : `${prepend} is inactive`}>
-      <Tag size="lg" variant="outline" colorScheme={active ? "green" : "gray"}>
-        <TagLabel>
-          {active ? <CheckIcon boxSize={4} /> : <NotAllowedIcon boxSize={4} />}
-        </TagLabel>
-      </Tag>
-    </Tooltip>
+    <Tooltip.Root>
+      <Tooltip.Trigger asChild>
+        <Tag.Root size="lg" variant="outline" colorPalette={active ? "green" : "gray"}>
+          <Tag.Label>
+            {active ? <Check size={16} /> : <Ban size={16} />}
+          </Tag.Label>
+        </Tag.Root>
+      </Tooltip.Trigger>
+      <Tooltip.Positioner>
+        <Tooltip.Content>
+          {active ? `${prepend} is active` : `${prepend} is inactive`}
+        </Tooltip.Content>
+      </Tooltip.Positioner>
+    </Tooltip.Root>
   );
 }
 
@@ -215,10 +199,11 @@ function ExperimentActions({ exp }) {
       <Link href={`/admin/${exp.id}`}>
         <IconButton
           aria-label="Edit"
-          icon={<EditIcon />}
           variant="outline"
-          colorScheme="whiteAlpha"
-        />
+          colorPalette="whiteAlpha"
+        >
+          <Pencil />
+        </IconButton>
       </Link>
       <DeleteAlertDialog exp={exp} />
     </HStack>
@@ -226,56 +211,53 @@ function ExperimentActions({ exp }) {
 }
 
 function DeleteAlertDialog({ exp }) {
-  const { isOpen, onOpen, onClose } = useDisclosure();
-  const cancelRef = useRef();
+  const [open, setOpen] = useState(false);
 
   return (
     <>
       <IconButton
         aria-label="Delete"
-        icon={<DeleteIcon />}
-        onClick={onOpen}
+        onClick={() => setOpen(true)}
         variant="outline"
-        colorScheme="red"
-      />
-
-      <AlertDialog
-        isOpen={isOpen}
-        leastDestructiveRef={cancelRef}
-        onClose={onClose}
+        colorPalette="red"
       >
-        <AlertDialogOverlay>
-          <AlertDialogContent bg="greyBackground">
-            <AlertDialogHeader fontSize="lg" fontWeight="bold">
-              Delete Experiment
-            </AlertDialogHeader>
+        <Trash2 />
+      </IconButton>
 
-            <AlertDialogBody>
+      <Dialog.Root open={open} onOpenChange={(e) => setOpen(e.open)}>
+        <Dialog.Backdrop />
+        <Dialog.Positioner>
+          <Dialog.Content bg="greyBackground">
+            <Dialog.Header fontSize="lg" fontWeight="bold">
+              Delete Experiment
+            </Dialog.Header>
+
+            <Dialog.Body>
               <Text>Are you sure? This action is final.</Text>
               <Text>
                 Deleting the experiment will not delete any data that is already
                 on the OSF.
               </Text>
-            </AlertDialogBody>
+            </Dialog.Body>
 
-            <AlertDialogFooter>
-              <Button ref={cancelRef} onClick={onClose} colorScheme="brandTeal">
+            <Dialog.Footer>
+              <Button onClick={() => setOpen(false)} colorPalette="brandTeal">
                 Cancel
               </Button>
               <Button
-                colorScheme="red"
+                colorPalette="red"
                 onClick={() => {
-                  onClose();
+                  setOpen(false);
                   deleteExperiment(exp);
                 }}
                 ml={3}
               >
                 Delete
               </Button>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialogOverlay>
-      </AlertDialog>
+            </Dialog.Footer>
+          </Dialog.Content>
+        </Dialog.Positioner>
+      </Dialog.Root>
     </>
   );
 }
