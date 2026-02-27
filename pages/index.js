@@ -44,7 +44,7 @@ export default function Home() {
       <Image
         src="/homepipe.png"
         alt="Decorative illustration of a pipe with data flowing through it"
-        boxSize={["100%", "768px"]}
+        width={["100%", "768px"]}
       />
     </Stack>
   );

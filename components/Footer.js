@@ -27,7 +27,7 @@ export default function Footer() {
           fontSize={"sm"}
         >
           <Text>
-            Created by the developers of jsPsych <JsPsychIcon boxSize={10} />
+            Created by the developers of jsPsych <JsPsychIcon width="2em" height="2em" style={{ display: "inline" }} />
           </Text>
           <Text>
             <Link
@@ -64,7 +64,7 @@ export default function Footer() {
                 window.open("https://opencollective.com/jspsych");
               }}
             >
-              Donate on Open Collective <OpenCollectiveIcon boxSize={8} />
+              Donate on Open Collective <OpenCollectiveIcon width="1.5em" height="1.5em" />
             </Button>
           </Stack>
         </Stack>

@@ -97,8 +97,8 @@ export default function Navbar() {
             <>
               <NextLink href="/admin/new">
                 <Button
-                  variant={"outline"}
-                  colorPalette={"green"}
+                  variant={"solid"}
+                  colorPalette={"brandTeal"}
                   size={"sm"}
                 >
                   <Plus /> New Experiment
