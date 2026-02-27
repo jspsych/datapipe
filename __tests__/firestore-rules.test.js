@@ -60,7 +60,7 @@ describe('/users', () => {
     await assertSucceeds(setDoc(doc(user123.firestore(), 'users/user123'), {
       email: 'john@doe.com',
       experiments: ['exp1', 'exp2'],
-      osfToken: 'abc123',
+      osfToken: '',
       uid: 'user123'
     }));
   });
@@ -71,7 +71,7 @@ describe('/users', () => {
     await assertFails(setDoc(doc(user123.firestore(), 'users/user123'), {
       email: 'john@doe.com',
       experiments: ['exp1', 'exp2'],
-      osfToken: 'abc123',
+      osfToken: '',
       uid: 'user456'
     }));
   });
