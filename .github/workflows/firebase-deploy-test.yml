@@ -58,6 +58,7 @@ jobs:
           echo "CLIENT_ID=${{ secrets.TEST_CLIENT_ID }}" >> .env
           echo "REDIRECT_URI=${{ secrets.TEST_REDIRECT_URI }}" >> .env
           echo "TOKEN_ENCRYPTION_KEY=${{ secrets.FIRESTORE_KEY_TEST }}" >> .env
+          echo "NEXT_PUBLIC_OSF_ENV=${{ secrets.TEST_OSF_ENV }}" >> .env
       - name: Install dependencies and build functions
         working-directory: functions
         run: |
