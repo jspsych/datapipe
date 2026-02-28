@@ -32,12 +32,13 @@ app.get('/endpoint', async (req, res) => {
   res.json(result);
 });
 
-const startServer = () => {
-    const server = app.listen(port, () => {
-      console.log(`Server running at http://localhost:${port}`);
+const startServer = (): Promise<ReturnType<typeof app.listen>> => {
+    return new Promise((resolve) => {
+      const server = app.listen(port, () => {
+        console.log(`Server running at http://localhost:${port}`);
+        resolve(server);
+      });
     });
-  
-    return server;
   };
-  
+
   export { startServer };
