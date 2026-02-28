@@ -21,9 +21,11 @@ export default function FAQ() {
             Science Framework. To use DataPipe, you will need to use a webhost
             to get your experiment online (e.g., GitHub Pages) and then add some
             code to your experiment to send data to DataPipe. You will also need
-            to have an OSF account to store the data and create an authorization
-            token on the OSF to allow DataPipe to write data to your OSF
-            account. Our{" "}
+            an OSF account to store the data. The recommended way to get started
+            is to sign in to DataPipe with your OSF account, which automatically
+            authorizes DataPipe to write data to the OSF on your behalf.
+            Alternatively, you can create a personal access token on the OSF.
+            Our{" "}
             <Link asChild>
               <NextLink href="/getting-started">getting started guide</NextLink>
             </Link>{" "}
@@ -117,12 +119,13 @@ export default function FAQ() {
           </Text>
           <ol style={{ paddingLeft: "1.5em" }}>
             <li style={{ marginBottom: "0.5em" }}>
-              In order to use this service you must provide us with an OSF
-              authorization token so that we can write data to your OSF account
-              on your behalf. This key enables full write access, so if we
-              suffer a data breach it would be possible for someone who got
-              access to the token to make malicious changes to your OSF account.
-              To mitigate this risk, you should create an OSF token that is just
+              In order to use this service you must authorize DataPipe to write
+              data to your OSF account on your behalf. All tokens are stored
+              encrypted. If you sign in with your OSF account, DataPipe also
+              manages your tokens automatically and refreshes them regularly,
+              which further reduces the risk of exposure. If you use a personal
+              access token instead, this key enables full write access. To
+              mitigate this risk, you should create an OSF token that is just
               for this service so that you can revoke authorization when you are
               done using the service. The strongest security would be to use an
               active token only when you need to collect data through this
@@ -222,6 +225,22 @@ export default function FAQ() {
               </Link>{" "}
             and stored in OSF as dataset_description.json. With every subsequent
             session, DataPipe will update the metadata as necessary.
+          </Text>
+        </FAQItem>
+        <FAQItem value="item-12" question="What is one-click authentication and how is it different from a personal access token?">
+          <Text mb={2}>
+            One-click authentication lets you sign in to DataPipe using your OSF
+            account. When you do this, DataPipe automatically manages your
+            authorization tokens so you do not need to create or paste a token
+            manually. Your tokens are refreshed automatically.
+          </Text>
+          <Text>
+            A personal access token is a token that you create manually on the
+            OSF and paste into DataPipe. This gives you more direct control over
+            the token, but you are responsible for creating and revoking it
+            yourself. Both methods store tokens encrypted. We recommend
+            one-click authentication for most users because it is simpler and
+            handles token refresh automatically.
           </Text>
         </FAQItem>
       </Accordion.Root>

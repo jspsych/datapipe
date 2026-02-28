@@ -1,8 +1,8 @@
 import AuthCheck from "../../components/AuthCheck";
 import { collection, query, where, doc, deleteDoc } from "firebase/firestore";
 import { db, auth } from "../../lib/firebase";
-import { useCollectionData } from "react-firebase-hooks/firestore";
-import { useRef, useState } from "react";
+import { useCollectionData, useDocumentData } from "react-firebase-hooks/firestore";
+import { useRef, useState, useEffect } from "react";
 import Link from "next/link";
 import {
   Heading,
@@ -20,6 +20,7 @@ import {
   Stack,
   Center,
   Card,
+  CloseButton,
 } from "@chakra-ui/react";
 import { Check, Ban, Trash2, Pencil } from "lucide-react";
 
@@ -27,9 +28,65 @@ export default function AdminPage({}) {
   return (
     <AuthCheck>
       <VStack gap={8} w={["100%", "960px"]}>
+        <OAuthBanner />
         <ExperimentList />
       </VStack>
     </AuthCheck>
+  );
+}
+
+function OAuthBanner() {
+  const user = auth.currentUser;
+  const [userData] = useDocumentData(doc(db, "users", user.uid));
+  const [dismissed, setDismissed] = useState(true);
+
+  useEffect(() => {
+    setDismissed(
+      localStorage.getItem("datapipe-oauth-banner-dismissed") === "true"
+    );
+  }, []);
+
+  const hasOAuthConnection = userData?.refreshToken && userData?.authToken;
+
+  if (dismissed || !userData || hasOAuthConnection) {
+    return null;
+  }
+
+  const handleDismiss = () => {
+    localStorage.setItem("datapipe-oauth-banner-dismissed", "true");
+    setDismissed(true);
+  };
+
+  return (
+    <Box
+      w="100%"
+      bg="brandTeal.900"
+      border="1px solid"
+      borderColor="brandTeal.600"
+      borderRadius="md"
+      px={4}
+      py={3}
+      position="relative"
+    >
+      <CloseButton
+        size="sm"
+        position="absolute"
+        right={2}
+        top={2}
+        onClick={handleDismiss}
+      />
+      <Text pr={8}>
+        <strong>Simplify your setup:</strong> You can now link your OSF account
+        directly to DataPipe for automatic token management. Switch to one-click
+        authentication in your{" "}
+        <Link href="/admin/account">
+          <Button variant="plain" colorPalette="brandTeal" fontSize="md" p={0} h="auto" minW={0}>
+            Account Settings
+          </Button>
+        </Link>
+        .
+      </Text>
+    </Box>
   );
 }
 
