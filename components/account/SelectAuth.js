@@ -4,7 +4,6 @@ import {
   Text,
   Link,
   Button,
-  IconButton,
   Dialog,
   Field,
   Input,
@@ -15,7 +14,7 @@ import { useDocumentData } from "react-firebase-hooks/firestore";
 import { doc, setDoc } from "firebase/firestore";
 import { db, auth } from "../../lib/firebase";
 
-import { CircleCheck, TriangleAlert, CircleHelp } from "lucide-react";
+import { CircleCheck, TriangleAlert } from "lucide-react";
 import { OsfIcon } from "../OsfIcon";
 
 export default function SelectAuth() {
@@ -25,7 +24,6 @@ export default function SelectAuth() {
         doc(db, "users", user.uid)
     );
 
-    const [isHelpOpen, setIsHelpOpen] = useState(false);
     const [isTokenOpen, setIsTokenOpen] = useState(false);
     const [isSubmittingToken, setIsSubmittingToken] = useState(false);
 
@@ -90,152 +88,61 @@ export default function SelectAuth() {
 
     const usingPersonalToken = data?.usingPersonalToken;
     const hasOAuthToken = data?.authToken && data?.refreshToken;
-    const hasPersonalToken = data?.osfToken;
     const hasValidPersonalToken = data?.osfTokenValid;
 
-    const getStatusText = () => {
-        if (usingPersonalToken) {
-            return hasPersonalToken
-                ? hasValidPersonalToken
-                    ? "Connected to OSF via personal access token"
-                    : "Personal access token invalid - please update"
-                : "Not connected - personal access token required";
-        } else {
-            return hasOAuthToken
-                ? "Connected to OSF via one-click authentication"
-                : "Not connected - click below to link your OSF account";
-        }
-    };
-
-    const getStatusColor = () => {
-        const isConnected = usingPersonalToken ? hasValidPersonalToken : hasOAuthToken;
-        return isConnected ? "green.600" : "orange.600";
-    };
+    if (!usingPersonalToken) {
+        return (
+            <>
+                <HStack justifyContent="space-between" w="100%">
+                    <HStack>
+                        <Text fontSize="lg">OSF Account</Text>
+                        {hasOAuthToken && <CircleCheck color="var(--chakra-colors-green-500)" size={18} />}
+                        {!hasOAuthToken && <TriangleAlert color="var(--chakra-colors-orange-500)" size={18} />}
+                    </HStack>
+                    <Button colorPalette="blue" onClick={handleAuthClick} size="md">
+                        <OsfIcon /> {hasOAuthToken ? "Re-link" : "Link OSF Account"}
+                    </Button>
+                </HStack>
+                <HStack justifyContent="flex-end" w="100%" mt={-4}>
+                    <Link
+                        color="gray.500"
+                        fontSize="sm"
+                        onClick={handleSwitchToPersonalToken}
+                        cursor="pointer"
+                    >
+                        Use personal access token instead
+                    </Link>
+                </HStack>
+            </>
+        );
+    }
 
     return (
         <>
-            <VStack gap={4} w="100%" align="stretch">
-                <VStack gap={2} w="100%" align="start">
-                    <Text fontSize="lg">OSF Authentication</Text>
-                    <Text fontSize="sm" color={getStatusColor()}>
-                        {getStatusText()}
-                    </Text>
-                </VStack>
-
-                {!usingPersonalToken && (
-                    <VStack gap={3} align="stretch">
-                        <Button
-                            colorPalette="blue"
-                            onClick={handleAuthClick}
-                            size="md"
-                        >
-                            <OsfIcon /> {hasOAuthToken ? "Re-link OSF Account" : "Link OSF Account"}
-                        </Button>
-
-                        <HStack justify="center" gap={1}>
-                            <Link
-                                color="gray.500"
-                                fontSize="sm"
-                                onClick={handleSwitchToPersonalToken}
-                                cursor="pointer"
-                            >
-                                Use personal access token instead
-                            </Link>
-                            <IconButton
-                                rounded={"full"}
-                                size="xs"
-                                variant="ghost"
-                                colorPalette="gray"
-                                onClick={() => setIsHelpOpen(true)}
-                                aria-label="Help with authentication methods"
-                            >
-                                <CircleHelp />
-                            </IconButton>
-                        </HStack>
-                    </VStack>
-                )}
-
-                {usingPersonalToken && (
-                    <VStack gap={3} align="stretch">
-                        <Button
-                            colorPalette="brandTeal"
-                            onClick={() => setIsTokenOpen(true)}
-                            loading={isSubmittingToken}
-                        >
-                            Set OSF Token
-                        </Button>
-
-                        <HStack justify="center" gap={1}>
-                            <Link
-                                color="blue.500"
-                                fontSize="sm"
-                                onClick={handleSwitchToOAuth}
-                                cursor="pointer"
-                            >
-                                Switch to one-click authentication
-                            </Link>
-                            <IconButton
-                                rounded={"full"}
-                                size="xs"
-                                variant="ghost"
-                                colorPalette="gray"
-                                onClick={() => setIsHelpOpen(true)}
-                                aria-label="Help with authentication methods"
-                            >
-                                <CircleHelp />
-                            </IconButton>
-                        </HStack>
-                    </VStack>
-                )}
-            </VStack>
-
-            {/* Help Dialog */}
-            <Dialog.Root open={isHelpOpen} onOpenChange={(e) => setIsHelpOpen(e.open)} size="lg">
-                <Dialog.Backdrop />
-                <Dialog.Positioner>
-                    <Dialog.Content bg="blackAlpha.800" color="white">
-                        <Dialog.Header>OSF Authentication Methods</Dialog.Header>
-                        <Dialog.CloseTrigger />
-                        <Dialog.Body>
-                            <VStack gap={4} align="start">
-                                <VStack gap={2} align="start">
-                                    <Text fontWeight="bold" color="blue.600">One-Click Authentication (Recommended)</Text>
-                                    <Text fontSize="sm">
-                                        Links your DataPipe account directly with your OSF account using OAuth.
-                                        This method automatically manages authentication tokens and requires no manual setup.
-                                    </Text>
-                                    <Text fontSize="sm" fontWeight="medium">Benefits:</Text>
-                                    <Text fontSize="sm" ml={4}>
-                                        - Easier to use: no need to copy/paste tokens<br/>
-                                        - Automatic token renewal handled by DataPipe<br/>
-                                        - More secure
-                                    </Text>
-                                </VStack>
-
-                                <VStack gap={2} align="start">
-                                    <Text fontWeight="bold" color="orange.600">Personal Access Token</Text>
-                                    <Text fontSize="sm">
-                                        Uses a manually created token from your OSF settings. You need to generate
-                                        this token yourself on the OSF website and paste it into DataPipe.
-                                    </Text>
-                                    <Text fontSize="sm" fontWeight="medium">When to use:</Text>
-                                    <Text fontSize="sm" ml={4}>
-                                        - You prefer manual token management<br/>
-                                        - Your organization requires it<br/>
-                                        - You want more direct control over permissions
-                                    </Text>
-                                </VStack>
-                            </VStack>
-                        </Dialog.Body>
-
-                        <Dialog.Footer>
-                            <Button colorPalette="blue" onClick={() => setIsHelpOpen(false)}>
-                                Got it
-                            </Button>
-                        </Dialog.Footer>
-                    </Dialog.Content>
-                </Dialog.Positioner>
-            </Dialog.Root>
+            <HStack justifyContent="space-between" w="100%">
+                <HStack>
+                    <Text fontSize="lg">OSF Token</Text>
+                    {hasValidPersonalToken && <CircleCheck color="var(--chakra-colors-green-500)" size={18} />}
+                    {!hasValidPersonalToken && <TriangleAlert color="var(--chakra-colors-orange-500)" size={18} />}
+                </HStack>
+                <Button
+                    colorPalette="brandTeal"
+                    onClick={() => setIsTokenOpen(true)}
+                    loading={isSubmittingToken}
+                >
+                    Set OSF Token
+                </Button>
+            </HStack>
+            <HStack justifyContent="flex-end" w="100%" mt={-4}>
+                <Link
+                    color="blue.500"
+                    fontSize="sm"
+                    onClick={handleSwitchToOAuth}
+                    cursor="pointer"
+                >
+                    Switch to one-click authentication
+                </Link>
+            </HStack>
 
             {/* OSF Token Dialog */}
             <Dialog.Root open={isTokenOpen} onOpenChange={(e) => setIsTokenOpen(e.open)}>
