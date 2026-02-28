@@ -9,6 +9,7 @@ import {
   Text,
   Button,
   Image,
+  Box,
 } from "@chakra-ui/react";
 
 export default function Home() {
@@ -27,6 +28,24 @@ export default function Home() {
           Send data from your behavioral experiments to the Open Science
           Framework, for free.
         </Text>
+        <Box
+          borderLeft="3px solid"
+          borderColor="brandTeal.400"
+          bg="whiteAlpha.100"
+          px={4}
+          py={3}
+          borderRadius="md"
+        >
+          <Text fontSize="md">
+            <strong>New: Sign in with your OSF account.</strong> Link your OSF
+            account directly to DataPipe for automatic token management.{" "}
+            <Link href="/getting-started">
+              <Button variant="plain" colorPalette="brandTeal" fontSize="md" p={0} h="auto" minW={0}>
+                Learn more
+              </Button>
+            </Link>
+          </Text>
+        </Box>
         {user ? (
           <Link href="/admin">
             <Button variant={"outline"} colorPalette={"brandOrange"} size={"lg"}>

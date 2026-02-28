@@ -27,6 +27,7 @@ export default function GettingStarted() {
           https://osf.io
         </Link>
         . You will need to create an account if you do not already have one.
+        Your OSF account can also be used to sign in to DataPipe directly.
         Once you have created an account, click the Create Project button to
         create a new project. You can name your project whatever you want.
       </Text>
@@ -48,9 +49,11 @@ export default function GettingStarted() {
       </Heading>
       <Text>
         If you are not using one-click authorization, you will need to authenticate to
-        the OSF via a personal access token. To create a personal access token, go
-        to your OSF account settings by clicking your name in the top right
-        corner of the screen and selecting Settings. Then click the Personal
+        the OSF via a personal access token. First, go to your DataPipe Account
+        Settings and switch to &quot;Personal access token&quot; mode. Then, to
+        create a personal access token on the OSF, go to your OSF account
+        settings by clicking your name in the top right corner of the screen
+        and selecting Settings. Then click the Personal
         Access Tokens tab. Click the Create Token button. Give the token a name
         (we recommend a name that is specific to DataPipe so that you can easily
         disable the token when you are done using DataPipe) and select
