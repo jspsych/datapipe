@@ -7,19 +7,15 @@ import { auth, db } from "../lib/firebase";
 
 import {
   Card,
-  CardBody,
   Heading,
   Link as ChakraLink,
   Text,
-  FormControl,
+  Field,
   Input,
-  FormLabel,
   Button,
-  FormErrorMessage,
   VStack,
-  FormHelperText,
   HStack,
-  Divider,
+  Separator,
   Box,
 } from "@chakra-ui/react";
 import { ERROR, getError } from "../lib/utils";
@@ -94,22 +90,22 @@ export default function SignUpPage() {
   };
 
   return (
-    <Card w={400} mx="auto">
-      <CardBody p={8}>
-        <VStack spacing={6}>
+    <Card.Root w={400} mx="auto">
+      <Card.Body p={8}>
+        <VStack gap={6}>
           <Heading size="lg" textAlign="center">Create Account</Heading>
-          
+
           <SignUpWithOSF />
 
           <HStack w="full">
-            <Divider />
+            <Separator />
             <Text fontSize="sm" color="gray.500" px={3}>or</Text>
-            <Divider />
+            <Separator />
           </HStack>
 
-          <VStack spacing={4} w="full">
-            <FormControl id="email" isInvalid={errorEmail}>
-              <FormLabel>Email</FormLabel>
+          <VStack gap={4} w="full">
+            <Field.Root id="email" invalid={!!errorEmail}>
+              <Field.Label>Email</Field.Label>
               <Input
                 type="email"
                 onChange={(e) => {
@@ -117,11 +113,11 @@ export default function SignUpPage() {
                   setErrorEmail("");
                 }}
               />
-              <FormErrorMessage>{errorEmail}</FormErrorMessage>
-            </FormControl>
-            
-            <FormControl id="password" isInvalid={errorPassword}>
-              <FormLabel>Password</FormLabel>
+              <Field.ErrorText>{errorEmail}</Field.ErrorText>
+            </Field.Root>
+
+            <Field.Root id="password" invalid={!!errorPassword}>
+              <Field.Label>Password</Field.Label>
               <Input
                 type="password"
                 onChange={(e) => {
@@ -129,15 +125,15 @@ export default function SignUpPage() {
                   setErrorPassword("");
                 }}
               />
-              <FormHelperText display={errorPassword === "" ? "block" : "none"}>
+              <Field.HelperText display={errorPassword === "" ? "block" : "none"}>
                 Password must be at least 12 characters
-              </FormHelperText>
-              <FormErrorMessage>{errorPassword}</FormErrorMessage>
-            </FormControl>
+              </Field.HelperText>
+              <Field.ErrorText>{errorPassword}</Field.ErrorText>
+            </Field.Root>
 
             <Button
-              colorScheme="brandTeal"
-              isLoading={isSubmitting}
+              colorPalette="brandTeal"
+              loading={isSubmitting}
               onClick={onSubmit}
               w="full"
               size="lg"
@@ -147,13 +143,13 @@ export default function SignUpPage() {
 
             <Text fontSize="sm" color="gray.600">
               Have an account?{" "}
-              <ChakraLink as={Link} href="/signin" color="blue.500">
-                Sign In
+              <ChakraLink asChild color="blue.500">
+                <Link href="/signin">Sign In</Link>
               </ChakraLink>
             </Text>
           </VStack>
         </VStack>
-      </CardBody>
-    </Card>
+      </Card.Body>
+    </Card.Root>
   );
 }

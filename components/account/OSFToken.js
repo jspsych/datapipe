@@ -1,21 +1,13 @@
-import { useState, useContext, useEffect } from "react";
+import { useState, useContext } from "react";
 import { UserContext } from "../../lib/context";
 
-import { FormErrorMessage, useDisclosure } from "@chakra-ui/react";
 import {
   HStack,
   VStack,
   Button,
   Text,
-  Modal,
-  ModalOverlay,
-  ModalContent,
-  ModalHeader,
-  ModalFooter,
-  ModalBody,
-  ModalCloseButton,
-  FormControl,
-  FormLabel,
+  Dialog,
+  Field,
   Input,
   Tooltip,
   Link,
@@ -25,12 +17,12 @@ import { useDocumentData } from "react-firebase-hooks/firestore";
 import { doc } from "firebase/firestore";
 
 import { db, auth } from "../../lib/firebase";
-import { CheckCircleIcon, WarningIcon } from "@chakra-ui/icons";
+import { CircleCheck, TriangleAlert } from "lucide-react";
 
 export default function OSFToken() {
   const { user } = useContext(UserContext);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { isOpen, onOpen, onClose } = useDisclosure();
+  const [open, setOpen] = useState(false);
 
   const [data, loading, error, snapshot, reload] = useDocumentData(
     doc(db, "users", user.uid)
@@ -41,67 +33,80 @@ export default function OSFToken() {
       <HStack>
         <Text fontSize={"lg"}>OSF Token</Text>
         {data && data.osfTokenValid ? (
-          <Tooltip label="Valid OSF Token">
-            <CheckCircleIcon color="brandTeal.500" />
-          </Tooltip>
+          <Tooltip.Root>
+            <Tooltip.Trigger asChild>
+              <span><CircleCheck color="var(--chakra-colors-green-500)" /></span>
+            </Tooltip.Trigger>
+            <Tooltip.Positioner>
+              <Tooltip.Content>Valid OSF Token</Tooltip.Content>
+            </Tooltip.Positioner>
+          </Tooltip.Root>
         ) : (
-          <Tooltip label="Invalid OSF Token">
-            <WarningIcon color="brandOrange.500" />
-          </Tooltip>
+          <Tooltip.Root>
+            <Tooltip.Trigger asChild>
+              <span><TriangleAlert color="var(--chakra-colors-orange-500)" /></span>
+            </Tooltip.Trigger>
+            <Tooltip.Positioner>
+              <Tooltip.Content>Invalid OSF Token</Tooltip.Content>
+            </Tooltip.Positioner>
+          </Tooltip.Root>
         )}
       </HStack>
-      <Button isLoading={isSubmitting} onClick={onOpen} colorScheme="brandTeal">
+      <Button loading={isSubmitting} onClick={() => setOpen(true)} colorPalette="brandTeal">
         Set OSF Token
       </Button>
-      <Modal isOpen={isOpen} onClose={onClose}>
-        <ModalOverlay />
-        <ModalContent bg="greyBackground">
-          <ModalHeader>Change OSF Token</ModalHeader>
-          <ModalCloseButton />
-          <ModalBody>
-            <VStack spacing={4} w="100%">
-              <Text>
-                To generate an OSF token, go to{" "}
-                <Link
-                  color="brandOrange.100"
-                  href={`https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/settings/tokens/`}
-                  isExternal
-                >
-                  https://osf.io/settings/tokens/
-                </Link>{" "}
-                and click &quot;Create Token&quot;.
-              </Text>
-              <Text>
-                Select osf.full_write under scopes and click &quot;Create
-                token&quot;. Copy the token and paste it below.
-              </Text>
+      <Dialog.Root open={open} onOpenChange={(e) => setOpen(e.open)}>
+        <Dialog.Backdrop />
+        <Dialog.Positioner>
+          <Dialog.Content bg="greyBackground" color="white">
+            <Dialog.Header>Change OSF Token</Dialog.Header>
+            <Dialog.CloseTrigger />
+            <Dialog.Body>
+              <VStack gap={4} w="100%">
+                <Text>
+                  To generate an OSF token, go to{" "}
+                  <Link
+                    color="brandOrange.100"
+                    href={`https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/settings/tokens/`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    https://osf.io/settings/tokens/
+                  </Link>{" "}
+                  and click &quot;Create Token&quot;.
+                </Text>
+                <Text>
+                  Select osf.full_write under scopes and click &quot;Create
+                  token&quot;. Copy the token and paste it below.
+                </Text>
 
-              {data && (
-                <VStack spacing={4} w="100%">
-                  <FormControl id="osf-token">
-                    <FormLabel>OSF Token</FormLabel>
-                    <Input type="text" placeholder="Paste your OSF token here" />
-                  </FormControl>
-                </VStack>
-              )}
-            </VStack>
-          </ModalBody>
-          <ModalFooter>
-            <Button
-              variant={"solid"}
-              colorScheme={"brandTeal"}
-              size={"md"}
-              mr={4}
-              onClick={() => {
-                handleSaveButton(setIsSubmitting, onClose);
-              }}
-              isLoading={isSubmitting}
-            >
-              Change Token
-            </Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
+                {data && (
+                  <VStack gap={4} w="100%">
+                    <Field.Root id="osf-token">
+                      <Field.Label>OSF Token</Field.Label>
+                      <Input type="text" placeholder="Paste your OSF token here" />
+                    </Field.Root>
+                  </VStack>
+                )}
+              </VStack>
+            </Dialog.Body>
+            <Dialog.Footer>
+              <Button
+                variant={"solid"}
+                colorPalette={"brandTeal"}
+                size={"md"}
+                mr={4}
+                onClick={() => {
+                  handleSaveButton(setIsSubmitting, () => setOpen(false));
+                }}
+                loading={isSubmitting}
+              >
+                Change Token
+              </Button>
+            </Dialog.Footer>
+          </Dialog.Content>
+        </Dialog.Positioner>
+      </Dialog.Root>
     </HStack>
   );
 }

@@ -1,15 +1,14 @@
 import {
-  FormControl,
-  FormLabel,
+  Field,
   HStack,
   Switch,
   Stack,
   Heading,
 } from "@chakra-ui/react";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
-import { setDoc, getDoc, doc } from "firebase/firestore";
+import { setDoc, doc } from "firebase/firestore";
 
 import { db } from "../../lib/firebase";
 
@@ -21,24 +20,31 @@ export default function MetadataControl({ data }) {
     <Stack
       w="100%"
       pr={8}
-      spacing={2}
+      gap={2}
       bgColor={"black"}
       borderRadius={16}
       p={6}
     >
       <Heading fontSize="2xl">Metadata</Heading>
-      <FormControl as={HStack} justify="space-between" alignItems="center">
-        <FormLabel fontWeight={"normal"}>Enable Psych-DS metadata production?</FormLabel>
-        <Switch
-          colorScheme="green"
-          size="md"
-          isChecked={metadataActive}
-          onChange={(e) => {
-            setMetadataActive(e.target.checked);
-            toggleMetadataActive(data.id, e.target.checked);
-          }}
-        />
-      </FormControl>
+      <Field.Root>
+        <HStack justify="space-between" alignItems="center" w="100%">
+          <Field.Label fontWeight={"normal"} mb={0}>Enable Psych-DS metadata production?</Field.Label>
+          <Switch.Root
+            colorPalette="green"
+            size="md"
+            checked={metadataActive}
+            onCheckedChange={(e) => {
+              setMetadataActive(e.checked);
+              toggleMetadataActive(data.id, e.checked);
+            }}
+          >
+            <Switch.HiddenInput />
+            <Switch.Control>
+              <Switch.Thumb />
+            </Switch.Control>
+          </Switch.Root>
+        </HStack>
+      </Field.Root>
     </Stack>
   );
 }
@@ -78,5 +84,3 @@ async function deactivateMetadata(expId) {
     console.error(error);
   }
 }
-
-

@@ -1,113 +1,46 @@
 import {
-  FormControl,
-  FormLabel,
-  HStack,
-  Switch,
-  Stack,
-  Heading,
-  Accordion,
-  AccordionItem,
-  AccordionButton,
-  AccordionPanel,
-  AccordionIcon,
-  Alert,
-  AlertIcon,
-  AlertTitle,
-  AlertDescription,
   Box,
+  Accordion,
+  Alert,
   Table,
-  Thead,
-  Tbody,
-  Tfoot,
-  Tr,
-  Th,
-  Td,
-  TableCaption,
-  TableContainer,
 } from "@chakra-ui/react";
-
-import { useState, useEffect } from "react";
-
-import { setDoc, getDoc, doc } from "firebase/firestore";
-
-import { db } from "../../lib/firebase";
 
 export default function ErrorPanel({ errors }) {
 
   return (
-    <Alert status="error" variant="solid">
-      <AlertIcon />
+    <Alert.Root status="error" variant="solid">
+      <Alert.Indicator />
       <Box flex="1">
-        <AlertTitle mb={4}>There was an error in data upload.</AlertTitle>
-        <Accordion allowToggle>
-          <AccordionItem>
-            <h2>
-              <AccordionButton>
-                <Box as="span" flex="1" textAlign="left">
-                  See Error Logs
-                </Box>
-              </AccordionButton>
-            </h2>
-            <AccordionPanel pb={4}>
-            <TableContainer>
-  <Table variant='simple'>
-    <Thead>
-      <Tr>
-        <Th>ERROR</Th>
-        <Th>TIME</Th>
-      </Tr>
-    </Thead>
-    <Tbody>
-      {errors.map((error, index) => (
-        <Tr key={index}>
-        <Td>{error.error}</Td>
-        <Td>{error.time}</Td>
-      </Tr>))}
-    </Tbody>
-  </Table>
-</TableContainer>  
-            </AccordionPanel>
-          </AccordionItem>
-        </Accordion>
+        <Alert.Title mb={4}>There was an error in data upload.</Alert.Title>
+        <Accordion.Root collapsible>
+          <Accordion.Item value="error-logs">
+            <Accordion.ItemTrigger>
+              <Box as="span" flex="1" textAlign="left">
+                See Error Logs
+              </Box>
+              <Accordion.ItemIndicator />
+            </Accordion.ItemTrigger>
+            <Accordion.ItemContent pb={4}>
+              <Table.Root variant="line">
+                <Table.Header>
+                  <Table.Row>
+                    <Table.ColumnHeader>ERROR</Table.ColumnHeader>
+                    <Table.ColumnHeader>TIME</Table.ColumnHeader>
+                  </Table.Row>
+                </Table.Header>
+                <Table.Body>
+                  {errors.map((error, index) => (
+                    <Table.Row key={index}>
+                      <Table.Cell>{error.error}</Table.Cell>
+                      <Table.Cell>{error.time}</Table.Cell>
+                    </Table.Row>
+                  ))}
+                </Table.Body>
+              </Table.Root>
+            </Accordion.ItemContent>
+          </Accordion.Item>
+        </Accordion.Root>
       </Box>
-    </Alert>
+    </Alert.Root>
   );
 }
-
-async function toggleMetadataActive(expId, active) {
-  if (active) {
-    activateMetadata(expId);
-  } else {
-    deactivateMetadata(expId);
-  }
-}
-
-async function activateMetadata(expId) {
-  try {
-    await setDoc(
-      doc(db, `experiments/${expId}`),
-      {
-        metadataActive: true,
-      },
-      { merge: true }
-    );
-  } catch (error) {
-    console.error(error);
-  }
-}
-
-async function deactivateMetadata(expId) {
-  try {
-    await setDoc(
-      doc(db, `experiments/${expId}`),
-      {
-        metadataActive: false,
-      },
-      { merge: true }
-    );
-  } catch (error) {
-    console.error(error);
-  }
-}
-
-

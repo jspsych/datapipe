@@ -1,22 +1,14 @@
 import {
-  Tab,
-  TabList,
-  TabPanel,
-  TabPanels,
   Tabs,
   VStack,
   Text,
   Heading,
   Stack,
   Menu,
-  MenuButton,
-  MenuList,
-  MenuItem,
-  MenuDivider,
   Button,
 } from "@chakra-ui/react";
 import { useState } from "react";
-import { ChevronDownIcon } from "@chakra-ui/icons";
+import { ChevronDown } from "lucide-react";
 
 import CodeBlock from "../CodeBlock";
 
@@ -26,7 +18,7 @@ export default function CodeHints({ expId }) {
   return (
     <Stack
       pr={8}
-      spacing={6}
+      gap={6}
       bgColor={"black"}
       borderRadius={16}
       p={6}
@@ -35,57 +27,66 @@ export default function CodeHints({ expId }) {
       <Heading fontSize="2xl">Code Samples</Heading>
       <VStack alignItems="flex-start">
         <Text>Select language</Text>
-        <Menu>
-          <MenuButton
-            as={Button}
-            variant="outline"
-            colorScheme="white"
-            rightIcon={<ChevronDownIcon />}
-          >
-            {language}
-          </MenuButton>
-          <MenuList bg="black" variant="outline">
-            <MenuItem
-              bg="black"
-              onClick={() => setLanguage("jspsych version 8")}
-            >
-              jspsych version 8
-            </MenuItem>
-            <MenuDivider />
-            <MenuItem bg="black" onClick={() => setLanguage("JavaScript")}>
-              JavaScript
-            </MenuItem>
-          </MenuList>
-        </Menu>
+        <Menu.Root>
+          <Menu.Trigger asChild>
+            <Button variant="outline" color="white" borderColor="white" _hover={{ bg: "whiteAlpha.300" }}>
+              {language} <ChevronDown />
+            </Button>
+          </Menu.Trigger>
+          <Menu.Positioner>
+            <Menu.Content bg="black" borderWidth="1px" borderColor="white" p="2">
+              <Menu.Item
+                value="jspsych"
+                bg="black"
+                color="white"
+                py="2"
+                px="3"
+                onClick={() => setLanguage("jspsych version 8")}
+              >
+                jspsych version 8
+              </Menu.Item>
+              <Menu.Separator />
+              <Menu.Item
+                value="javascript"
+                bg="black"
+                color="white"
+                py="2"
+                px="3"
+                onClick={() => setLanguage("JavaScript")}
+              >
+                JavaScript
+              </Menu.Item>
+            </Menu.Content>
+          </Menu.Positioner>
+        </Menu.Root>
       </VStack>
       {language === "jspsych version 8" && (
-        <Tabs variant="solid-rounded" colorScheme="brandOrange">
-          <TabList>
-            <Tab>Send data</Tab>
-            <Tab>Send and decode base64 data</Tab>
-            <Tab>Get condition assignment</Tab>
-          </TabList>
+        <Tabs.Root variant="enclosed" colorPalette="brandOrange" defaultValue="send-data">
+          <Tabs.List>
+            <Tabs.Trigger value="send-data">Send data</Tabs.Trigger>
+            <Tabs.Trigger value="send-base64">Send and decode base64 data</Tabs.Trigger>
+            <Tabs.Trigger value="get-condition">Get condition assignment</Tabs.Trigger>
+          </Tabs.List>
 
-          <TabPanels>
-            <TabPanel>
-              <VStack alignItems={"start"}>
-                <Text>Load the pipe plugin:</Text>
-                <CodeBlock>
-                  {`<script src="https://unpkg.com/@jspsych-contrib/plugin-pipe"></script>`}
-                </CodeBlock>
-                <Text>Generate a unique filename:</Text>
-                <CodeBlock>
-                  {`
+          <Tabs.Content value="send-data">
+            <VStack alignItems={"start"}>
+              <Text>Load the pipe plugin:</Text>
+              <CodeBlock>
+                {`<script src="https://unpkg.com/@jspsych-contrib/plugin-pipe"></script>`}
+              </CodeBlock>
+              <Text>Generate a unique filename:</Text>
+              <CodeBlock>
+                {`
               const subject_id = jsPsych.randomization.randomID(10);
               const filename = \`\${subject_id}.csv\`;
             `}
-                </CodeBlock>
-                <Text>
-                  To save data, add this trial to your timeline after all data
-                  is collected:
-                </Text>
-                <CodeBlock>
-                  {`
+              </CodeBlock>
+              <Text>
+                To save data, add this trial to your timeline after all data
+                is collected:
+              </Text>
+              <CodeBlock>
+                {`
               const save_data = {
                 type: jsPsychPipe,
                 action: "save",
@@ -93,41 +94,41 @@ export default function CodeHints({ expId }) {
                 filename: filename,
                 data_string: ()=>jsPsych.data.get().csv()
               };`}
-                </CodeBlock>
-                <Text>
-                  Note that you can also save the data as JSON by changing the
-                  file name and using .json() instead of .csv() to get the
-                  jsPsych data.
-                </Text>
-              </VStack>
-            </TabPanel>
-            <TabPanel>
-              <VStack alignItems={"start"}>
-                <Text>Load the pipe plugin:</Text>
-                <CodeBlock>
-                  {`<script src="https://unpkg.com/@jspsych-contrib/plugin-pipe"></script>`}
-                </CodeBlock>
-                <Text>
-                  This example will imagine that you are recording audio data
-                  from the html-audio-response plugin and sending the file at
-                  the end of the trial. There are other ways that you could use
-                  this, but this method will illustrate the key ideas.
-                </Text>
-                <Text>
-                  First, we will generate a unique subject ID so that we can
-                  label the file with the subject ID and the trial number.
-                </Text>
-                <CodeBlock>
-                  {`
+              </CodeBlock>
+              <Text>
+                Note that you can also save the data as JSON by changing the
+                file name and using .json() instead of .csv() to get the
+                jsPsych data.
+              </Text>
+            </VStack>
+          </Tabs.Content>
+          <Tabs.Content value="send-base64">
+            <VStack alignItems={"start"}>
+              <Text>Load the pipe plugin:</Text>
+              <CodeBlock>
+                {`<script src="https://unpkg.com/@jspsych-contrib/plugin-pipe"></script>`}
+              </CodeBlock>
+              <Text>
+                This example will imagine that you are recording audio data
+                from the html-audio-response plugin and sending the file at
+                the end of the trial. There are other ways that you could use
+                this, but this method will illustrate the key ideas.
+              </Text>
+              <Text>
+                First, we will generate a unique subject ID so that we can
+                label the file with the subject ID and the trial number.
+              </Text>
+              <CodeBlock>
+                {`
                     const subject_id = jsPsych.randomization.randomID(10);
                   `}
-                </CodeBlock>
-                <Text>
-                  In the on_finish event, we can send the data using the static
-                  method of the pipe plugin.
-                </Text>
-                <CodeBlock>
-                  {`
+              </CodeBlock>
+              <Text>
+                In the on_finish event, we can send the data using the static
+                method of the pipe plugin.
+              </Text>
+              <CodeBlock>
+                {`
                   var trial = {
                     type: jsPsychHtmlAudioResponse,
                     stimulus: \`
@@ -143,16 +144,16 @@ export default function CodeHints({ expId }) {
                     }
                   };
                 `}
-                </CodeBlock>
-                <Text>
-                  The jsPsych.saveBase64Data method is asynchronous, so if you
-                  want to wait for confirmation that the file was saved before
-                  moving on you can use the plugin instead. If you are
-                  comfortable with asynchronous programming then async/await
-                  will work too.
-                </Text>
-                <CodeBlock>
-                  {`
+              </CodeBlock>
+              <Text>
+                The jsPsych.saveBase64Data method is asynchronous, so if you
+                want to wait for confirmation that the file was saved before
+                moving on you can use the plugin instead. If you are
+                comfortable with asynchronous programming then async/await
+                will work too.
+              </Text>
+              <CodeBlock>
+                {`
               const save_data = {
                 type: jsPsychPipe,
                 action: "saveBase64",
@@ -165,24 +166,24 @@ export default function CodeHints({ expId }) {
                   return jsPsych.data.get().last(1).values()[0].response;
                 }
               };`}
-                </CodeBlock>
-              </VStack>
-            </TabPanel>
-            <TabPanel>
-              <VStack alignItems={"start"}>
-                <Text>Load the pipe plugin:</Text>
-                <CodeBlock>
-                  {`<script src="https://unpkg.com/@jspsych-contrib/plugin-pipe"></script>`}
-                </CodeBlock>
-                <Text>
-                  Use the static method of the pipe plugin to request the
-                  condition. This is an asynchronous request so we need to wait
-                  for the response before using the condition value. An easy
-                  wait to do this is to put your experiment creation code inside
-                  an async function.
-                </Text>
-                <CodeBlock>
-                  {`
+              </CodeBlock>
+            </VStack>
+          </Tabs.Content>
+          <Tabs.Content value="get-condition">
+            <VStack alignItems={"start"}>
+              <Text>Load the pipe plugin:</Text>
+              <CodeBlock>
+                {`<script src="https://unpkg.com/@jspsych-contrib/plugin-pipe"></script>`}
+              </CodeBlock>
+              <Text>
+                Use the static method of the pipe plugin to request the
+                condition. This is an asynchronous request so we need to wait
+                for the response before using the condition value. An easy
+                wait to do this is to put your experiment creation code inside
+                an async function.
+              </Text>
+              <CodeBlock>
+                {`
                   async function createExperiment(){
                     const condition = await jsPsychPipe.getCondition("${expId}");
                     if(condition == 0) { timeline = condition_1_timeline; }
@@ -191,26 +192,24 @@ export default function CodeHints({ expId }) {
                   }
                   createExperiment();
                   `}
-                </CodeBlock>
-              </VStack>
-            </TabPanel>
-          </TabPanels>
-        </Tabs>
+              </CodeBlock>
+            </VStack>
+          </Tabs.Content>
+        </Tabs.Root>
       )}
       {language === "JavaScript" && (
-        <Tabs variant="solid-rounded" colorScheme="brandOrange">
-          <TabList>
-            <Tab>Send data</Tab>
-            <Tab>Send and decode base64 data</Tab>
-            <Tab>Get condition assignment</Tab>
-          </TabList>
+        <Tabs.Root variant="enclosed" colorPalette="brandOrange" defaultValue="send-data-js">
+          <Tabs.List>
+            <Tabs.Trigger value="send-data-js">Send data</Tabs.Trigger>
+            <Tabs.Trigger value="send-base64-js">Send and decode base64 data</Tabs.Trigger>
+            <Tabs.Trigger value="get-condition-js">Get condition assignment</Tabs.Trigger>
+          </Tabs.List>
 
-          <TabPanels>
-            <TabPanel>
-              <VStack alignItems={"start"}>
-                <Text>Use fetch to send data.</Text>
-                <CodeBlock>
-                  {`
+          <Tabs.Content value="send-data-js">
+            <VStack alignItems={"start"}>
+              <Text>Use fetch to send data.</Text>
+              <CodeBlock>
+                {`
             fetch("https://pipe.jspsych.org/api/data/", {
               method: "POST",
               headers: {
@@ -223,18 +222,18 @@ export default function CodeHints({ expId }) {
                 data: dataAsString,
               }),
             });`}
-                </CodeBlock>
-              </VStack>
-            </TabPanel>
-            <TabPanel>
-              <VStack alignItems={"start"}>
-                <Text>
-                  Use fetch to send base64 data. The server will decode the
-                  base64 and send the decoded file to the OSF. Use the
-                  appropriate file extension in the file name.
-                </Text>
-                <CodeBlock>
-                  {`
+              </CodeBlock>
+            </VStack>
+          </Tabs.Content>
+          <Tabs.Content value="send-base64-js">
+            <VStack alignItems={"start"}>
+              <Text>
+                Use fetch to send base64 data. The server will decode the
+                base64 and send the decoded file to the OSF. Use the
+                appropriate file extension in the file name.
+              </Text>
+              <CodeBlock>
+                {`
             fetch("https://pipe.jspsych.org/api/base64/", {
               method: "POST",
               headers: {
@@ -247,14 +246,14 @@ export default function CodeHints({ expId }) {
                 data: base64DataString,
               }),
             });`}
-                </CodeBlock>
-              </VStack>
-            </TabPanel>
-            <TabPanel>
-              <VStack alignItems={"start"}>
-                <Text>Use fetch to request the next condition number.</Text>
-                <CodeBlock>
-                  {`
+              </CodeBlock>
+            </VStack>
+          </Tabs.Content>
+          <Tabs.Content value="get-condition-js">
+            <VStack alignItems={"start"}>
+              <Text>Use fetch to request the next condition number.</Text>
+              <CodeBlock>
+                {`
             const response = await fetch("https://pipe.jspsych.org/api/condition/", {
               method: "POST",
               headers: {
@@ -265,24 +264,23 @@ export default function CodeHints({ expId }) {
                 experimentID: "${expId}",
               }),
             });`}
-                </CodeBlock>
-                <Text>
-                  This request is asynchronous, so you will need to wrap this in
-                  an async function. If the request is successful, the response
-                  will be a JSON object with a condition property. The value of
-                  this property will be the condition number.
-                </Text>
-                <CodeBlock>
-                  {`
+              </CodeBlock>
+              <Text>
+                This request is asynchronous, so you will need to wrap this in
+                an async function. If the request is successful, the response
+                will be a JSON object with a condition property. The value of
+                this property will be the condition number.
+              </Text>
+              <CodeBlock>
+                {`
                   if(!response.error){
                     const condition = response.condition;
                   }
                 `}
-                </CodeBlock>
-              </VStack>
-            </TabPanel>
-          </TabPanels>
-        </Tabs>
+              </CodeBlock>
+            </VStack>
+          </Tabs.Content>
+        </Tabs.Root>
       )}
     </Stack>
   );

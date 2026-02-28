@@ -29,7 +29,7 @@ export default function AccountPage({}) {
 
   return (
     <AuthCheck fallbackRoute={deleting ? "/admin/deleted-account" : null}>
-      <VStack spacing={8} w="560px">
+      <VStack gap={8} w="560px">
         <Heading>Account Settings</Heading>
         
         {/* OAuth users: Show OAuth status only, no auth method selection */}

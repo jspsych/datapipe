@@ -40,7 +40,7 @@ export default function OneClickAuth() {
             <HStack>
                 <Text fontSize={"lg"}>One-Click Authentication</Text>
             </HStack>
-            <Button colorScheme="blue" leftIcon={<OsfIcon />} onClick={handleAuthClick}>
+            <Button colorPalette="blue" onClick={handleAuthClick}><OsfIcon />
                 Link OSF Account
             </Button>
         </HStack>

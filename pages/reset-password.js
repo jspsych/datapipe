@@ -1,16 +1,11 @@
 import {
   Card,
-  CardHeader,
-  CardBody,
   Stack,
   Heading,
   Text,
-  FormControl,
-  FormLabel,
-  FormErrorMessage,
+  Field,
   Input,
   Button,
-  FormHelperText,
 } from "@chakra-ui/react";
 
 import { auth } from "../lib/firebase";
@@ -67,19 +62,19 @@ export default function ResetPassword() {
   };
 
   return (
-    <Card w={360}>
-      <CardHeader>
+    <Card.Root w={360}>
+      <Card.Header>
         <Heading size="lg">Reset your password</Heading>
-      </CardHeader>
-      <CardBody>
+      </Card.Header>
+      <Card.Body>
         <Stack>
           {state === "send" && (
             <Text>We have sent you a link to reset your password.</Text>
           )}
           {state === "forgot" && (
             <>
-              <FormControl isInvalid={error}>
-                <FormLabel>Email</FormLabel>
+              <Field.Root invalid={!!error}>
+                <Field.Label>Email</Field.Label>
                 <Input
                   type="email"
                   onChange={(e) => {
@@ -87,15 +82,15 @@ export default function ResetPassword() {
                     setError("");
                   }}
                 />
-                <FormErrorMessage>{error}</FormErrorMessage>
-              </FormControl>
+                <Field.ErrorText>{error}</Field.ErrorText>
+              </Field.Root>
               <Text>
                 Enter your email and we will send you a link to reset your
                 password.
               </Text>
               <Button
-                colorScheme={"green"}
-                isLoading={isSubmitting}
+                colorPalette={"green"}
+                loading={isSubmitting}
                 onClick={resetPassword}
               >
                 Request Reset
@@ -104,8 +99,8 @@ export default function ResetPassword() {
           )}
           {state === "token" && (
             <>
-              <FormControl isInvalid={error}>
-                <FormLabel>New Password</FormLabel>
+              <Field.Root invalid={!!error}>
+                <Field.Label>New Password</Field.Label>
                 <Input
                   type="password"
                   onChange={(e) => {
@@ -113,14 +108,14 @@ export default function ResetPassword() {
                     setError("");
                   }}
                 />
-                <FormHelperText display={error === "" ? "block" : "none"}>
+                <Field.HelperText display={error === "" ? "block" : "none"}>
                   Password must be at least 12 characters
-                </FormHelperText>
-                <FormErrorMessage>{error}</FormErrorMessage>
-              </FormControl>
+                </Field.HelperText>
+                <Field.ErrorText>{error}</Field.ErrorText>
+              </Field.Root>
               <Button
-                colorScheme={"green"}
-                isLoading={isSubmitting}
+                colorPalette={"green"}
+                loading={isSubmitting}
                 onClick={setNewPassword}
               >
                 Set New Password
@@ -128,7 +123,7 @@ export default function ResetPassword() {
             </>
           )}
         </Stack>
-      </CardBody>
-    </Card>
+      </Card.Body>
+    </Card.Root>
   );
 }

@@ -11,17 +11,14 @@ import {
   Button,
   Stack,
   Heading,
-  FormControl,
-  FormLabel,
+  Field,
   Input,
   Spinner,
-  InputGroup,
-  InputLeftAddon,
-  FormErrorMessage,
-  FormHelperText,
+  Group,
+  InputAddon,
   VStack,
   Text,
-  Select,
+  NativeSelect,
 } from "@chakra-ui/react";
 
 export default function NewExperimentPage({}) {
@@ -47,50 +44,52 @@ function NewExperimentForm() {
     <>
       {loading && <Spinner color="green.500" size={"xl"} />}
       {isValid && (
-        <Stack spacing={6} maxWidth="540px">
+        <Stack gap={6} maxWidth="540px">
           <Heading>Create a New Experiment</Heading>
-          <FormControl id="title" isInvalid={titleError}>
-            <FormLabel>Title</FormLabel>
+          <Field.Root id="title" invalid={titleError}>
+            <Field.Label>Title</Field.Label>
             <Input type="text" onChange={() => setTitleError(false)} />
-            <FormErrorMessage color={"red"}>
+            <Field.ErrorText color={"red"}>
               This field is required
-            </FormErrorMessage>
-          </FormControl>
-          <FormControl id="osf-repo" isInvalid={osfError}>
-            <FormLabel>Existing OSF Project</FormLabel>
-            <InputGroup>
-              <InputLeftAddon bgColor={"greyBackground"}>
+            </Field.ErrorText>
+          </Field.Root>
+          <Field.Root id="osf-repo" invalid={osfError}>
+            <Field.Label>Existing OSF Project</Field.Label>
+            <Group attached>
+              <InputAddon bgColor={"greyBackground"}>
                 {`https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/`}
-              </InputLeftAddon>
+              </InputAddon>
               <Input type="text" />
-            </InputGroup>
-            <FormErrorMessage color={"red"}>
+            </Group>
+            <Field.ErrorText color={"red"}>
               Cannot connect to this OSF component
-            </FormErrorMessage>
-          </FormControl>
-          <FormControl id="osf-component-name" isInvalid={dataComponentError}>
-            <FormLabel>New OSF Data Component Name</FormLabel>
+            </Field.ErrorText>
+          </Field.Root>
+          <Field.Root id="osf-component-name" invalid={dataComponentError}>
+            <Field.Label>New OSF Data Component Name</Field.Label>
             <Input type="text" onChange={() => setDataComponentError(false)} />
-            <FormErrorMessage color={"red"}>
+            <Field.ErrorText color={"red"}>
               This field is required
-            </FormErrorMessage>
-            <FormHelperText color="gray">
+            </Field.ErrorText>
+            <Field.HelperText color="gray">
               DataPipe will create a new component with this name in the OSF
               project and store all data in it.
-            </FormHelperText>
-          </FormControl>
-          <FormControl id="osf-component-region">
-            <FormLabel>Storage Location</FormLabel>
-            <Select defaultValue="us" sx={{'> option': {background: 'black', color: 'white'}}}>
-              <option value="us">United States</option>
-              <option value="de-1">Germany - Frankfurt</option>
-              <option value="au-1">Australia - Sydney</option>
-              <option value="ca-1">Canada - Montreal</option>
-            </Select>
-            <FormHelperText color="gray">
+            </Field.HelperText>
+          </Field.Root>
+          <Field.Root id="osf-component-region">
+            <Field.Label>Storage Location</Field.Label>
+            <NativeSelect.Root>
+              <NativeSelect.Field defaultValue="us">
+                <option value="us">United States</option>
+                <option value="de-1">Germany - Frankfurt</option>
+                <option value="au-1">Australia - Sydney</option>
+                <option value="ca-1">Canada - Montreal</option>
+              </NativeSelect.Field>
+            </NativeSelect.Root>
+            <Field.HelperText color="gray">
               Choose the region where the data will be stored.
-            </FormHelperText>
-          </FormControl>
+            </Field.HelperText>
+          </Field.Root>
           <Button
             onClick={() =>
               handleCreateExperiment(
@@ -100,8 +99,8 @@ function NewExperimentForm() {
                 setDataComponentError
               )
             }
-            isLoading={isSubmitting}
-            colorScheme={"brandTeal"}
+            loading={isSubmitting}
+            colorPalette={"brandTeal"}
           >
             Create
           </Button>
@@ -115,7 +114,7 @@ function NewExperimentForm() {
             account.
           </Text>
           <Link href="/admin/account">
-            <Button variant={"solid"} colorScheme={"brandTeal"} size={"md"}>
+            <Button variant={"solid"} colorPalette={"brandTeal"} size={"md"}>
               Connect OSF Account
             </Button>
           </Link>
@@ -159,7 +158,6 @@ async function handleCreateExperiment(
   }
 
   try {
-    // Use the shared experiment creation utility
     const result = await createExperiment({
       title: title,
       osfRepo: osfRepo,
