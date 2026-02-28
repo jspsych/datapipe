@@ -40,7 +40,6 @@ function useOAuthCallback() {
     }
 
     if (!urlCode || !urlState) {
-      dispatch({ type: 'ERROR', error: 'Missing required OAuth parameters' });
       return;
     }
 
