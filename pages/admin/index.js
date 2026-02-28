@@ -46,7 +46,9 @@ function OAuthBanner() {
     );
   }, []);
 
-  if (dismissed || !userData || !userData.usingPersonalToken) {
+  const hasOAuthConnection = userData?.refreshToken && userData?.authToken;
+
+  if (dismissed || !userData || hasOAuthConnection) {
     return null;
   }
 
