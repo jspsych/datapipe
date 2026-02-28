@@ -124,6 +124,7 @@ export default function SignUpPage() {
                   setPassword(e.target.value);
                   setErrorPassword("");
                 }}
+                onKeyDown={(e) => e.key === "Enter" && onSubmit()}
               />
               <Field.HelperText display={errorPassword === "" ? "block" : "none"}>
                 Password must be at least 12 characters
