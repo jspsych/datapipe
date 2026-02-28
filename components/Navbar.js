@@ -17,11 +17,15 @@ import { Menu } from "@chakra-ui/react";
 import { auth } from "../lib/firebase";
 
 import { Rubik } from "next/font/google";
+import { useState, useEffect } from "react";
 
 const rubik = Rubik({ subsets: ["latin"] });
 
 export default function Navbar() {
   const { user } = useContext(UserContext);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const showUser = mounted ? user : null;
 
   return (
     <Box as="nav" flexShrink={0}>
@@ -66,7 +70,7 @@ export default function Navbar() {
             <Link color="white" focusRing="none" asChild>
               <NextLink href="/faq">FAQ</NextLink>
             </Link>
-            {user && (
+            {showUser && (
               <Link color="white" focusRing="none" asChild>
                 <NextLink href="/admin">My Experiments</NextLink>
               </Link>
@@ -74,7 +78,7 @@ export default function Navbar() {
           </HStack>
         </HStack>
         <HStack display={{ base: "none", md: "flex" }} gap={8}>
-          {!user && (
+          {!showUser && (
             <>
               <NextLink href="/signin">
                 <Button
@@ -93,7 +97,7 @@ export default function Navbar() {
               </NextLink>
             </>
           )}
-          {user && (
+          {showUser && (
             <>
               <NextLink href="/admin/new">
                 <Button
@@ -162,7 +166,7 @@ export default function Navbar() {
                   <NextLink href="/admin/new">New Experiment</NextLink>
                 </Menu.Item>
                 <Menu.Separator />
-                {!user && (
+                {!showUser && (
                   <>
                     <Menu.Item value="signup" bg="greyBackground" color="white" py="2" px="3" asChild>
                       <NextLink href="/signup">Sign Up</NextLink>
@@ -172,7 +176,7 @@ export default function Navbar() {
                     </Menu.Item>
                   </>
                 )}
-                {user && (
+                {showUser && (
                   <Menu.Item value="signout" bg="greyBackground" color="white" py="2" px="3" onClick={() => auth.signOut()}>
                     Sign Out
                   </Menu.Item>
