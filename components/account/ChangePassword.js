@@ -22,6 +22,7 @@ export default function ChangePassword() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordMatch, setPasswordMatch] = useState(true);
   const [passwordLengthSatisfied, setPasswordLengthSatisfied] = useState(true);
+  const [submitStatus, setSubmitStatus] = useState(null); // "success" | "failure" | null
 
   useEffect(() => {
     if (password !== confirmPassword) {
@@ -32,7 +33,7 @@ export default function ChangePassword() {
   }, [password, confirmPassword]);
 
   useEffect(() => {
-    if (password.length < 6) {
+    if (password.length < 12) {
       setPasswordLengthSatisfied(false);
     } else {
       setPasswordLengthSatisfied(true);
@@ -42,9 +43,17 @@ export default function ChangePassword() {
   return (
     <HStack justifyContent="space-between" w="100%">
       <Text fontSize={"lg"}>Password</Text>
-      <Button loading={isSubmitting} onClick={() => setOpen(true)} colorPalette="brandTeal">
-        Change Password
-      </Button>
+      <HStack>
+        {submitStatus === "success" && (
+          <Text fontSize="sm" color="green.400">Success</Text>
+        )}
+        {submitStatus === "failure" && (
+          <Text fontSize="sm" color="red.400">Failed</Text>
+        )}
+        <Button loading={isSubmitting} onClick={() => setOpen(true)} colorPalette="brandTeal">
+          Change Password
+        </Button>
+      </HStack>
       <Dialog.Root open={open} onOpenChange={(e) => setOpen(e.open)}>
         <Dialog.Backdrop />
         <Dialog.Positioner>
@@ -64,7 +73,7 @@ export default function ChangePassword() {
                     onChange={(e) => setPassword(e.target.value)}
                   />
                   <Field.ErrorText>
-                    Password must be at least 6 characters
+                    Password must be at least 12 characters
                   </Field.ErrorText>
                 </Field.Root>
                 <Field.Root id="confirm-password" invalid={!passwordMatch}>
@@ -83,8 +92,7 @@ export default function ChangePassword() {
                 variant={"solid"}
                 colorPalette={"brandTeal"}
                 size={"md"}
-                mr={4}
-                onClick={() => handleChangePassword(password, setIsSubmitting)}
+                onClick={() => handleChangePassword(password, setIsSubmitting, setOpen, setSubmitStatus)}
                 loading={isSubmitting}
                 disabled={!passwordMatch || !passwordLengthSatisfied}
               >
@@ -98,14 +106,19 @@ export default function ChangePassword() {
   );
 }
 
-async function handleChangePassword(newPassword, setIsSubmitting) {
+async function handleChangePassword(newPassword, setIsSubmitting, setOpen, setSubmitStatus) {
   setIsSubmitting(true);
   const user = auth.currentUser;
 
   try {
     await updatePassword(user, newPassword);
     setIsSubmitting(false);
+    setOpen(false);
+    setSubmitStatus("success");
   } catch (error) {
     console.log(error);
+    setIsSubmitting(false);
+    setOpen(false);
+    setSubmitStatus("failure");
   }
 }
