@@ -120,17 +120,16 @@ export default function FAQ() {
           <ol style={{ paddingLeft: "1.5em" }}>
             <li style={{ marginBottom: "0.5em" }}>
               In order to use this service you must authorize DataPipe to write
-              data to your OSF account on your behalf. If you sign in with your
-              OSF account, DataPipe manages your authorization tokens
-              automatically and they are stored encrypted, which reduces the
-              risk of exposure. If you use a personal access token instead, this
-              key enables full write access, so if we suffer a data breach it
-              would be possible for someone who got access to the token to make
-              malicious changes to your OSF account. To mitigate this risk, you
-              should create an OSF token that is just for this service so that
-              you can revoke authorization when you are done using the service.
-              The strongest security would be to use an active token only when
-              you need to collect data through this service.
+              data to your OSF account on your behalf. All tokens are stored
+              encrypted. If you sign in with your OSF account, DataPipe also
+              manages your tokens automatically and refreshes them regularly,
+              which further reduces the risk of exposure. If you use a personal
+              access token instead, this key enables full write access. To
+              mitigate this risk, you should create an OSF token that is just
+              for this service so that you can revoke authorization when you are
+              done using the service. The strongest security would be to use an
+              active token only when you need to collect data through this
+              service.
             </li>
             <li style={{ marginBottom: "0.5em" }}>
               This service does allow a technically savvy user to potentially
@@ -233,15 +232,15 @@ export default function FAQ() {
             One-click authentication lets you sign in to DataPipe using your OSF
             account. When you do this, DataPipe automatically manages your
             authorization tokens so you do not need to create or paste a token
-            manually. The tokens are stored encrypted and refreshed
-            automatically.
+            manually. Your tokens are refreshed automatically.
           </Text>
           <Text>
             A personal access token is a token that you create manually on the
             OSF and paste into DataPipe. This gives you more direct control over
-            the token, but you are responsible for creating, storing, and
-            revoking it yourself. We recommend one-click authentication for most
-            users because it is simpler and more secure.
+            the token, but you are responsible for creating and revoking it
+            yourself. Both methods store tokens encrypted. We recommend
+            one-click authentication for most users because it is simpler and
+            handles token refresh automatically.
           </Text>
         </FAQItem>
       </Accordion.Root>
