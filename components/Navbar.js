@@ -83,15 +83,22 @@ export default function Navbar() {
               <NextLink href="/signin">
                 <Button
                   variant={"ghost"}
-                  colorPalette={"white"}
+                  color="white"
                   size={"sm"}
                   mr={4}
+                  _hover={{ bg: "whiteAlpha.300" }}
                 >
                   Sign In
                 </Button>
               </NextLink>
               <NextLink href="/signup">
-                <Button variant={"outline"} colorPalette={"white"} size={"sm"}>
+                <Button
+                  variant={"outline"}
+                  color="white"
+                  borderColor="white"
+                  size={"sm"}
+                  _hover={{ bg: "whiteAlpha.300" }}
+                >
                   Sign Up
                 </Button>
               </NextLink>
