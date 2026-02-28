@@ -192,7 +192,7 @@ function OAuth2CallbackPage() {
   };
 
   return (
-    <Card.Root w={400} mx="auto">
+    <Card.Root w={400} mx="auto" variant="unstyled" color="white">
       <Card.Body p={8}>
         <VStack gap={6}>
           <Heading size="lg" textAlign="center">OSF Authentication</Heading>

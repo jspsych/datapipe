@@ -59,7 +59,7 @@ function ExperimentList() {
         </Stack>
 
         <Center w="100%" py={12}>
-          <Card.Root maxW="md" w="100%">
+          <Card.Root maxW="md" w="100%" variant="unstyled" color="white">
             <Card.Body>
               <VStack gap={6} textAlign="center">
                 <VStack gap={3}>

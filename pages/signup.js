@@ -90,17 +90,17 @@ export default function SignUpPage() {
   };
 
   return (
-    <Card.Root w={400} mx="auto">
+    <Card.Root w={400} mx="auto" variant="unstyled" color="white">
       <Card.Body p={8}>
         <VStack gap={6}>
           <Heading size="lg" textAlign="center">Create Account</Heading>
 
           <SignUpWithOSF />
 
-          <HStack w="full">
-            <Separator />
-            <Text fontSize="sm" color="gray.500" px={3}>or</Text>
-            <Separator />
+          <HStack w="full" alignItems="center">
+            <Separator flex="1" />
+            <Text fontSize="sm" color="gray.400" px={3} whiteSpace="nowrap" textTransform="uppercase" fontWeight="medium" letterSpacing="wide">or</Text>
+            <Separator flex="1" />
           </HStack>
 
           <VStack gap={4} w="full">
@@ -141,9 +141,9 @@ export default function SignUpPage() {
               Create Account
             </Button>
 
-            <Text fontSize="sm" color="gray.600">
+            <Text fontSize="sm" color="gray.400">
               Have an account?{" "}
-              <ChakraLink asChild color="blue.500">
+              <ChakraLink asChild color="brandOrange.300">
                 <Link href="/signin">Sign In</Link>
               </ChakraLink>
             </Text>
