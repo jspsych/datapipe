@@ -26,11 +26,10 @@ export default function ExperimentPage() {
 }
 
 function ExperimentPageDashboard({ experiment_id }) {
-  const [data, loading, error, snapshot, reload] = useDocumentData(
-    doc(db, `experiments/${experiment_id}`)
-  );
-  const logs = useDocumentData(
-    doc(db, `logs/${experiment_id}`))?.[0] || null;
+  const experimentRef = experiment_id ? doc(db, `experiments/${experiment_id}`) : null;
+  const logsRef = experiment_id ? doc(db, `logs/${experiment_id}`) : null;
+  const [data, loading, error, snapshot, reload] = useDocumentData(experimentRef);
+  const logs = useDocumentData(logsRef)?.[0] || null;
 
   const uploadError = logs?.logError;
   const errorLog = logs?.errors;

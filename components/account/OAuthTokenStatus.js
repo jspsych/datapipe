@@ -12,7 +12,7 @@ import {
   Link,
   Box
 } from "@chakra-ui/react";
-import { CircleCheck, TriangleAlert, Info } from "lucide-react";
+import { CircleCheck, TriangleAlert } from "lucide-react";
 
 export default function OAuthTokenStatus() {
   const { user } = useContext(UserContext);
@@ -35,13 +35,11 @@ export default function OAuthTokenStatus() {
   }
 
   const isRefreshTokenExpired = data.refreshTokenExpires && Date.now() > data.refreshTokenExpires;
-  const isAccessTokenExpired = data.authTokenExpires && Date.now() > data.authTokenExpires;
+
 
   const getStatusIcon = () => {
     if (isRefreshTokenExpired) {
       return <TriangleAlert color="var(--chakra-colors-red-500)" />;
-    } else if (isAccessTokenExpired) {
-      return <Info color="var(--chakra-colors-blue-500)" />;
     } else {
       return <CircleCheck color="var(--chakra-colors-green-500)" />;
     }
@@ -50,8 +48,6 @@ export default function OAuthTokenStatus() {
   const getStatusText = () => {
     if (isRefreshTokenExpired) {
       return "Re-authentication Required";
-    } else if (isAccessTokenExpired) {
-      return "Connected (Auto-refreshing)";
     } else {
       return "Connected";
     }
@@ -99,17 +95,6 @@ export default function OAuthTokenStatus() {
         </Alert.Root>
       )}
 
-      {isAccessTokenExpired && !isRefreshTokenExpired && (
-        <Alert.Root status="info" size="sm">
-          <Alert.Indicator />
-          <Box>
-            <Alert.Title>Auto-Refreshing Access</Alert.Title>
-            <Alert.Description>
-              Your access token will be automatically refreshed when needed. No action required.
-            </Alert.Description>
-          </Box>
-        </Alert.Root>
-      )}
     </VStack>
   );
 }

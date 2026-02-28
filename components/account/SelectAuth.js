@@ -193,7 +193,7 @@ export default function SelectAuth() {
             <Dialog.Root open={isHelpOpen} onOpenChange={(e) => setIsHelpOpen(e.open)} size="lg">
                 <Dialog.Backdrop />
                 <Dialog.Positioner>
-                    <Dialog.Content bg="blackAlpha.800">
+                    <Dialog.Content bg="blackAlpha.800" color="white">
                         <Dialog.Header>OSF Authentication Methods</Dialog.Header>
                         <Dialog.CloseTrigger />
                         <Dialog.Body>
@@ -241,7 +241,7 @@ export default function SelectAuth() {
             <Dialog.Root open={isTokenOpen} onOpenChange={(e) => setIsTokenOpen(e.open)}>
                 <Dialog.Backdrop />
                 <Dialog.Positioner>
-                    <Dialog.Content bg="greyBackground">
+                    <Dialog.Content bg="greyBackground" color="white">
                         <Dialog.Header>Set OSF Personal Access Token</Dialog.Header>
                         <Dialog.CloseTrigger />
                         <Dialog.Body>

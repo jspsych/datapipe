@@ -29,15 +29,18 @@ export default function CodeHints({ expId }) {
         <Text>Select language</Text>
         <Menu.Root>
           <Menu.Trigger asChild>
-            <Button variant="outline" colorPalette="gray">
+            <Button variant="outline" color="white" borderColor="white" _hover={{ bg: "whiteAlpha.300" }}>
               {language} <ChevronDown />
             </Button>
           </Menu.Trigger>
           <Menu.Positioner>
-            <Menu.Content bg="black">
+            <Menu.Content bg="black" borderWidth="1px" borderColor="white" p="2">
               <Menu.Item
                 value="jspsych"
                 bg="black"
+                color="white"
+                py="2"
+                px="3"
                 onClick={() => setLanguage("jspsych version 8")}
               >
                 jspsych version 8
@@ -46,6 +49,9 @@ export default function CodeHints({ expId }) {
               <Menu.Item
                 value="javascript"
                 bg="black"
+                color="white"
+                py="2"
+                px="3"
                 onClick={() => setLanguage("JavaScript")}
               >
                 JavaScript

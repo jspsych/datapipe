@@ -38,7 +38,7 @@ export default function DeleteAccount({ setDeleting }) {
       <Dialog.Root open={open} onOpenChange={(e) => setOpen(e.open)}>
         <Dialog.Backdrop />
         <Dialog.Positioner>
-          <Dialog.Content bg="greyBackground">
+          <Dialog.Content bg="greyBackground" color="white">
             <Dialog.Header fontSize="lg" fontWeight="bold">
               Delete Account
             </Dialog.Header>

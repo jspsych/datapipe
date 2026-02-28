@@ -1,5 +1,5 @@
-import { Button } from "@chakra-ui/react";
-import { Check } from "lucide-react";
+import { IconButton } from "@chakra-ui/react";
+import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 
 export default function CopyButton({ code }) {
@@ -12,8 +12,16 @@ export default function CopyButton({ code }) {
   };
 
   return (
-    <Button size="sm" w={14} colorPalette="green" onClick={onCopy}>
-      {hasCopied ? <Check /> : "Copy"}
-    </Button>
+    <IconButton
+      aria-label="Copy code"
+      size="sm"
+      variant="outline"
+      color="white"
+      borderColor="white"
+      _hover={{ bg: "whiteAlpha.300" }}
+      onClick={onCopy}
+    >
+      {hasCopied ? <Check /> : <Copy />}
+    </IconButton>
   );
 }

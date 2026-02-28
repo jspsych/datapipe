@@ -58,8 +58,9 @@ export default function Footer() {
             <Button
               variant="outline"
               color="white"
-              colorPalette="white"
+              borderColor="white"
               size="sm"
+              _hover={{ bg: "whiteAlpha.300" }}
               onClick={() => {
                 window.open("https://opencollective.com/jspsych");
               }}

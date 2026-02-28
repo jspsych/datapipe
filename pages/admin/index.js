@@ -178,7 +178,7 @@ function ExperimentStatusTag({ active, prepend }) {
   return (
     <Tooltip.Root>
       <Tooltip.Trigger asChild>
-        <Tag.Root size="lg" variant="outline" colorPalette={active ? "green" : "gray"}>
+        <Tag.Root size="lg" variant="outline" colorPalette={active ? "green" : "gray"} color={active ? "green.400" : "gray.400"} opacity={active ? 1 : 0.75}>
           <Tag.Label>
             {active ? <Check size={16} /> : <Ban size={16} />}
           </Tag.Label>
@@ -200,7 +200,9 @@ function ExperimentActions({ exp }) {
         <IconButton
           aria-label="Edit"
           variant="outline"
-          colorPalette="whiteAlpha"
+          color="white"
+          borderColor="white"
+          _hover={{ bg: "whiteAlpha.300" }}
         >
           <Pencil />
         </IconButton>
@@ -219,7 +221,9 @@ function DeleteAlertDialog({ exp }) {
         aria-label="Delete"
         onClick={() => setOpen(true)}
         variant="outline"
-        colorPalette="red"
+        color="red.400"
+        borderColor="red.400"
+        _hover={{ bg: "whiteAlpha.300" }}
       >
         <Trash2 />
       </IconButton>
@@ -227,7 +231,7 @@ function DeleteAlertDialog({ exp }) {
       <Dialog.Root open={open} onOpenChange={(e) => setOpen(e.open)}>
         <Dialog.Backdrop />
         <Dialog.Positioner>
-          <Dialog.Content bg="greyBackground">
+          <Dialog.Content bg="greyBackground" color="white">
             <Dialog.Header fontSize="lg" fontWeight="bold">
               Delete Experiment
             </Dialog.Header>

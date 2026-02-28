@@ -26,7 +26,9 @@ export default function ExperimentTitle({ data }) {
         <Editable.EditTrigger asChild>
           <IconButton
             variant="outline"
-            colorPalette={"whiteAlpha"}
+            color="white"
+            borderColor="white"
+            _hover={{ bg: "whiteAlpha.300" }}
             size="sm"
           >
             <Pencil />
@@ -36,7 +38,9 @@ export default function ExperimentTitle({ data }) {
           <IconButton
             size="sm"
             variant="outline"
-            colorPalette={"brandTeal"}
+            color="green.400"
+            borderColor="green.400"
+            _hover={{ bg: "whiteAlpha.300" }}
           >
             <Check />
           </IconButton>
@@ -45,7 +49,9 @@ export default function ExperimentTitle({ data }) {
           <IconButton
             size="sm"
             variant="outline"
-            colorPalette={"red"}
+            color="red.400"
+            borderColor="red.400"
+            _hover={{ bg: "whiteAlpha.300" }}
           >
             <X />
           </IconButton>

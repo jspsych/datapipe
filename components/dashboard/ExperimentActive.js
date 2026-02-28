@@ -113,7 +113,7 @@ export default function ExperimentActive({ data }) {
               }
             }}
           >
-            <NumberInput.Field />
+            <NumberInput.Input />
             <NumberInput.Control>
               <NumberInput.IncrementTrigger />
               <NumberInput.DecrementTrigger />
@@ -154,7 +154,7 @@ export default function ExperimentActive({ data }) {
               }
             }}
           >
-            <NumberInput.Field />
+            <NumberInput.Input />
             <NumberInput.Control>
               <NumberInput.IncrementTrigger />
               <NumberInput.DecrementTrigger />

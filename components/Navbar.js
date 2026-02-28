@@ -57,17 +57,17 @@ export default function Navbar() {
             gap={8}
             display={{ base: "none", md: "flex" }}
           >
-            <Link color="white" asChild>
+            <Link color="white" focusRing="none" asChild>
               <NextLink href="/getting-started">Getting Started</NextLink>
             </Link>
-            <Link color="white" asChild>
+            <Link color="white" focusRing="none" asChild>
               <NextLink href="/api-docs">API Docs</NextLink>
             </Link>
-            <Link color="white" asChild>
+            <Link color="white" focusRing="none" asChild>
               <NextLink href="/faq">FAQ</NextLink>
             </Link>
             {user && (
-              <Link color="white" asChild>
+              <Link color="white" focusRing="none" asChild>
                 <NextLink href="/admin">My Experiments</NextLink>
               </Link>
             )}
@@ -107,7 +107,7 @@ export default function Navbar() {
               <Menu.Root>
                 <Menu.Trigger asChild>
                   <Button
-                    colorPalette={"white"}
+                    color="white"
                     rounded={"full"}
                     variant={"plain"}
                     cursor={"pointer"}
@@ -117,12 +117,12 @@ export default function Navbar() {
                   </Button>
                 </Menu.Trigger>
                 <Menu.Positioner>
-                  <Menu.Content bg="greyBackground">
-                    <Menu.Item value="settings" bg="greyBackground" asChild>
+                  <Menu.Content bg="greyBackground" borderWidth="1px" borderColor="white" p="2">
+                    <Menu.Item value="settings" bg="greyBackground" color="white" py="2" px="3" asChild>
                       <NextLink href="/admin/account">Settings</NextLink>
                     </Menu.Item>
                     <Menu.Separator />
-                    <Menu.Item value="signout" bg="greyBackground" onClick={() => auth.signOut()}>
+                    <Menu.Item value="signout" bg="greyBackground" color="white" py="2" px="3" onClick={() => auth.signOut()}>
                       Sign Out
                     </Menu.Item>
                   </Menu.Content>
@@ -145,35 +145,35 @@ export default function Navbar() {
               </IconButton>
             </Menu.Trigger>
             <Menu.Positioner>
-              <Menu.Content w="90vw" bg="greyBackground">
-                <Menu.Item value="getting-started" bg="greyBackground" asChild>
+              <Menu.Content w="90vw" bg="greyBackground" borderWidth="1px" borderColor="white" p="2">
+                <Menu.Item value="getting-started" bg="greyBackground" color="white" py="2" px="3" asChild>
                   <NextLink href="/getting-started">Getting Started</NextLink>
                 </Menu.Item>
-                <Menu.Item value="api-docs" bg="greyBackground" asChild>
+                <Menu.Item value="api-docs" bg="greyBackground" color="white" py="2" px="3" asChild>
                   <NextLink href="/api-docs">API Docs</NextLink>
                 </Menu.Item>
-                <Menu.Item value="faq" bg="greyBackground" asChild>
+                <Menu.Item value="faq" bg="greyBackground" color="white" py="2" px="3" asChild>
                   <NextLink href="/faq">FAQ</NextLink>
                 </Menu.Item>
-                <Menu.Item value="experiments" bg="greyBackground" asChild>
+                <Menu.Item value="experiments" bg="greyBackground" color="white" py="2" px="3" asChild>
                   <NextLink href="/admin">My Experiments</NextLink>
                 </Menu.Item>
-                <Menu.Item value="new-experiment" bg="greyBackground" asChild>
+                <Menu.Item value="new-experiment" bg="greyBackground" color="white" py="2" px="3" asChild>
                   <NextLink href="/admin/new">New Experiment</NextLink>
                 </Menu.Item>
                 <Menu.Separator />
                 {!user && (
                   <>
-                    <Menu.Item value="signup" bg="greyBackground" asChild>
+                    <Menu.Item value="signup" bg="greyBackground" color="white" py="2" px="3" asChild>
                       <NextLink href="/signup">Sign Up</NextLink>
                     </Menu.Item>
-                    <Menu.Item value="signin" bg="greyBackground" asChild>
+                    <Menu.Item value="signin" bg="greyBackground" color="white" py="2" px="3" asChild>
                       <NextLink href="/signin">Sign In</NextLink>
                     </Menu.Item>
                   </>
                 )}
                 {user && (
-                  <Menu.Item value="signout" bg="greyBackground" onClick={() => auth.signOut()}>
+                  <Menu.Item value="signout" bg="greyBackground" color="white" py="2" px="3" onClick={() => auth.signOut()}>
                     Sign Out
                   </Menu.Item>
                 )}
