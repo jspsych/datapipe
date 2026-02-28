@@ -16,10 +16,6 @@
         "function": "apidata"
       },
       {
-        "source": "/api/session",
-        "function": "apisession"
-      },
-      {
         "source": "/api/condition",
         "function": "apicondition"
       },

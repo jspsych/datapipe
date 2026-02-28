@@ -52,7 +52,9 @@ jobs:
       - name: Create functions environment file
         working-directory: functions
         run: |
-          echo "CLIENT_SECRET=${{ secrets.TEST_CLIENT_SECRET }}" > .env
+          echo "CLIENT_SECRET=${{ secrets.PROD_CLIENT_SECRET }}" > .env
+          echo "CLIENT_ID=${{ secrets.PROD_CLIENT_ID }}" >> .env
+          echo "REDIRECT_URI=${{ secrets.PROD_REDIRECT_URI }}" >> .env
           echo "TOKEN_ENCRYPTION_KEY=${{ secrets.FIRESTORE_KEY_PRODUCTION }}" >> .env
       - name: Install dependencies and build functions
         working-directory: functions
