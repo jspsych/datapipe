@@ -96,9 +96,14 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
       grant_type: 'authorization_code',
     });
 
+    const tokenUrl = `https://accounts.${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/oauth2/token`;
+    console.log('Token exchange URL:', tokenUrl);
+    console.log('NEXT_PUBLIC_OSF_ENV:', JSON.stringify(process.env.NEXT_PUBLIC_OSF_ENV));
+    console.log('Redirect URI:', redirectUri);
+    console.log('Client ID:', clientId);
 
     // Exchange authorization code for access token
-    const tokenResponse = await fetch(`https://accounts.${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/oauth2/token`, {
+    const tokenResponse = await fetch(tokenUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -323,7 +328,8 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
     }
 
   } catch (error) {
-    console.error('OAuth callback error:', error instanceof Error ? error.message : 'Unknown error');
+    console.error('OAuth callback error:', error instanceof Error ? error.stack : 'Unknown error');
+    console.error('OAuth callback full error:', error);
     res.status(500).json({
       error: 'Internal server error'
     });
