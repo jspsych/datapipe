@@ -57,12 +57,17 @@ function useOSFEntry() {
       return;
     }
 
-    if (user?.uid && userData?.osfUserId === osfUserId) {
+    if (!user?.uid) {
+      setState(prev => ({ ...prev, status: 'needs-auth' }));
+      return;
+    }
+
+    if (userData?.osfUserId === osfUserId) {
       setState(prev => ({ ...prev, status: 'ready' }));
       return;
     }
 
-    if (user?.uid && userData?.osfUserId && userData?.osfUserId !== osfUserId) {
+    if (userData?.osfUserId && userData?.osfUserId !== osfUserId) {
       setState({
         status: 'error',
         error: `You are signed in with OSF account ${userData.osfUserId}, but this link is for ${osfUserId}. Please sign out and try again.`,
@@ -71,7 +76,7 @@ function useOSFEntry() {
       return;
     }
 
-    setState(prev => ({ ...prev, status: 'ready' }));
+    setState(prev => ({ ...prev, status: 'needs-auth' }));
   }, [user, userLoading, userData, userDataLoading, osfUserId, osfComponentId]);
 
   const handleAuthenticate = async () => {
@@ -201,6 +206,34 @@ function OSFEntryPage() {
           </VStack>
         );
 
+      case 'needs-auth':
+        return (
+          <VStack gap={6}>
+            <Heading size="lg" textAlign="center">
+              Create DataPipe Experiment
+            </Heading>
+            <Text textAlign="center" color="gray.300">
+              Sign in with your OSF account to create a DataPipe experiment linked to your OSF project.
+            </Text>
+            <Box bg="greyBackground" p={4} borderRadius="md" w="full" border="1px solid" borderColor="gray.600">
+              <Text fontSize="sm" color="white" mb={2}>
+                <strong>OSF Component:</strong> {osfComponentId}
+              </Text>
+              <Text fontSize="sm" color="white">
+                <strong>OSF User:</strong> {osfUserId}
+              </Text>
+            </Box>
+            <Button
+              colorPalette="brandTeal"
+              onClick={handleAuthenticate}
+              size="lg"
+              w="full"
+            >
+              Sign in with OSF
+            </Button>
+          </VStack>
+        );
+
       case 'ready':
         return (
           <VStack gap={6}>
@@ -229,48 +262,14 @@ function OSFEntryPage() {
                 />
               </Field.Root>
             </Box>
-
-            {userData?.uid && userData?.osfUserId === osfUserId ? (
-              <Button
-                colorPalette="brandTeal"
-                onClick={handleCreateExperiment}
-                size="lg"
-                w="full"
-              >
-                Create Experiment
-              </Button>
-            ) : userData?.uid ? (
-              <VStack gap={3}>
-                <Text fontSize="sm" color="gray.300" textAlign="center">
-                  {userData?.osfUserId ?
-                    `You're signed in with OSF account ${userData.osfUserId}, but this link is for ${osfUserId}.` :
-                    "Your DataPipe account isn't linked to OSF yet."
-                  }
-                </Text>
-                <Button
-                  colorPalette="brandTeal"
-                  onClick={handleAuthenticate}
-                  size="lg"
-                  w="full"
-                >
-                  {userData?.osfUserId ? 'Switch OSF Account' : 'Link OSF Account'}
-                </Button>
-              </VStack>
-            ) : (
-              <VStack gap={3}>
-                <Text fontSize="sm" color="gray.300" textAlign="center">
-                  You need to sign in to DataPipe with your OSF account.
-                </Text>
-                <Button
-                  colorPalette="brandTeal"
-                  onClick={handleAuthenticate}
-                  size="lg"
-                  w="full"
-                >
-                  Sign in with OSF
-                </Button>
-              </VStack>
-            )}
+            <Button
+              colorPalette="brandTeal"
+              onClick={handleCreateExperiment}
+              size="lg"
+              w="full"
+            >
+              Create Experiment
+            </Button>
           </VStack>
         );
 
