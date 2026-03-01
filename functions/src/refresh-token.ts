@@ -21,7 +21,7 @@ export async function refreshAndUpdateUser(
 ): Promise<RefreshResult> {
   const params = new URLSearchParams({
     refresh_token: refreshToken,
-    client_id: process.env.NEXT_PUBLIC_CLIENT_ID as string,
+    client_id: process.env.CLIENT_ID as string,
     client_secret: process.env.CLIENT_SECRET as string,
     grant_type: "refresh_token",
   });

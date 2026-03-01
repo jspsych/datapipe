@@ -8,6 +8,7 @@ import { DocumentReference, DocumentData } from "firebase-admin/firestore";
 import putFileOSF from "./put-file-osf.js";
 import { db } from "./app.js";
 import { decrypt } from "./crypto-utils.js";
+import { refreshAndUpdateUser } from "./refresh-token.js";
 import { ExperimentData, UserData, Metadata, MetadataResponse } from './interfaces';
 
 
@@ -22,7 +23,20 @@ export default async function blockMetadata(
 
 let metadataMessage: {metadataMessage: string} = {metadataMessage: ''};
 
-const decryptedOsfToken = decrypt(user_data.osfToken);
+let decryptedOsfToken: string;
+if (user_data.usingPersonalToken) {
+  decryptedOsfToken = decrypt(user_data.osfToken);
+} else {
+  if (Date.now() > user_data.authTokenExpires) {
+    const refreshResult = await refreshAndUpdateUser(exp_data.owner, decrypt(user_data.refreshToken));
+    if (!refreshResult.success) {
+      return { success: false, metadataMessage: "OAuth token refresh failed" };
+    }
+    decryptedOsfToken = refreshResult.accessToken!;
+  } else {
+    decryptedOsfToken = decrypt(user_data.authToken);
+  }
+}
 
 try {
 
