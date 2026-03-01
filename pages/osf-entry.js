@@ -29,6 +29,9 @@ function useOSFEntry() {
   useEffect(() => {
     if (userLoading || userDataLoading) return;
 
+    // Don't override active or terminal states
+    if (['creating', 'success', 'authenticating'].includes(state.status)) return;
+
     if (!osfUserId) {
       setState({
         status: 'error',
@@ -77,7 +80,7 @@ function useOSFEntry() {
     }
 
     setState(prev => ({ ...prev, status: 'needs-auth' }));
-  }, [user, userLoading, userData, userDataLoading, osfUserId, osfComponentId]);
+  }, [user, userLoading, userData, userDataLoading, osfUserId, osfComponentId, state.status]);
 
   const handleAuthenticate = async () => {
     if (processingRef.current) return;
