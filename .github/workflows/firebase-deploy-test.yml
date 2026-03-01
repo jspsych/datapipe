@@ -19,6 +19,7 @@ env:
   NEXT_PUBLIC_OAUTH_FINAL: ${{ secrets.TEST_OAUTH_FINAL }}
   NEXT_PUBLIC_OAUTH_REGENERATE: ${{ secrets.TEST_OAUTH_REGENERATE }}
   NEXT_PUBLIC_GENERATE_STATE: "https://datapipe-test.web.app/api/generateoauthstate"
+  NEXT_PUBLIC_BASE_URL: "https://datapipe-test.web.app"
   NEXT_PUBLIC_OSF_ENV: ${{ secrets.TEST_OSF_ENV }}
 
 jobs:

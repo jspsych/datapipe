@@ -330,8 +330,7 @@ function OSFEntryPage() {
                   size="md"
                   w="full"
                   onClick={() => {
-                    const baseUrl = process.env.NODE_ENV === 'production' ? 'https://pipe.jspsych.org' : 'http://localhost:5000';
-                    const experimentUrl = `${baseUrl}/admin/${state.projectInfo.experimentId}`;
+                    const experimentUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/admin/${state.projectInfo.experimentId}`;
                     window.location.href = experimentUrl;
                   }}
                 >
