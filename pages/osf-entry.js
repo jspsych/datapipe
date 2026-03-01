@@ -1,5 +1,6 @@
 import { VStack, Heading, Text, Button, Alert, Card, Spinner, Center, Box, Input, Field } from "@chakra-ui/react";
 import { useSearchParams } from 'next/navigation';
+import { useRouter } from "next/router";
 import { useEffect, useContext, useState, useRef } from "react";
 import { UserContext } from "../lib/context";
 import { createExperiment, getUserOsfToken } from "../lib/experiment-creation";
@@ -10,6 +11,7 @@ import { db, auth } from "../lib/firebase";
 
 function useOSFEntry() {
   const { user, loading: userLoading } = useContext(UserContext);
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [state, setState] = useState({
     status: 'loading',
@@ -187,13 +189,14 @@ function useOSFEntry() {
     handleAuthenticate,
     handleCreateExperiment,
     titleRef,
+    router,
     isAuthenticated: user?.uid && userData?.osfUserId === osfUserId,
     user: userData
   };
 }
 
 function OSFEntryPage() {
-  const { state, osfUserId, osfComponentId, handleAuthenticate, handleCreateExperiment, titleRef, isAuthenticated, user: userData } = useOSFEntry();
+  const { state, osfUserId, osfComponentId, handleAuthenticate, handleCreateExperiment, titleRef, router, isAuthenticated, user: userData } = useOSFEntry();
 
   const renderContent = () => {
     switch (state.status) {
@@ -329,10 +332,7 @@ function OSFEntryPage() {
                   colorPalette="brandTeal"
                   size="md"
                   w="full"
-                  onClick={() => {
-                    const experimentUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/admin/${state.projectInfo.experimentId}`;
-                    window.location.href = experimentUrl;
-                  }}
+                  onClick={() => router.push(`/admin/${state.projectInfo.experimentId}`)}
                 >
                   Open Experiment in DataPipe
                 </Button>

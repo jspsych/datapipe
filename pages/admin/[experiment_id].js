@@ -14,6 +14,10 @@ import MetadataControl from "../../components/dashboard/MetadataControl";
 import CodeHints from "../../components/dashboard/CodeHints";
 import ErrorPanel from "../../components/dashboard/ErrorPanel";
 
+export async function getServerSideProps() {
+  return { props: {} };
+}
+
 export default function ExperimentPage() {
   const router = useRouter();
   const { experiment_id } = router.query;
