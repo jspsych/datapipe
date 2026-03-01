@@ -338,6 +338,9 @@ function OSFEntryPage() {
                   Open Experiment in DataPipe
                 </Button>
               </VStack>
+              <Text fontSize="sm" color="gray.400" textAlign="center">
+                You can safely close this tab and return to OSF.
+              </Text>
             </VStack>
           </VStack>
         );
