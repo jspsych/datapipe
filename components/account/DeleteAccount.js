@@ -6,6 +6,7 @@ import {
   Button,
   Text,
   Dialog,
+  Tooltip,
 } from "@chakra-ui/react";
 
 import { auth } from "../../lib/firebase";
@@ -17,6 +18,7 @@ export default function DeleteAccount({ setDeleting }) {
   const { user } = useContext(UserContext);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [open, setOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
   const router = useRouter();
 
   const deleteAccount = async function () {
@@ -25,6 +27,8 @@ export default function DeleteAccount({ setDeleting }) {
       router.push("/admin/deleted-account");
     } catch (error) {
       setDeleting(false);
+      setIsSubmitting(false);
+      setDeleteError(error.message);
       console.log(error);
     }
   };
@@ -32,9 +36,21 @@ export default function DeleteAccount({ setDeleting }) {
   return (
     <HStack justifyContent="space-between" w="100%">
       <Text fontSize={"lg"}>Delete DataPipe Account</Text>
-      <Button loading={isSubmitting} onClick={() => setOpen(true)} colorPalette="red">
-        Delete Account
-      </Button>
+      <HStack>
+        {deleteError && (
+          <Tooltip.Root>
+            <Tooltip.Trigger asChild>
+              <Text fontSize="sm" color="red.400" cursor="default">Failed</Text>
+            </Tooltip.Trigger>
+            <Tooltip.Positioner>
+              <Tooltip.Content>{deleteError}</Tooltip.Content>
+            </Tooltip.Positioner>
+          </Tooltip.Root>
+        )}
+        <Button loading={isSubmitting} onClick={() => setOpen(true)} colorPalette="red">
+          Delete Account
+        </Button>
+      </HStack>
       <Dialog.Root open={open} onOpenChange={(e) => setOpen(e.open)}>
         <Dialog.Backdrop />
         <Dialog.Positioner>
