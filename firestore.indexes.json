@@ -1,4 +1,13 @@
 {
-  "indexes": [],
+  "indexes": [
+    {
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "usingPersonalToken", "order": "ASCENDING" },
+        { "fieldPath": "refreshTokenExpires", "order": "ASCENDING" }
+      ]
+    }
+  ],
   "fieldOverrides": []
 }
