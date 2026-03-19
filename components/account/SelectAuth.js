@@ -185,7 +185,6 @@ export default function SelectAuth() {
                                 variant="solid"
                                 colorPalette="brandTeal"
                                 size="md"
-                                mr={4}
                                 onClick={handleSaveToken}
                                 loading={isSubmittingToken}
                             >

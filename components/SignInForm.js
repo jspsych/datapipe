@@ -79,6 +79,7 @@ export default function SignInForm({ routeAfterSignIn }) {
                   setPassword(e.target.value);
                   setErrorPassword("");
                 }}
+                onKeyDown={(e) => e.key === "Enter" && onSubmit()}
               />
               <Field.ErrorText>{errorPassword}</Field.ErrorText>
             </Field.Root>
