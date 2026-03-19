@@ -29,7 +29,6 @@ export default async function writeLog(experimentID: string, action: "saveData" 
       );
       const date = new Date(Timestamp.now().toDate());
       const shortDate = new Intl.DateTimeFormat( 'en-GB', { dateStyle: 'short', timeStyle: 'long'} ).format(date);
-      console.log(shortDate);
       await log_doc_ref.set( 
       { errors: FieldValue.arrayUnion({...error, time: shortDate})},
       { merge: true }

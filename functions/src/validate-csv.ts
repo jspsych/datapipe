@@ -5,7 +5,6 @@ export default function validateCSV(csv: string, requiredFields: string[] | unde
     let parsedCSV: string[][]| null = null;
     try {
       parsedCSV = CSV.parse(csv);
-      console.log(parsedCSV);
     } catch (error) {
       return false;
     }

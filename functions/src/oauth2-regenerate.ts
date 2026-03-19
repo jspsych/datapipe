@@ -77,7 +77,7 @@ try {
   });
 
   } catch (error) {
-    console.error('OAuth regenerate error:', error);
+    console.error('OAuth regenerate error:', error instanceof Error ? error.message : 'Unknown error');
     res.status(500).json({
       error: 'Internal server error'
     });
