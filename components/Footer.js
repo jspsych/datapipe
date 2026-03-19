@@ -55,18 +55,22 @@ export default function Footer() {
             </Link>
           </Text>
           <Stack align={"flex-start"}>
-            <Button
-              variant="outline"
-              color="white"
-              borderColor="white"
-              size="sm"
-              _hover={{ bg: "whiteAlpha.300" }}
-              onClick={() => {
-                window.open("https://opencollective.com/jspsych");
-              }}
+            <Link
+              href="https://opencollective.com/jspsych"
+              target="_blank"
+              rel="noopener noreferrer"
+              _hover={{ textDecoration: "none" }}
             >
-              Donate on Open Collective <OpenCollectiveIcon width="1.5em" height="1.5em" />
-            </Button>
+              <Button
+                variant="outline"
+                color="white"
+                borderColor="white"
+                size="sm"
+                _hover={{ bg: "whiteAlpha.300" }}
+              >
+                Donate on Open Collective <OpenCollectiveIcon width="1.5em" height="1.5em" />
+              </Button>
+            </Link>
           </Stack>
         </Stack>
       </Container>

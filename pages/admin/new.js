@@ -36,9 +36,53 @@ function NewExperimentForm() {
   const [titleError, setTitleError] = useState(false);
   const [dataComponentError, setDataComponentError] = useState(false);
 
+  const [title, setTitle] = useState("");
+  const [osfRepo, setOsfRepo] = useState("");
+  const [osfComponentName, setOsfComponentName] = useState("");
+  const [region, setRegion] = useState("us");
+
   const [data, loading, error] = useDocumentData(doc(db, "users", user.uid));
 
   const isValid = data && (data.usingPersonalToken ? data.osfTokenValid : data.refreshToken !== "");
+
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    setOsfError(false);
+
+    if (title.length === 0) {
+      setTitleError(true);
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (osfComponentName.length === 0) {
+      setDataComponentError(true);
+      setIsSubmitting(false);
+      return;
+    }
+
+    try {
+      const result = await createExperiment({
+        title,
+        osfRepo,
+        osfComponentName,
+        region,
+        uid: auth.currentUser.uid,
+        nConditions: 1,
+        useValidation: true,
+        allowJSON: true,
+        allowCSV: true,
+        useSessionLimit: false,
+        maxSessions: 1,
+      });
+
+      Router.push(`/admin/${result.experimentId}`);
+    } catch (err) {
+      console.error(err);
+      setIsSubmitting(false);
+      setOsfError(true);
+    }
+  };
 
   return (
     <>
@@ -46,28 +90,46 @@ function NewExperimentForm() {
       {isValid && (
         <Stack gap={6} maxWidth="540px">
           <Heading>Create a New Experiment</Heading>
-          <Field.Root id="title" invalid={titleError}>
+          <Field.Root invalid={titleError}>
             <Field.Label>Title</Field.Label>
-            <Input type="text" onChange={() => setTitleError(false)} />
+            <Input
+              type="text"
+              value={title}
+              onChange={(e) => {
+                setTitle(e.target.value);
+                setTitleError(false);
+              }}
+            />
             <Field.ErrorText color={"red"}>
               This field is required
             </Field.ErrorText>
           </Field.Root>
-          <Field.Root id="osf-repo" invalid={osfError}>
+          <Field.Root invalid={osfError}>
             <Field.Label>Existing OSF Project</Field.Label>
             <Group attached>
               <InputAddon bgColor={"greyBackground"}>
                 {`https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/`}
               </InputAddon>
-              <Input type="text" />
+              <Input
+                type="text"
+                value={osfRepo}
+                onChange={(e) => setOsfRepo(e.target.value)}
+              />
             </Group>
             <Field.ErrorText color={"red"}>
               Cannot connect to this OSF component
             </Field.ErrorText>
           </Field.Root>
-          <Field.Root id="osf-component-name" invalid={dataComponentError}>
+          <Field.Root invalid={dataComponentError}>
             <Field.Label>New OSF Data Component Name</Field.Label>
-            <Input type="text" onChange={() => setDataComponentError(false)} />
+            <Input
+              type="text"
+              value={osfComponentName}
+              onChange={(e) => {
+                setOsfComponentName(e.target.value);
+                setDataComponentError(false);
+              }}
+            />
             <Field.ErrorText color={"red"}>
               This field is required
             </Field.ErrorText>
@@ -76,10 +138,13 @@ function NewExperimentForm() {
               project and store all data in it.
             </Field.HelperText>
           </Field.Root>
-          <Field.Root id="osf-component-region">
+          <Field.Root>
             <Field.Label>Storage Location</Field.Label>
             <NativeSelect.Root>
-              <NativeSelect.Field defaultValue="us">
+              <NativeSelect.Field
+                value={region}
+                onChange={(e) => setRegion(e.target.value)}
+              >
                 <option value="us">United States</option>
                 <option value="de-1">Germany - Frankfurt</option>
                 <option value="au-1">Australia - Sydney</option>
@@ -91,14 +156,7 @@ function NewExperimentForm() {
             </Field.HelperText>
           </Field.Root>
           <Button
-            onClick={() =>
-              handleCreateExperiment(
-                setIsSubmitting,
-                setOsfError,
-                setTitleError,
-                setDataComponentError
-              )
-            }
+            onClick={handleSubmit}
             loading={isSubmitting}
             colorPalette={"brandTeal"}
           >
@@ -122,60 +180,4 @@ function NewExperimentForm() {
       )}
     </>
   );
-}
-
-async function handleCreateExperiment(
-  setIsSubmitting,
-  setOsfError,
-  setTitleError,
-  setDataComponentError
-) {
-  setIsSubmitting(true);
-  setOsfError(false);
-
-  const user = auth.currentUser;
-  const title = document.querySelector("#title").value;
-  const osfRepo = document.querySelector("#osf-repo").value;
-  const region = document.querySelector("#osf-component-region").value;
-  const osfComponentName = document.querySelector("#osf-component-name").value;
-  const nConditions = 1;
-  const useValidation = true;
-  const allowJSON = true;
-  const allowCSV = true;
-  const useSessionLimit = false;
-  const maxSessions = 1;
-
-  if (title.length === 0) {
-    setTitleError(true);
-    setIsSubmitting(false);
-    return;
-  }
-
-  if (osfComponentName.length === 0) {
-    setDataComponentError(true);
-    setIsSubmitting(false);
-    return;
-  }
-
-  try {
-    const result = await createExperiment({
-      title: title,
-      osfRepo: osfRepo,
-      osfComponentName: osfComponentName,
-      region: region,
-      uid: user.uid,
-      nConditions: nConditions,
-      useValidation: useValidation,
-      allowJSON: allowJSON,
-      allowCSV: allowCSV,
-      useSessionLimit: useSessionLimit,
-      maxSessions: maxSessions
-    });
-
-    Router.push(`/admin/${result.experimentId}`);
-  } catch (error) {
-    console.log(error);
-    setIsSubmitting(false);
-    setOsfError(true);
-  }
 }

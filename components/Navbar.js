@@ -166,12 +166,16 @@ export default function Navbar() {
                 <Menu.Item value="faq" bg="greyBackground" color="white" py="2" px="3" asChild>
                   <NextLink href="/faq">FAQ</NextLink>
                 </Menu.Item>
-                <Menu.Item value="experiments" bg="greyBackground" color="white" py="2" px="3" asChild>
-                  <NextLink href="/admin">My Experiments</NextLink>
-                </Menu.Item>
-                <Menu.Item value="new-experiment" bg="greyBackground" color="white" py="2" px="3" asChild>
-                  <NextLink href="/admin/new">New Experiment</NextLink>
-                </Menu.Item>
+                {showUser && (
+                  <>
+                    <Menu.Item value="experiments" bg="greyBackground" color="white" py="2" px="3" asChild>
+                      <NextLink href="/admin">My Experiments</NextLink>
+                    </Menu.Item>
+                    <Menu.Item value="new-experiment" bg="greyBackground" color="white" py="2" px="3" asChild>
+                      <NextLink href="/admin/new">New Experiment</NextLink>
+                    </Menu.Item>
+                  </>
+                )}
                 <Menu.Separator />
                 {!showUser && (
                   <>

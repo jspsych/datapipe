@@ -38,8 +38,6 @@ function ExperimentPageDashboard({ experiment_id }) {
   const uploadError = logs?.logError;
   const errorLog = logs?.errors;
 
-  console.log(errorLog);
-
   return (
     <>
       {loading && <Spinner color="green.500" size={"xl"} />}
