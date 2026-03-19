@@ -148,6 +148,9 @@ export default function ApiDocs() {
             <Table.Row><Table.Cell>UNKNOWN_ERROR_GETTING_CONDITION</Table.Cell><Table.Cell>An unknown error occurred while getting the condition for this experiment</Table.Cell></Table.Row>
             <Table.Row><Table.Cell>OSF_FILE_EXISTS</Table.Cell><Table.Cell>The OSF file already exists. File names must be unique.</Table.Cell></Table.Row>
             <Table.Row><Table.Cell>OSF_UPLOAD_ERROR</Table.Cell><Table.Cell>An error occurred while uploading the data to OSF</Table.Cell></Table.Row>
+            <Table.Row><Table.Cell>INVALID_METADATA_ERROR</Table.Cell><Table.Cell>Metadata produced from incoming data is invalid</Table.Cell></Table.Row>
+            <Table.Row><Table.Cell>OSF_METADATA_UPLOAD_ERROR</Table.Cell><Table.Cell>An error occured while uploading metadata to OSF</Table.Cell></Table.Row>
+            <Table.Row><Table.Cell>METADATA_ERROR</Table.Cell><Table.Cell>An error occurred while processing metadata</Table.Cell></Table.Row>
           </Table.Body>
         </Table.Root>
       </Stack>
