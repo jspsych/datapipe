@@ -8,21 +8,19 @@ import {
   Heading,
   Box,
   Button,
-  Table,
-  Tag,
   IconButton,
   HStack,
   VStack,
   Spinner,
   Dialog,
   Text,
-  Tooltip,
   Stack,
   Center,
   Card,
   CloseButton,
+  Link as ChakraLink,
 } from "@chakra-ui/react";
-import { Check, Ban, Trash2, Pencil } from "lucide-react";
+import { Trash2, Pencil } from "lucide-react";
 
 export default function AdminPage({}) {
   return (
@@ -116,14 +114,17 @@ function ExperimentList() {
         </Stack>
 
         <Center w="100%" py={12}>
-          <Card.Root maxW="md" w="100%" variant="unstyled" color="white">
-            <Card.Body>
-              <VStack gap={6} textAlign="center">
-                <VStack gap={3}>
-                  <Heading size="md">
-                    No experiments yet
-                  </Heading>
-                </VStack>
+          <Card.Root maxW="lg" w="100%" bg="black" borderRadius={12} color="white">
+            <Card.Body p={[5, 8]}>
+              <VStack gap={5} textAlign="center">
+                <Heading size="md">
+                  No experiments yet
+                </Heading>
+                <Text color="gray.400" fontSize="sm" maxW="sm">
+                  Experiments connect your online study to an OSF project so
+                  that data files are sent directly to OSF as participants
+                  complete your task.
+                </Text>
 
                 <Link href="/admin/new">
                   <Button
@@ -134,6 +135,13 @@ function ExperimentList() {
                     Create Your First Experiment
                   </Button>
                 </Link>
+
+                <Text color="gray.500" fontSize="xs">
+                  Need help?{" "}
+                  <ChakraLink asChild color="brandOrange.300">
+                    <Link href="/getting-started">Read the Getting Started guide</Link>
+                  </ChakraLink>
+                </Text>
               </VStack>
             </Card.Body>
           </Card.Root>
@@ -162,91 +170,65 @@ function ExperimentList() {
         </Link>
       </Stack>
 
-      <Box w="100%" overflowX="auto">
-        <Table.Root size="md" w="100%">
-          <Table.Header>
-            <Table.Row>
-              <Table.ColumnHeader color="white">Name</Table.ColumnHeader>
-              <Table.ColumnHeader color="white" display={["none", "table-cell"]}>
-                Data collection?
-              </Table.ColumnHeader>
-              <Table.ColumnHeader color="white" display={["none", "table-cell"]}>
-                Base 64?
-              </Table.ColumnHeader>
-              <Table.ColumnHeader color="white" display={["none", "table-cell"]}>
-                Metadata?
-              </Table.ColumnHeader>
-              <Table.ColumnHeader color="white" display={["none", "table-cell"]}>
-                Conditions?
-              </Table.ColumnHeader>
-              <Table.ColumnHeader color="white" display={["none", "table-cell"]}>
-                Sessions
-              </Table.ColumnHeader>
-              <Table.ColumnHeader></Table.ColumnHeader>
-            </Table.Row>
-          </Table.Header>
-          <Table.Body>
-            {querySnapshot.map((exp) => (
-              <ExperimentItem key={exp.id} exp={exp} />
-            ))}
-          </Table.Body>
-        </Table.Root>
-      </Box>
+      <VStack w="100%" gap={3}>
+        {querySnapshot.map((exp) => (
+          <ExperimentItem key={exp.id} exp={exp} />
+        ))}
+      </VStack>
     </VStack>
   );
 }
 
 function ExperimentItem({ exp }) {
-  return (
-    <Table.Row id={exp.id}>
-      <Table.Cell fontSize="lg">
-        <Link href={`/admin/${exp.id}`}>{exp.title}</Link>
-      </Table.Cell>
-      <Table.Cell display={["none", "table-cell"]}>
-        <ExperimentStatusTag prepend="Data collection" active={exp.active} />
-      </Table.Cell>
-      <Table.Cell display={["none", "table-cell"]}>
-        <ExperimentStatusTag
-          prepend="Base 64 data collection"
-          active={exp.activeBase64}
-        />
-      </Table.Cell>
-      <Table.Cell display={["none", "table-cell"]}>
-        <ExperimentStatusTag
-          prepend="Metadata production"
-          active={exp.metadataActive}
-        />
-      </Table.Cell>
-      <Table.Cell display={["none", "table-cell"]}>
-        <ExperimentStatusTag
-          prepend="Condition assignment "
-          active={exp.activeConditionAssignment}
-        />
-      </Table.Cell>
-      <Table.Cell display={["none", "table-cell"]}>{exp.sessions}</Table.Cell>
-      <Table.Cell>
-        <ExperimentActions exp={exp} />
-      </Table.Cell>
-    </Table.Row>
-  );
-}
+  const activeFeatures = [];
+  if (exp.active) activeFeatures.push("Data");
+  if (exp.activeBase64) activeFeatures.push("Base64");
+  if (exp.metadataActive) activeFeatures.push("Metadata");
+  if (exp.activeConditionAssignment) activeFeatures.push("Conditions");
 
-function ExperimentStatusTag({ active, prepend }) {
   return (
-    <Tooltip.Root>
-      <Tooltip.Trigger asChild>
-        <Tag.Root size="lg" variant="outline" colorPalette={active ? "green" : "gray"} color={active ? "green.400" : "gray.400"} opacity={active ? 1 : 0.75}>
-          <Tag.Label>
-            {active ? <Check size={16} /> : <Ban size={16} />}
-          </Tag.Label>
-        </Tag.Root>
-      </Tooltip.Trigger>
-      <Tooltip.Positioner>
-        <Tooltip.Content>
-          {active ? `${prepend} is active` : `${prepend} is inactive`}
-        </Tooltip.Content>
-      </Tooltip.Positioner>
-    </Tooltip.Root>
+    <Box
+      id={exp.id}
+      w="100%"
+      bg="black"
+      borderRadius={10}
+      px={[4, 6]}
+      py={4}
+    >
+      <Stack
+        direction={["column", "row"]}
+        justify="space-between"
+        align={["start", "center"]}
+        gap={[3, 4]}
+      >
+        <VStack align="start" gap={1} flex="1" minW={0}>
+          <Link href={`/admin/${exp.id}`}>
+            <Text fontSize="lg" fontWeight="semibold" _hover={{ textDecoration: "underline" }}>
+              {exp.title}
+            </Text>
+          </Link>
+          <HStack gap={3} flexWrap="wrap">
+            {activeFeatures.length > 0 ? (
+              activeFeatures.map((feature) => (
+                <Text key={feature} fontSize="xs" color="green.400">
+                  {feature}
+                </Text>
+              ))
+            ) : (
+              <Text fontSize="xs" color="gray.500">
+                No features active
+              </Text>
+            )}
+            {exp.sessions > 0 && (
+              <Text fontSize="xs" color="gray.400">
+                {exp.sessions} {exp.sessions === 1 ? "session" : "sessions"}
+              </Text>
+            )}
+          </HStack>
+        </VStack>
+        <ExperimentActions exp={exp} />
+      </Stack>
+    </Box>
   );
 }
 
