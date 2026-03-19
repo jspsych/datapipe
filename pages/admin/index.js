@@ -180,12 +180,6 @@ function ExperimentList() {
 }
 
 function ExperimentItem({ exp }) {
-  const activeFeatures = [];
-  if (exp.active) activeFeatures.push("Data");
-  if (exp.activeBase64) activeFeatures.push("Base64");
-  if (exp.metadataActive) activeFeatures.push("Metadata");
-  if (exp.activeConditionAssignment) activeFeatures.push("Conditions");
-
   return (
     <Box
       id={exp.id}
@@ -201,24 +195,17 @@ function ExperimentItem({ exp }) {
         align={["start", "center"]}
         gap={[3, 4]}
       >
-        <VStack align="start" gap={1} flex="1" minW={0}>
+        <VStack align="start" gap={2} flex="1" minW={0}>
           <Link href={`/admin/${exp.id}`}>
             <Text fontSize="lg" fontWeight="semibold" _hover={{ textDecoration: "underline" }}>
               {exp.title}
             </Text>
           </Link>
-          <HStack gap={3} flexWrap="wrap">
-            {activeFeatures.length > 0 ? (
-              activeFeatures.map((feature) => (
-                <Text key={feature} fontSize="xs" color="green.400">
-                  {feature}
-                </Text>
-              ))
-            ) : (
-              <Text fontSize="xs" color="gray.500">
-                No features active
-              </Text>
-            )}
+          <HStack gap={[2, 4]} flexWrap="wrap" rowGap={1}>
+            <StatusLabel label="Data" on={exp.active} />
+            <StatusLabel label="Base64" on={exp.activeBase64} />
+            <StatusLabel label="Conditions" on={exp.activeConditionAssignment} />
+            <StatusLabel label="Metadata" on={exp.metadataActive} />
             {exp.sessions > 0 && (
               <Text fontSize="xs" color="gray.400">
                 {exp.sessions} {exp.sessions === 1 ? "session" : "sessions"}
@@ -229,6 +216,22 @@ function ExperimentItem({ exp }) {
         <ExperimentActions exp={exp} />
       </Stack>
     </Box>
+  );
+}
+
+function StatusLabel({ label, on }) {
+  return (
+    <HStack gap="5px">
+      <Box
+        w="6px"
+        h="6px"
+        borderRadius="full"
+        bg={on ? "green.400" : "gray.600"}
+      />
+      <Text fontSize="xs" color={on ? "gray.300" : "gray.600"}>
+        {label}
+      </Text>
+    </HStack>
   );
 }
 
