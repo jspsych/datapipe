@@ -81,7 +81,7 @@ function CollapsibleSection({ title, children }) {
           color="gray.400"
           size="sm"
           px={0}
-          _hover={{ color: "white" }}
+          _hover={{ color: "white", bg: "transparent" }}
         >
           {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
           {title}

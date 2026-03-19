@@ -179,7 +179,7 @@ function HeroCodeSnippet() {
                 color={i === activeIndex ? "white" : "gray.600"}
                 bg={i === activeIndex ? "gray.800" : "transparent"}
                 borderRadius={4}
-                _hover={{ color: "white" }}
+                _hover={{ color: "white", bg: "gray.800" }}
                 onClick={() => {
                   setFading(true);
                   setTimeout(() => {
@@ -301,7 +301,7 @@ export default function Home() {
                   variant="ghost"
                   color="gray.400"
                   size="lg"
-                  _hover={{ color: "white" }}
+                  _hover={{ color: "white", bg: "transparent" }}
                 >
                   How it works
                 </Button>
