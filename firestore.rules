@@ -7,10 +7,10 @@ service cloud.firestore {
           && request.resource.data.osfToken == '';
       }
       function isTokenMethodUpdate() {
-        return request.resource.data.keys().hasOnly(['usingPersonalToken']);
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usingPersonalToken']);
       }
       function isExperimentsUpdate() {
-        return request.resource.data.keys().hasOnly(['experiments']);
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['experiments']);
       }
       allow read: if(request.auth.uid == userId);
       allow write: if(request.auth.uid == userId) &&
