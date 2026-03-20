@@ -191,6 +191,28 @@ export default function FAQ() {
             tokens encrypted.
           </Text>
         </FAQItem>
+        <FAQItem value="item-13" question="How should I cite DataPipe?">
+          <Text mb={2}>
+            If you use DataPipe to collect data, please cite the following paper:
+          </Text>
+          <Text
+            bg="gray.800"
+            p={4}
+            borderRadius="md"
+            fontSize="sm"
+          >
+            de Leeuw, J. R. (2024). DataPipe: Born-open data collection for
+            online experiments. <em>Behavior Research Methods</em>, 56(3),
+            2499–2506.{" "}
+            <Link
+              href="https://doi.org/10.3758/s13428-023-02161-x"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              https://doi.org/10.3758/s13428-023-02161-x
+            </Link>
+          </Text>
+        </FAQItem>
       </Accordion.Root>
     </Stack>
   );

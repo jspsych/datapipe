@@ -46,7 +46,7 @@ beforeAll(async () => {
   const db = getFirestore();
 
   await db.collection("experiments").doc('metadata-testexp').set({active: true, metadataActive: true, owner: 'test-user', osfFilesLink: "http://localhost:3000/endpoint"});
-  await db.collection('users').doc('test-user').set({osfTokenValid: true, osfToken: 'valid'});
+  await db.collection('users').doc('test-user').set({osfTokenValid: true, osfToken: 'valid', usingPersonalToken: true});
   await db.collection("metadata").doc('metadata-testexp').set({});
 });
 

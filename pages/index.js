@@ -10,7 +10,7 @@ import {
   Button,
   Stack,
 } from "@chakra-ui/react";
-import { ArrowRight, Database, Shield, Zap } from "lucide-react";
+import { ArrowRight, Database, Shield, Zap, BookOpen } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import TestEnvironmentWarning from "../components/TestEnvironmentWarning";
@@ -384,6 +384,35 @@ export default function Home() {
           >
             Features
           </Text>
+
+          {/* Born-open data */}
+          <HStack gap={[4, 6]} align="start" mb={[8, 8, 12]}>
+            <Box color="brandOrange.400" flexShrink={0} mt="2px">
+              <BookOpen size={24} />
+            </Box>
+            <VStack align="start" gap={1}>
+              <Text fontWeight="bold" fontSize="lg">
+                Born-open data collection
+              </Text>
+              <Text color="gray.400" fontSize="sm" lineHeight="tall">
+                DataPipe sends experiment data directly to a public repository
+                as it is collected, making openness the default rather than an
+                afterthought. Read more about the rationale and design in{" "}
+                <Link
+                  href="https://doi.org/10.3758/s13428-023-02161-x"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Text as="span" color="gray.200" _hover={{ textDecoration: "underline" }}>
+                    <em>Behavior Research Methods</em>
+                  </Text>
+                </Link>
+                . If you use DataPipe in your research, we&apos;d appreciate a
+                citation!
+              </Text>
+            </VStack>
+          </HStack>
+
           <Stack
             direction={["column", "column", "row"]}
             gap={[8, 8, 12]}
