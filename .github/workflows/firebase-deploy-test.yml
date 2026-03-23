@@ -13,11 +13,11 @@ env:
   NEXT_PUBLIC_CLIENT_ID: ${{ secrets.TEST_CLIENT_ID }}
   CLIENT_SECRET: ${{ secrets.TEST_CLIENT_SECRET }}
   CLIENT_ID: ${{ secrets.TEST_CLIENT_ID }}                    
-  REDIRECT_URI: ${{ secrets.TEST_REDIRECT_URI }}              
-  NEXT_PUBLIC_REDIRECT_URI: ${{ secrets.TEST_REDIRECT_URI }}
-  NEXT_PUBLIC_OAUTH_CALLBACK: ${{ secrets.TEST_OAUTH_CALLBACK }}
-  NEXT_PUBLIC_OAUTH_FINAL: ${{ secrets.TEST_OAUTH_FINAL }}
-  NEXT_PUBLIC_OAUTH_REGENERATE: ${{ secrets.TEST_OAUTH_REGENERATE }}
+  REDIRECT_URI: "https://datapipe-test.web.app/oauth2/callback"
+  NEXT_PUBLIC_REDIRECT_URI: "https://datapipe-test.web.app/oauth2/callback"
+  NEXT_PUBLIC_OAUTH_CALLBACK: "https://datapipe-test.web.app/api/oauth2callback"
+  NEXT_PUBLIC_OAUTH_FINAL: "/admin"
+  NEXT_PUBLIC_OAUTH_REGENERATE: "https://datapipe-test.web.app/api/oauth2regenerate"
   NEXT_PUBLIC_GENERATE_STATE: "https://datapipe-test.web.app/api/generateoauthstate"
   NEXT_PUBLIC_BASE_URL: "https://datapipe-test.web.app"
   NEXT_PUBLIC_OSF_ENV: ""
@@ -57,7 +57,7 @@ jobs:
         run: |
           echo "CLIENT_SECRET=${{ secrets.TEST_CLIENT_SECRET }}" > .env
           echo "CLIENT_ID=${{ secrets.TEST_CLIENT_ID }}" >> .env
-          echo "REDIRECT_URI=${{ secrets.TEST_REDIRECT_URI }}" >> .env
+          echo "REDIRECT_URI=https://datapipe-test.web.app/oauth2/callback" >> .env
           echo "TOKEN_ENCRYPTION_KEY=${{ secrets.FIRESTORE_KEY_TEST }}" >> .env
           echo "NEXT_PUBLIC_OSF_ENV=" >> .env
       - name: Install dependencies and build functions

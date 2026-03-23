@@ -15,9 +15,9 @@ env:
   NEXT_PUBLIC_CLIENT_ID: ${{ secrets.TEST_CLIENT_ID }}
   CLIENT_SECRET: ${{ secrets.TEST_CLIENT_SECRET }}
   NEXT_PUBLIC_REDIRECT_URI: ${{ secrets.TEST_REDIRECT_URI }}
-  NEXT_PUBLIC_OAUTH_CALLBACK: ${{ secrets.TEST_OAUTH_CALLBACK }}
-  NEXT_PUBLIC_OAUTH_FINAL: ${{ secrets.TEST_OAUTH_FINAL }}
-  NEXT_PUBLIC_OAUTH_REGENERATE: ${{ secrets.TEST_OAUTH_REGENERATE }}
+  NEXT_PUBLIC_OAUTH_CALLBACK: "https://datapipe-test.web.app/api/oauth2callback"
+  NEXT_PUBLIC_OAUTH_FINAL: "/admin"
+  NEXT_PUBLIC_OAUTH_REGENERATE: "https://datapipe-test.web.app/api/oauth2regenerate"
   NEXT_PUBLIC_OSF_ENV: ""
 
 jobs:
