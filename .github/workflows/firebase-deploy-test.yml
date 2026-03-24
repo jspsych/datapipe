@@ -6,6 +6,7 @@ name: Deploy to Test
 on:
   push:
     branches: ["test"]
+  workflow_dispatch:
 
 env:
   #FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
