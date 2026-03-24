@@ -70,7 +70,7 @@ function useOAuthCallback() {
 
         let idToken = null;
         if (isLinking && user) {
-          idToken = await user.id;
+          idToken = await user.getIdToken();
         }
 
         const requestBody = {
