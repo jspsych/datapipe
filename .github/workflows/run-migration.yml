@@ -61,7 +61,7 @@ jobs:
       - name: Set environment variables
         run: |
           if [ "${{ github.event.inputs.environment }}" == "prod" ]; then
-            echo "FIREBASE_PROJECT_ID=datapipe" >> $GITHUB_ENV
+            echo "FIREBASE_PROJECT_ID=osf-relay" >> $GITHUB_ENV
           else
             echo "FIREBASE_PROJECT_ID=datapipe-test" >> $GITHUB_ENV
           fi
