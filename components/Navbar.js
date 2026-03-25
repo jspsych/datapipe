@@ -146,11 +146,12 @@ export default function Navbar() {
           <Menu.Root>
             <Menu.Trigger asChild>
               <IconButton
-                colorPalette={"white"}
+                color="white"
                 cursor={"pointer"}
                 minW={0}
                 variant="ghost"
                 aria-label="Menu"
+                _hover={{ bg: "whiteAlpha.300" }}
               >
                 <MenuIcon size={32} />
               </IconButton>
