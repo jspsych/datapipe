@@ -7,15 +7,20 @@ import "prismjs/components/prism-markup";
 import "prismjs/themes/prism-tomorrow.css";
 
 const customScrollBarCSS = {
+  scrollbarWidth: "thin",
+  scrollbarColor: "#4A5568 transparent",
   "::-webkit-scrollbar": {
-    backgroundColor: "gray.800",
-    height: "8px",
-    paddingTop: "10px",
-    borderRadius: "8px",
+    height: "6px",
+  },
+  "::-webkit-scrollbar-track": {
+    background: "transparent",
   },
   "::-webkit-scrollbar-thumb": {
-    background: "gray.600",
-    borderRadius: "8px",
+    background: "#4A5568",
+    borderRadius: "3px",
+  },
+  "::-webkit-scrollbar-thumb:hover": {
+    background: "#718096",
   },
 };
 
