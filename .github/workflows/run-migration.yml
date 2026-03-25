@@ -85,4 +85,5 @@ jobs:
           echo "======================"
 
       - name: Run migration
-        run: node "migrations/${{ github.event.inputs.migration_name }}"
+        run: node "../migrations/${{ github.event.inputs.migration_name }}"
+        working-directory: functions
