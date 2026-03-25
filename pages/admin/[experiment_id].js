@@ -4,8 +4,7 @@ import { useDocumentData } from "react-firebase-hooks/firestore";
 import { db } from "../../lib/firebase";
 import { doc } from "firebase/firestore";
 
-import { Spinner, Flex, VStack, HStack, Text, Badge, Separator, Stack, Collapsible, Button } from "@chakra-ui/react";
-import { Code, ChevronDown } from "lucide-react";
+import { Spinner, Flex, VStack, HStack, Text, Badge, Separator } from "@chakra-ui/react";
 
 import Title from "../../components/dashboard/Title";
 import ExperimentInfo from "../../components/dashboard/ExperimentInfo";
@@ -84,18 +83,7 @@ function ExperimentPageDashboard({ experiment_id }) {
             </VStack>
 
             <VStack flex="1" minW="300px" align="stretch">
-              <Collapsible.Root defaultOpen>
-                <Collapsible.Trigger asChild>
-                  <Button variant="ghost" color="gray.400" size="sm" px={0} _hover={{ color: "white" }}>
-                    <Code size={16} /> Integration Code <ChevronDown size={14} />
-                  </Button>
-                </Collapsible.Trigger>
-                <Collapsible.Content>
-                  <VStack w="100%" mt={4}>
-                    <CodeHints expId={experiment_id} />
-                  </VStack>
-                </Collapsible.Content>
-              </Collapsible.Root>
+              <CodeHints expId={experiment_id} />
             </VStack>
           </Flex>
         </VStack>
