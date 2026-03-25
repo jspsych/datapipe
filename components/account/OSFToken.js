@@ -23,6 +23,7 @@ export default function OSFToken() {
   const { user } = useContext(UserContext);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [open, setOpen] = useState(false);
+  const [errorMessage, setErrorMessage] = useState(null);
 
   const [data, loading, error, snapshot, reload] = useDocumentData(
     doc(db, "users", user.uid)
@@ -80,6 +81,10 @@ export default function OSFToken() {
                   token&quot;. Copy the token and paste it below.
                 </Text>
 
+                {errorMessage && (
+                  <Text color="red.400" fontSize="sm">{errorMessage}</Text>
+                )}
+
                 {data && (
                   <VStack gap={4} w="100%">
                     <Field.Root id="osf-token">
@@ -97,7 +102,8 @@ export default function OSFToken() {
                 size={"md"}
                 mr={4}
                 onClick={() => {
-                  handleSaveButton(setIsSubmitting, () => setOpen(false));
+                  setErrorMessage(null);
+                  handleSaveButton(setIsSubmitting, () => setOpen(false), setErrorMessage);
                 }}
                 loading={isSubmitting}
               >
@@ -111,7 +117,7 @@ export default function OSFToken() {
   );
 }
 
-async function handleSaveButton(setIsSubmitting, closeHandler) {
+async function handleSaveButton(setIsSubmitting, closeHandler, setErrorMessage) {
   const token = document.querySelector("#osf-token").value;
   setIsSubmitting(true);
   try {
@@ -127,10 +133,16 @@ async function handleSaveButton(setIsSubmitting, closeHandler) {
     if (!response.ok) {
       throw new Error("Failed to save token");
     }
+    const result = await response.json();
+    if (!result.osfTokenValid) {
+      setErrorMessage("The token could not be verified with OSF. Please check that you copied the full token and that it has the osf.full_write scope.");
+      setIsSubmitting(false);
+      return;
+    }
     setIsSubmitting(false);
     closeHandler();
   } catch (error) {
+    setErrorMessage("Failed to save token. Please try again.");
     setIsSubmitting(false);
-    console.log(error);
   }
 }
