@@ -1,12 +1,16 @@
 const admin = require('firebase-admin');
+const path = require('path');
+const os = require('os');
+
+const DRY_RUN = process.env.DRY_RUN === 'true';
 
 // Initialize Firebase Admin SDK
 if (!admin.apps.length) {
   if (process.env.NODE_ENV === 'production' || process.env.CI) {
-    const credentials = process.env.GOOGLE_CREDENTIALS 
+    const credentials = process.env.GOOGLE_CREDENTIALS
       ? JSON.parse(process.env.GOOGLE_CREDENTIALS)
       : undefined;
-    
+
     admin.initializeApp({
       credential: credentials ? admin.credential.cert(credentials) : admin.credential.applicationDefault(),
       projectId: process.env.FIREBASE_PROJECT_ID || 'datapipe-prod'
@@ -31,45 +35,49 @@ const db = admin.firestore();
 
 async function migrateUsers() {
   try {
-    console.log('Starting user migration...');
-    
+    console.log(`Starting user migration...${DRY_RUN ? ' (DRY RUN)' : ''}`);
+
     const usersRef = db.collection('users');
     const snapshot = await usersRef.get();
-    
-    const batch = db.batch();
+
+    let batch = db.batch();
     let batchCount = 0;
-    
-    snapshot.forEach((doc) => {
+
+    for (const doc of snapshot.docs) {
       const userData = doc.data();
-      
+
       const updatedData = {
-        ...userData,
-        authMethod: userData.osfUserId ? 'osf' : 'email', // Determine auth method
+        authMethod: userData.authMethod || (userData.osfUserId ? 'osf' : 'email'),
         osfUserId: userData.osfUserId || null,
-        refreshToken: userData.refreshToken || '',
-        refreshTokenExpires: userData.refreshTokenExpires || 0,
-        authToken: userData.authToken || '',
-        authTokenExpires: userData.authTokenExpires || 0,
-        usingPersonalToken: userData.usingPersonalToken !== undefined ? userData.usingPersonalToken : true
+        ...(!userData.refreshToken && { refreshToken: '' }),
+        ...(userData.refreshTokenExpires === undefined && { refreshTokenExpires: 0 }),
+        ...(!userData.authToken && { authToken: '' }),
+        ...(userData.authTokenExpires === undefined && { authTokenExpires: 0 }),
+        usingPersonalToken: userData.usingPersonalToken !== undefined ? userData.usingPersonalToken : !userData.osfUserId
       };
-      
-      batch.update(doc.ref, updatedData);
+
+      if (DRY_RUN) {
+        console.log(`[DRY RUN] Would update user ${doc.id}: authMethod=${updatedData.authMethod}`);
+      } else {
+        batch.update(doc.ref, updatedData);
+      }
       batchCount++;
-      
+
       // Firestore batch limit is 500
-      if (batchCount === 500) {
+      if (batchCount === 500 && !DRY_RUN) {
         console.log('Committing batch...');
-        batch.commit();
+        await batch.commit();
+        batch = db.batch();
         batchCount = 0;
       }
-    });
-    
+    }
+
     // Commit remaining updates
-    if (batchCount > 0) {
+    if (batchCount > 0 && !DRY_RUN) {
       await batch.commit();
     }
-    
-    console.log(`Migration completed. Updated ${snapshot.size} users.`);
+
+    console.log(`Migration completed${DRY_RUN ? ' (DRY RUN)' : ''}. ${DRY_RUN ? 'Would update' : 'Updated'} ${snapshot.size} users.`);
   } catch (error) {
     console.error('Migration failed:', error);
     throw error;

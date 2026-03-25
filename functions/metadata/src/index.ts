@@ -452,7 +452,6 @@ export default class JsPsychMetadata {
         const response = await fetch(unpkgUrl);
         const scriptContent = await response.text();
         this.requests_cache[pluginType] = scriptContent;
-        console.log(scriptContent);
 
         // Extract the JSDoc description for the variable from the script content
         description = this.getJsdocsDescription(scriptContent, variableName);

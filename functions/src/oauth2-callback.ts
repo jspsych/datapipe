@@ -238,7 +238,7 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
       
       const emailConflictUsers = existingEmailUserQuery.docs.filter(doc => {
         const userData = doc.data();
-        return !userData.authMethod; // Email users don't have authMethod field
+        return userData.authMethod !== 'osf'; // Email users have no authMethod or authMethod === 'email'
       });
 
       if (emailConflictUsers.length > 0) {

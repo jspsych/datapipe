@@ -1,6 +1,8 @@
 const admin = require('firebase-admin');
 const crypto = require('crypto');
 
+const DRY_RUN = process.env.DRY_RUN === 'true';
+
 // Encryption config — must match functions/src/crypto-utils.ts
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12;
@@ -64,7 +66,7 @@ const TOKEN_FIELDS = ['osfToken', 'authToken', 'refreshToken'];
 
 async function encryptTokens() {
   try {
-    console.log('Starting token encryption migration...');
+    console.log(`Starting token encryption migration...${DRY_RUN ? ' (DRY RUN)' : ''}`);
 
     const usersRef = db.collection('users');
     const snapshot = await usersRef.get();
@@ -93,12 +95,16 @@ async function encryptTokens() {
         continue;
       }
 
-      batch.update(doc.ref, updates);
-      batchCount++;
+      if (DRY_RUN) {
+        console.log(`[DRY RUN] Would encrypt ${Object.keys(updates).length} token(s) for user ${doc.id}: ${Object.keys(updates).join(', ')}`);
+      } else {
+        batch.update(doc.ref, updates);
+        batchCount++;
+      }
       updatedCount++;
 
       // Firestore batch limit is 500
-      if (batchCount === 500) {
+      if (batchCount === 500 && !DRY_RUN) {
         console.log(`Committing batch of ${batchCount} updates...`);
         await batch.commit();
         batch = db.batch();
@@ -107,12 +113,12 @@ async function encryptTokens() {
     }
 
     // Commit remaining updates
-    if (batchCount > 0) {
+    if (batchCount > 0 && !DRY_RUN) {
       console.log(`Committing final batch of ${batchCount} updates...`);
       await batch.commit();
     }
 
-    console.log(`Migration completed. Updated: ${updatedCount}, Skipped: ${skippedCount}, Total: ${snapshot.size}`);
+    console.log(`Migration completed${DRY_RUN ? ' (DRY RUN)' : ''}. ${DRY_RUN ? 'Would update' : 'Updated'}: ${updatedCount}, Skipped: ${skippedCount}, Total: ${snapshot.size}`);
   } catch (error) {
     console.error('Migration failed:', error);
     throw error;

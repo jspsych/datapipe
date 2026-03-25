@@ -13,8 +13,7 @@ env:
   #FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
   NEXT_PUBLIC_FIREBASE_CONFIG: ${{ secrets.FIREBASE_TEST_CONFIG }}
   NEXT_PUBLIC_CLIENT_ID: ${{ secrets.TEST_CLIENT_ID }}
-  CLIENT_SECRET: ${{ secrets.TEST_CLIENT_SECRET }}
-  NEXT_PUBLIC_REDIRECT_URI: ${{ secrets.TEST_REDIRECT_URI }}
+  NEXT_PUBLIC_REDIRECT_URI: "https://datapipe-test.web.app/oauth2/callback"
   NEXT_PUBLIC_OAUTH_CALLBACK: "https://datapipe-test.web.app/api/oauth2callback"
   NEXT_PUBLIC_OAUTH_FINAL: "/admin"
   NEXT_PUBLIC_OAUTH_REGENERATE: "https://datapipe-test.web.app/api/oauth2regenerate"
