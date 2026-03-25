@@ -85,5 +85,4 @@ jobs:
           echo "======================"
 
       - name: Run migration
-        run: node "../migrations/${{ github.event.inputs.migration_name }}"
-        working-directory: functions
+        run: NODE_PATH=$PWD/functions/node_modules node "migrations/${{ github.event.inputs.migration_name }}"
