@@ -15,6 +15,10 @@ on:
         description: 'Migration file name'
         required: true
         default: '2025-09-29-osf-integration.cjs'
+        type: choice
+        options:
+        - 2025-09-29-osf-integration.cjs
+        - encrypt-tokens.cjs
       dry_run:
         description: 'Dry run (no changes applied)'
         required: true
