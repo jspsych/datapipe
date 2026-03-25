@@ -7,8 +7,10 @@ import {
   Dialog,
   Field,
   Input,
+  Spinner,
+  Center,
 } from "@chakra-ui/react"
-import { useContext, useState } from "react";
+import { useContext, useState, useRef } from "react";
 import { UserContext } from "../../lib/context";
 import { useDocumentData } from "react-firebase-hooks/firestore";
 import { doc, setDoc } from "firebase/firestore";
@@ -26,6 +28,7 @@ export default function SelectAuth() {
 
     const [isTokenOpen, setIsTokenOpen] = useState(false);
     const [isSubmittingToken, setIsSubmittingToken] = useState(false);
+    const tokenRef = useRef(null);
 
     const handleSwitchToPersonalToken = () => {
         setDoc(doc(db, "users", user.uid), {
@@ -60,7 +63,7 @@ export default function SelectAuth() {
     }
 
     const handleSaveToken = async () => {
-        const token = document.querySelector("#osf-token").value;
+        const token = tokenRef.current?.value;
         setIsSubmittingToken(true);
         try {
             const idToken = await auth.currentUser.getIdToken();
@@ -79,11 +82,10 @@ export default function SelectAuth() {
             setIsTokenOpen(false);
         } catch (error) {
             setIsSubmittingToken(false);
-            console.log(error);
         }
     }
 
-    if (loading) return <div>Loading...</div>;
+    if (loading) return <Center py={8}><Spinner size="lg" color="brandTeal.500" /></Center>;
     if (error) return <div>Error: {error.message}</div>;
 
     const usingPersonalToken = data?.usingPersonalToken;
@@ -92,7 +94,7 @@ export default function SelectAuth() {
 
     if (!usingPersonalToken) {
         return (
-            <>
+            <VStack gap={1} w="100%" align="stretch">
                 <HStack justifyContent="space-between" w="100%">
                     <HStack>
                         <Text fontSize="lg">OSF Account</Text>
@@ -103,7 +105,7 @@ export default function SelectAuth() {
                         <OsfIcon /> {hasOAuthToken ? "Re-link" : "Link OSF Account"}
                     </Button>
                 </HStack>
-                <HStack justifyContent="flex-end" w="100%" mt={-4}>
+                <HStack justifyContent="flex-end" w="100%">
                     <Link
                         color="gray.500"
                         fontSize="sm"
@@ -113,12 +115,12 @@ export default function SelectAuth() {
                         Use personal access token instead
                     </Link>
                 </HStack>
-            </>
+            </VStack>
         );
     }
 
     return (
-        <>
+        <VStack gap={1} w="100%" align="stretch">
             <HStack justifyContent="space-between" w="100%">
                 <HStack>
                     <Text fontSize="lg">OSF Token</Text>
@@ -133,7 +135,7 @@ export default function SelectAuth() {
                     Set OSF Token
                 </Button>
             </HStack>
-            <HStack justifyContent="flex-end" w="100%" mt={-4}>
+            <HStack justifyContent="flex-end" w="100%">
                 <Link
                     color="blue.500"
                     fontSize="sm"
@@ -172,9 +174,9 @@ export default function SelectAuth() {
 
                                 {data && (
                                     <VStack gap={4} w="100%">
-                                        <Field.Root id="osf-token">
+                                        <Field.Root>
                                             <Field.Label>OSF Token</Field.Label>
-                                            <Input type="text" placeholder="Paste your OSF token here" />
+                                            <Input ref={tokenRef} type="text" placeholder="Paste your OSF token here" />
                                         </Field.Root>
                                     </VStack>
                                 )}
@@ -194,6 +196,6 @@ export default function SelectAuth() {
                     </Dialog.Content>
                 </Dialog.Positioner>
             </Dialog.Root>
-        </>
+        </VStack>
     );
 }

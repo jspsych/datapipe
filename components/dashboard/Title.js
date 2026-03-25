@@ -72,6 +72,5 @@ async function updateExperimentTitle(newTitle, expId, oldTitle) {
       { merge: true }
     );
   } catch (error) {
-    console.error(error);
   }
 }

@@ -62,9 +62,7 @@ export default function AccountPage({}) {
         <Text fontSize="xs" fontWeight="semibold" textTransform="uppercase" letterSpacing="wide" color="red.400" mb={3}>
           Danger Zone
         </Text>
-        <Box borderWidth="1px" borderColor="red.900" borderRadius="md" p={4}>
-          <DeleteAccount setDeleting={setDeleting} />
-        </Box>
+        <DeleteAccount setDeleting={setDeleting} />
       </VStack>
     </AuthCheck>
   );

@@ -39,8 +39,6 @@ export default function SignInForm({ routeAfterSignIn }) {
       } else {
         setErrorEmail(getError(code));
       }
-      console.log("Sign in failed");
-      console.log(error);
     }
   };
 

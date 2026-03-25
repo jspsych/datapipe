@@ -1,4 +1,4 @@
-import { useState, useContext } from "react";
+import { useState, useContext, useRef } from "react";
 import { UserContext } from "../../lib/context";
 
 import {
@@ -24,10 +24,41 @@ export default function OSFToken() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [open, setOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
+  const tokenRef = useRef(null);
 
   const [data, loading, error, snapshot, reload] = useDocumentData(
     doc(db, "users", user.uid)
   );
+
+  const handleSave = async () => {
+    const token = tokenRef.current?.value;
+    setIsSubmitting(true);
+    try {
+      const idToken = await auth.currentUser.getIdToken();
+      const response = await fetch("/api/saveosftoken", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ token }),
+      });
+      if (!response.ok) {
+        throw new Error("Failed to save token");
+      }
+      const result = await response.json();
+      if (!result.osfTokenValid) {
+        setErrorMessage("The token could not be verified with OSF. Please check that you copied the full token and that it has the osf.full_write scope.");
+        setIsSubmitting(false);
+        return;
+      }
+      setIsSubmitting(false);
+      setOpen(false);
+    } catch (error) {
+      setErrorMessage("Failed to save token. Please try again.");
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <HStack justifyContent="space-between" w="100%">
@@ -87,9 +118,9 @@ export default function OSFToken() {
 
                 {data && (
                   <VStack gap={4} w="100%">
-                    <Field.Root id="osf-token">
+                    <Field.Root>
                       <Field.Label>OSF Token</Field.Label>
-                      <Input type="text" placeholder="Paste your OSF token here" />
+                      <Input ref={tokenRef} type="text" placeholder="Paste your OSF token here" />
                     </Field.Root>
                   </VStack>
                 )}
@@ -103,7 +134,7 @@ export default function OSFToken() {
                 mr={4}
                 onClick={() => {
                   setErrorMessage(null);
-                  handleSaveButton(setIsSubmitting, () => setOpen(false), setErrorMessage);
+                  handleSave();
                 }}
                 loading={isSubmitting}
               >
@@ -115,34 +146,4 @@ export default function OSFToken() {
       </Dialog.Root>
     </HStack>
   );
-}
-
-async function handleSaveButton(setIsSubmitting, closeHandler, setErrorMessage) {
-  const token = document.querySelector("#osf-token").value;
-  setIsSubmitting(true);
-  try {
-    const idToken = await auth.currentUser.getIdToken();
-    const response = await fetch("/api/saveosftoken", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${idToken}`,
-      },
-      body: JSON.stringify({ token }),
-    });
-    if (!response.ok) {
-      throw new Error("Failed to save token");
-    }
-    const result = await response.json();
-    if (!result.osfTokenValid) {
-      setErrorMessage("The token could not be verified with OSF. Please check that you copied the full token and that it has the osf.full_write scope.");
-      setIsSubmitting(false);
-      return;
-    }
-    setIsSubmitting(false);
-    closeHandler();
-  } catch (error) {
-    setErrorMessage("Failed to save token. Please try again.");
-    setIsSubmitting(false);
-  }
 }

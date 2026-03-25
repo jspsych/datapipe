@@ -29,7 +29,6 @@ export default function DeleteAccount({ setDeleting }) {
       setDeleting(false);
       setIsSubmitting(false);
       setDeleteError(error.message);
-      console.log(error);
     }
   };
 

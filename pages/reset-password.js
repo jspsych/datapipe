@@ -40,8 +40,6 @@ export default function ResetPassword() {
     } catch (error) {
       setIsSubmitting(false);
       setError(getError(error.code));
-      console.log("Password reset failed");
-      console.log(error);
     }
   };
 
@@ -57,7 +55,6 @@ export default function ResetPassword() {
     } catch (error) {
       setError(getError(error.code));
       setIsSubmitting(false);
-      console.log(error);
     }
   };
 
@@ -89,7 +86,7 @@ export default function ResetPassword() {
                 password.
               </Text>
               <Button
-                colorPalette={"green"}
+                colorPalette={"brandTeal"}
                 loading={isSubmitting}
                 onClick={resetPassword}
               >
@@ -114,7 +111,7 @@ export default function ResetPassword() {
                 <Field.ErrorText>{error}</Field.ErrorText>
               </Field.Root>
               <Button
-                colorPalette={"green"}
+                colorPalette={"brandTeal"}
                 loading={isSubmitting}
                 onClick={setNewPassword}
               >

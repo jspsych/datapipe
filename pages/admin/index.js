@@ -25,7 +25,7 @@ import { Trash2, Pencil } from "lucide-react";
 export default function AdminPage({}) {
   return (
     <AuthCheck>
-      <VStack gap={8} w={["100%", "960px"]}>
+      <VStack gap={8} w="100%" maxW="960px" px={4}>
         <OAuthBanner />
         <ExperimentList />
       </VStack>
@@ -97,7 +97,7 @@ function ExperimentList() {
   if (loading) {
     return (
       <Center w="100%" py={8}>
-        <Spinner color="green.500" size={"xl"} />
+        <Spinner color="brandTeal.500" size={"xl"} />
       </Center>
     );
   }

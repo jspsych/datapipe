@@ -67,7 +67,6 @@ async function activateMetadata(expId) {
       { merge: true }
     );
   } catch (error) {
-    console.error(error);
   }
 }
 
@@ -81,6 +80,5 @@ async function deactivateMetadata(expId) {
       { merge: true }
     );
   } catch (error) {
-    console.error(error);
   }
 }

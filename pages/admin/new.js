@@ -86,9 +86,9 @@ function NewExperimentForm() {
 
   return (
     <>
-      {loading && <Spinner color="green.500" size={"xl"} />}
+      {loading && <Spinner color="brandTeal.500" size={"xl"} />}
       {isValid && (
-        <Stack gap={6} maxWidth="540px">
+        <Stack gap={6} w="100%" maxW="540px" px={4}>
           <Heading>Create a New Experiment</Heading>
           <Field.Root invalid={titleError}>
             <Field.Label>Title</Field.Label>
@@ -100,7 +100,7 @@ function NewExperimentForm() {
                 setTitleError(false);
               }}
             />
-            <Field.ErrorText color={"red"}>
+            <Field.ErrorText color="red.400">
               This field is required
             </Field.ErrorText>
           </Field.Root>
@@ -116,7 +116,7 @@ function NewExperimentForm() {
                 onChange={(e) => setOsfRepo(e.target.value)}
               />
             </Group>
-            <Field.ErrorText color={"red"}>
+            <Field.ErrorText color="red.400">
               Cannot connect to this OSF component
             </Field.ErrorText>
           </Field.Root>
@@ -130,7 +130,7 @@ function NewExperimentForm() {
                 setDataComponentError(false);
               }}
             />
-            <Field.ErrorText color={"red"}>
+            <Field.ErrorText color="red.400">
               This field is required
             </Field.ErrorText>
             <Field.HelperText color="gray">
@@ -164,15 +164,17 @@ function NewExperimentForm() {
           </Button>
         </Stack>
       )}
-      {!isValid && (
-        <VStack>
-          <Heading as="h2">Connect your OSF Account</Heading>
-          <Text>
-            Before you can create an experiment, you need to connect your OSF
-            account.
-          </Text>
+      {!loading && !isValid && (
+        <VStack gap={6} maxW="540px" w="100%" px={4}>
+          <VStack gap={3}>
+            <Heading>Create a New Experiment</Heading>
+            <Text color="gray.400" textAlign="center">
+              DataPipe sends experiment data directly to your OSF project.
+              Connect your OSF account to get started.
+            </Text>
+          </VStack>
           <Link href="/admin/account">
-            <Button variant={"solid"} colorPalette={"brandTeal"} size={"md"}>
+            <Button variant={"solid"} colorPalette={"brandTeal"} size={"lg"}>
               Connect OSF Account
             </Button>
           </Link>

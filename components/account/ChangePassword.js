@@ -116,7 +116,6 @@ async function handleChangePassword(newPassword, setIsSubmitting, setOpen, setSu
     setOpen(false);
     setSubmitStatus("success");
   } catch (error) {
-    console.log(error);
     setIsSubmitting(false);
     setOpen(false);
     setSubmitStatus("failure");

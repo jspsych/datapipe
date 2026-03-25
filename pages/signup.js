@@ -85,7 +85,6 @@ export default function SignUpPage() {
         setErrorEmail(getError(code));
       }
       setIsSubmitting(false);
-      console.log(error);
     }
   };
 

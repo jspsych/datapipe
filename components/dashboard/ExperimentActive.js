@@ -182,7 +182,6 @@ async function activateExperiment(expId) {
       { merge: true }
     );
   } catch (error) {
-    console.error(error);
   }
 }
 
@@ -194,7 +193,6 @@ async function deactivateExperiment(expId) {
       { merge: true }
     );
   } catch (error) {
-    console.error(error);
   }
 }
 
@@ -206,7 +204,6 @@ async function toggleBase64Active(expId, active) {
       { merge: true }
     );
   } catch (error) {
-    console.error(error);
   }
 }
 
@@ -218,7 +215,6 @@ async function updateSessionLimitActive(expId, active) {
       { merge: true }
     );
   } catch (error) {
-    console.error(error);
   }
 }
 
@@ -230,7 +226,6 @@ async function updateMaxSessions(expId, maxSessions) {
       { merge: true }
     );
   } catch (error) {
-    console.error(error);
   }
 }
 
@@ -242,7 +237,6 @@ async function updateConditionActive(expId, active) {
       { merge: true }
     );
   } catch (error) {
-    console.error(error);
   }
 }
 
@@ -254,6 +248,5 @@ async function updateNConditions(expId, nConditions) {
       { merge: true }
     );
   } catch (error) {
-    console.error(error);
   }
 }

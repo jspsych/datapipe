@@ -46,7 +46,6 @@ export default function ExperimentValidation({ data }) {
           merge: true,
         });
       } catch (error) {
-        console.error(error);
       }
     }
     handleSave();
