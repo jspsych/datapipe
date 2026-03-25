@@ -60,41 +60,44 @@ function ExperimentPageDashboard({ experiment_id }) {
             )}
           </HStack>
           {uploadError && <ErrorPanel errors={errorLog} />}
-          <VStack w="100%" maxW="560px" gap={0} align="stretch">
-            <ExperimentInfo data={data} />
+          <Flex w="100%" gap={8} wrap="wrap" alignItems="flex-start">
+            <VStack flex="1" minW="300px" gap={0} align="stretch">
+              <ExperimentInfo data={data} />
 
-            <Separator my={5} borderColor="whiteAlpha.200" />
-            <Text fontSize="xs" fontWeight="semibold" textTransform="uppercase" letterSpacing="wide" color="gray.500" mb={3}>
-              Data Collection
-            </Text>
-            <ExperimentActive data={data} />
+              <Separator my={5} borderColor="whiteAlpha.200" />
+              <Text fontSize="xs" fontWeight="semibold" textTransform="uppercase" letterSpacing="wide" color="gray.500" mb={3}>
+                Data Collection
+              </Text>
+              <ExperimentActive data={data} />
 
-            <Separator my={5} borderColor="whiteAlpha.200" />
-            <Text fontSize="xs" fontWeight="semibold" textTransform="uppercase" letterSpacing="wide" color="gray.500" mb={3}>
-              Validation
-            </Text>
-            <ExperimentValidation data={data} />
+              <Separator my={5} borderColor="whiteAlpha.200" />
+              <Text fontSize="xs" fontWeight="semibold" textTransform="uppercase" letterSpacing="wide" color="gray.500" mb={3}>
+                Validation
+              </Text>
+              <ExperimentValidation data={data} />
 
-            <Separator my={5} borderColor="whiteAlpha.200" />
-            <Text fontSize="xs" fontWeight="semibold" textTransform="uppercase" letterSpacing="wide" color="gray.500" mb={3}>
-              Metadata
-            </Text>
-            <MetadataControl data={data} />
-          </VStack>
+              <Separator my={5} borderColor="whiteAlpha.200" />
+              <Text fontSize="xs" fontWeight="semibold" textTransform="uppercase" letterSpacing="wide" color="gray.500" mb={3}>
+                Metadata
+              </Text>
+              <MetadataControl data={data} />
+            </VStack>
 
-          <Separator my={6} borderColor="whiteAlpha.200" w="100%" />
-          <Collapsible.Root w="100%">
-            <Collapsible.Trigger asChild>
-              <Button variant="ghost" color="gray.400" size="sm" px={0} _hover={{ color: "white" }}>
-                <Code size={16} /> Integration Code <ChevronDown size={14} />
-              </Button>
-            </Collapsible.Trigger>
-            <Collapsible.Content>
-              <VStack w="100%" mt={4}>
-                <CodeHints expId={experiment_id} />
-              </VStack>
-            </Collapsible.Content>
-          </Collapsible.Root>
+            <VStack flex="1" minW="300px" align="stretch">
+              <Collapsible.Root defaultOpen>
+                <Collapsible.Trigger asChild>
+                  <Button variant="ghost" color="gray.400" size="sm" px={0} _hover={{ color: "white" }}>
+                    <Code size={16} /> Integration Code <ChevronDown size={14} />
+                  </Button>
+                </Collapsible.Trigger>
+                <Collapsible.Content>
+                  <VStack w="100%" mt={4}>
+                    <CodeHints expId={experiment_id} />
+                  </VStack>
+                </Collapsible.Content>
+              </Collapsible.Root>
+            </VStack>
+          </Flex>
         </VStack>
       )}
     </>

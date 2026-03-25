@@ -15,7 +15,8 @@ export default function ExperimentTitle({ data }) {
     <Editable.Root
       textAlign="left"
       defaultValue={data.title}
-      fontSize="4xl"
+      fontSize="2xl"
+      fontWeight="bold"
       onValueCommit={(details) => updateExperimentTitle(details.value, data.id, data.title)}
       as={Flex}
       align="center"
