@@ -57,6 +57,28 @@ a {
   pointer-events: none; 
 }
 
+pre {
+  scrollbar-width: thin;
+  scrollbar-color: #4A5568 transparent;
+}
+
+pre::-webkit-scrollbar {
+  height: 6px;
+}
+
+pre::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+pre::-webkit-scrollbar-thumb {
+  background: #4A5568;
+  border-radius: 3px;
+}
+
+pre::-webkit-scrollbar-thumb:hover {
+  background: #718096;
+}
+
 .sticky-alert__content {
   pointer-events: auto; 
   width: 100%;

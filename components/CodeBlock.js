@@ -6,24 +6,6 @@ import "prismjs/components/prism-javascript";
 import "prismjs/components/prism-markup";
 import "prismjs/themes/prism-tomorrow.css";
 
-const customScrollBarCSS = {
-  scrollbarWidth: "thin",
-  scrollbarColor: "#4A5568 transparent",
-  "::-webkit-scrollbar": {
-    height: "6px",
-  },
-  "::-webkit-scrollbar-track": {
-    background: "transparent",
-  },
-  "::-webkit-scrollbar-thumb": {
-    background: "#4A5568",
-    borderRadius: "3px",
-  },
-  "::-webkit-scrollbar-thumb:hover": {
-    background: "#718096",
-  },
-};
-
 export default function CodeBlock({ children, language = "javascript", ...props }) {
   let lines = children.split("\n");
   // remove first line if it is empty
@@ -53,7 +35,6 @@ export default function CodeBlock({ children, language = "javascript", ...props 
           fontFamily="monospace"
           pb={3}
           overflowX="auto"
-          sx={customScrollBarCSS}
           style={{ background: "none", margin: 0, padding: 0 }}
         >
           <code ref={codeRef} className={`language-${language}`}>
