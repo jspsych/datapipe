@@ -63,16 +63,18 @@ describe("getCondition", () => {
 
     const db = getFirestore();
     // Wait briefly for any in-flight writes from previous tests to settle
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, 2000));
     await db.collection("logs").doc("testexp").delete();
 
     await getCondition({ experimentID: "testexp" });
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
     let doc = await db.collection("logs").doc("testexp").get();
 
     expect(doc.data().logError).toBe(1);
 
     await getCondition({ experimentID: "testexp" });
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
     doc = await db.collection("logs").doc("testexp").get();
 
