@@ -67,7 +67,7 @@ export default function CodeHints({ expId }) {
               <Text fontSize="sm" color="gray.400">
                 Load the plugin, generate a unique filename, and add a save trial to your timeline.
               </Text>
-              <CodeBlock>
+              <CodeBlock language="html">
                 {`<script src="https://unpkg.com/@jspsych-contrib/plugin-pipe"></script>`}
               </CodeBlock>
               <CodeBlock>
@@ -93,7 +93,7 @@ export default function CodeHints({ expId }) {
               <Text fontSize="sm" color="gray.400">
                 Use saveBase64Data to upload binary files (audio, video, images). This example saves audio from the html-audio-response plugin.
               </Text>
-              <CodeBlock>
+              <CodeBlock language="html">
                 {`<script src="https://unpkg.com/@jspsych-contrib/plugin-pipe"></script>`}
               </CodeBlock>
               <CodeBlock>
@@ -121,7 +121,7 @@ export default function CodeHints({ expId }) {
               <Text fontSize="sm" color="gray.400">
                 Request the next condition assignment. This is async, so wrap your experiment in an async function.
               </Text>
-              <CodeBlock>
+              <CodeBlock language="html">
                 {`<script src="https://unpkg.com/@jspsych-contrib/plugin-pipe"></script>`}
               </CodeBlock>
               <CodeBlock>
