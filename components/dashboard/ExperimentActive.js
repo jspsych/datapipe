@@ -3,7 +3,6 @@ import {
   HStack,
   Switch,
   Stack,
-  Heading,
   NumberInput,
 } from "@chakra-ui/react";
 
@@ -28,15 +27,7 @@ export default function ExperimentActive({ data }) {
   const [nConditions, setNConditions] = useState(data.nConditions);
 
   return (
-    <Stack
-      w="100%"
-      pr={[0, 8]}
-      gap={2}
-      bgColor={"black"}
-      borderRadius={16}
-      p={6}
-    >
-      <Heading fontSize="2xl">Status</Heading>
+    <Stack w="100%" gap={2}>
       <Field.Root>
         <HStack justify="space-between" alignItems="center" w="100%">
           <Field.Label fontWeight={"normal"} mb={0}>Enable data collection?</Field.Label>

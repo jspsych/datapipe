@@ -4,7 +4,8 @@ import { useDocumentData } from "react-firebase-hooks/firestore";
 import { db } from "../../lib/firebase";
 import { doc } from "firebase/firestore";
 
-import { Spinner, Flex, VStack, Text } from "@chakra-ui/react";
+import { Spinner, Flex, VStack, HStack, Text, Badge, Separator, Stack, Collapsible, Button } from "@chakra-ui/react";
+import { Code, ChevronDown } from "lucide-react";
 
 import Title from "../../components/dashboard/Title";
 import ExperimentInfo from "../../components/dashboard/ExperimentInfo";
@@ -45,23 +46,55 @@ function ExperimentPageDashboard({ experiment_id }) {
       {data && (
         <VStack alignSelf="flex-start" align="flex-start" w="100%" maxW={1200} px={4}>
           <Title data={data} />
-          <Flex
-            alignItems="flex-start"
-            wrap="wrap"
-            w="100%"
-            justifyContent="space-between"
-          >
-            <VStack w={["100%", "38%"]}>
-              <ExperimentInfo data={data} />
-              <MetadataControl data={data} />
-              <ExperimentActive data={data} />
-              <ExperimentValidation data={data} />
-            </VStack>
-            <VStack w={["100%", "60%"]}>
-            {uploadError && <ErrorPanel errors={errorLog} />}
-              <CodeHints expId={experiment_id} />
-            </VStack>
-          </Flex>
+          <HStack gap={3} mb={2} flexWrap="wrap">
+            <Badge colorPalette={data.active ? "green" : "gray"} variant="solid" px={2} py={1}>
+              {data.active ? "Active" : "Inactive"}
+            </Badge>
+            <Text fontSize="sm" color="gray.400">
+              {data.sessions || 0} session{data.sessions !== 1 ? "s" : ""}
+            </Text>
+            {uploadError && (
+              <Badge colorPalette="red" variant="solid" px={2} py={1}>
+                Data upload errors
+              </Badge>
+            )}
+          </HStack>
+          {uploadError && <ErrorPanel errors={errorLog} />}
+          <VStack w="100%" maxW="560px" gap={0} align="stretch">
+            <ExperimentInfo data={data} />
+
+            <Separator my={5} borderColor="whiteAlpha.200" />
+            <Text fontSize="xs" fontWeight="semibold" textTransform="uppercase" letterSpacing="wide" color="gray.500" mb={3}>
+              Data Collection
+            </Text>
+            <ExperimentActive data={data} />
+
+            <Separator my={5} borderColor="whiteAlpha.200" />
+            <Text fontSize="xs" fontWeight="semibold" textTransform="uppercase" letterSpacing="wide" color="gray.500" mb={3}>
+              Validation
+            </Text>
+            <ExperimentValidation data={data} />
+
+            <Separator my={5} borderColor="whiteAlpha.200" />
+            <Text fontSize="xs" fontWeight="semibold" textTransform="uppercase" letterSpacing="wide" color="gray.500" mb={3}>
+              Metadata
+            </Text>
+            <MetadataControl data={data} />
+          </VStack>
+
+          <Separator my={6} borderColor="whiteAlpha.200" w="100%" />
+          <Collapsible.Root w="100%">
+            <Collapsible.Trigger asChild>
+              <Button variant="ghost" color="gray.400" size="sm" px={0} _hover={{ color: "white" }}>
+                <Code size={16} /> Integration Code <ChevronDown size={14} />
+              </Button>
+            </Collapsible.Trigger>
+            <Collapsible.Content>
+              <VStack w="100%" mt={4}>
+                <CodeHints expId={experiment_id} />
+              </VStack>
+            </Collapsible.Content>
+          </Collapsible.Root>
         </VStack>
       )}
     </>

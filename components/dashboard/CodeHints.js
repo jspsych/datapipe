@@ -2,7 +2,6 @@ import {
   Tabs,
   VStack,
   Text,
-  Heading,
   Stack,
   Menu,
   Button,
@@ -17,14 +16,9 @@ export default function CodeHints({ expId }) {
 
   return (
     <Stack
-      pr={[0, 8]}
       gap={6}
-      bgColor={"black"}
-      borderRadius={16}
-      p={6}
       w={"100%"}
     >
-      <Heading fontSize="2xl">Code Samples</Heading>
       <VStack alignItems="flex-start">
         <Text>Select language</Text>
         <Menu.Root>

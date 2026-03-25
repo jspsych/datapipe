@@ -1,4 +1,4 @@
-import { Stack, HStack, Text, Link, Heading } from "@chakra-ui/react";
+import { Stack, HStack, Text, Link } from "@chakra-ui/react";
 
 import { ExternalLink } from "lucide-react";
 
@@ -6,37 +6,33 @@ export default function ExperimentInfo({ data }) {
   return (
     <Stack
       w="100%"
-      pr={[0, 8]}
       gap={2}
-      bgColor={"black"}
-      borderRadius={16}
-      p={6}
     >
-      <Heading fontSize="2xl">Info</Heading>
-      <HStack justify="space-between">
-        <Text>Experiment ID</Text>
-        <Text>{data.id}</Text>
+      <HStack justify="space-between" flexWrap="wrap" gap={1}>
+        <Text color="gray.400" fontSize="sm">Experiment ID</Text>
+        <Text fontSize="sm">{data.id}</Text>
       </HStack>
-      <HStack justify="space-between">
-        <Text>OSF Project</Text>
-        <Link color="white" href={`https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/${data.osfRepo}`} target="_blank" rel="noopener noreferrer">
-          {`https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/${data.osfRepo}`} <ExternalLink style={{ display: "inline", width: "1em", height: "1em" }} />
+      <HStack justify="space-between" flexWrap="wrap" gap={1}>
+        <Text color="gray.400" fontSize="sm">OSF Project</Text>
+        <Link color="white" fontSize="sm" href={`https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/${data.osfRepo}`} target="_blank" rel="noopener noreferrer">
+          {data.osfRepo} <ExternalLink style={{ display: "inline", width: "0.9em", height: "0.9em" }} />
         </Link>
       </HStack>
-      <HStack justify="space-between">
-        <Text>OSF Data Component</Text>
+      <HStack justify="space-between" flexWrap="wrap" gap={1}>
+        <Text color="gray.400" fontSize="sm">OSF Data Component</Text>
         <Link
           color="white"
+          fontSize="sm"
           href={`https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/${data.osfComponent}`}
           target="_blank"
           rel="noopener noreferrer"
         >
-          {`https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/${data.osfComponent}`} <ExternalLink style={{ display: "inline", width: "1em", height: "1em" }} />
+          {data.osfComponent} <ExternalLink style={{ display: "inline", width: "0.9em", height: "0.9em" }} />
         </Link>
       </HStack>
       <HStack justify="space-between">
-        <Text>Completed Sessions</Text>
-        <Text>{data.sessions}</Text>
+        <Text color="gray.400" fontSize="sm">Completed Sessions</Text>
+        <Text fontSize="sm">{data.sessions}</Text>
       </HStack>
     </Stack>
   );

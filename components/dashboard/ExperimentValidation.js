@@ -3,7 +3,6 @@ import {
   HStack,
   Switch,
   Stack,
-  Heading,
   Textarea,
   Checkbox,
   CheckboxGroup,
@@ -52,15 +51,7 @@ export default function ExperimentValidation({ data }) {
   }, [validationEnabled, validationSettings, fieldsArray, data]);
 
   return (
-    <Stack
-      w="100%"
-      pr={[0, 8]}
-      gap={3}
-      bgColor={"black"}
-      borderRadius={16}
-      p={6}
-    >
-      <Heading fontSize="2xl">Data Validation</Heading>
+    <Stack w="100%" gap={3}>
       <Field.Root id="enable-validation">
         <HStack justify="space-between" alignItems="center" w="100%">
           <Field.Label fontWeight="normal" mb={0}>Enable data validation?</Field.Label>
