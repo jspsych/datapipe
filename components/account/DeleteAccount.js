@@ -33,7 +33,7 @@ export default function DeleteAccount({ setDeleting }) {
   };
 
   return (
-    <HStack justifyContent="space-between" w="100%">
+    <HStack justifyContent="space-between" w="100%" flexWrap="wrap" gap={3}>
       <Text fontSize={"lg"}>Delete DataPipe Account</Text>
       <HStack>
         {deleteError && (

@@ -19,7 +19,7 @@ export default function MetadataControl({ data }) {
   return (
     <Stack
       w="100%"
-      pr={8}
+      pr={[0, 8]}
       gap={2}
       bgColor={"black"}
       borderRadius={16}

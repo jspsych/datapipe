@@ -17,7 +17,7 @@ export default function CodeHints({ expId }) {
 
   return (
     <Stack
-      pr={8}
+      pr={[0, 8]}
       gap={6}
       bgColor={"black"}
       borderRadius={16}

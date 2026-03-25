@@ -59,7 +59,7 @@ export default function OAuthTokenStatus() {
 
   return (
     <VStack gap={4} w="100%" align="stretch">
-      <HStack justifyContent="space-between" w="100%">
+      <HStack justifyContent="space-between" w="100%" flexWrap="wrap" gap={3}>
         <HStack>
           <Text fontSize="lg" fontWeight="medium">Connected to OSF Account</Text>
           <Tooltip.Root>

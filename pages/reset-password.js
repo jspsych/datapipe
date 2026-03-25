@@ -59,7 +59,7 @@ export default function ResetPassword() {
   };
 
   return (
-    <Card.Root w={360} variant="unstyled" color="white">
+    <Card.Root w="100%" maxW={360} mx="auto" px={4} variant="unstyled" color="white">
       <Card.Header>
         <Heading size="lg">Reset your password</Heading>
       </Card.Header>

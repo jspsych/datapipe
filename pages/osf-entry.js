@@ -439,7 +439,7 @@ function OSFEntryPage() {
 
   return (
     <Box minH="100vh" bg="greyBackground" py={8}>
-      <Card.Root w={400} mx="auto" mt={8} variant="unstyled" color="white">
+      <Card.Root w="100%" maxW={400} mx="auto" mt={8} px={4} variant="unstyled" color="white">
         <Card.Body p={8}>
           {renderContent()}
         </Card.Body>

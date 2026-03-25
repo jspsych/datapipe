@@ -54,7 +54,7 @@ export default function ExperimentValidation({ data }) {
   return (
     <Stack
       w="100%"
-      pr={8}
+      pr={[0, 8]}
       gap={3}
       bgColor={"black"}
       borderRadius={16}

@@ -95,7 +95,7 @@ export default function SelectAuth() {
     if (!usingPersonalToken) {
         return (
             <VStack gap={1} w="100%" align="stretch">
-                <HStack justifyContent="space-between" w="100%">
+                <HStack justifyContent="space-between" w="100%" flexWrap="wrap" gap={3}>
                     <HStack>
                         <Text fontSize="lg">OSF Account</Text>
                         {hasOAuthToken && <CircleCheck color="var(--chakra-colors-green-500)" size={18} />}
@@ -121,7 +121,7 @@ export default function SelectAuth() {
 
     return (
         <VStack gap={1} w="100%" align="stretch">
-            <HStack justifyContent="space-between" w="100%">
+            <HStack justifyContent="space-between" w="100%" flexWrap="wrap" gap={3}>
                 <HStack>
                     <Text fontSize="lg">OSF Token</Text>
                     {hasValidPersonalToken && <CircleCheck color="var(--chakra-colors-green-500)" size={18} />}

@@ -61,7 +61,7 @@ export default function OSFToken() {
   };
 
   return (
-    <HStack justifyContent="space-between" w="100%">
+    <HStack justifyContent="space-between" w="100%" flexWrap="wrap" gap={3}>
       <HStack>
         <Text fontSize={"lg"}>OSF Token</Text>
         {data && data.osfTokenValid ? (

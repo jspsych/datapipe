@@ -2,7 +2,7 @@ import { Stack, Heading, Text, Button, Link } from "@chakra-ui/react";
 
 export default function Contact() {
   return (
-    <Stack w={600} gap={8}>
+    <Stack w="100%" maxW={600} px={4} gap={8}>
       <Heading as="h1" size="2xl">
         Contact Us
       </Heading>
