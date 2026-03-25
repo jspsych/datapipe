@@ -13,7 +13,7 @@ import { ChevronDown } from "lucide-react";
 import CodeBlock from "../CodeBlock";
 
 export default function CodeHints({ expId }) {
-  const [language, setLanguage] = useState("jspsych version 8");
+  const [language, setLanguage] = useState("jsPsych v8");
 
   return (
     <Stack gap={4} w={"100%"}>
@@ -35,7 +35,7 @@ export default function CodeHints({ expId }) {
                 color="white"
                 py="2"
                 px="3"
-                onClick={() => setLanguage("jspsych version 8")}
+                onClick={() => setLanguage("jsPsych v8")}
               >
                 jsPsych v8
               </Menu.Item>
@@ -54,7 +54,7 @@ export default function CodeHints({ expId }) {
           </Menu.Positioner>
         </Menu.Root>
       </HStack>
-      {language === "jspsych version 8" && (
+      {language === "jsPsych v8" && (
         <Tabs.Root variant="enclosed" colorPalette="brandOrange" defaultValue="send-data" size="sm">
           <Tabs.List>
             <Tabs.Trigger value="send-data">Save data</Tabs.Trigger>
