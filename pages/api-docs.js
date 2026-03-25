@@ -2,208 +2,197 @@ import {
   Stack,
   Heading,
   Text,
-  Button,
   Link,
-  OrderedList,
-  ListItem,
   Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
   Badge,
-  Code
+  Code,
+  Box,
+  VStack,
 } from "@chakra-ui/react";
+import CodeBlock from "../components/CodeBlock";
+
+const BASE_URL = "https://pipe.jspsych.org";
+
+function EndpointHeading({ method, path, children }) {
+  return (
+    <Stack gap={3}>
+      <Heading as="h2" size="md">
+        {children}
+      </Heading>
+      <Text>
+        <Badge colorPalette="green" mr={2}>{method}</Badge>
+        <Code>{BASE_URL}{path}</Code>
+      </Text>
+    </Stack>
+  );
+}
+
+function ParamTable({ children }) {
+  return (
+    <Table.Root variant="outline">
+      <Table.Header>
+        <Table.Row>
+          <Table.ColumnHeader color="white">Field</Table.ColumnHeader>
+          <Table.ColumnHeader color="white">Type</Table.ColumnHeader>
+          <Table.ColumnHeader color="white">Description</Table.ColumnHeader>
+        </Table.Row>
+      </Table.Header>
+      <Table.Body>
+        {children}
+      </Table.Body>
+    </Table.Root>
+  );
+}
+
+function Param({ name, type, children }) {
+  return (
+    <Table.Row>
+      <Table.Cell><Code>{name}</Code></Table.Cell>
+      <Table.Cell><Text fontSize="sm" color="gray.400">{type}</Text></Table.Cell>
+      <Table.Cell>{children}</Table.Cell>
+    </Table.Row>
+  );
+}
 
 export default function ApiDocs() {
   return (
-    <Stack w={["95%", 960]} spacing={10}>
+    <Stack w={["95%", 960]} gap={12} py={4}>
 
-      <Stack spacing={2}>
+      <Stack gap={3}>
         <Heading as="h1" size="xl">
-          API Documentation
+          API Reference
         </Heading>
         <Text>
-          Using the API requires setting up an experiment to obtain an experiment ID.
-          Code examples for using JavaScript and jsPsych are available in the experiment dashboard.
+          All endpoints accept JSON request bodies with{" "}
+          <Code>Content-Type: application/json</Code>. You will need
+          an experiment ID, which you get when you create an experiment
+          on DataPipe. Code examples for jsPsych and JavaScript are
+          available on each experiment&apos;s dashboard.
         </Text>
       </Stack>
 
-      <Stack spacing={2}>
-        <Heading as="h2" size="md">
-          Save text-based data
-        </Heading>
+      {/* Save text data */}
+      <Stack gap={4}>
+        <EndpointHeading method="POST" path="/api/data/">
+          Save text data
+        </EndpointHeading>
         <Text>
-          <Badge colorScheme="green">POST</Badge> /api/data
+          Save a text file (CSV, JSON, etc.) to your OSF project. If you
+          have validation rules configured, the data will be checked before
+          it is sent to the OSF.
         </Text>
-        <Text>
-          Save a text-based data file to the OSF. The data can be optionally validated by setting up validation
-          rules in the experiment configuration.
-        </Text>
-        <Table variant="simple">
-          <Thead>
-            <Tr>
-              <Th color="white">Parameter</Th>
-              <Th color="white">Description</Th>
-            </Tr>
-          </Thead>
-          <Tbody>
-            <Tr>
-              <Td>experimentID</Td>
-              <Td>The ID of the experiment to save data for. This ID is provided when an experiment is created on DataPipe.</Td>
-            </Tr>
-            <Tr>
-              <Td>data</Td>
-              <Td>The text-based data to save, sent as a string.</Td>
-            </Tr>
-            <Tr>
-              <Td>filename</Td>
-              <Td>The name of the file to create. This filename must be unique. If the file already exists the request will fail.</Td>
-            </Tr>
-          </Tbody>
-        </Table>
+        <ParamTable>
+          <Param name="experimentID" type="string">
+            Your experiment ID, found on the experiment dashboard.
+          </Param>
+          <Param name="filename" type="string">
+            Name for the file on OSF (e.g., <Code>subject01.csv</Code>).
+            Must be unique — the request will fail if a file with this name
+            already exists.
+          </Param>
+          <Param name="data" type="string">
+            The file contents as a string.
+          </Param>
+        </ParamTable>
+        <Box>
+          <Text fontSize="sm" color="gray.400" mb={2}>Example request body</Text>
+          <CodeBlock>
+            {`{
+  "experimentID": "abc123",
+  "filename": "subject01.csv",
+  "data": "rt,response\\n204,1\\n389,0"
+}`}
+          </CodeBlock>
+        </Box>
       </Stack>
-      <Stack spacing={2}>
-        <Heading as="h2" size="md">
+
+      {/* Save base64 data */}
+      <Stack gap={4}>
+        <EndpointHeading method="POST" path="/api/base64/">
           Save base64-encoded data
-        </Heading>
+        </EndpointHeading>
         <Text>
-          <Badge colorScheme="green">POST</Badge> /api/base64
+          Save a binary file (audio, video, images) encoded as a base64
+          string. DataPipe decodes the string and stores the resulting
+          file in your OSF project.
         </Text>
-        <Text>
-          Save a base64-encoded file to the OSF. The file will be decoded before being posted to the OSF.
-        </Text>
-        <Table variant="simple">
-          <Thead>
-            <Tr>
-              <Th color="white">Parameter</Th>
-              <Th color="white">Description</Th>
-            </Tr>
-          </Thead>
-          <Tbody>
-            <Tr>
-              <Td>experimentID</Td>
-              <Td>The ID of the experiment to save data for. This ID is provided when an experiment is created on DataPipe.</Td>
-            </Tr>
-            <Tr>
-              <Td>data</Td>
-              <Td>The base64-encoded data to save, sent as a string.</Td>
-            </Tr>
-            <Tr>
-              <Td>filename</Td>
-              <Td>The name of the file to create. This filename must be unique. If the file already exists the request will fail.</Td>
-            </Tr>
-          </Tbody>
-        </Table>
+        <ParamTable>
+          <Param name="experimentID" type="string">
+            Your experiment ID.
+          </Param>
+          <Param name="filename" type="string">
+            Name for the decoded file on OSF (e.g., <Code>recording_01.webm</Code>).
+            Must be unique.
+          </Param>
+          <Param name="data" type="string">
+            The base64-encoded file contents.
+          </Param>
+        </ParamTable>
       </Stack>
-      <Stack spacing={2}>
-        <Heading as="h2" size="md">
+
+      {/* Condition assignment */}
+      <Stack gap={4}>
+        <EndpointHeading method="POST" path="/api/condition/">
           Get condition assignment
-        </Heading>
+        </EndpointHeading>
         <Text>
-          <Badge colorScheme="green">POST</Badge> /api/condition
+          Get the next condition number for balanced assignment. Returns
+          a value from 0 to n−1, cycling sequentially (0, 1, 2, ..., 0,
+          1, 2, ...).
         </Text>
-        <Text>
-          Get the next condition assignment in an experiment. The condition is a numerical value from 0 to n-1, where n
-          is the number of conditions in the experiment. Condition assignment is sequential, so the first request will
-          return 0, the second request will return 1, and so on.
-        </Text>
-        <Table variant="simple">
-          <Thead>
-            <Tr>
-              <Th color="white">Parameter</Th>
-              <Th color="white">Description</Th>
-            </Tr>
-          </Thead>
-          <Tbody>
-            <Tr>
-              <Td>experimentID</Td>
-              <Td>The ID of the experiment. This ID is provided when an experiment is created on DataPipe.</Td>
-            </Tr>
-          </Tbody>
-        </Table>
-        <Text>
-          On a successful request, the JSON response will contain a <Code>condition</Code> parameter with the condition assignment.
-        </Text>
+        <ParamTable>
+          <Param name="experimentID" type="string">
+            Your experiment ID.
+          </Param>
+        </ParamTable>
+        <Box>
+          <Text fontSize="sm" color="gray.400" mb={2}>Example response</Text>
+          <CodeBlock>
+            {`{
+  "condition": 2
+}`}
+          </CodeBlock>
+        </Box>
       </Stack>
-      <Stack spacing={2}>
+
+      {/* Responses */}
+      <Stack gap={4}>
         <Heading as="h2" size="md">
-          API Responses
+          Responses
         </Heading>
-        <Text>Responses from the API are JSON. On a successful request the response will contain a <Code>message</Code>{' '}
-          parameter will the value <Code>Success</Code>. When an error occurs, the responses will contain one of the <Code>error</Code>{' '}
-          and <Code>message</Code> parameter sets shown below.</Text>
-        <Table variant="simple">
-          <Thead>
-            <Tr>
-              <Th color="white">Error</Th>
-              <Th color="white">Message</Th>
-            </Tr>
-          </Thead>
-          <Tbody>
-            <Tr>
-              <Td>MISSING_PARAMETER</Td>
-              <Td>One or more required parameters are missing.</Td>
-            </Tr>
-            <Tr>
-              <Td>DATA_COLLECTION_NOT_ACTIVE</Td>
-              <Td>Data collection is not active for this experiment</Td>
-            </Tr>
-            <Tr>
-              <Td>BASE64DATA_COLLECTION_NOT_ACTIVE</Td>
-              <Td>Base64 data collection is not active for this experiment</Td>
-            </Tr>
-            <Tr>
-              <Td>CONDITION_ASSIGNMENT_NOT_ACTIVE</Td>
-              <Td>Condition assignment is not active for this experiment</Td>
-            </Tr>
-            <Tr>
-              <Td>EXPERIMENT_NOT_FOUND</Td>
-              <Td>The experiment ID does not match an experiment</Td>
-            </Tr>
-            <Tr>
-              <Td>INVALID_OWNER</Td>
-              <Td>The owner ID of this experiment does not match a valid user</Td>
-            </Tr>
-            <Tr>
-              <Td>INVALID_OSF_TOKEN</Td>
-              <Td>The OSF token for this experiment is not valid</Td>
-            </Tr>
-            <Tr>
-              <Td>INVALID_BASE64_DATA</Td>
-              <Td>The data are not valid base64 data</Td>
-            </Tr>
-            <Tr>
-              <Td>INVALID_DATA</Td>
-              <Td>
-                The data are not valid according to the validation parameters set
-                for this experiment.
-              </Td>
-            </Tr>
-            <Tr>
-              <Td>SESSION_LIMIT_REACHED</Td>
-              <Td>The session limit for this experiment has been reached</Td>
-            </Tr>
-            <Tr>
-              <Td>UNKNOWN_ERROR_GETTING_CONDITION</Td>
-              <Td>
-                An unknown error occurred while getting the condition for this
-                experiment
-              </Td>
-            </Tr>
-            <Tr>
-              <Td>OSF_FILE_EXISTS</Td>
-              <Td>
-                The OSF file already exists. File names must be unique.
-              </Td>
-            </Tr>
-            <Tr>
-              <Td>OSF_UPLOAD_ERROR</Td>
-              <Td>An error occurred while uploading the data to OSF</Td>
-            </Tr>
-          </Tbody>
-        </Table>
+        <Text>
+          All responses are JSON. A successful request returns{" "}
+          <Code>{`{ "message": "Success" }`}</Code>. The condition
+          endpoint also includes a <Code>condition</Code> field.
+          On failure, the response contains an <Code>error</Code> code
+          and a <Code>message</Code> describing the problem.
+        </Text>
+        <Table.Root variant="outline">
+          <Table.Header>
+            <Table.Row>
+              <Table.ColumnHeader color="white">Error code</Table.ColumnHeader>
+              <Table.ColumnHeader color="white">Meaning</Table.ColumnHeader>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
+            <Table.Row><Table.Cell><Code>MISSING_PARAMETER</Code></Table.Cell><Table.Cell>One or more required fields are missing from the request body.</Table.Cell></Table.Row>
+            <Table.Row><Table.Cell><Code>EXPERIMENT_NOT_FOUND</Code></Table.Cell><Table.Cell>No experiment matches the provided ID.</Table.Cell></Table.Row>
+            <Table.Row><Table.Cell><Code>DATA_COLLECTION_NOT_ACTIVE</Code></Table.Cell><Table.Cell>Data collection is not enabled for this experiment.</Table.Cell></Table.Row>
+            <Table.Row><Table.Cell><Code>BASE64DATA_COLLECTION_NOT_ACTIVE</Code></Table.Cell><Table.Cell>Base64 data collection is not enabled for this experiment.</Table.Cell></Table.Row>
+            <Table.Row><Table.Cell><Code>CONDITION_ASSIGNMENT_NOT_ACTIVE</Code></Table.Cell><Table.Cell>Condition assignment is not enabled for this experiment.</Table.Cell></Table.Row>
+            <Table.Row><Table.Cell><Code>SESSION_LIMIT_REACHED</Code></Table.Cell><Table.Cell>The experiment has reached its session limit. Increase the limit in the dashboard.</Table.Cell></Table.Row>
+            <Table.Row><Table.Cell><Code>INVALID_DATA</Code></Table.Cell><Table.Cell>The data did not pass the validation rules configured for this experiment.</Table.Cell></Table.Row>
+            <Table.Row><Table.Cell><Code>INVALID_BASE64_DATA</Code></Table.Cell><Table.Cell>The data is not valid base64.</Table.Cell></Table.Row>
+            <Table.Row><Table.Cell><Code>OSF_FILE_EXISTS</Code></Table.Cell><Table.Cell>A file with this name already exists in the OSF project. Filenames must be unique.</Table.Cell></Table.Row>
+            <Table.Row><Table.Cell><Code>OSF_UPLOAD_ERROR</Code></Table.Cell><Table.Cell>DataPipe could not upload the file to OSF. Try again later.</Table.Cell></Table.Row>
+            <Table.Row><Table.Cell><Code>INVALID_OWNER</Code></Table.Cell><Table.Cell>The experiment owner does not match a valid user account.</Table.Cell></Table.Row>
+            <Table.Row><Table.Cell><Code>INVALID_OSF_TOKEN</Code></Table.Cell><Table.Cell>The OSF token for this account is invalid or expired. Reconnect your OSF account in settings.</Table.Cell></Table.Row>
+            <Table.Row><Table.Cell><Code>INVALID_METADATA_ERROR</Code></Table.Cell><Table.Cell>The metadata generated from the data is invalid.</Table.Cell></Table.Row>
+            <Table.Row><Table.Cell><Code>OSF_METADATA_UPLOAD_ERROR</Code></Table.Cell><Table.Cell>DataPipe could not upload the metadata file to OSF.</Table.Cell></Table.Row>
+            <Table.Row><Table.Cell><Code>METADATA_ERROR</Code></Table.Cell><Table.Cell>An error occurred while processing metadata.</Table.Cell></Table.Row>
+            <Table.Row><Table.Cell><Code>UNKNOWN_ERROR_GETTING_CONDITION</Code></Table.Cell><Table.Cell>An unexpected error occurred while assigning a condition.</Table.Cell></Table.Row>
+          </Table.Body>
+        </Table.Root>
       </Stack>
     </Stack>
   );

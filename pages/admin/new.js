@@ -1,27 +1,24 @@
-import { customAlphabet } from "nanoid";
 import AuthCheck from "../../components/AuthCheck";
-import { doc, getDoc, writeBatch, arrayUnion } from "firebase/firestore";
+import { doc } from "firebase/firestore";
 import { db, auth } from "../../lib/firebase";
 import { useContext, useState } from "react";
 import { UserContext } from "../../lib/context";
 import { useDocumentData } from "react-firebase-hooks/firestore";
 import Link from "next/link";
 import Router from "next/router";
+import { createExperiment } from "../../lib/experiment-creation";
 import {
   Button,
   Stack,
   Heading,
-  FormControl,
-  FormLabel,
+  Field,
   Input,
   Spinner,
-  InputGroup,
-  InputLeftAddon,
-  FormErrorMessage,
-  FormHelperText,
+  Group,
+  InputAddon,
   VStack,
   Text,
-  Select,
+  NativeSelect,
 } from "@chakra-ui/react";
 
 export default function NewExperimentPage({}) {
@@ -39,81 +36,145 @@ function NewExperimentForm() {
   const [titleError, setTitleError] = useState(false);
   const [dataComponentError, setDataComponentError] = useState(false);
 
+  const [title, setTitle] = useState("");
+  const [osfRepo, setOsfRepo] = useState("");
+  const [osfComponentName, setOsfComponentName] = useState("");
+  const [region, setRegion] = useState("us");
+
   const [data, loading, error] = useDocumentData(doc(db, "users", user.uid));
+
+  const isValid = data && (data.usingPersonalToken ? data.osfTokenValid : data.refreshToken !== "");
+
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    setOsfError(false);
+
+    if (title.length === 0) {
+      setTitleError(true);
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (osfComponentName.length === 0) {
+      setDataComponentError(true);
+      setIsSubmitting(false);
+      return;
+    }
+
+    try {
+      const result = await createExperiment({
+        title,
+        osfRepo,
+        osfComponentName,
+        region,
+        uid: auth.currentUser.uid,
+        nConditions: 1,
+        useValidation: true,
+        allowJSON: true,
+        allowCSV: true,
+        useSessionLimit: false,
+        maxSessions: 1,
+      });
+
+      Router.push(`/admin/${result.experimentId}`);
+    } catch (err) {
+      console.error(err);
+      setIsSubmitting(false);
+      setOsfError(true);
+    }
+  };
 
   return (
     <>
-      {loading && <Spinner color="green.500" size={"xl"} />}
-      {data && data.osfTokenValid && (
-        <Stack spacing={6} maxWidth="540px">
+      {loading && <Spinner color="brandTeal.500" size={"xl"} />}
+      {isValid && (
+        <Stack gap={6} w="100%" maxW="540px" px={4}>
           <Heading>Create a New Experiment</Heading>
-          <FormControl id="title" isInvalid={titleError}>
-            <FormLabel>Title</FormLabel>
-            <Input type="text" onChange={() => setTitleError(false)} />
-            <FormErrorMessage color={"red"}>
+          <Field.Root invalid={titleError}>
+            <Field.Label>Title</Field.Label>
+            <Input
+              type="text"
+              value={title}
+              onChange={(e) => {
+                setTitle(e.target.value);
+                setTitleError(false);
+              }}
+            />
+            <Field.ErrorText color="red.400">
               This field is required
-            </FormErrorMessage>
-          </FormControl>
-          <FormControl id="osf-repo" isInvalid={osfError}>
-            <FormLabel>Existing OSF Project</FormLabel>
-            <InputGroup>
-              <InputLeftAddon bgColor={"greyBackground"}>
-                https://osf.io/
-              </InputLeftAddon>
-              <Input type="text" />
-            </InputGroup>
-            <FormErrorMessage color={"red"}>
+            </Field.ErrorText>
+          </Field.Root>
+          <Field.Root invalid={osfError}>
+            <Field.Label>Existing OSF Project</Field.Label>
+            <Group attached>
+              <InputAddon bgColor={"greyBackground"}>
+                {`https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/`}
+              </InputAddon>
+              <Input
+                type="text"
+                value={osfRepo}
+                onChange={(e) => setOsfRepo(e.target.value)}
+              />
+            </Group>
+            <Field.ErrorText color="red.400">
               Cannot connect to this OSF component
-            </FormErrorMessage>
-          </FormControl>
-          <FormControl id="osf-component-name" isInvalid={dataComponentError}>
-            <FormLabel>New OSF Data Component Name</FormLabel>
-            <Input type="text" onChange={() => setDataComponentError(false)} />
-            <FormErrorMessage color={"red"}>
+            </Field.ErrorText>
+          </Field.Root>
+          <Field.Root invalid={dataComponentError}>
+            <Field.Label>New OSF Data Component Name</Field.Label>
+            <Input
+              type="text"
+              value={osfComponentName}
+              onChange={(e) => {
+                setOsfComponentName(e.target.value);
+                setDataComponentError(false);
+              }}
+            />
+            <Field.ErrorText color="red.400">
               This field is required
-            </FormErrorMessage>
-            <FormHelperText color="gray">
+            </Field.ErrorText>
+            <Field.HelperText color="gray">
               DataPipe will create a new component with this name in the OSF
               project and store all data in it.
-            </FormHelperText>
-          </FormControl>
-          <FormControl id="osf-component-region">
-            <FormLabel>Storage Location</FormLabel>
-            <Select defaultValue="us" sx={{'> option': {background: 'black', color: 'white'}}}>
-              <option value="us">United States</option>
-              <option value="de-1">Germany - Frankfurt</option>
-              <option value="au-1">Australia - Sydney</option>
-              <option value="ca-1">Canada - Montreal</option>
-            </Select>
-            <FormHelperText color="gray">
+            </Field.HelperText>
+          </Field.Root>
+          <Field.Root>
+            <Field.Label>Storage Location</Field.Label>
+            <NativeSelect.Root>
+              <NativeSelect.Field
+                value={region}
+                onChange={(e) => setRegion(e.target.value)}
+              >
+                <option value="us">United States</option>
+                <option value="de-1">Germany - Frankfurt</option>
+                <option value="au-1">Australia - Sydney</option>
+                <option value="ca-1">Canada - Montreal</option>
+              </NativeSelect.Field>
+            </NativeSelect.Root>
+            <Field.HelperText color="gray">
               Choose the region where the data will be stored.
-            </FormHelperText>
-          </FormControl>
+            </Field.HelperText>
+          </Field.Root>
           <Button
-            onClick={() =>
-              handleCreateExperiment(
-                setIsSubmitting,
-                setOsfError,
-                setTitleError,
-                setDataComponentError
-              )
-            }
-            isLoading={isSubmitting}
-            colorScheme={"brandTeal"}
+            onClick={handleSubmit}
+            loading={isSubmitting}
+            colorPalette={"brandTeal"}
           >
             Create
           </Button>
         </Stack>
       )}
-      {data && !data.osfTokenValid && (
-        <VStack>
-          <Heading as="h2">Connect your OSF Account</Heading>
-          <Text>
-            Before you can create an experiment, you need to connect your OSF
-            account.
-          </Text>
+      {!loading && !isValid && (
+        <VStack gap={6} maxW="540px" w="100%" px={4}>
+          <VStack gap={3}>
+            <Heading>Create a New Experiment</Heading>
+            <Text color="gray.400" textAlign="center">
+              DataPipe sends experiment data directly to your OSF project.
+              Connect your OSF account to get started.
+            </Text>
+          </VStack>
           <Link href="/admin/account">
-            <Button variant={"solid"} colorScheme={"brandTeal"} size={"md"}>
+            <Button variant={"solid"} colorPalette={"brandTeal"} size={"lg"}>
               Connect OSF Account
             </Button>
           </Link>
@@ -121,137 +182,4 @@ function NewExperimentForm() {
       )}
     </>
   );
-}
-
-async function handleCreateExperiment(
-  setIsSubmitting,
-  setOsfError,
-  setTitleError,
-  setDataComponentError
-) {
-  setIsSubmitting(true);
-  setOsfError(false);
-
-  const user = auth.currentUser;
-  const title = document.querySelector("#title").value;
-  let osfRepo = document.querySelector("#osf-repo").value;
-  const region = document.querySelector("#osf-component-region").value;
-  const osfComponentName = document.querySelector("#osf-component-name").value;
-  const nConditions = 1;
-  const useValidation = true;
-  const allowJSON = true;
-  const allowCSV = true;
-  const useSessionLimit = false;
-  const maxSessions = 1;
-
-  if (title.length === 0) {
-    setTitleError(true);
-    setIsSubmitting(false);
-    return;
-  }
-
-  if (osfComponentName.length === 0) {
-    setDataComponentError(true);
-    setIsSubmitting(false);
-    return;
-  }
-
-  const nanoid = customAlphabet(
-    "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
-    12
-  );
-  const id = nanoid();
-
-  // check if OSF repo string contains https://osf.io/
-  // and remove it if it does
-  if (osfRepo.includes("https://osf.io/")) {
-    osfRepo = osfRepo.replace("https://osf.io/", "");
-  }
-
-  try {
-    const userdoc = await getDoc(doc(db, `users/${user.uid}`));
-    let osfToken = null;
-    if (userdoc.exists()) {
-      osfToken = userdoc.data().osfToken;
-    }
-
-    const osfResult = await fetch(
-      `https://api.osf.io/v2/nodes/${osfRepo}/children/?region=${region}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${osfToken}`,
-        },
-        body: JSON.stringify({
-          data: {
-            type: "nodes",
-            attributes: {
-              title: osfComponentName,
-              category: "data",
-              description:
-                "This node was automatically generated by DataPipe (https://pipe.jspsych.org/)",
-            },
-          },
-        }),
-      }
-    );
-
-    const nodeData = await osfResult.json();
-    console.log(nodeData);
-
-    if (nodeData.errors) {
-      throw new Error(nodeData.errors);
-    }
-
-    const filesLink = nodeData.data.relationships.files.links.related.href;
-
-    const filesResult = await fetch(filesLink, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${osfToken}`,
-      },
-    });
-
-    const filesData = await filesResult.json();
-    const uploadLink = filesData.data[0].links.upload;
-
-    const batch = writeBatch(db);
-
-    const experimentDoc = doc(db, "experiments", id);
-    batch.set(experimentDoc, {
-      title: title,
-      osfRepo: osfRepo,
-      osfComponent: nodeData.data.id,
-      osfFilesLink: uploadLink,
-      active: false,
-      activeBase64: false,
-      activeConditionAssignment: false,
-      sessions: 0,
-      limitSessions: useSessionLimit,
-      maxSessions: maxSessions,
-      id: id,
-      owner: user.uid,
-      nConditions: nConditions,
-      currentCondition: 0,
-      useValidation: useValidation,
-      allowJSON: allowJSON,
-      allowCSV: allowCSV,
-      requiredFields: ["trial_type"],
-    });
-
-    const userDoc = doc(db, `users/${user.uid}`);
-    batch.update(userDoc, {
-      experiments: arrayUnion(id),
-    });
-
-    await batch.commit();
-
-    Router.push(`/admin/${id}`);
-  } catch (error) {
-    setIsSubmitting(false);
-    //TODO: are there other errors that could be thrown here?
-    setOsfError(true);
-  }
 }

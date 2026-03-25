@@ -8,24 +8,24 @@ import {
   Flex,
   HStack,
   Link,
-  MenuItem,
-  Menu,
-  MenuButton,
-  MenuList,
-  MenuDivider,
   Image,
   IconButton,
 } from "@chakra-ui/react";
-import { AddIcon, HamburgerIcon } from "@chakra-ui/icons";
+import { Plus, Menu as MenuIcon } from "lucide-react";
+import { Menu } from "@chakra-ui/react";
 
 import { auth } from "../lib/firebase";
 
-import { Rubik } from "@next/font/google";
+import { Rubik } from "next/font/google";
+import { useState, useEffect } from "react";
 
 const rubik = Rubik({ subsets: ["latin"] });
 
 export default function Navbar() {
   const { user } = useContext(UserContext);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const showUser = mounted ? user : null;
 
   return (
     <Box as="nav" flexShrink={0}>
@@ -36,7 +36,7 @@ export default function Navbar() {
         w={"100%"}
         color={"white"}
       >
-        <HStack spacing={4} alignItems={"center"} pe={"2"}>
+        <HStack gap={4} alignItems={"center"} pe={"2"}>
           <NextLink href="/">
             <Box
               display={"flex"}
@@ -50,7 +50,6 @@ export default function Navbar() {
                   src="/logo.png"
                   alt="DataPipe Logo"
                   boxSize="64px"
-                  quality={100}
                 />
               </Box>
               <Text>DataPipe</Text>
@@ -59,124 +58,144 @@ export default function Navbar() {
           <HStack
             as={"nav"}
             fontSize="lg"
-            spacing={8}
+            gap={8}
             display={{ base: "none", md: "flex" }}
           >
-            <Link color="white" as={NextLink} href="/getting-started">
-              Getting Started
+            <Link color="white" focusRing="none" asChild>
+              <NextLink href="/getting-started">Getting Started</NextLink>
             </Link>
-            <Link color="white" as={NextLink} href="/api-docs">
-              API Docs
+            <Link color="white" focusRing="none" asChild>
+              <NextLink href="/api-docs">API Docs</NextLink>
             </Link>
-            <Link color="white" as={NextLink} href="/faq">
-              FAQ
+            <Link color="white" focusRing="none" asChild>
+              <NextLink href="/faq">FAQ</NextLink>
             </Link>
-            {user && (
-              <Link color="white" as={NextLink} href="/admin">
-                My Experiments
+            {showUser && (
+              <Link color="white" focusRing="none" asChild>
+                <NextLink href="/admin">My Experiments</NextLink>
               </Link>
             )}
           </HStack>
         </HStack>
-        <HStack display={{ base: "none", md: "flex" }} spacing={8}>
-          {!user && (
+        <HStack display={{ base: "none", md: "flex" }} gap={8}>
+          {!showUser && (
             <>
               <NextLink href="/signin">
                 <Button
                   variant={"ghost"}
-                  colorScheme={"white"}
+                  color="white"
                   size={"sm"}
                   mr={4}
+                  _hover={{ bg: "whiteAlpha.300" }}
                 >
                   Sign In
                 </Button>
               </NextLink>
               <NextLink href="/signup">
-                <Button variant={"outline"} colorScheme={"white"} size={"sm"}>
+                <Button
+                  variant={"outline"}
+                  color="white"
+                  borderColor="white"
+                  size={"sm"}
+                  _hover={{ bg: "whiteAlpha.300" }}
+                >
                   Sign Up
                 </Button>
               </NextLink>
             </>
           )}
-          {user && (
+          {showUser && (
             <>
               <NextLink href="/admin/new">
                 <Button
-                  variant={"outline"}
-                  colorScheme={"green"}
+                  variant={"solid"}
+                  colorPalette={"brandTeal"}
                   size={"sm"}
-                  leftIcon={<AddIcon />}
                 >
-                  New Experiment
+                  <Plus /> New Experiment
                 </Button>
               </NextLink>
-              <Menu>
-                <MenuButton
-                  as={Button}
-                  colorScheme={"white"}
-                  rounded={"full"}
-                  variant={"link"}
-                  cursor={"pointer"}
-                  minW={0}
-                >
-                  Account
-                </MenuButton>
-                <MenuList bg="greyBackground">
-                  <MenuItem bg="greyBackground">
-                    <NextLink href="/admin/account">Settings</NextLink>
-                  </MenuItem>
-                  <MenuDivider />
-                  <MenuItem bg="greyBackground" onClick={() => auth.signOut()}>
-                    Sign Out
-                  </MenuItem>
-                </MenuList>
-              </Menu>
+              <Menu.Root>
+                <Menu.Trigger asChild>
+                  <Button
+                    color="white"
+                    rounded={"full"}
+                    variant={"plain"}
+                    cursor={"pointer"}
+                    minW={0}
+                  >
+                    Account
+                  </Button>
+                </Menu.Trigger>
+                <Menu.Positioner>
+                  <Menu.Content bg="greyBackground" borderWidth="1px" borderColor="white" p="2">
+                    <Menu.Item value="settings" bg="greyBackground" color="white" py="2" px="3" asChild>
+                      <NextLink href="/admin/account">Settings</NextLink>
+                    </Menu.Item>
+                    <Menu.Separator />
+                    <Menu.Item value="signout" bg="greyBackground" color="white" py="2" px="3" onClick={() => auth.signOut()}>
+                      Sign Out
+                    </Menu.Item>
+                  </Menu.Content>
+                </Menu.Positioner>
+              </Menu.Root>
             </>
           )}
         </HStack>
-        <HStack display={{ base: "flex", md: "none" }} spacing={8}>
-          <Menu>
-            <MenuButton
-              as={IconButton}
-              colorScheme={"white"}
-              icon={<HamburgerIcon boxSize={8} />}
-              cursor={"pointer"}
-              minW={0}
-            ></MenuButton>
-            <MenuList w="90vw" bg="greyBackground">
-              <MenuItem bg="greyBackground">
-                <NextLink href="/getting-started">Getting Started</NextLink>
-              </MenuItem>
-              <MenuItem bg="greyBackground">
-                <NextLink href="/api-docs">API Docs</NextLink>
-              </MenuItem>
-              <MenuItem bg="greyBackground">
-                <NextLink href="/faq">FAQ</NextLink>
-              </MenuItem>
-              <MenuItem bg="greyBackground">
-                <NextLink href="/admin">My Experiments</NextLink>
-              </MenuItem>
-              <MenuItem bg="greyBackground">
-                <NextLink href="/admin/new">New Experiment</NextLink>
-              </MenuItem>
-              <MenuDivider />
-              {!user && (
-                <>
-                  <MenuItem bg="greyBackground">
-                    <NextLink href="/signup">Sign Up</NextLink>
-                  </MenuItem>
-                  <MenuItem bg="greyBackground">
-                    <NextLink href="/signin">Sign In</NextLink>
-                  </MenuItem>
-                </>
-              )}
-              {user && (
-                <MenuItem bg="greyBackground" onClick={() => auth.signOut()}>
-                  Sign Out
-                </MenuItem>
-              )}
-            </MenuList>
-          </Menu>
+        <HStack display={{ base: "flex", md: "none" }} gap={8}>
+          <Menu.Root>
+            <Menu.Trigger asChild>
+              <IconButton
+                color="white"
+                cursor={"pointer"}
+                minW={0}
+                variant="ghost"
+                aria-label="Menu"
+                _hover={{ bg: "whiteAlpha.300" }}
+              >
+                <MenuIcon size={32} />
+              </IconButton>
+            </Menu.Trigger>
+            <Menu.Positioner>
+              <Menu.Content w="90vw" bg="greyBackground" borderWidth="1px" borderColor="white" p="2">
+                <Menu.Item value="getting-started" bg="greyBackground" color="white" py="2" px="3" asChild>
+                  <NextLink href="/getting-started">Getting Started</NextLink>
+                </Menu.Item>
+                <Menu.Item value="api-docs" bg="greyBackground" color="white" py="2" px="3" asChild>
+                  <NextLink href="/api-docs">API Docs</NextLink>
+                </Menu.Item>
+                <Menu.Item value="faq" bg="greyBackground" color="white" py="2" px="3" asChild>
+                  <NextLink href="/faq">FAQ</NextLink>
+                </Menu.Item>
+                {showUser && (
+                  <>
+                    <Menu.Item value="experiments" bg="greyBackground" color="white" py="2" px="3" asChild>
+                      <NextLink href="/admin">My Experiments</NextLink>
+                    </Menu.Item>
+                    <Menu.Item value="new-experiment" bg="greyBackground" color="white" py="2" px="3" asChild>
+                      <NextLink href="/admin/new">New Experiment</NextLink>
+                    </Menu.Item>
+                  </>
+                )}
+                <Menu.Separator />
+                {!showUser && (
+                  <>
+                    <Menu.Item value="signup" bg="greyBackground" color="white" py="2" px="3" asChild>
+                      <NextLink href="/signup">Sign Up</NextLink>
+                    </Menu.Item>
+                    <Menu.Item value="signin" bg="greyBackground" color="white" py="2" px="3" asChild>
+                      <NextLink href="/signin">Sign In</NextLink>
+                    </Menu.Item>
+                  </>
+                )}
+                {showUser && (
+                  <Menu.Item value="signout" bg="greyBackground" color="white" py="2" px="3" onClick={() => auth.signOut()}>
+                    Sign Out
+                  </Menu.Item>
+                )}
+              </Menu.Content>
+            </Menu.Positioner>
+          </Menu.Root>
         </HStack>
       </Flex>
     </Box>

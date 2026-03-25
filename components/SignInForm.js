@@ -1,16 +1,14 @@
 import {
   Button,
   Card,
-  CardBody,
-  CardHeader,
   Input,
   Text,
   Link,
-  Stack,
   Heading,
-  FormControl,
-  FormLabel,
-  FormErrorMessage,
+  Field,
+  VStack,
+  HStack,
+  Separator,
 } from "@chakra-ui/react";
 import { auth } from "../lib/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
@@ -18,6 +16,7 @@ import { useState } from "react";
 import { useRouter } from "next/router";
 import NextLink from "next/link";
 import { ERROR, getError } from "../lib/utils";
+import SignInWithOSF from "./SignInWithOSF";
 
 export default function SignInForm({ routeAfterSignIn }) {
   const router = useRouter();
@@ -40,60 +39,74 @@ export default function SignInForm({ routeAfterSignIn }) {
       } else {
         setErrorEmail(getError(code));
       }
-      console.log("Sign in failed");
-      console.log(error);
     }
   };
 
   return (
-    <Card w={360}>
-      <CardHeader>
-        <Heading size="lg">Sign In</Heading>
-      </CardHeader>
-      <CardBody>
-        <Stack>
-          <FormControl isInvalid={errorEmail}>
-            <FormLabel>Email</FormLabel>
-            <Input
-              type="email"
-              onChange={(e) => {
-                setEmail(e.target.value);
-                setErrorEmail("");
-              }}
-            />
-            <FormErrorMessage>{errorEmail}</FormErrorMessage>
-          </FormControl>
-          <FormControl pb={4} isInvalid={errorPassword}>
-            <FormLabel>Password</FormLabel>
-            <Input
-              type="password"
-              onChange={(e) => {
-                setPassword(e.target.value);
-                setErrorPassword("");
-              }}
-            />
-            <FormErrorMessage>{errorPassword}</FormErrorMessage>
-          </FormControl>
-          <Text>
-            <Link as={NextLink} href="/reset-password">
-              Forgot password?
-            </Link>
-          </Text>
-          <Button
-            colorScheme={"brandTeal"}
-            isLoading={isSubmitting}
-            onClick={onSubmit}
-          >
-            Sign In
-          </Button>
-          <Text pt={4}>
-            Need an account?{" "}
-            <Link as={NextLink} href="/signup">
-              Sign Up!
-            </Link>
-          </Text>
-        </Stack>
-      </CardBody>
-    </Card>
+    <Card.Root w="100%" maxW={400} mx="auto" variant="unstyled" color="white">
+      <Card.Body p={8}>
+        <VStack gap={6}>
+          <Heading size="lg" textAlign="center">Sign In</Heading>
+
+          <SignInWithOSF />
+
+          <HStack w="full" alignItems="center">
+            <Separator flex="1" />
+            <Text fontSize="sm" color="gray.400" px={3} whiteSpace="nowrap" textTransform="uppercase" fontWeight="medium" letterSpacing="wide">or</Text>
+            <Separator flex="1" />
+          </HStack>
+
+          <VStack gap={4} w="full">
+            <Field.Root invalid={!!errorEmail}>
+              <Field.Label>Email</Field.Label>
+              <Input
+                type="email"
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setErrorEmail("");
+                }}
+              />
+              <Field.ErrorText>{errorEmail}</Field.ErrorText>
+            </Field.Root>
+
+            <Field.Root invalid={!!errorPassword}>
+              <Field.Label>Password</Field.Label>
+              <Input
+                type="password"
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setErrorPassword("");
+                }}
+                onKeyDown={(e) => e.key === "Enter" && onSubmit()}
+              />
+              <Field.ErrorText>{errorPassword}</Field.ErrorText>
+            </Field.Root>
+
+            <Button
+              colorPalette="brandTeal"
+              loading={isSubmitting}
+              onClick={onSubmit}
+              w="full"
+              size="lg"
+            >
+              Sign In
+            </Button>
+
+            <VStack gap={2} w="full">
+              <Link asChild fontSize="sm" color="brandOrange.300">
+                <NextLink href="/reset-password">Forgot password?</NextLink>
+              </Link>
+
+              <Text fontSize="sm" color="gray.400">
+                Need an account?{" "}
+                <Link asChild color="brandOrange.300">
+                  <NextLink href="/signup">Sign Up</NextLink>
+                </Link>
+              </Text>
+            </VStack>
+          </VStack>
+        </VStack>
+      </Card.Body>
+    </Card.Root>
   );
 }

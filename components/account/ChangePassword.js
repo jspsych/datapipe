@@ -1,21 +1,13 @@
 import { useState, useContext, useEffect } from "react";
 import { UserContext } from "../../lib/context";
 
-import { FormErrorMessage, useDisclosure } from "@chakra-ui/react";
 import {
   HStack,
   VStack,
   Button,
   Text,
-  Modal,
-  ModalOverlay,
-  ModalContent,
-  ModalHeader,
-  ModalFooter,
-  ModalBody,
-  ModalCloseButton,
-  FormControl,
-  FormLabel,
+  Dialog,
+  Field,
   Input,
 } from "@chakra-ui/react";
 
@@ -25,11 +17,12 @@ import { updatePassword } from "firebase/auth";
 export default function ChangePassword() {
   const { user } = useContext(UserContext);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { isOpen, onOpen, onClose } = useDisclosure();
+  const [open, setOpen] = useState(false);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordMatch, setPasswordMatch] = useState(true);
   const [passwordLengthSatisfied, setPasswordLengthSatisfied] = useState(true);
+  const [submitStatus, setSubmitStatus] = useState(null); // "success" | "failure" | null
 
   useEffect(() => {
     if (password !== confirmPassword) {
@@ -40,7 +33,7 @@ export default function ChangePassword() {
   }, [password, confirmPassword]);
 
   useEffect(() => {
-    if (password.length < 6) {
+    if (password.length < 12) {
       setPasswordLengthSatisfied(false);
     } else {
       setPasswordLengthSatisfied(true);
@@ -48,70 +41,83 @@ export default function ChangePassword() {
   }, [password]);
 
   return (
-    <HStack justifyContent="space-between" w="100%">
+    <HStack justifyContent="space-between" w="100%" flexWrap="wrap" gap={3}>
       <Text fontSize={"lg"}>Password</Text>
-      <Button isLoading={isSubmitting} onClick={onOpen} colorScheme="brandTeal">
-        Change Password
-      </Button>
-      <Modal isOpen={isOpen} onClose={onClose}>
-        <ModalOverlay />
-        <ModalContent bg="greyBackground">
-          <ModalHeader>Change Password</ModalHeader>
-          <ModalCloseButton />
-          <ModalBody>
-            <VStack spacing={4}>
-              <FormControl
-                id="new-password"
-                isInvalid={!passwordLengthSatisfied}
+      <HStack>
+        {submitStatus === "success" && (
+          <Text fontSize="sm" color="green.400">Success</Text>
+        )}
+        {submitStatus === "failure" && (
+          <Text fontSize="sm" color="red.400">Failed</Text>
+        )}
+        <Button loading={isSubmitting} onClick={() => setOpen(true)} colorPalette="brandTeal">
+          Change Password
+        </Button>
+      </HStack>
+      <Dialog.Root open={open} onOpenChange={(e) => setOpen(e.open)}>
+        <Dialog.Backdrop />
+        <Dialog.Positioner>
+          <Dialog.Content bg="greyBackground" color="white">
+            <Dialog.Header>Change Password</Dialog.Header>
+            <Dialog.CloseTrigger />
+            <Dialog.Body>
+              <VStack gap={4}>
+                <Field.Root
+                  id="new-password"
+                  invalid={!passwordLengthSatisfied}
+                >
+                  <Field.Label>New Password</Field.Label>
+                  <Input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                  <Field.ErrorText>
+                    Password must be at least 12 characters
+                  </Field.ErrorText>
+                </Field.Root>
+                <Field.Root id="confirm-password" invalid={!passwordMatch}>
+                  <Field.Label>Confirm Password</Field.Label>
+                  <Input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                  />
+                  <Field.ErrorText>Passwords do not match</Field.ErrorText>
+                </Field.Root>
+              </VStack>
+            </Dialog.Body>
+            <Dialog.Footer>
+              <Button
+                variant={"solid"}
+                colorPalette={"brandTeal"}
+                size={"md"}
+                onClick={() => handleChangePassword(password, setIsSubmitting, setOpen, setSubmitStatus)}
+                loading={isSubmitting}
+                disabled={!passwordMatch || !passwordLengthSatisfied}
               >
-                <FormLabel>New Password</FormLabel>
-                <Input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-                <FormErrorMessage>
-                  Password must be at least 6 characters
-                </FormErrorMessage>
-              </FormControl>
-              <FormControl id="confirm-password" isInvalid={!passwordMatch}>
-                <FormLabel>Confirm Password</FormLabel>
-                <Input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                />
-                <FormErrorMessage>Passwords do not match</FormErrorMessage>
-              </FormControl>
-            </VStack>
-          </ModalBody>
-          <ModalFooter>
-            <Button
-              variant={"solid"}
-              colorScheme={"brandTeal"}
-              size={"md"}
-              mr={4}
-              onClick={() => handleChangePassword(password, setIsSubmitting)}
-              isLoading={isSubmitting}
-              isDisabled={!passwordMatch || !passwordLengthSatisfied}
-            >
-              Change Password
-            </Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
+                Change Password
+              </Button>
+            </Dialog.Footer>
+          </Dialog.Content>
+        </Dialog.Positioner>
+      </Dialog.Root>
     </HStack>
   );
 }
 
-async function handleChangePassword(newPassword, setIsSubmitting) {
+async function handleChangePassword(newPassword, setIsSubmitting, setOpen, setSubmitStatus) {
   setIsSubmitting(true);
   const user = auth.currentUser;
 
   try {
     await updatePassword(user, newPassword);
     setIsSubmitting(false);
+    setOpen(false);
+    setSubmitStatus("success");
   } catch (error) {
-    console.log(error);
+    setIsSubmitting(false);
+    setOpen(false);
+    setSubmitStatus("failure");
   }
 }

@@ -2,14 +2,9 @@ import {
   Stack,
   Heading,
   Accordion,
-  AccordionItem,
-  AccordionButton,
-  AccordionPanel,
-  AccordionIcon,
   Text,
-  OrderedList,
-  ListItem,
   Link,
+  Box,
 } from "@chakra-ui/react";
 import NextLink from "next/link";
 
@@ -19,219 +14,224 @@ export default function FAQ() {
       <Heading as="h1" my={4}>
         FAQ
       </Heading>
-      <Accordion defaultIndex={[0]} allowMultiple>
-        <FAQItem question="How do I use DataPipe?">
+      <Accordion.Root defaultValue={["item-0"]} multiple collapsible>
+        <FAQItem value="item-0" question="How do I use DataPipe?">
           <Text>
-            DataPipe serves as a connection between an experiment and the Open
-            Science Framework. To use DataPipe, you will need to use a webhost
-            to get your experiment online (e.g., GitHub Pages) and then add some
-            code to your experiment to send data to DataPipe. You will also need
-            to have an OSF account to store the data and create an authorization
-            token on the OSF to allow DataPipe to write data to your OSF
-            account. Our{" "}
-            <Link as={NextLink} href="/getting-started">
-              getting started guide
-            </Link>{" "}
-            has more information about how to use DataPipe.
+            Follow our{" "}
+            <Link asChild>
+              <NextLink href="/getting-started">getting started guide</NextLink>
+            </Link>
+            . In short: create an OSF project, link your OSF account to
+            DataPipe, set up an experiment, and add a few lines of code to
+            your study to send data through DataPipe to the OSF. The easiest
+            way to get started is to sign in to DataPipe with your OSF
+            account, which automatically authorizes DataPipe to write data
+            on your behalf.
           </Text>
         </FAQItem>
-        <FAQItem question="Will DataPipe host my experiment?">
+        <FAQItem value="item-1" question="Will DataPipe host my experiment?">
           <Text mb={2}>
-            No, you will need to use a different service to make the experiment
-            available online. The benefit of using this service is that you do
-            not need to configure any of the backend/server components of an
-            experiment, so you can use a provider like GitHub Pages to host the
-            experiment for free.
+            No. You need a separate service to host your experiment online
+            (e.g., GitHub Pages, Netlify, or university hosting). DataPipe
+            only handles sending data to the OSF, so you do not need to
+            configure any backend or server components yourself.
           </Text>
           <Text>
-            <Link isExternal href="https://pages.github.com/">
-              This guide on GitHub Pages
+            <Link href="https://pages.github.com/" target="_blank" rel="noopener noreferrer">
+              GitHub Pages
             </Link>{" "}
-            describes how to set up a free website using their service. In the
-            guide, select &quot;project site&quot; and &quot;start from
-            scratch&quot; and follow the guide to get an experiment hosted
-            quickly.
+            is a free option. Select &quot;project site&quot; and &quot;start
+            from scratch&quot; in their guide.
           </Text>
         </FAQItem>
-        <FAQItem question="Will DataPipe store my data?">
+        <FAQItem value="item-2" question="Will DataPipe store my data?">
           <Text>
-            Not directly. DataPipe helps you store your data on the Open Science
-            Framework. When you use DataPipe, the data is routed through our
-            service to (optionally) perform validation and then we send it to
-            the OSF. DataPipe does not store a copy of the data.
+            No. DataPipe routes your data to the Open Science Framework but
+            does not keep a copy. Data passes through DataPipe for optional
+            validation and is then sent directly to your OSF project.
           </Text>
         </FAQItem>
-        <FAQItem question="How much does it cost?">
+        <FAQItem value="item-3" question="How much does it cost?">
           <Text>DataPipe is free to use.</Text>
         </FAQItem>
-        <FAQItem question="Why is DataPipe free?">
+        <FAQItem value="item-4" question="Why is DataPipe free?">
           <Text>
-            The expensive parts of hosting an experiment are providing storage
-            and bandwidth for the experiment files and data. Fortunately there
-            are providers who are willing to do both of these things for free.
-            GitHub (and others) will host a website for free and the Open
-            Science Framework will store data for free. Unfortunately these
-            providers are not directly connected to each other, so that is what
-            we are trying to solve. DataPipe is a very lightweight (i.e., cheap)
-            service that makes it easy to link a hosting provider with a data
-            storage provider.
+            The expensive parts of running an online experiment — hosting files
+            and storing data — are handled by free services like GitHub Pages
+            and the OSF. DataPipe is a lightweight bridge between them, which
+            makes it inexpensive to operate.
           </Text>
         </FAQItem>
-        <FAQItem question="How expensive is it to run DataPipe?">
+        <FAQItem value="item-5" question="How expensive is it to run DataPipe?">
           <Text>
-            We host DataPipe using Google Firebase, so the cost of DataPipe
-            depends on how much usage it gets. Currently our resource
-            consumption is less than $1 per month. Once we have been up and
-            running for a while we will post more information about how much it
-            costs to run the service. We have funding reserves in the{" "}
+            DataPipe is hosted on Google Firebase. Current resource consumption
+            is less than $1 per month. The{" "}
             <Link
-              isExternal
               href="https://opencollective.com/jspsych#category-BUDGET"
+              target="_blank"
+              rel="noopener noreferrer"
             >
-              Open Collective account for jsPsych development
+              jsPsych Open Collective account
             </Link>{" "}
-            to sustain this serivce. Our goal is to provide transparent
-            information about our costs and our available funds to run the
-            service so you can determine whether we are likely to be able to
-            keep the service running. We are grateful for donations to help keep
-            the service running. If you{" "}
+            has funding reserves to sustain the service, and we aim to keep
+            costs and available funds transparent so you can judge the
+            service&apos;s long-term viability. If you{" "}
             <Link
-              isExternal
               href="https://opencollective.com/jspsych#category-CONTRIBUTE"
+              target="_blank"
+              rel="noopener noreferrer"
             >
-              donate a few dollars to our account
-            </Link>{" "}
-            you should cover the lifetime cost of providing this service to you.
+              donate a few dollars
+            </Link>
+            , you will likely cover the lifetime cost of providing DataPipe
+            to you.
           </Text>
         </FAQItem>
-        <FAQItem question="Who can see the data that I collect using DataPipe?">
+        <FAQItem value="item-6" question="Who can see the data I collect?">
           <Text>
-            The data that you send to DataPipe are not stored anywhere on our
-            servers and we do not log any information about the data when it is
-            sent. If your OSF component that receives the data is private, then
-            you have full control over who can see the data. If your OSF
-            component is public, then anyone can see the data.
+            DataPipe does not store or log your data. Once data reaches your
+            OSF project, visibility depends on your OSF settings. If the
+            receiving component is private, only you and your collaborators
+            can see the data. If it is public, anyone can.
           </Text>
         </FAQItem>
-        <FAQItem question="What are the risks of using DataPipe and how can I mitigate them?">
+        <FAQItem value="item-7" question="What are the risks of using DataPipe?">
           <Text mb={2}>
-            There are a few risks that you should be aware of before using
-            DataPipe.
+            There are a few risks to be aware of:
           </Text>
-          <OrderedList>
-            <ListItem>
-              In order to use this service you must provide us with an OSF
-              authorization token so that we can write data to your OSF account
-              on your behalf. This key enables full write access, so if we
-              suffer a data breach it would be possible for someone who got
-              access to the token to make malicious changes to your OSF account.
-              To mitigate this risk, you should create an OSF token that is just
-              for this service so that you can revoke authorization when you are
-              done using the service. The strongest security would be to use an
-              active token only when you need to collect data through this
-              service.
-            </ListItem>
-            <ListItem>
-              This service does allow a technically savvy user to potentially
-              write fake data to your OSF project. This is almost always a risk
-              with online experiments because the data are usually recorded on
-              the participant&apos;s computer before being sent to the server.
-              It is possible for a malicious user to change or create the data
-              before sending it to the service. It is also possible that a user
-              could spam data to your OSF account or could send files that are
-              not actually experiment data. We provide tools to mitigate these
-              risks by allowing you to specify validation rules for the data
-              that is sent and to rate limit the amount of data you are
-              receiving.
-            </ListItem>
-            <ListItem>
-              This service is not a commercial venture with a dedicated user
-              support team. If something goes wrong, we may not be able to
-              respond quickly. However, the{" "}
-              <Link isExternal href="https://github.com/jspsych/datapipe">
-                code that runs this service is open source
+          <ol style={{ paddingLeft: "1.5em" }}>
+            <li style={{ marginBottom: "0.5em" }}>
+              <strong>Authorization tokens.</strong> DataPipe needs permission
+              to write to your OSF account. All tokens are stored encrypted.
+              If you sign in with your OSF account, tokens are managed and
+              refreshed automatically. If you use a personal access token
+              instead, create one specifically for DataPipe and revoke it when
+              you are done collecting data.
+            </li>
+            <li style={{ marginBottom: "0.5em" }}>
+              <strong>Fake or spam data.</strong> As with any online experiment,
+              a technically savvy user could submit fabricated data or spam
+              files to your OSF project. DataPipe provides validation rules
+              and session limits to reduce this risk.
+            </li>
+            <li>
+              <strong>Support availability.</strong> DataPipe is not a
+              commercial product with a dedicated support team. However,
+              the{" "}
+              <Link href="https://github.com/jspsych/datapipe" target="_blank" rel="noopener noreferrer">
+                source code is open
               </Link>{" "}
-              and thoroughly tested. The service is hosted using the Google
-              Cloud, so we get the benefit of Google&apos;s infrastructure to
-              make sure the service is secure and keeps running.
-            </ListItem>
-          </OrderedList>
+              and thoroughly tested, and the service runs on Google Cloud
+              infrastructure.
+            </li>
+          </ol>
         </FAQItem>
-        <FAQItem question="How does data validation work?">
+        <FAQItem value="item-8" question="How does data validation work?">
           <Text mb={2}>
-            DataPipe has an optional feature that will validate any incoming
-            data before sending it to the OSF. Currently, this feature supports
-            checking whether an incoming file is valid JSON or CSV data (meaning
-            that it has the correct format) and it allows you to specify a set
-            of columns/fields that the data must contain. For CSV data, the
-            validation simply checks if all of the required columns are in the
-            header row. For JSON data, the validation checks if all of the
-            required fields are present in at least one object in the data. For
-            example, if the data are an array of trials (as jsPsych generates),
-            then this validation will generate a list of all of the unique
-            fields that are present in any of the trials and then check if all
-            of the required fields are present. This is equivalent to converting
-            the data to CSV format and then checking if all of the required
-            columns are present.
+            When enabled, DataPipe checks incoming data before sending it to
+            the OSF. You can validate that files are well-formed JSON or CSV,
+            and you can specify a list of required columns or fields that must
+            be present. For JSON arrays (like jsPsych output), DataPipe checks
+            whether the required fields appear in at least one object across
+            the array.
           </Text>
           <Text>
-            If an invalid data file is sent, it will be rejected and not sent to
-            the OSF. There is no way to recover this data. This feature is not
-            designed to catch errors in legitimate data files. It is designed to
-            prevent malicious users from sending non-data files to your OSF
-            project.
+            Invalid files are rejected and not sent to the OSF. Rejected data
+            cannot be recovered. This feature is designed to block malicious
+            submissions, not to catch errors in legitimate data.
           </Text>
         </FAQItem>
-        <FAQItem question="How does base 64 data collection work?">
+        <FAQItem value="item-9" question="How does base64 data collection work?">
           <Text mb={2}>
-            DataPipe has an optional feature that will collect data as base 64
-            encoded strings. This is useful if you want to collect data that is
-            not text-based, like JSON or CSV. This feature is designed to
-            collect a single file of data at a time. For example, if you are
-            running an experiment where the participant will record several
-            audio files, you could use this feature to send each file to the OSF
-            as it is recorded. When DataPipe gets a base 64 encoded file, it
-            will decode it and then send it to the OSF as a file.
+            Base64 data collection lets you send binary files — like audio
+            recordings, video, or images — encoded as base64 strings. DataPipe
+            decodes the string and stores the resulting file in your OSF
+            project. Each request sends one file at a time.
           </Text>
           <Text>
-            Note that validating base 64 encoded data is not currently
-            supported, so enabling this feature does create additional risk. We
-            recommend minimizing this risk by enabling the feature only when you
-            are actively collecting data and disabling it when you are not.
+            Validation is not currently supported for base64 data, so enabling
+            this feature carries additional risk. We recommend keeping it
+            active only while you are collecting data.
           </Text>
         </FAQItem>
-        <FAQItem question="How does condition assignment work?">
+        <FAQItem value="item-10" question="How does condition assignment work?">
           <Text>
-            When you enable condition assignment, you can call an API endpoint
-            to get the next condition for a participant. DataPipe will send you
-            a number between 0 and n-1, where n is the number of conditions you
-            set in your experiment. If you have an experimental design with
-            multiple factors, set the number of conditions to the number of
-            unique cells in your design, and then use the condition number to
-            determine the appropriate level of each factor. DataPipe generates
-            condition numbers sequentially, so if you have 3 conditions, the
-            first participant will get condition 0, the second participant will
-            get condition 1, the third participant will get condition 2, and
-            then the cycle will repeat.
+            When enabled, DataPipe assigns condition numbers sequentially.
+            It returns a number from 0 to n−1, where n is the number of
+            conditions you configure. For example, with 3 conditions the
+            sequence is 0, 1, 2, 0, 1, 2, and so on. If your design has
+            multiple factors, set n to the total number of unique cells and
+            map each number to the appropriate factor levels in your
+            experiment code.
           </Text>
         </FAQItem>
-      </Accordion>
+        <FAQItem value="item-11" question="How does metadata production work?">
+          <Text>
+            When enabled, DataPipe generates a metadata file describing your
+            data and its variables, following the{" "}
+            <Link href="https://github.com/psych-ds/psych-DS" target="_blank" rel="noopener noreferrer">
+              Psych-DS
+            </Link>{" "}
+            specification. The file is stored in your OSF project as
+            dataset_description.json and is updated automatically after
+            each session.
+          </Text>
+        </FAQItem>
+        <FAQItem value="item-12" question="What is one-click authentication?">
+          <Text mb={2}>
+            One-click authentication lets you sign in to DataPipe with your
+            OSF account. DataPipe then manages your authorization tokens
+            automatically, including refreshing them when they expire. This
+            is the recommended approach for most users.
+          </Text>
+          <Text>
+            The alternative is a personal access token, which you create on
+            the OSF and paste into DataPipe. This gives you direct control
+            but requires you to manage the token yourself. Both methods store
+            tokens encrypted.
+          </Text>
+        </FAQItem>
+        <FAQItem value="item-13" question="How should I cite DataPipe?">
+          <Text mb={2}>
+            If you use DataPipe to collect data, please cite the following paper:
+          </Text>
+          <Text
+            bg="gray.800"
+            p={4}
+            borderRadius="md"
+            fontSize="sm"
+          >
+            de Leeuw, J. R. (2024). DataPipe: Born-open data collection for
+            online experiments. <em>Behavior Research Methods</em>, 56(3),
+            2499–2506.{" "}
+            <Link
+              href="https://doi.org/10.3758/s13428-023-02161-x"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              https://doi.org/10.3758/s13428-023-02161-x
+            </Link>
+          </Text>
+        </FAQItem>
+      </Accordion.Root>
     </Stack>
   );
 }
 
-function FAQItem({ question, children }) {
+function FAQItem({ question, children, value }) {
   return (
-    <AccordionItem>
-      <AccordionButton>
+    <Accordion.Item value={value}>
+      <Accordion.ItemTrigger>
         <Heading as="h2" size="md" my={2} flex="1" textAlign="left">
           {question}
         </Heading>
-        <AccordionIcon />
-      </AccordionButton>
-      <AccordionPanel pb={4} style={{ whiteSpace: "pre-line" }}>
-        {children}
-      </AccordionPanel>
-    </AccordionItem>
+        <Accordion.ItemIndicator />
+      </Accordion.ItemTrigger>
+      <Accordion.ItemContent>
+        <Box pb={4} style={{ whiteSpace: "pre-line" }}>
+          {children}
+        </Box>
+      </Accordion.ItemContent>
+    </Accordion.Item>
   );
 }

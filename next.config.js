@@ -1,7 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
+  bundlePagesRouterDependencies: true,
+  turbopack: {
+    root: __dirname,
+  },
 }
 
 module.exports = nextConfig

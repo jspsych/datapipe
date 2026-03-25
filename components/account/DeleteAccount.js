@@ -1,32 +1,24 @@
-import { useState, useContext, useEffect } from "react";
+import { useState, useContext } from "react";
 import { UserContext } from "../../lib/context";
 
-import { useDisclosure } from "@chakra-ui/react";
 import {
   HStack,
-  VStack,
   Button,
   Text,
-  AlertDialog,
-  AlertDialogBody,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogContent,
-  AlertDialogOverlay,
+  Dialog,
+  Tooltip,
 } from "@chakra-ui/react";
 
 import { auth } from "../../lib/firebase";
 import { deleteUser } from "firebase/auth";
-
-import { useRef } from "react";
 
 import { useRouter } from "next/router";
 
 export default function DeleteAccount({ setDeleting }) {
   const { user } = useContext(UserContext);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { isOpen, onOpen, onClose } = useDisclosure();
-  const cancelRef = useRef();
+  const [open, setOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
   const router = useRouter();
 
   const deleteAccount = async function () {
@@ -35,28 +27,38 @@ export default function DeleteAccount({ setDeleting }) {
       router.push("/admin/deleted-account");
     } catch (error) {
       setDeleting(false);
-      console.log(error);
+      setIsSubmitting(false);
+      setDeleteError(error.message);
     }
   };
 
   return (
-    <HStack justifyContent="space-between" w="100%">
-      <Text fontSize={"lg"}>Delete Account</Text>
-      <Button isLoading={isSubmitting} onClick={onOpen} colorScheme="red">
-        Delete Account
-      </Button>
-      <AlertDialog
-        isOpen={isOpen}
-        leastDestructiveRef={cancelRef}
-        onClose={onClose}
-      >
-        <AlertDialogOverlay>
-          <AlertDialogContent bg="greyBackground">
-            <AlertDialogHeader fontSize="lg" fontWeight="bold">
+    <HStack justifyContent="space-between" w="100%" flexWrap="wrap" gap={3}>
+      <Text fontSize={"lg"}>Delete DataPipe Account</Text>
+      <HStack>
+        {deleteError && (
+          <Tooltip.Root>
+            <Tooltip.Trigger asChild>
+              <Text fontSize="sm" color="red.400" cursor="default">Failed</Text>
+            </Tooltip.Trigger>
+            <Tooltip.Positioner>
+              <Tooltip.Content>{deleteError}</Tooltip.Content>
+            </Tooltip.Positioner>
+          </Tooltip.Root>
+        )}
+        <Button loading={isSubmitting} onClick={() => setOpen(true)} colorPalette="red">
+          Delete Account
+        </Button>
+      </HStack>
+      <Dialog.Root open={open} onOpenChange={(e) => setOpen(e.open)}>
+        <Dialog.Backdrop />
+        <Dialog.Positioner>
+          <Dialog.Content bg="greyBackground" color="white">
+            <Dialog.Header fontSize="lg" fontWeight="bold">
               Delete Account
-            </AlertDialogHeader>
+            </Dialog.Header>
 
-            <AlertDialogBody>
+            <Dialog.Body>
               <Text mb={4}>
                 Are you sure? This action is final. We cannot recover any
                 experiments that are associated with this account after
@@ -66,27 +68,27 @@ export default function DeleteAccount({ setDeleting }) {
                 Deleting your DataPipe account will not affect any data on the
                 OSF.
               </Text>
-            </AlertDialogBody>
+            </Dialog.Body>
 
-            <AlertDialogFooter>
-              <Button ref={cancelRef} onClick={onClose} colorScheme="brandTeal">
+            <Dialog.Footer>
+              <Button onClick={() => setOpen(false)} colorPalette="brandTeal">
                 Cancel
               </Button>
               <Button
-                colorScheme="red"
+                colorPalette="red"
                 onClick={() => {
                   setDeleting(true);
-                  onClose();
+                  setOpen(false);
                   deleteAccount();
                 }}
                 ml={3}
               >
                 Delete
               </Button>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialogOverlay>
-      </AlertDialog>
+            </Dialog.Footer>
+          </Dialog.Content>
+        </Dialog.Positioner>
+      </Dialog.Root>
     </HStack>
   );
 }

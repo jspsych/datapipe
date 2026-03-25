@@ -1,16 +1,12 @@
 import {
-  FormControl,
-  FormLabel,
+  Field,
   HStack,
   Switch,
   Stack,
-  Heading,
   Textarea,
-  FormHelperText,
   Checkbox,
   CheckboxGroup,
   Button,
-  requiredChakraThemeKeys,
 } from "@chakra-ui/react";
 
 import { useEffect, useState } from "react";
@@ -37,8 +33,6 @@ export default function ExperimentValidation({ data }) {
 
   useEffect(() => {
     async function handleSave() {
-      // split array and remove all whitespace
-
       const settings = {
         useValidation: validationEnabled,
         allowJSON: validationSettings.includes("json"),
@@ -51,55 +45,58 @@ export default function ExperimentValidation({ data }) {
           merge: true,
         });
       } catch (error) {
-        console.error(error);
       }
     }
     handleSave();
   }, [validationEnabled, validationSettings, fieldsArray, data]);
 
   return (
-    <Stack
-      w="100%"
-      pr={8}
-      spacing={3}
-      bgColor={"black"}
-      borderRadius={16}
-      p={6}
-    >
-      <Heading fontSize="2xl">Data Validation</Heading>
-      <FormControl
-        as={HStack}
-        id="enable-validation"
-        justify="space-between"
-        alignItems="center"
-      >
-        <FormLabel fontWeight="normal">Enable data validation?</FormLabel>
-        <Switch
-          colorScheme="green"
-          size="md"
-          isChecked={validationEnabled}
-          onChange={(e) => {
-            setValidationEnabled(e.target.checked);
-          }}
-        />
-      </FormControl>
+    <Stack w="100%" gap={3}>
+      <Field.Root id="enable-validation">
+        <HStack justify="space-between" alignItems="center" w="100%">
+          <Field.Label fontWeight="normal" mb={0}>Enable data validation?</Field.Label>
+          <Switch.Root
+            colorPalette="green"
+            size="md"
+            checked={validationEnabled}
+            onCheckedChange={(e) => {
+              setValidationEnabled(e.checked);
+            }}
+          >
+            <Switch.HiddenInput />
+            <Switch.Control>
+              <Switch.Thumb />
+            </Switch.Control>
+          </Switch.Root>
+        </HStack>
+      </Field.Root>
       {validationEnabled && (
         <>
           <CheckboxGroup
-            id="validation-settings"
             defaultValue={validationSettings}
-            onChange={(e) => {
-              setValidationSettings(e);
+            onValueChange={(values) => {
+              setValidationSettings(values);
             }}
-            colorScheme="brandTeal"
           >
-            <Stack spacing={5} direction="row">
-              <Checkbox value="json">Allow JSON</Checkbox>
-              <Checkbox value="csv">Allow CSV</Checkbox>
+            <Stack gap={5} direction="row">
+              <Checkbox.Root value="json" colorPalette="brandTeal">
+                <Checkbox.HiddenInput />
+                <Checkbox.Control>
+                  <Checkbox.Indicator />
+                </Checkbox.Control>
+                <Checkbox.Label>Allow JSON</Checkbox.Label>
+              </Checkbox.Root>
+              <Checkbox.Root value="csv" colorPalette="brandTeal">
+                <Checkbox.HiddenInput />
+                <Checkbox.Control>
+                  <Checkbox.Indicator />
+                </Checkbox.Control>
+                <Checkbox.Label>Allow CSV</Checkbox.Label>
+              </Checkbox.Root>
             </Stack>
           </CheckboxGroup>
-          <FormControl>
-            <FormLabel>Required Fields</FormLabel>
+          <Field.Root>
+            <Field.Label>Required Fields</Field.Label>
             <Textarea
               value={requiredFields}
               onChange={(e) => {
@@ -111,10 +108,10 @@ export default function ExperimentValidation({ data }) {
                 );
               }}
             />
-            <FormHelperText color="gray">
+            <Field.HelperText color="gray">
               Enter a comma-separated list of required fields
-            </FormHelperText>
-          </FormControl>
+            </Field.HelperText>
+          </Field.Root>
         </>
       )}
     </Stack>

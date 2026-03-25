@@ -15,36 +15,77 @@ on:
         description: 'Migration file name'
         required: true
         default: '2025-09-29-osf-integration.cjs'
+        type: choice
+        options:
+        - 2025-09-29-osf-integration.cjs
+        - encrypt-tokens.cjs
+      dry_run:
+        description: 'Dry run (no changes applied)'
+        required: true
+        default: true
+        type: boolean
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   migrate:
     runs-on: ubuntu-latest
-    
+
     steps:
-      - uses: actions/checkout@v3
-      
-      - name: Use Node.js 20.x
-        uses: actions/setup-node@v3
+      - uses: actions/checkout@v6
+
+      - name: Validate migration name
+        run: |
+          MIGRATION_NAME="${{ github.event.inputs.migration_name }}"
+          if [[ ! "$MIGRATION_NAME" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+            echo "::error::Invalid migration name. Only alphanumeric characters, dots, dashes, and underscores are allowed."
+            exit 1
+          fi
+          if [ ! -f "migrations/$MIGRATION_NAME" ]; then
+            echo "::error::Migration file 'migrations/$MIGRATION_NAME' does not exist."
+            exit 1
+          fi
+
+      - name: Use Node.js 22.x
+        uses: actions/setup-node@v6
         with:
-          node-version: 20.x
+          node-version: 22.x
           cache: "npm"
-          
+
       - name: Set credentials based on environment
-        uses: 'google-github-actions/auth@v2'
+        uses: 'google-github-actions/auth@v3'
         with:
           credentials_json: ${{ github.event.inputs.environment == 'prod' && secrets.GOOGLE_PRODUCTION_CREDENTIALS || secrets.GOOGLE_TEST_CREDENTIALS }}
-          
+
       - name: Set environment variables
         run: |
           if [ "${{ github.event.inputs.environment }}" == "prod" ]; then
-            echo "FIREBASE_PROJECT_ID=datapipe-prod" >> $GITHUB_ENV
+            echo "FIREBASE_PROJECT_ID=osf-relay" >> $GITHUB_ENV
           else
             echo "FIREBASE_PROJECT_ID=datapipe-test" >> $GITHUB_ENV
           fi
           echo "NODE_ENV=production" >> $GITHUB_ENV
-          
+          echo "DRY_RUN=${{ github.event.inputs.dry_run }}" >> $GITHUB_ENV
+          if [ "${{ github.event.inputs.environment }}" == "prod" ]; then
+            echo "TOKEN_ENCRYPTION_KEY=${{ secrets.FIRESTORE_KEY_PRODUCTION }}" >> $GITHUB_ENV
+          else
+            echo "TOKEN_ENCRYPTION_KEY=${{ secrets.FIRESTORE_KEY_TEST }}" >> $GITHUB_ENV
+          fi
+
       - name: Install dependencies
-        run: npm ci
-        
+        run: |
+          npm ci
+          cd functions && npm ci
+
+      - name: Show migration plan
+        run: |
+          echo "=== Migration Plan ==="
+          echo "Environment: ${{ github.event.inputs.environment }}"
+          echo "Project:     $FIREBASE_PROJECT_ID"
+          echo "Migration:   ${{ github.event.inputs.migration_name }}"
+          echo "Dry run:     ${{ github.event.inputs.dry_run }}"
+          echo "======================"
+
       - name: Run migration
-        run: node migrations/${{ github.event.inputs.migration_name }}
+        run: NODE_PATH=$PWD/functions/node_modules node "migrations/${{ github.event.inputs.migration_name }}"

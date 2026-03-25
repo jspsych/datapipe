@@ -6,10 +6,20 @@ name: Deploy to Test
 on:
   push:
     branches: ["test"]
+  workflow_dispatch:
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   #FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
   NEXT_PUBLIC_FIREBASE_CONFIG: ${{ secrets.FIREBASE_TEST_CONFIG }}
+  NEXT_PUBLIC_CLIENT_ID: ${{ secrets.TEST_CLIENT_ID }}
+  NEXT_PUBLIC_REDIRECT_URI: "https://datapipe-test.web.app/oauth2/callback"
+  NEXT_PUBLIC_OAUTH_CALLBACK: "https://datapipe-test.web.app/api/oauth2callback"
+  NEXT_PUBLIC_OAUTH_FINAL: "/admin"
+  NEXT_PUBLIC_OAUTH_REGENERATE: "https://datapipe-test.web.app/api/oauth2regenerate"
+  NEXT_PUBLIC_GENERATE_STATE: "https://datapipe-test.web.app/api/generateoauthstate"
+  NEXT_PUBLIC_BASE_URL: "https://datapipe-test.web.app"
+  NEXT_PUBLIC_OSF_ENV: ""
 
 jobs:
   deploy:
@@ -17,28 +27,44 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [20.x]
+        node-version: [22.x]
         # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
       - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node-version }}
           cache: "npm"
-      - uses: 'google-github-actions/auth@v2'
+      - uses: 'google-github-actions/auth@v3'
         with:
           credentials_json: '${{ secrets.GOOGLE_TEST_CREDENTIALS }}' # Replace with the name of your GitHub Actions secret
       - name: Install firebase tools
-        run: npm install -g firebase-tools@12.1.0
+        run: npm install -g firebase-tools@15.8.0
       - name: Enable firebase webframeworks
         run: firebase experiments:enable webframeworks
-      - run: npm ci
-      - name: Run npm ci in /functions
-        working-directory: functions
+      - name: Install dependencies 
         run: npm ci
+      - name: Install dependencies and build metadata
+        working-directory: functions/metadata
+        run: |
+          npm ci
+          npm run build
+      - name: Create functions environment file
+        working-directory: functions
+        run: |
+          echo "CLIENT_SECRET=${{ secrets.TEST_CLIENT_SECRET }}" > .env
+          echo "CLIENT_ID=${{ secrets.TEST_CLIENT_ID }}" >> .env
+          echo "REDIRECT_URI=https://datapipe-test.web.app/oauth2/callback" >> .env
+          echo "TOKEN_ENCRYPTION_KEY=${{ secrets.FIRESTORE_KEY_TEST }}" >> .env
+          echo "NEXT_PUBLIC_OSF_ENV=" >> .env
+      - name: Install dependencies and build functions
+        working-directory: functions
+        run: |
+          npm ci
+          npm run build
       - name: Use test firebase project
         run: firebase use test
       - name: Deploy firebase project
-        run: firebase deploy
+        run: firebase deploy --only firestore,functions,hosting --force

@@ -1,7 +1,6 @@
 import {
   Box,
   Container,
-  SimpleGrid,
   HStack,
   VStack,
   Link,
@@ -21,20 +20,21 @@ export default function Footer() {
           direction={["column", "row"]}
           justifyContent={["flex-start", "space-between"]}
           alignItems={["flex-end", "center"]}
-          spacing={[4, 1]}
+          gap={[4, 1]}
           borderTopWidth={1}
           borderColor="gray.700"
           pt={3}
           fontSize={"sm"}
         >
           <Text>
-            Created by the developers of jsPsych <JsPsychIcon boxSize={10} />
+            Created by the developers of jsPsych <JsPsychIcon width="2em" height="2em" style={{ display: "inline" }} />
           </Text>
           <Text>
             <Link
               color="gray.300"
               href={"https://github.com/jspsych/datapipe/issues/new"}
-              isExternal
+              target="_blank"
+              rel="noopener noreferrer"
             >
               Report an Issue
             </Link>
@@ -43,29 +43,34 @@ export default function Footer() {
             <Link
               color="gray.300"
               href={"https://github.com/jspsych/datapipe"}
-              isExternal
+              target="_blank"
+              rel="noopener noreferrer"
             >
               GitHub
             </Link>
           </Text>
           <Text>
-            <Link color="gray.300" as={NextLink} href="/contact">
-              Contact Us
+            <Link color="gray.300" asChild>
+              <NextLink href="/contact">Contact Us</NextLink>
             </Link>
           </Text>
           <Stack align={"flex-start"}>
-            <Button
-              rightIcon={<OpenCollectiveIcon boxSize={8} />}
-              variant="outline"
-              color="white"
-              colorScheme="white"
-              size="sm"
-              onClick={() => {
-                window.open("https://opencollective.com/jspsych");
-              }}
+            <Link
+              href="https://opencollective.com/jspsych"
+              target="_blank"
+              rel="noopener noreferrer"
+              _hover={{ textDecoration: "none" }}
             >
-              Donate on Open Collective
-            </Button>
+              <Button
+                variant="outline"
+                color="white"
+                borderColor="white"
+                size="sm"
+                _hover={{ bg: "whiteAlpha.300" }}
+              >
+                Donate on Open Collective <OpenCollectiveIcon width="1.5em" height="1.5em" />
+              </Button>
+            </Link>
           </Stack>
         </Stack>
       </Container>

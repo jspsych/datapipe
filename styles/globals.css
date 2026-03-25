@@ -6,6 +6,8 @@ body {
     Ubuntu, Cantarell, Fira Sans, Droid Sans, Helvetica Neue, sans-serif;
   display: grid;
   height: 100%;
+  background-color: #1C1F22;
+  color: white;
 }
 
 #__next {
@@ -37,4 +39,52 @@ a {
   100% {
     transform: rotate(360deg);
   }
+}
+
+/* hide Firebase Emulator warning banner, we are using custom one */
+.firebase-emulator-warning {
+  display: none;
+}
+
+.sticky-alert {
+  position: fixed; 
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  display: flex;
+  justify-content: center; 
+  pointer-events: none; 
+}
+
+pre {
+  scrollbar-width: thin;
+  scrollbar-color: #4A5568 transparent;
+}
+
+pre::-webkit-scrollbar {
+  height: 6px;
+}
+
+pre::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+pre::-webkit-scrollbar-thumb {
+  background: #4A5568;
+  border-radius: 3px;
+}
+
+pre::-webkit-scrollbar-thumb:hover {
+  background: #718096;
+}
+
+.sticky-alert__content {
+  pointer-events: auto; 
+  width: 100%;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.9); 
+  color: #800000;
+  text-align: center;
+  font-size: 1rem;
 }

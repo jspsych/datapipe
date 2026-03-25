@@ -2,231 +2,308 @@ import {
   Stack,
   Heading,
   Text,
-  Button,
   Link,
-  OrderedList,
-  ListItem,
+  Box,
+  HStack,
+  VStack,
+  Collapsible,
+  Button,
 } from "@chakra-ui/react";
+import { ChevronDown, ChevronRight, Shield } from "lucide-react";
+import { useState } from "react";
+
+function StepNumber({ number }) {
+  return (
+    <Box
+      flexShrink={0}
+      w="36px"
+      h="36px"
+      borderRadius="full"
+      bg="brandTeal.600"
+      color="white"
+      display="flex"
+      alignItems="center"
+      justifyContent="center"
+      fontWeight="bold"
+      fontSize="lg"
+    >
+      {number}
+    </Box>
+  );
+}
+
+function StepCard({ number, title, children }) {
+  return (
+    <Box
+      bg="black"
+      borderRadius={12}
+      p={[4, 6]}
+      w="100%"
+    >
+      <HStack gap={3} mb={4} alignItems="center">
+        <StepNumber number={number} />
+        <Heading as="h2" fontSize="xl">
+          {title}
+        </Heading>
+      </HStack>
+      <Stack gap={4} pl={[0, "48px"]}>
+        {children}
+      </Stack>
+    </Box>
+  );
+}
+
+function Callout({ children }) {
+  return (
+    <Box
+      bg="brandTeal.900"
+      border="1px solid"
+      borderColor="brandTeal.700"
+      borderRadius={8}
+      px={4}
+      py={3}
+    >
+      <HStack gap={2} alignItems="flex-start">
+        <Shield size={18} style={{ flexShrink: 0, marginTop: "3px" }} />
+        <Text fontSize="sm">{children}</Text>
+      </HStack>
+    </Box>
+  );
+}
+
+function CollapsibleSection({ title, children }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Collapsible.Root open={open} onOpenChange={(e) => setOpen(e.open)}>
+      <Collapsible.Trigger asChild>
+        <Button
+          variant="ghost"
+          color="gray.400"
+          size="sm"
+          px={0}
+          _hover={{ color: "white", bg: "transparent" }}
+        >
+          {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+          {title}
+        </Button>
+      </Collapsible.Trigger>
+      <Collapsible.Content>
+        <Stack gap={3} pt={2} pl={4} borderLeft="1px solid" borderColor="gray.700">
+          {children}
+        </Stack>
+      </Collapsible.Content>
+    </Collapsible.Root>
+  );
+}
+
+function FeatureItem({ name, children }) {
+  return (
+    <Box>
+      <Text>
+        <Text as="span" fontWeight="semibold" color="brandOrange.300">{name}</Text>
+        {" "}{children}
+      </Text>
+    </Box>
+  );
+}
 
 export default function GettingStarted() {
   return (
-    <Stack w={["95%", 960]} spacing={6}>
-      <Heading as="h1" size="2xl">
-        Getting Started
-      </Heading>
-      <Text>
-        You can use DataPipe with any online experiment. You can even use it
-        with a laboratory experiment, as long as you have an internet
-        connection. This guide will walk you through the steps for a typical
-        online experiment using tools that are widely available and free.
-      </Text>
-      <Heading as="h2" size="lg">
-        Create an OSF project for your experiment
-      </Heading>
-      <Text>
-        The first step is to create an OSF project for your experiment. You can
-        create an OSF project at{" "}
-        <Link isExternal href="https://osf.io">
-          https://osf.io
-        </Link>
-        . You will need to create an account if you do not already have one.
-        Once you have created an account, click the Create Project button to
-        create a new project. You can name your project whatever you want.
-      </Text>
-      <Heading as="h2" size="lg">
-        Link your OSF account to DataPipe
-      </Heading>
-      <Text>
-        In order for DataPipe to have permission to send files to your OSF
-        account, you need to create an authorization token on the OSF and add
-        the token to your DataPipe account. To create an authorization token, go
-        to your OSF account settings by clicking your name in the top right
-        corner of the screen and selecting Settings. Then click the Personal
-        Access Tokens tab. Click the Create Token button. Give the token a name
-        (we recommend a name that is specific to DataPipe so that you can easily
-        disable the token when you are done using DataPipe) and select
-        &quot;osf.full_write&quot; as the scope. Click the Create Token button
-        to finish creating the token. You will be shown the token value. Copy
-        the token value.
-      </Text>
-      <Text>
-        On DataPipe, click the Account button in the top right corner and select
-        Settings. Click the Set OSF Token button and paste the token value into
-        the box. Click Change Token to finish. You should see the icon become a
-        green checkmark to indicate that you have a valid token.
-      </Text>
-      <Heading as="h2" size="lg">
-        Create a DataPipe experiment
-      </Heading>
-      <Text>
-        The next step is to create an experiment on DataPipe. Click the New
-        Experiment button in the top right corner. Give your experiment a name
-        and enter the OSF project ID. This ID is part of the URL of the OSF
-        project. For example, if the URL of your OSF project is
-        https://osf.io/abcde/, then the project ID is abcde.
-      </Text>
-      <Text>
-        When you create an experiment, DataPipe will automatically create a new
-        Data component on the OSF project. The Data component is where DataPipe
-        will store the data files that it sends to the OSF project. Enter the
-        name you would like to use for the Data component.
-      </Text>
-      <Text>
-        Click the create experiment button to finish. You will be sent to the
-        experiment dashboard where you can edit the experiment settings.
-      </Text>
-      <Heading as="h2" size="lg">
-        Configure the experiment
-      </Heading>
-      <Text>
-        There are three optional features that you can enable for your
-        experiment via the experiment dashboard.
-      </Text>
-      <Text>
-        <span style={{ fontWeight: "bold" }}>Condition assignment</span> will
-        allow you to request the next sequential condition number from DataPipe.
-        For example, if you have 4 conditions in the experiment, DataPipe will
-        respond to the first request with 0, the next request with 1, then 2,
-        then 3, and then cycle back to 0.
-      </Text>
-      <Text>
-        <span style={{ fontWeight: "bold" }}>Data validation</span> will check
-        the data as it is sent to DataPipe. If the data are invalid, then
-        DataPipe will not send the data to the OSF. The basic data validation
-        features are to check if the data file is a valid JSON or CSV file. Once
-        you have created the experiment, you can also specify a list of required
-        fields that the JSON or CSV must have in order to be considered valid.
-        This is a useful feature to enable because it limits the potential for
-        malicious use of DataPipe. One risk of using DataPipe is that it creates
-        an open path to create files in your OSF project. A malicious and
-        technically savvy user could potentially create spam data and send the
-        files to your OSF account. Turning on validation makes it harder to do
-        this.
-      </Text>
-      <Text>
-        <span style={{ fontWeight: "bold" }}>The session limit</span> will cap
-        the number of data files that can be sent to your OSF project. This is
-        another way to limit the potential for malicious use. If you set the
-        session limit to 100, then DataPipe will only send the first 100 data
-        files that it receives. You can adjust the session limit later if you
-        need to increase it.
-      </Text>
-      <Heading as="h2" size="lg">
-        Add code to your experiment to send data to DataPipe
-      </Heading>
-      <Text>
-        In order to send data to DataPipe, you need to add code to your
-        experiment to communicate with DataPipe. If you are using jsPsych,
-        then you can use the <Link isExternal href="https://github.com/jspsych/jspsych-contrib/tree/main/packages/plugin-pipe">jsPsychPipe plugin</Link>. If you are not using jsPsych, then you can use the DataPipe API
-        directly via fetch requests.
-      </Text>
-      <Text>
-        After creating an experiment in the previous step, you will be sent to
-        the experiment page. You can also get to the experiment page by clicking
-        My Experiments in the top menu and selecting the experiment you want to
-        view. On this page, there are code snippets for sending data to
-        DataPipe. Select the code snippet for the language that you are using in
-        your experiment and follow the instructions provided on the dashboard to add the code to your experiment.
-      </Text>
+    <Stack w={["95%", 960]} gap={8} py={4}>
+      <VStack gap={2} align="start">
+        <Heading as="h1" size="2xl">
+          Getting Started
+        </Heading>
+        <Text color="gray.400" fontSize="lg">
+          Set up DataPipe to send experiment data directly to the OSF. This
+          guide covers a typical online experiment using free tools.
+        </Text>
+      </VStack>
 
-      <Heading as="h2" size="lg">
-        Publish your experiment
-      </Heading>
-      <Text>
-        The next step is to publish your experiment online so that participants
-        can view it. You can use any tool that allows you to publish a web page,
-        such as university web hosting, GitHub Pages, or Netlify. We will
-        describe how to use GitHub Pages, since it is free, accessible, and
-        relatively easy to use. This guide will assume no familiarity with
-        GitHub or git version control. We will describe the easiest way to get
-        started for someone with no experience using GitHub, but if you are
-        already familiar with GitHub, the approach we take here is probably not
-        the best way to do things and you should feel free to follow your own
-        preferred workflow.
-      </Text>
-      <Text>
-        First, create a GitHub account at{" "}
-        <Link isExternal href="https://www.github.com">
-          https://github.com
-        </Link>{" "}
-        if you do not already have one. Then go to{" "}
-        <Link isExternal href="https://www.github.com/new">
-          https://github.com/new
-        </Link>{" "}
-        to create a new repository. You can name it whatever you want, but the
-        name that you give it will become part of the URL that you use to access
-        your experiment. Therefore, you may want to avoid names that reveal
-        information that you want to keep hidden from the participants. Check
-        the box to add a README file. The rest of the settings can be left at
-        their default values. Click the &quot;Create repository&quot; button to
-        create the repository.
-      </Text>
-      <Text>
-        Next, configure the repository to share its content as a webpage. Go to
-        the Settings tab of your repository. Select the Pages menu item on the
-        left side. For Source, leave it as deploy from a branch. Under branch
-        select main as the source. Click the save button to finish this step.
-      </Text>
-      <Text>
-        Now add the experiment files to the repository. In your GitHub
-        repository, click the Add Files button near the top of the screen and
-        select Upload Files. Drag and drop your experiment files into the upload
-        box. You can also click the upload box to select the files from your
-        computer. Once you have uploaded all of your experiment files, click the
-        Commit Changes button.
-      </Text>
-      <Text>
-        That&apos;s it! Your experiment is now published on the web. You can
-        view it by going to https://[your username].github.io/[your repository
-        name]. If your HTML file is not named index.html, then you need to add
-        the name of the HTML file to the end of the URL. For example, if your
-        HTML file is called experiment.html, then the URL would be https://[your
-        username].github.io/[your repository name]/experiment.html. It may take
-        a few minutes for the uploaded files to be available as a website.
-      </Text>
-      <Heading as="h2" size="lg">
-        Activate your experiment
-      </Heading>
-      <Text>
-        The final step is to activate your experiment. On the experiment
-        dashboard, you can activate three different features of DataPipe for
-        each experiment.
-      </Text>
+      <StepCard number={1} title="Create an OSF project">
+        <Text>
+          Create a project at{" "}
+          <Link href={`https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io`} target="_blank" rel="noopener noreferrer" color="brandOrange.300">
+            osf.io
+          </Link>
+          {" "}to store your experiment data. You will need an OSF account
+          — create one if you do not have one already.
+        </Text>
+        <Text>
+          Once you have an account, click <strong>Create Project</strong> and
+          give it any name you like. Your OSF account can also be used to
+          sign in to DataPipe directly.
+        </Text>
+      </StepCard>
 
-      <Text>
-        <span style={{ fontWeight: "bold" }}>Enable data collection</span> will
-        activate the standard data collection feature. This enables sending text
-        files (e.g., JSON or CSV) to your OSF project.
-      </Text>
-      <Text>
-        <span style={{ fontWeight: "bold" }}>
-          Enable base64 data collection
-        </span>{" "}
-        activates base64-based data collection. Base 64 is a way to encode files
-        as strings, and can be used for collecting data like audio recordings,
-        video recordings, or images.
-      </Text>
-      <Text>
-        <span style={{ fontWeight: "bold" }}>Enable condition assignment</span>{" "}
-        activates the condition assignment feature. This allow you to request
-        the next condition from DataPipe.
-      </Text>
-      <Text>
-        We strongly recommend that you only activate the minimum features that
-        you need for your experiment and that you only activate features during
-        active data collection. This will reduce the risk of malicious use of
-        DataPipe.
-      </Text>
+      <StepCard number={2} title="Link your OSF account to DataPipe">
+        <Text>
+          DataPipe needs authorization to create files in your OSF projects.
+          If you signed up for DataPipe using your OSF account, this is
+          already done.
+        </Text>
+        <Text>
+          Otherwise, go to your{" "}
+          <Link href="/admin/account" color="brandOrange.300">
+            Account Settings
+          </Link>
+          , switch to one-click authentication if not already enabled, and
+          click <strong>Link OSF Account</strong>. You will be redirected to
+          OSF to authorize DataPipe, then sent back automatically.
+        </Text>
+        <CollapsibleSection title="Using a personal access token instead (legacy)">
+          <Text>
+            Go to your DataPipe Account Settings and switch to &quot;Personal
+            access token&quot; mode. Then on OSF, go to your account settings,
+            click the <strong>Personal Access Tokens</strong> tab, and create
+            a new token with the <strong>osf.full_write</strong> scope.
+          </Text>
+          <Text>
+            Copy the token value and paste it into your DataPipe Account
+            Settings. A green checkmark will confirm the token is valid.
+          </Text>
+        </CollapsibleSection>
+      </StepCard>
 
-      <Heading as="h2" size="lg">
-        Try it out!
-      </Heading>
-      <Text>
-        At this point you should be ready to collect data. We recommend testing
-        data collection carefully at this point to ensure everything is properly
-        configured. You should see data files created on your OSF data component
-        immediately after you finish the experiment.
-      </Text>
+      <StepCard number={3} title="Create a DataPipe experiment">
+        <Text>
+          Click <strong>New Experiment</strong> in the navigation bar. You will
+          need to provide:
+        </Text>
+        <Stack gap={2} pl={4}>
+          <Text>
+            <Text as="span" fontWeight="semibold">Title</Text> — a name for
+            your experiment.
+          </Text>
+          <Text>
+            <Text as="span" fontWeight="semibold">OSF Project ID</Text> — the
+            short code from your OSF project URL. For example, if your project
+            is at <em>osf.io/abcde</em>, the ID is <strong>abcde</strong>.
+          </Text>
+          <Text>
+            <Text as="span" fontWeight="semibold">Data Component Name</Text> — DataPipe
+            will create a new component with this name inside your OSF project
+            to store all data files.
+          </Text>
+        </Stack>
+        <Text>
+          Click <strong>Create</strong> and you will be taken to the experiment
+          dashboard.
+        </Text>
+      </StepCard>
+
+      <StepCard number={4} title="Configure the experiment">
+        <Text>
+          The experiment dashboard has several optional features you can enable:
+        </Text>
+        <Stack gap={3}>
+          <FeatureItem name="Condition assignment">
+            — request the next sequential condition number. DataPipe cycles
+            through conditions (0, 1, 2, ... back to 0).
+          </FeatureItem>
+          <FeatureItem name="Data validation">
+            — check that incoming data is valid JSON or CSV. You can also
+            specify required fields. This helps prevent malicious submissions.
+          </FeatureItem>
+          <FeatureItem name="Session limit">
+            — cap the number of data files that can be sent to your OSF
+            project. You can increase this later.
+          </FeatureItem>
+          <FeatureItem name="Psych-DS metadata">
+            — automatically produce metadata adhering to{" "}
+            <Link href="https://github.com/psych-ds/psych-DS" target="_blank" rel="noopener noreferrer" color="brandOrange.300">
+              Psych-DS
+            </Link>
+            , updated after each session.
+          </FeatureItem>
+        </Stack>
+        <Callout>
+          Only activate the features you need, and only during active data
+          collection. DataPipe creates an open path to your OSF project —
+          validation and session limits reduce the risk of unwanted submissions.
+        </Callout>
+      </StepCard>
+
+      <StepCard number={5} title="Add code to your experiment">
+        <Text>
+          Add code to send data from your experiment to DataPipe. If you use
+          jsPsych, the easiest option is the{" "}
+          <Link href="https://github.com/jspsych/jspsych-contrib/tree/main/packages/plugin-pipe" target="_blank" rel="noopener noreferrer" color="brandOrange.300">
+            jsPsychPipe plugin
+          </Link>
+          . Otherwise, you can use the DataPipe API directly with fetch requests.
+        </Text>
+        <Text>
+          Your experiment dashboard has ready-to-use code snippets for both
+          jsPsych and plain JavaScript. Go to{" "}
+          <Link href="/admin" color="brandOrange.300">My Experiments</Link>,
+          select your experiment, and copy the code from the{" "}
+          <strong>Code Samples</strong> panel.
+        </Text>
+      </StepCard>
+
+      <StepCard number={6} title="Publish your experiment online">
+        <Text>
+          Host your experiment on any web server — university hosting, GitHub
+          Pages, Netlify, etc. Below is a quick guide for GitHub Pages.
+        </Text>
+        <CollapsibleSection title="GitHub Pages setup instructions">
+          <Text>
+            1. Create a GitHub account at{" "}
+            <Link href="https://www.github.com" target="_blank" rel="noopener noreferrer" color="brandOrange.300">
+              github.com
+            </Link>
+            {" "}and{" "}
+            <Link href="https://www.github.com/new" target="_blank" rel="noopener noreferrer" color="brandOrange.300">
+              create a new repository
+            </Link>
+            . The repo name becomes part of your experiment URL, so avoid
+            names that reveal information to participants. Check the box
+            to add a README file.
+          </Text>
+          <Text>
+            2. Go to <strong>Settings &rarr; Pages</strong> in your
+            repository. Set the source to <strong>Deploy from a branch</strong> and
+            select <strong>main</strong>. Click <strong>Save</strong>.
+          </Text>
+          <Text>
+            3. Click <strong>Add Files &rarr; Upload Files</strong> and upload
+            your experiment files. Click <strong>Commit Changes</strong>.
+          </Text>
+          <Text>
+            Your experiment will be available
+            at <em>https://[username].github.io/[repo-name]</em>. If your
+            HTML file is not named <em>index.html</em>, append the filename to
+            the URL. It may take a few minutes for the site to become
+            available after uploading.
+          </Text>
+        </CollapsibleSection>
+      </StepCard>
+
+      <StepCard number={7} title="Activate and test">
+        <Text>
+          Back on the experiment dashboard, turn on the features you need:
+        </Text>
+        <Stack gap={2} pl={4}>
+          <Text>
+            <Text as="span" fontWeight="semibold">Enable data collection</Text> — for
+            sending text files (JSON, CSV) to OSF.
+          </Text>
+          <Text>
+            <Text as="span" fontWeight="semibold">Enable base64 data collection</Text> — for
+            binary data like audio, video, or images.
+          </Text>
+          <Text>
+            <Text as="span" fontWeight="semibold">Enable condition assignment</Text> — for
+            automated condition cycling.
+          </Text>
+        </Stack>
+        <Text>
+          Run through your experiment once to verify data files appear in
+          your OSF data component. You should see them immediately after
+          completing the experiment.
+        </Text>
+      </StepCard>
     </Stack>
   );
 }

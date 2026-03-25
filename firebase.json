@@ -5,7 +5,11 @@
   },
   "hosting": {
     "source": ".",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
     "rewrites": [
       {
         "source": "/api/data",
@@ -18,6 +22,30 @@
       {
         "source": "/api/base64",
         "function": "apibase64"
+      },
+      {
+        "source": "/api/oauth2callback",
+        "function": "oauth2callback"
+      },
+      {
+        "source": "/api/oauth2regenerate",
+        "function": "oauth2regenerate"
+      },
+      {
+        "source": "/api/checkemailconflict",
+        "function": "checkemailconflict"
+      },
+      {
+        "source": "/api/generateoauthstate",
+        "function": "generateoauthstate"
+      },
+      {
+        "source": "/api/saveosftoken",
+        "function": "saveosftoken"
+      },
+      {
+        "source": "/api/getosftoken",
+        "function": "getosftoken"
       }
     ]
   },
@@ -42,7 +70,20 @@
       "enabled": true
     }
   },
-  "functions": {
-    "source": "functions"
-  }
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "predeploy": [
+        "npm --prefix \"$RESOURCE_DIR\" run build"
+      ]
+    }
+  ]
 }

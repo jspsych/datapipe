@@ -1,69 +1,90 @@
 import AuthCheck from "../../components/AuthCheck";
 import { collection, query, where, doc, deleteDoc } from "firebase/firestore";
 import { db, auth } from "../../lib/firebase";
-import { useCollectionData } from "react-firebase-hooks/firestore";
-import { useRef } from "react";
+import { useCollectionData, useDocumentData } from "react-firebase-hooks/firestore";
+import { useRef, useState, useEffect } from "react";
 import Link from "next/link";
 import {
   Heading,
   Box,
   Button,
-  Table,
-  Thead,
-  Tbody,
-  Tfoot,
-  Tr,
-  Th,
-  Td,
-  Tag,
-  TagLabel,
-  TableContainer,
   IconButton,
   HStack,
   VStack,
   Spinner,
-  AlertDialog,
-  AlertDialogBody,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogContent,
-  AlertDialogOverlay,
-  useDisclosure,
+  Dialog,
   Text,
-  Tooltip,
   Stack,
+  Center,
+  Card,
+  CloseButton,
+  Link as ChakraLink,
 } from "@chakra-ui/react";
-import {
-  CheckIcon,
-  NotAllowedIcon,
-  DeleteIcon,
-  EditIcon,
-} from "@chakra-ui/icons";
+import { Trash2, Pencil } from "lucide-react";
 
 export default function AdminPage({}) {
   return (
     <AuthCheck>
-      <VStack spacing={8} w={["100%", "960px"]}>
-        <Stack
-          justifyContent="space-between"
-          w="100%"
-          direction={["column", "row"]}
-        >
-          <Heading>Your Experiments</Heading>
-          <Link href="/admin/new">
-            <Button
-              variant={"solid"}
-              colorScheme={"brandTeal"}
-              size={"md"}
-              mr={4}
-            >
-              Create New Experiment
-            </Button>
-          </Link>
-        </Stack>
+      <VStack gap={8} w="100%" maxW="960px" px={4}>
+        <OAuthBanner />
         <ExperimentList />
       </VStack>
     </AuthCheck>
+  );
+}
+
+function OAuthBanner() {
+  const user = auth.currentUser;
+  const [userData] = useDocumentData(doc(db, "users", user.uid));
+  const [dismissed, setDismissed] = useState(true);
+
+  useEffect(() => {
+    setDismissed(
+      localStorage.getItem("datapipe-oauth-banner-dismissed") === "true"
+    );
+  }, []);
+
+  const hasOAuthConnection = userData?.refreshToken && userData?.authToken;
+
+  if (dismissed || !userData || hasOAuthConnection) {
+    return null;
+  }
+
+  const handleDismiss = () => {
+    localStorage.setItem("datapipe-oauth-banner-dismissed", "true");
+    setDismissed(true);
+  };
+
+  return (
+    <Box
+      w="100%"
+      bg="brandTeal.900"
+      border="1px solid"
+      borderColor="brandTeal.600"
+      borderRadius="md"
+      px={4}
+      py={3}
+      position="relative"
+    >
+      <CloseButton
+        size="sm"
+        position="absolute"
+        right={2}
+        top={2}
+        onClick={handleDismiss}
+      />
+      <Text pr={8}>
+        <strong>Simplify your setup:</strong> You can now link your OSF account
+        directly to DataPipe for automatic token management. Switch to one-click
+        authentication in your{" "}
+        <Link href="/admin/account">
+          <Button variant="plain" colorPalette="brandTeal" fontSize="md" p={0} h="auto" minW={0}>
+            Account Settings
+          </Button>
+        </Link>
+        .
+      </Text>
+    </Box>
   );
 }
 
@@ -73,79 +94,144 @@ function ExperimentList() {
   const q = query(experiments, where("owner", "==", user.uid));
   const [querySnapshot, loading] = useCollectionData(q);
 
+  if (loading) {
+    return (
+      <Center w="100%" py={8}>
+        <Spinner color="brandTeal.500" size={"xl"} />
+      </Center>
+    );
+  }
+
+  if (!querySnapshot || querySnapshot.length === 0) {
+    return (
+      <VStack gap={8} w="100%">
+        <Stack
+          justifyContent="space-between"
+          w="100%"
+          direction={["column", "row"]}
+        >
+          <Heading>Your Experiments</Heading>
+        </Stack>
+
+        <Center w="100%" py={12}>
+          <Card.Root maxW="lg" w="100%" bg="black" borderRadius={12} color="white">
+            <Card.Body p={[5, 8]}>
+              <VStack gap={5} textAlign="center">
+                <Heading size="md">
+                  No experiments yet
+                </Heading>
+                <Text color="gray.400" fontSize="sm" maxW="sm">
+                  Experiments connect your online study to an OSF project so
+                  that data files are sent directly to OSF as participants
+                  complete your task.
+                </Text>
+
+                <Link href="/admin/new">
+                  <Button
+                    colorPalette="brandTeal"
+                    size="lg"
+                    width="full"
+                  >
+                    Create Your First Experiment
+                  </Button>
+                </Link>
+
+                <Text color="gray.500" fontSize="xs">
+                  Need help?{" "}
+                  <ChakraLink asChild color="brandOrange.300">
+                    <Link href="/getting-started">Read the Getting Started guide</Link>
+                  </ChakraLink>
+                </Text>
+              </VStack>
+            </Card.Body>
+          </Card.Root>
+        </Center>
+      </VStack>
+    );
+  }
+
   return (
-    <>
-      <TableContainer w="100%">
-        <Table size="md">
-          <Thead>
-            <Tr>
-              <Th color="white">Name</Th>
-              <Th color="white" display={["none", "table-cell"]}>
-                Data collection?
-              </Th>
-              <Th color="white" display={["none", "table-cell"]}>
-                Base 64?
-              </Th>
-              <Th color="white" display={["none", "table-cell"]}>
-                Conditions?
-              </Th>
-              <Th color="white" display={["none", "table-cell"]}>
-                Sessions
-              </Th>
-              <Th></Th>
-            </Tr>
-          </Thead>
-          <Tbody>
-            {querySnapshot &&
-              querySnapshot.map((exp) => (
-                <ExperimentItem key={exp.id} exp={exp} />
-              ))}
-          </Tbody>
-        </Table>
-      </TableContainer>
-      {loading && <Spinner color="green.500" size={"xl"} />}
-    </>
+    <VStack gap={8} w="100%">
+      <Stack
+        justifyContent="space-between"
+        w="100%"
+        direction={["column", "row"]}
+      >
+        <Heading>Your Experiments</Heading>
+        <Link href="/admin/new">
+          <Button
+            variant={"solid"}
+            colorPalette={"brandTeal"}
+            size={"md"}
+            mr={4}
+          >
+            Create New Experiment
+          </Button>
+        </Link>
+      </Stack>
+
+      <VStack w="100%" gap={3}>
+        {querySnapshot.map((exp) => (
+          <ExperimentItem key={exp.id} exp={exp} />
+        ))}
+      </VStack>
+    </VStack>
   );
 }
 
 function ExperimentItem({ exp }) {
   return (
-    <Tr id={exp.id}>
-      <Td fontSize="lg">
-        <Link href={`/admin/${exp.id}`}>{exp.title}</Link>
-      </Td>
-      <Td display={["none", "table-cell"]}>
-        <ExperimentStatusTag prepend="Data collection" active={exp.active} />
-      </Td>
-      <Td display={["none", "table-cell"]}>
-        <ExperimentStatusTag
-          prepend="Base 64 data collection"
-          active={exp.activeBase64}
-        />
-      </Td>
-      <Td display={["none", "table-cell"]}>
-        <ExperimentStatusTag
-          prepend="Condition assignment "
-          active={exp.activeConditionAssignment}
-        />
-      </Td>
-      <Td display={["none", "table-cell"]}>{exp.sessions}</Td>
-      <Td>
+    <Box
+      id={exp.id}
+      w="100%"
+      bg="black"
+      borderRadius={10}
+      px={[4, 6]}
+      py={4}
+    >
+      <Stack
+        direction={["column", "row"]}
+        justify="space-between"
+        align={["start", "center"]}
+        gap={[3, 4]}
+      >
+        <VStack align="start" gap={2} flex="1" minW={0}>
+          <Link href={`/admin/${exp.id}`}>
+            <Text fontSize="lg" fontWeight="semibold" _hover={{ textDecoration: "underline" }}>
+              {exp.title}
+            </Text>
+          </Link>
+          <HStack gap={[2, 4]} flexWrap="wrap" rowGap={1}>
+            <StatusLabel label="Data" on={exp.active} />
+            <StatusLabel label="Base64" on={exp.activeBase64} />
+            <StatusLabel label="Conditions" on={exp.activeConditionAssignment} />
+            <StatusLabel label="Metadata" on={exp.metadataActive} />
+            {exp.sessions > 0 && (
+              <Text fontSize="xs" color="gray.400">
+                {exp.sessions} {exp.sessions === 1 ? "session" : "sessions"}
+              </Text>
+            )}
+          </HStack>
+        </VStack>
         <ExperimentActions exp={exp} />
-      </Td>
-    </Tr>
+      </Stack>
+    </Box>
   );
 }
 
-function ExperimentStatusTag({ active, prepend }) {
+function StatusLabel({ label, on }) {
   return (
-    <Tooltip label={active ? `${prepend} is active` : `${prepend} is inactive`}>
-      <Tag size="lg" variant="outline" colorScheme={active ? "green" : "gray"}>
-        <TagLabel>
-          {active ? <CheckIcon boxSize={4} /> : <NotAllowedIcon boxSize={4} />}
-        </TagLabel>
-      </Tag>
-    </Tooltip>
+    <HStack gap="5px">
+      <Box
+        w="6px"
+        h="6px"
+        borderRadius="full"
+        bg={on ? "green.400" : "gray.600"}
+      />
+      <Text fontSize="xs" color={on ? "gray.300" : "gray.600"}>
+        {label}
+      </Text>
+    </HStack>
   );
 }
 
@@ -155,10 +241,13 @@ function ExperimentActions({ exp }) {
       <Link href={`/admin/${exp.id}`}>
         <IconButton
           aria-label="Edit"
-          icon={<EditIcon />}
           variant="outline"
-          colorScheme="whiteAlpha"
-        />
+          color="white"
+          borderColor="white"
+          _hover={{ bg: "whiteAlpha.300" }}
+        >
+          <Pencil />
+        </IconButton>
       </Link>
       <DeleteAlertDialog exp={exp} />
     </HStack>
@@ -166,56 +255,55 @@ function ExperimentActions({ exp }) {
 }
 
 function DeleteAlertDialog({ exp }) {
-  const { isOpen, onOpen, onClose } = useDisclosure();
-  const cancelRef = useRef();
+  const [open, setOpen] = useState(false);
 
   return (
     <>
       <IconButton
         aria-label="Delete"
-        icon={<DeleteIcon />}
-        onClick={onOpen}
+        onClick={() => setOpen(true)}
         variant="outline"
-        colorScheme="red"
-      />
-
-      <AlertDialog
-        isOpen={isOpen}
-        leastDestructiveRef={cancelRef}
-        onClose={onClose}
+        color="red.400"
+        borderColor="red.400"
+        _hover={{ bg: "whiteAlpha.300" }}
       >
-        <AlertDialogOverlay>
-          <AlertDialogContent bg="greyBackground">
-            <AlertDialogHeader fontSize="lg" fontWeight="bold">
-              Delete Experiment
-            </AlertDialogHeader>
+        <Trash2 />
+      </IconButton>
 
-            <AlertDialogBody>
+      <Dialog.Root open={open} onOpenChange={(e) => setOpen(e.open)}>
+        <Dialog.Backdrop />
+        <Dialog.Positioner>
+          <Dialog.Content bg="greyBackground" color="white">
+            <Dialog.Header fontSize="lg" fontWeight="bold">
+              Delete Experiment
+            </Dialog.Header>
+
+            <Dialog.Body>
               <Text>Are you sure? This action is final.</Text>
               <Text>
                 Deleting the experiment will not delete any data that is already
                 on the OSF.
               </Text>
-            </AlertDialogBody>
+            </Dialog.Body>
 
-            <AlertDialogFooter>
-              <Button ref={cancelRef} onClick={onClose} colorScheme="brandTeal">
+            <Dialog.Footer>
+              <Button onClick={() => setOpen(false)} colorPalette="brandTeal">
                 Cancel
               </Button>
               <Button
-                colorScheme="red"
+                colorPalette="red"
                 onClick={() => {
-                  onClose();
+                  setOpen(false);
                   deleteExperiment(exp);
                 }}
                 ml={3}
               >
                 Delete
               </Button>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialogOverlay>
-      </AlertDialog>
+            </Dialog.Footer>
+          </Dialog.Content>
+        </Dialog.Positioner>
+      </Dialog.Root>
     </>
   );
 }

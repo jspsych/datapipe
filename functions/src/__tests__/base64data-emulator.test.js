@@ -36,6 +36,7 @@ beforeAll(async () => {
   await db.collection("experiments").doc("base64-testexp").set({ activeBase64: false });
   await db.collection("users").doc("testuser").set({
     osfTokenValid: false,
+    usingPersonalToken: true,
   });
   await db.collection("experiments").doc("base64-testexp-active-no-owner").set({
     activeBase64: true,
@@ -70,6 +71,8 @@ describe("apiData", () => {
       data: "test",
       filename: "test",
     });
+    // Wait for in-flight log writes to settle before reading
+    await new Promise((resolve) => setTimeout(resolve, 2000));
     let doc = await db.collection("logs").doc("testlog").get();
     expect(doc.data().saveBase64Data).toBe(1);
 
@@ -78,9 +81,44 @@ describe("apiData", () => {
       data: "test",
       filename: "test",
     });
+    await new Promise((resolve) => setTimeout(resolve, 2000));
     doc = await db.collection("logs").doc("testlog").get();
     expect(doc.data().saveBase64Data).toBe(2);
   });
+
+  it("should increment the error log for an experiment when errors are caught", async () => {
+    const db = getFirestore();
+
+    await db.collection("logs").doc("base64-testexp-active-no-owner").delete();
+
+    await saveData({
+      experimentID: "base64-testexp-active-no-owner",
+      data: "test",
+      filename: "test",
+    });
+
+    // Wait for in-flight log writes to settle before reading
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    let doc = await db.collection("logs").doc("base64-testexp-active-no-owner").get();
+
+    expect(doc.data().logError).toBe(1);
+
+    await db.collection("experiments").doc("base64-testexp-active-no-owner").set({
+      activeBase64: true,
+    });
+
+    await saveData({
+      experimentID: "base64-testexp-active-no-owner",
+      data: "{'test': 21}",
+      filename: "test",
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    doc = await db.collection("logs").doc("base64-testexp-active-no-owner").get();
+
+    expect(doc.data().logError).toBe(2);
+  });
+
 
   it("should reject the request when the data are not valid base64 data", async () => {
     const response = await saveData({
@@ -100,7 +138,8 @@ describe("apiData", () => {
     expect(response).toEqual(MESSAGES.EXPERIMENT_NOT_FOUND);
   });
 
-  it("should return error message when condition assignment is not active", async () => {
+  it("should return error message when base64 data collection is not active", async () => {
+    
     const response = await saveData({
       experimentID: "base64-testexp",
       data: "test",
