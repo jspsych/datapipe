@@ -107,12 +107,20 @@ export const apiBase64 = onRequest({ cors: true }, async (req, res) => {
     }
   }
 
-  const result = await putFileOSF(
-    exp_data.osfFilesLink,
-    token,
-    buffer,
-    filename
-  );
+  let result;
+  try {
+    result = await putFileOSF(
+      exp_data.osfFilesLink,
+      token,
+      buffer,
+      filename
+    );
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : "Unknown error";
+    res.status(500).json(MESSAGES.OSF_UPLOAD_EXCEPTION);
+    await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail});
+    return;
+  }
 
   if (!result.success) {
     if (result.errorCode === 409 && result.errorText === "Conflict") {

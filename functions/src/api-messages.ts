@@ -74,6 +74,10 @@ const MESSAGES = {
     error: "OSF_UPLOAD_ERROR",
     message: "An error occurred while uploading the data to OSF",
   },
+  OSF_UPLOAD_EXCEPTION: {
+    error: "OSF_UPLOAD_EXCEPTION",
+    message: "An unexpected error occurred while uploading the data to OSF",
+  },
   INVALD_METADATA_ERROR: {
     error: "INVALD_METADATA_ERROR",
     message: "Metadata produced from incoming data is invalid"

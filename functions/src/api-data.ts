@@ -127,18 +127,27 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
 
   if (metadataResponse.success === false) {
     res.status(400).json(metadataResponse);
+    await writeLog(experimentID, "logError", {...MESSAGES.METADATA_ERROR, detail: metadataResponse.message});
     return;
   }
 
   const metadataMessage: string = metadataResponse.metadataMessage;
   //METADATA BLOCK END
 
-  const result: OSFResult = await putFileOSF(
-    exp_data.osfFilesLink,
-    token,
-    data,
-    filename
-  );  
+  let result: OSFResult;
+  try {
+    result = await putFileOSF(
+      exp_data.osfFilesLink,
+      token,
+      data,
+      filename
+    );
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : "Unknown error";
+    res.status(500).json({...MESSAGES.OSF_UPLOAD_EXCEPTION, metadataMessage});
+    await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail});
+    return;
+  }
 
   if (!result.success) {
     if (result.errorCode === 409 && result.errorText === "Conflict") {
