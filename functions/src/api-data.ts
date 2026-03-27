@@ -147,7 +147,7 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
       return;
     }
     res.status(400).json({...MESSAGES.OSF_UPLOAD_ERROR, metadataMessage});
-    await writeLog(experimentID, "logError", MESSAGES.OSF_UPLOAD_ERROR);
+    await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.errorCode, osfStatusText: result.errorText});
     return;
   }
 

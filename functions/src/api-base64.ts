@@ -121,7 +121,7 @@ export const apiBase64 = onRequest({ cors: true }, async (req, res) => {
       return;
     }
     res.status(400).json(MESSAGES.OSF_UPLOAD_ERROR);
-    await writeLog(experimentID, "logError", MESSAGES.OSF_UPLOAD_ERROR);
+    await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.errorCode, osfStatusText: result.errorText});
     return;
   }
 
