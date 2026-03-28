@@ -30,9 +30,15 @@ if (user_data.usingPersonalToken) {
   if (Date.now() > user_data.authTokenExpires) {
     const refreshResult = await refreshAndUpdateUser(exp_data.owner, decrypt(user_data.refreshToken));
     if (!refreshResult.success) {
-      return { success: false, metadataMessage: "OAuth token refresh failed" };
+      // Fall back to PAT if available
+      if (user_data.osfTokenValid && user_data.osfToken) {
+        decryptedOsfToken = decrypt(user_data.osfToken);
+      } else {
+        return { success: false, metadataMessage: "OAuth token refresh failed" };
+      }
+    } else {
+      decryptedOsfToken = refreshResult.accessToken!;
     }
-    decryptedOsfToken = refreshResult.accessToken!;
   } else {
     decryptedOsfToken = decrypt(user_data.authToken);
   }
