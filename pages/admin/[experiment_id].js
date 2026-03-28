@@ -45,8 +45,8 @@ function ExperimentPageDashboard({ experiment_id }) {
     : null;
   const [data, loading, error, snapshot, reload] = useDocumentData(experimentRef);
   const logs = useDocumentData(logsRef)?.[0] || null;
-  const [queueData] = useCollectionData(queueRef, { idField: "id" });
-  const queueEntries = queueData || [];
+  const [, , , queueSnapshot] = useCollectionData(queueRef);
+  const queueEntries = queueSnapshot?.docs.map(d => ({ id: d.id, ...d.data() })) || [];
 
   const pendingUploads = queueEntries.filter(e => e.status === "pending" || e.status === "processing").length;
   const uploadError = logs?.logError;
