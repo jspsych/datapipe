@@ -8,6 +8,7 @@ import writeLog from "./write-log.js";
 import MESSAGES from "./api-messages.js";
 import blockMetadata from "./metadata-block.js";
 import resolveToken from "./resolve-token.js";
+import queueUpload from "./queue-upload.js";
 import { ExperimentData, UserData, MetadataResponse, OSFResult, RequestBody } from './interfaces';
 
 export const apiData = onRequest({ cors: true }, async (req, res) => {
@@ -133,10 +134,24 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
       filename
     );
   } catch (e) {
+    // Network errors, timeouts, etc. — queue for retry
     const detail = e instanceof Error ? e.message : "Unknown error";
-    res.status(500).json({...MESSAGES.OSF_UPLOAD_EXCEPTION, metadataMessage});
-    await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail});
-    return;
+    try {
+      await queueUpload({
+        experimentID, owner: exp_data.owner, filename, data,
+        dataType: "data", osfFilesLink: exp_data.osfFilesLink,
+        errorCode: 0, sessionIncremented: true,
+        failureReason: `Upload exception: ${detail}`,
+      });
+      await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
+      res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
+      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail});
+      return;
+    } catch {
+      res.status(500).json({...MESSAGES.OSF_UPLOAD_EXCEPTION, metadataMessage});
+      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail});
+      return;
+    }
   }
 
   if (!result.success) {
@@ -145,9 +160,23 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
       await writeLog(experimentID, "logError", MESSAGES.OSF_FILE_EXISTS);
       return;
     }
-    res.status(400).json({...MESSAGES.OSF_UPLOAD_ERROR, metadataMessage});
-    await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.errorCode, osfStatusText: result.errorText});
-    return;
+    // Queue all other failures for retry
+    try {
+      await queueUpload({
+        experimentID, owner: exp_data.owner, filename, data,
+        dataType: "data", osfFilesLink: exp_data.osfFilesLink,
+        errorCode: result.errorCode || 0, sessionIncremented: true,
+        failureReason: `OSF error ${result.errorCode}: ${result.errorText}`,
+      });
+      await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
+      res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
+      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.errorCode, osfStatusText: result.errorText});
+      return;
+    } catch {
+      res.status(400).json({...MESSAGES.OSF_UPLOAD_ERROR, metadataMessage});
+      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.errorCode, osfStatusText: result.errorText});
+      return;
+    }
   }
 
   await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });

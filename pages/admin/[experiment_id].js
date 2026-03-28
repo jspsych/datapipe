@@ -1,8 +1,8 @@
 import AuthCheck from "../../components/AuthCheck";
 import { useRouter } from "next/router";
-import { useDocumentData } from "react-firebase-hooks/firestore";
+import { useDocumentData, useCollectionData } from "react-firebase-hooks/firestore";
 import { db } from "../../lib/firebase";
-import { doc } from "firebase/firestore";
+import { doc, collection, query, where, orderBy } from "firebase/firestore";
 
 import { Spinner, Flex, VStack, HStack, Text, Badge, Separator } from "@chakra-ui/react";
 
@@ -13,6 +13,7 @@ import ExperimentValidation from "../../components/dashboard/ExperimentValidatio
 import MetadataControl from "../../components/dashboard/MetadataControl";
 import CodeHints from "../../components/dashboard/CodeHints";
 import ErrorPanel from "../../components/dashboard/ErrorPanel";
+import QueuePanel from "../../components/dashboard/QueuePanel";
 
 export async function getServerSideProps() {
   return { props: {} };
@@ -32,9 +33,20 @@ export default function ExperimentPage() {
 function ExperimentPageDashboard({ experiment_id }) {
   const experimentRef = experiment_id ? doc(db, `experiments/${experiment_id}`) : null;
   const logsRef = experiment_id ? doc(db, `logs/${experiment_id}`) : null;
+  const queueRef = experiment_id
+    ? query(
+        collection(db, "uploadQueue"),
+        where("experimentID", "==", experiment_id),
+        where("status", "in", ["pending", "processing", "failed"]),
+        orderBy("createdAt", "desc")
+      )
+    : null;
   const [data, loading, error, snapshot, reload] = useDocumentData(experimentRef);
   const logs = useDocumentData(logsRef)?.[0] || null;
+  const [queueData] = useCollectionData(queueRef, { idField: "id" });
+  const queueEntries = queueData || [];
 
+  const pendingUploads = queueEntries.filter(e => e.status === "pending" || e.status === "processing").length;
   const uploadError = logs?.logError;
   const errorLog = logs?.errors;
 
@@ -57,8 +69,19 @@ function ExperimentPageDashboard({ experiment_id }) {
                 Data upload errors
               </Badge>
             )}
+            {pendingUploads > 0 && (
+              <Badge colorPalette="orange" variant="solid" px={2} py={1}>
+                {pendingUploads} pending upload{pendingUploads !== 1 ? "s" : ""}
+              </Badge>
+            )}
+            {pendingUploads === 0 && queueEntries.length > 0 && (
+              <Badge colorPalette="red" variant="solid" px={2} py={1}>
+                {queueEntries.length} failed upload{queueEntries.length !== 1 ? "s" : ""}
+              </Badge>
+            )}
           </HStack>
           {uploadError && <ErrorPanel errors={errorLog} />}
+          {queueEntries.length > 0 && <QueuePanel entries={queueEntries} experimentId={experiment_id} />}
           <Flex w="100%" gap={8} wrap="wrap" alignItems="flex-start">
             <VStack flex="1" minW="300px" gap={0} align="stretch">
               <ExperimentInfo data={data} />
