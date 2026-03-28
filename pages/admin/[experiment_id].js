@@ -1,7 +1,7 @@
 import AuthCheck from "../../components/AuthCheck";
 import { useRouter } from "next/router";
 import { useDocumentData, useCollectionData } from "react-firebase-hooks/firestore";
-import { db } from "../../lib/firebase";
+import { db, auth } from "../../lib/firebase";
 import { doc, collection, query, where, orderBy } from "firebase/firestore";
 
 import { Spinner, Flex, VStack, HStack, Text, Badge, Separator } from "@chakra-ui/react";
@@ -33,10 +33,12 @@ export default function ExperimentPage() {
 function ExperimentPageDashboard({ experiment_id }) {
   const experimentRef = experiment_id ? doc(db, `experiments/${experiment_id}`) : null;
   const logsRef = experiment_id ? doc(db, `logs/${experiment_id}`) : null;
-  const queueRef = experiment_id
+  const uid = auth.currentUser?.uid;
+  const queueRef = experiment_id && uid
     ? query(
         collection(db, "uploadQueue"),
         where("experimentID", "==", experiment_id),
+        where("owner", "==", uid),
         where("status", "in", ["pending", "processing", "failed"]),
         orderBy("createdAt", "desc")
       )
