@@ -118,7 +118,7 @@ export default function QueuePanel({ entries, experimentId }) {
                     <Table.ColumnHeader>STATUS</Table.ColumnHeader>
                     <Table.ColumnHeader>EXPIRES</Table.ColumnHeader>
                     <Table.ColumnHeader>ATTEMPTS</Table.ColumnHeader>
-                    <Table.ColumnHeader></Table.ColumnHeader>
+                    <Table.ColumnHeader>DOWNLOAD</Table.ColumnHeader>
                   </Table.Row>
                 </Table.Header>
                 <Table.Body>
