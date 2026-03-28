@@ -73,7 +73,7 @@ function ExperimentPageDashboard({ experiment_id }) {
             )}
             {pendingUploads > 0 && (
               <Badge colorPalette="orange" variant="solid" px={2} py={1}>
-                {pendingUploads} pending upload{pendingUploads !== 1 ? "s" : ""}
+                {pendingUploads} upload{pendingUploads !== 1 ? "s" : ""} waiting
               </Badge>
             )}
             {pendingUploads === 0 && queueEntries.length > 0 && (

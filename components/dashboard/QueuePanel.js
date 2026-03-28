@@ -12,14 +12,15 @@ import { Download } from "lucide-react";
 import { auth } from "../../lib/firebase";
 
 function statusBadge(status) {
-  const colors = {
-    pending: "orange",
-    processing: "blue",
-    failed: "red",
+  const labels = {
+    pending: { color: "orange", text: "Waiting to retry" },
+    processing: { color: "blue", text: "Retrying now" },
+    failed: { color: "red", text: "Failed" },
   };
+  const { color, text } = labels[status] || { color: "gray", text: status };
   return (
-    <Badge colorPalette={colors[status] || "gray"} variant="solid" px={2}>
-      {status}
+    <Badge colorPalette={color} variant="solid" px={2}>
+      {text}
     </Badge>
   );
 }
@@ -80,13 +81,15 @@ export default function QueuePanel({ entries, experimentId }) {
   ).length;
   const failedCount = entries.filter((e) => e.status === "failed").length;
 
+  const plural = (n, word) => `${n} ${word}${n !== 1 ? "s" : ""}`;
+
   let alertTitle = "";
   if (pendingCount > 0 && failedCount > 0) {
-    alertTitle = `${pendingCount} file(s) queued for upload, ${failedCount} failed.`;
+    alertTitle = `${plural(pendingCount, "file")} waiting to upload, ${plural(failedCount, "file")} failed.`;
   } else if (pendingCount > 0) {
-    alertTitle = `${pendingCount} file(s) queued for upload to OSF.`;
+    alertTitle = `${plural(pendingCount, "file")} waiting to upload to OSF.`;
   } else {
-    alertTitle = `${failedCount} file(s) failed to upload to OSF.`;
+    alertTitle = `${plural(failedCount, "file")} could not be uploaded to OSF.`;
   }
 
   return (
@@ -95,14 +98,15 @@ export default function QueuePanel({ entries, experimentId }) {
       <Box flex="1">
         <Alert.Title mb={1}>{alertTitle}</Alert.Title>
         <Text fontSize="sm" mb={4}>
-          Queued files are retried automatically every hour and stored for up to
-          1 week. You can download them below.
+          {failedCount > 0 && pendingCount === 0
+            ? "These files could not be delivered after multiple attempts. Download them below to avoid data loss."
+            : "DataPipe will keep retrying automatically. Files are stored for up to 1 week. You can also download them below."}
         </Text>
         <Accordion.Root collapsible>
           <Accordion.Item value="queue-list">
             <Accordion.ItemTrigger>
               <Box as="span" flex="1" textAlign="left">
-                See Queued Files
+                View file details
               </Box>
               <Accordion.ItemIndicator />
             </Accordion.ItemTrigger>
@@ -113,8 +117,8 @@ export default function QueuePanel({ entries, experimentId }) {
                     <Table.ColumnHeader>FILENAME</Table.ColumnHeader>
                     <Table.ColumnHeader>STATUS</Table.ColumnHeader>
                     <Table.ColumnHeader>EXPIRES</Table.ColumnHeader>
-                    <Table.ColumnHeader>RETRIES</Table.ColumnHeader>
-                    <Table.ColumnHeader>DOWNLOAD</Table.ColumnHeader>
+                    <Table.ColumnHeader>ATTEMPTS</Table.ColumnHeader>
+                    <Table.ColumnHeader></Table.ColumnHeader>
                   </Table.Row>
                 </Table.Header>
                 <Table.Body>
