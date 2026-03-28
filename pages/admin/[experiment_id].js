@@ -66,7 +66,7 @@ function ExperimentPageDashboard({ experiment_id }) {
             <Text fontSize="sm" color="gray.400">
               {data.sessions || 0} session{data.sessions !== 1 ? "s" : ""}
             </Text>
-            {uploadError && (
+            {uploadError && queueEntries.length === 0 && (
               <Badge colorPalette="red" variant="solid" px={2} py={1}>
                 Data upload errors
               </Badge>
@@ -82,8 +82,8 @@ function ExperimentPageDashboard({ experiment_id }) {
               </Badge>
             )}
           </HStack>
-          {uploadError && <ErrorPanel errors={errorLog} />}
-          {queueEntries.length > 0 && <QueuePanel entries={queueEntries} experimentId={experiment_id} />}
+          {uploadError && queueEntries.length === 0 && <ErrorPanel errors={errorLog} />}
+          {queueEntries.length > 0 && <QueuePanel entries={queueEntries} experimentId={experiment_id} errorLog={uploadError ? errorLog : null} />}
           <Flex w="100%" gap={8} wrap="wrap" alignItems="flex-start">
             <VStack flex="1" minW="300px" gap={0} align="stretch">
               <ExperimentInfo data={data} />

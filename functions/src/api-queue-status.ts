@@ -1,4 +1,5 @@
 import { onRequest } from "firebase-functions/v2/https";
+import archiver from "archiver";
 import { db, auth, storage } from "./app.js";
 
 export const apiQueueStatus = onRequest({ cors: true }, async (req, res) => {
@@ -86,6 +87,52 @@ export const apiQueueStatus = onRequest({ cors: true }, async (req, res) => {
       }
     } catch {
       res.status(500).json({ error: "Failed to download file" });
+    }
+    return;
+  }
+
+  const downloadAll = req.query.downloadAll as string | undefined;
+
+  if (downloadAll === "true") {
+    const queueDocs = await db
+      .collection("uploadQueue")
+      .where("experimentID", "==", experimentID)
+      .where("status", "in", ["pending", "processing", "failed"])
+      .get();
+
+    if (queueDocs.empty) {
+      res.status(404).json({ error: "No queued files found" });
+      return;
+    }
+
+    try {
+      const bucket = storage.bucket();
+      const archive = archiver("zip", { zlib: { level: 5 } });
+
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader("Content-Disposition", `attachment; filename="${experimentID}-queued-files.zip"`);
+      archive.pipe(res);
+
+      for (const doc of queueDocs.docs) {
+        const data = doc.data();
+        const file = bucket.file(data.storagePath);
+        const [contents] = await file.download();
+        const raw = contents.toString("utf-8");
+
+        if (data.dataType === "base64") {
+          const split = raw.split(",");
+          const base64Data = split.length > 1 ? split[1] : raw;
+          archive.append(Buffer.from(base64Data, "base64"), { name: data.filename });
+        } else {
+          archive.append(raw, { name: data.filename });
+        }
+      }
+
+      await archive.finalize();
+    } catch {
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Failed to create ZIP archive" });
+      }
     }
     return;
   }

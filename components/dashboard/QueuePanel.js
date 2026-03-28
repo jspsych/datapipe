@@ -6,7 +6,9 @@ import {
   Table,
   Badge,
   IconButton,
+  Button,
   Text,
+  HStack,
 } from "@chakra-ui/react";
 import { Download } from "lucide-react";
 import { auth } from "../../lib/firebase";
@@ -25,15 +27,6 @@ function statusBadge(status) {
   );
 }
 
-function formatDate(value) {
-  if (!value) return "-";
-  const date = value.toDate ? value.toDate() : new Date(value);
-  return new Intl.DateTimeFormat("en-GB", {
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(date);
-}
-
 function timeRemaining(createdAt) {
   if (!createdAt) return null;
   const created = createdAt.toDate ? createdAt.toDate() : new Date(createdAt);
@@ -48,22 +41,25 @@ function timeRemaining(createdAt) {
   return `${hoursLeft}h remaining`;
 }
 
-export default function QueuePanel({ entries, experimentId }) {
+async function fetchFile(experimentId, entryId) {
+  const user = auth.currentUser;
+  if (!user) return;
+  const idToken = await user.getIdToken();
+  return fetch(
+    `/api/queuestatus?experimentID=${experimentId}&download=${entryId}`,
+    { headers: { Authorization: `Bearer ${idToken}` } }
+  );
+}
+
+export default function QueuePanel({ entries, experimentId, errorLog }) {
   const [downloading, setDownloading] = useState(null);
+  const [downloadingAll, setDownloadingAll] = useState(false);
 
   const handleDownload = async (entry) => {
     setDownloading(entry.id);
     try {
-      const user = auth.currentUser;
-      if (!user) return;
-      const idToken = await user.getIdToken();
-      const response = await fetch(
-        `/api/queuestatus?experimentID=${experimentId}&download=${entry.id}`,
-        {
-          headers: { Authorization: `Bearer ${idToken}` },
-        }
-      );
-      if (!response.ok) {
+      const response = await fetchFile(experimentId, entry.id);
+      if (!response || !response.ok) {
         console.error("Failed to download file");
         return;
       }
@@ -81,10 +77,39 @@ export default function QueuePanel({ entries, experimentId }) {
     }
   };
 
+  const handleDownloadAll = async () => {
+    setDownloadingAll(true);
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+      const idToken = await user.getIdToken();
+      const response = await fetch(
+        `/api/queuestatus?experimentID=${experimentId}&downloadAll=true`,
+        { headers: { Authorization: `Bearer ${idToken}` } }
+      );
+      if (!response.ok) {
+        console.error("Failed to download ZIP");
+        return;
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${experimentId}-queued-files.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error("Download all failed:", e);
+    } finally {
+      setDownloadingAll(false);
+    }
+  };
+
   const pendingCount = entries.filter(
     (e) => e.status === "pending" || e.status === "processing"
   ).length;
   const failedCount = entries.filter((e) => e.status === "failed").length;
+  const allFailed = failedCount > 0 && pendingCount === 0;
 
   const plural = (n, word) => `${n} ${word}${n !== 1 ? "s" : ""}`;
 
@@ -98,16 +123,27 @@ export default function QueuePanel({ entries, experimentId }) {
   }
 
   return (
-    <Alert.Root status="warning" variant="solid">
+    <Alert.Root status={allFailed ? "error" : "warning"} variant="solid">
       <Alert.Indicator />
       <Box flex="1">
         <Alert.Title mb={1}>{alertTitle}</Alert.Title>
         <Text fontSize="sm" mb={4}>
-          {failedCount > 0 && pendingCount === 0
-            ? "These files could not be delivered after multiple attempts. Download them below to avoid data loss."
+          {allFailed
+            ? "These files could not be delivered after multiple attempts. Download them to avoid data loss."
             : "DataPipe will keep retrying automatically. Files are stored for up to 1 week. You can also download them below."}
         </Text>
-        <Accordion.Root collapsible>
+        <HStack mb={4}>
+          <Button
+            size="sm"
+            variant="outline"
+            loading={downloadingAll}
+            onClick={handleDownloadAll}
+          >
+            <Download size={14} />
+            Download all as ZIP
+          </Button>
+        </HStack>
+        <Accordion.Root collapsible defaultValue={allFailed ? ["queue-list"] : []}>
           <Accordion.Item value="queue-list">
             <Accordion.ItemTrigger>
               <Box as="span" flex="1" textAlign="left">
@@ -153,6 +189,24 @@ export default function QueuePanel({ entries, experimentId }) {
                           <Download size={14} />
                         </IconButton>
                       </Table.Cell>
+                    </Table.Row>
+                  ))}
+                  {errorLog && errorLog.map((error, index) => (
+                    <Table.Row key={`error-${index}`}>
+                      <Table.Cell>
+                        <Text>{error.error}</Text>
+                        <Text fontSize="xs" color="red.300" mt={1}>
+                          {error.time}
+                        </Text>
+                      </Table.Cell>
+                      <Table.Cell>
+                        <Badge colorPalette="red" variant="solid" px={2}>
+                          Error
+                        </Badge>
+                      </Table.Cell>
+                      <Table.Cell>-</Table.Cell>
+                      <Table.Cell>-</Table.Cell>
+                      <Table.Cell>-</Table.Cell>
                     </Table.Row>
                   ))}
                 </Table.Body>
