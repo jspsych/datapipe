@@ -64,11 +64,16 @@ export default function QueuePanel({ entries, experimentId }) {
         }
       );
       if (!response.ok) {
-        console.error("Failed to get download URL");
+        console.error("Failed to download file");
         return;
       }
-      const { url } = await response.json();
-      window.open(url, "_blank");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = entry.filename;
+      a.click();
+      URL.revokeObjectURL(url);
     } catch (e) {
       console.error("Download failed:", e);
     } finally {

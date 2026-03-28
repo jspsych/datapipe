@@ -47,17 +47,45 @@ export const apiQueueStatus = onRequest({ cors: true }, async (req, res) => {
       return;
     }
 
-    const storagePath = queueDoc.data()?.storagePath;
+    const queueData = queueDoc.data()!;
+    const storagePath = queueData.storagePath;
+    const filename = queueData.filename;
+    const dataType = queueData.dataType;
+
     try {
       const bucket = storage.bucket();
       const file = bucket.file(storagePath);
-      const [url] = await file.getSignedUrl({
-        action: "read",
-        expires: Date.now() + 15 * 60 * 1000, // 15 minutes
-      });
-      res.status(200).json({ url });
+      const [contents] = await file.download();
+      const raw = contents.toString("utf-8");
+
+      if (dataType === "base64") {
+        const split = raw.split(",");
+        const base64Data = split.length > 1 ? split[1] : raw;
+        const buffer = Buffer.from(base64Data, "base64");
+
+        // Infer content type from filename extension
+        const ext = filename.split(".").pop()?.toLowerCase();
+        const mimeTypes: Record<string, string> = {
+          png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg",
+          gif: "image/gif", webp: "image/webp", wav: "audio/wav",
+          mp3: "audio/mpeg", mp4: "video/mp4", webm: "video/webm",
+          pdf: "application/pdf",
+        };
+        const contentType = mimeTypes[ext || ""] || "application/octet-stream";
+
+        res.setHeader("Content-Type", contentType);
+        res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+        res.status(200).send(buffer);
+      } else {
+        const ext = filename.split(".").pop()?.toLowerCase();
+        const contentType = ext === "json" ? "application/json" : "text/csv";
+
+        res.setHeader("Content-Type", contentType);
+        res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+        res.status(200).send(raw);
+      }
     } catch {
-      res.status(500).json({ error: "Failed to generate download URL" });
+      res.status(500).json({ error: "Failed to download file" });
     }
     return;
   }
