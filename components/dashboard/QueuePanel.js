@@ -132,6 +132,29 @@ export default function QueuePanel({ entries, experimentId, errorLog }) {
             ? "These files could not be delivered after multiple attempts. Download them to avoid data loss."
             : "DataPipe will keep retrying automatically. Files are stored for up to 1 week. You can also download them below."}
         </Text>
+        <Accordion.Root collapsible size="sm" mb={4}>
+          <Accordion.Item value="why">
+            <Accordion.ItemTrigger>
+              <Box as="span" flex="1" textAlign="left" fontSize="sm">
+                Why am I seeing this?
+              </Box>
+              <Accordion.ItemIndicator />
+            </Accordion.ItemTrigger>
+            <Accordion.ItemContent>
+              <Text fontSize="sm" pb={3}>
+                When a participant submits data, DataPipe tries to upload it to
+                your OSF project immediately. If that transfer fails — for
+                example, because OSF is temporarily unavailable, rate-limiting
+                requests, or there is a configuration issue with your project —
+                DataPipe saves a copy of the data and retries automatically over
+                the next several days. The files listed here are those saved
+                copies. Once a retry succeeds the file will disappear from this
+                list. If all retries are exhausted, you can still download the
+                data and upload it to OSF manually.
+              </Text>
+            </Accordion.ItemContent>
+          </Accordion.Item>
+        </Accordion.Root>
         <HStack mb={4}>
           <Button
             size="sm"
