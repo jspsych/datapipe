@@ -135,7 +135,8 @@ export default function QueuePanel({ entries, experimentId, errorLog }) {
         <HStack mb={4}>
           <Button
             size="sm"
-            variant="outline"
+            variant="solid"
+            colorPalette="gray"
             loading={downloadingAll}
             onClick={handleDownloadAll}
           >
