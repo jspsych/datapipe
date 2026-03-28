@@ -114,6 +114,7 @@ export const apiBase64 = onRequest({ cors: true }, async (req, res) => {
         experimentID, owner: exp_data.owner, filename, data,
         dataType: "base64", osfFilesLink: exp_data.osfFilesLink,
         errorCode: 0, sessionIncremented: false,
+        failureReason: `Upload exception: ${detail}`,
       });
       res.status(202).json(MESSAGES.OSF_UPLOAD_QUEUED);
       await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail});
@@ -137,6 +138,7 @@ export const apiBase64 = onRequest({ cors: true }, async (req, res) => {
         experimentID, owner: exp_data.owner, filename, data,
         dataType: "base64", osfFilesLink: exp_data.osfFilesLink,
         errorCode: result.errorCode || 0, sessionIncremented: false,
+        failureReason: `OSF error ${result.errorCode}: ${result.errorText}`,
       });
       res.status(202).json(MESSAGES.OSF_UPLOAD_QUEUED);
       await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.errorCode, osfStatusText: result.errorText});

@@ -150,7 +150,7 @@ async function processQueueItem(queueDoc: FirebaseFirestore.QueryDocumentSnapsho
       return;
     }
 
-    await handleRetryFailure(docRef, data, `OSF error ${result.errorCode}: ${result.errorText}`);
+    await handleRetryFailure(docRef, data, `OSF error ${result.errorCode}: ${result.errorText}`, result.retryAfter);
   } catch (e) {
     const detail = e instanceof Error ? e.message : "Unknown error";
     await handleRetryFailure(docRef, data, `Upload exception: ${detail}`);
@@ -175,7 +175,8 @@ async function markCompleted(
 async function handleRetryFailure(
   docRef: FirebaseFirestore.DocumentReference,
   data: FirebaseFirestore.DocumentData,
-  reason: string
+  reason: string,
+  retryAfterSeconds?: number | null
 ) {
   const newRetryCount = (data.retryCount || 0) + 1;
 
@@ -189,8 +190,10 @@ async function handleRetryFailure(
     return;
   }
 
-  // Exponential backoff: 2^retryCount hours, capped at 24 hours
-  const backoffMs = Math.min(Math.pow(2, newRetryCount) * 60 * 60 * 1000, MAX_BACKOFF_MS);
+  // Honor Retry-After header if provided, otherwise use exponential backoff
+  const backoffMs = retryAfterSeconds
+    ? Math.min(retryAfterSeconds * 1000, MAX_BACKOFF_MS)
+    : Math.min(Math.pow(2, newRetryCount) * 60 * 60 * 1000, MAX_BACKOFF_MS);
   const nextRetryAt = Timestamp.fromMillis(Date.now() + backoffMs);
 
   console.log(`Upload ${docRef.id} retry ${newRetryCount} failed: ${reason}. Next retry at ${nextRetryAt.toDate().toISOString()}`);

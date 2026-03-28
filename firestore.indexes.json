@@ -7,6 +7,23 @@
         { "fieldPath": "usingPersonalToken", "order": "ASCENDING" },
         { "fieldPath": "refreshTokenExpires", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "uploadQueue",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "experimentID", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "uploadQueue",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "nextRetryAt", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

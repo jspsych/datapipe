@@ -10,32 +10,33 @@ interface QueueUploadParams {
   osfFilesLink: string;
   errorCode: number;
   sessionIncremented: boolean;
+  failureReason?: string;
 }
 
 const MAX_RETRIES = 5;
 
 export default async function queueUpload(params: QueueUploadParams): Promise<string> {
   const deduplicationKey = `${params.experimentID}:${params.filename}`;
+  const docId = deduplicationKey.replace(/[/\\]/g, "_");
 
-  // Check for existing pending/processing entry with same key
-  const existing = await db
-    .collection("uploadQueue")
-    .where("deduplicationKey", "==", deduplicationKey)
-    .where("status", "in", ["pending", "processing"])
-    .limit(1)
-    .get();
-
-  if (!existing.empty) {
-    return existing.docs[0].id;
-  }
+  const docRef = db.collection("uploadQueue").doc(docId);
 
   const now = Timestamp.now();
   const nextRetryAt = Timestamp.fromMillis(now.toMillis() + 60 * 60 * 1000); // 1 hour
 
-  const docRef = db.collection("uploadQueue").doc();
+  // Use set with merge:false — if the doc already exists (pending/processing),
+  // the storage write is idempotent and the Firestore write overwrites with fresh data.
+  // If it was completed/failed, we re-queue it.
+  const existingDoc = await docRef.get();
+  if (existingDoc.exists) {
+    const status = existingDoc.data()?.status;
+    if (status === "pending" || status === "processing") {
+      return docId;
+    }
+  }
 
   // Write data to Cloud Storage
-  const storagePath = `upload-queue/${docRef.id}`;
+  const storagePath = `upload-queue/${docId}`;
   const bucket = storage.bucket();
   const file = bucket.file(storagePath);
   await file.save(params.data, { contentType: "text/plain" });
@@ -56,10 +57,10 @@ export default async function queueUpload(params: QueueUploadParams): Promise<st
     lastAttemptAt: null,
     nextRetryAt,
     completedAt: null,
-    failureReason: null,
+    failureReason: params.failureReason || null,
     deduplicationKey,
     sessionIncremented: params.sessionIncremented,
   });
 
-  return docRef.id;
+  return docId;
 }

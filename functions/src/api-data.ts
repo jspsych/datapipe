@@ -141,6 +141,7 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
         experimentID, owner: exp_data.owner, filename, data,
         dataType: "data", osfFilesLink: exp_data.osfFilesLink,
         errorCode: 0, sessionIncremented: true,
+        failureReason: `Upload exception: ${detail}`,
       });
       await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
       res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
@@ -165,6 +166,7 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
         experimentID, owner: exp_data.owner, filename, data,
         dataType: "data", osfFilesLink: exp_data.osfFilesLink,
         errorCode: result.errorCode || 0, sessionIncremented: true,
+        failureReason: `OSF error ${result.errorCode}: ${result.errorText}`,
       });
       await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
       res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});

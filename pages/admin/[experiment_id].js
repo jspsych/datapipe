@@ -46,6 +46,7 @@ function ExperimentPageDashboard({ experiment_id }) {
   const [queueData] = useCollectionData(queueRef, { idField: "id" });
   const queueEntries = queueData || [];
 
+  const pendingUploads = queueEntries.filter(e => e.status === "pending" || e.status === "processing").length;
   const uploadError = logs?.logError;
   const errorLog = logs?.errors;
 
@@ -68,9 +69,14 @@ function ExperimentPageDashboard({ experiment_id }) {
                 Data upload errors
               </Badge>
             )}
-            {queueEntries.length > 0 && (
+            {pendingUploads > 0 && (
               <Badge colorPalette="orange" variant="solid" px={2} py={1}>
-                {queueEntries.filter(e => e.status === "pending" || e.status === "processing").length} pending upload{queueEntries.filter(e => e.status === "pending" || e.status === "processing").length !== 1 ? "s" : ""}
+                {pendingUploads} pending upload{pendingUploads !== 1 ? "s" : ""}
+              </Badge>
+            )}
+            {pendingUploads === 0 && queueEntries.length > 0 && (
+              <Badge colorPalette="red" variant="solid" px={2} py={1}>
+                {queueEntries.length} failed upload{queueEntries.length !== 1 ? "s" : ""}
               </Badge>
             )}
           </HStack>
