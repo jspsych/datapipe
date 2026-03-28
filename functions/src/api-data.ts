@@ -91,31 +91,46 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
   }
 
   let token: string = "";
-  if (user_data.usingPersonalToken) {
-    if (!user_data.osfTokenValid) {
-      res.status(400).json(MESSAGES.INVALID_OSF_TOKEN);
-      await writeLog(experimentID, "logError", MESSAGES.INVALID_OSF_TOKEN);
-      return;
-    }
-    else {
-      token = decrypt(user_data.osfToken);
-    }
-  }
-
-  if (!user_data.usingPersonalToken) {
-    if (Date.now() > user_data.authTokenExpires) {
-      const refreshResult = await refreshAndUpdateUser(exp_data.owner, decrypt(user_data.refreshToken));
-
-      if (!refreshResult.success) {
-        res.status(400).json(MESSAGES.INVALID_REFRESH_TOKEN);
-        await writeLog(experimentID, "logError", MESSAGES.INVALID_REFRESH_TOKEN);
+  try {
+    if (user_data.usingPersonalToken) {
+      if (!user_data.osfTokenValid) {
+        res.status(400).json(MESSAGES.INVALID_OSF_TOKEN);
+        await writeLog(experimentID, "logError", MESSAGES.INVALID_OSF_TOKEN);
         return;
       }
-
-      token = refreshResult.accessToken!;
-    } else {
-      token = decrypt(user_data.authToken);
+      else {
+        token = decrypt(user_data.osfToken);
+      }
     }
+
+    if (!user_data.usingPersonalToken) {
+      if (Date.now() > user_data.authTokenExpires) {
+        let refreshResult;
+        try {
+          refreshResult = await refreshAndUpdateUser(exp_data.owner, decrypt(user_data.refreshToken));
+        } catch (e) {
+          const detail = e instanceof Error ? e.message : "Unknown error";
+          res.status(500).json(MESSAGES.TOKEN_REFRESH_EXCEPTION);
+          await writeLog(experimentID, "logError", {...MESSAGES.TOKEN_REFRESH_EXCEPTION, detail});
+          return;
+        }
+
+        if (!refreshResult.success) {
+          res.status(400).json(MESSAGES.INVALID_REFRESH_TOKEN);
+          await writeLog(experimentID, "logError", MESSAGES.INVALID_REFRESH_TOKEN);
+          return;
+        }
+
+        token = refreshResult.accessToken!;
+      } else {
+        token = decrypt(user_data.authToken);
+      }
+    }
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : "Unknown error";
+    res.status(500).json(MESSAGES.TOKEN_DECRYPTION_ERROR);
+    await writeLog(experimentID, "logError", {...MESSAGES.TOKEN_DECRYPTION_ERROR, detail});
+    return;
   }
 
   //METADATA BLOCK START

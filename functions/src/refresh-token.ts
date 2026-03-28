@@ -26,16 +26,23 @@ export async function refreshAndUpdateUser(
     grant_type: "refresh_token",
   });
 
-  const tokenResponse = await fetch(
-    `https://accounts.${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/oauth2/token`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: params.toString(),
-    }
-  );
+  let tokenResponse;
+  try {
+    tokenResponse = await fetch(
+      `https://accounts.${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/oauth2/token`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: params.toString(),
+      }
+    );
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : "Unknown network error";
+    console.error(`Token refresh network error for user ${userId}:`, errorMessage);
+    return { success: false, error: errorMessage };
+  }
 
   if (!tokenResponse.ok) {
     const errorData = await tokenResponse.text();
@@ -57,7 +64,13 @@ export async function refreshAndUpdateUser(
     updateData.refreshTokenExpires = Date.now() + REFRESH_TOKEN_LIFETIME_MS;
   }
 
-  await db.doc(`users/${userId}`).update(updateData);
+  try {
+    await db.doc(`users/${userId}`).update(updateData);
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : "Unknown database error";
+    console.error(`Failed to save refreshed token for user ${userId}:`, errorMessage);
+    return { success: false, error: errorMessage };
+  }
 
   return {
     success: true,
