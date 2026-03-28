@@ -7,6 +7,8 @@ import { oauth2Callback } from "./oauth2-callback.js";
 import { oauth2Regenerate } from "./oauth2-regenerate.js";
 import { checkEmailConflict } from "./check-email-conflict.js";
 import { scheduledTokenRefresh } from "./scheduled-token-refresh.js";
+import { scheduledUploadRetry } from "./scheduled-upload-retry.js";
+import { apiQueueStatus } from "./api-queue-status.js";
 import { generateOAuthState } from "./generate-oauth-state.js";
 import { saveOsfToken } from "./save-osf-token.js";
 import { getOsfToken } from "./get-osf-token.js";
@@ -24,6 +26,8 @@ export {
   oauth2Regenerate as oauth2regenerate,
   checkEmailConflict as checkemailconflict,
   scheduledTokenRefresh as scheduledtokenrefresh,
+  scheduledUploadRetry as scheduleduploadretry,
+  apiQueueStatus as apiqueuestatus,
   generateOAuthState as generateoauthstate,
   saveOsfToken as saveosftoken,
   getOsfToken as getosftoken,

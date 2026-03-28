@@ -72,6 +72,27 @@ export interface ExperimentData {
     success: boolean;
     errorCode: number | null;
     errorText: string | null;
+    retryAfter?: number | null;
+  }
+
+  export interface QueuedUpload {
+    experimentID: string;
+    owner: string;
+    filename: string;
+    storagePath: string;
+    dataType: "data" | "base64";
+    osfFilesLink: string;
+    status: "pending" | "processing" | "completed" | "failed";
+    errorCode: number;
+    retryCount: number;
+    maxRetries: number;
+    createdAt: FirebaseFirestore.Timestamp;
+    lastAttemptAt: FirebaseFirestore.Timestamp | null;
+    nextRetryAt: FirebaseFirestore.Timestamp;
+    completedAt: FirebaseFirestore.Timestamp | null;
+    failureReason: string | null;
+    deduplicationKey: string;
+    sessionIncremented: boolean;
   }
 
   export interface OSFFile{

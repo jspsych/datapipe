@@ -45,10 +45,38 @@ export default function FAQ() {
           </Text>
         </FAQItem>
         <FAQItem value="item-2" question="Will DataPipe store my data?">
+          <Text mb={2}>
+            Under normal operation, no. DataPipe routes your data to the Open
+            Science Framework but does not keep a copy. Data passes through
+            DataPipe for optional validation and is then sent directly to your
+            OSF project.
+          </Text>
           <Text>
-            No. DataPipe routes your data to the Open Science Framework but
-            does not keep a copy. Data passes through DataPipe for optional
-            validation and is then sent directly to your OSF project.
+            The one exception is when an upload to the OSF fails (for example,
+            due to a temporary OSF outage or rate limit). In that case,
+            DataPipe temporarily caches the data so it can retry the upload
+            automatically. Cached data is encrypted at rest, stored for up to
+            one week, and deleted as soon as the upload succeeds. See the
+            question below for details.
+          </Text>
+        </FAQItem>
+        <FAQItem value="item-2b" question="What happens if an upload to the OSF fails?">
+          <Text mb={2}>
+            If the OSF is temporarily unavailable or returns an error, DataPipe
+            will not lose your data. Failed uploads are automatically cached
+            and retried with increasing intervals (starting at one hour, up to
+            24 hours) for up to five attempts over approximately one week.
+          </Text>
+          <Text mb={2}>
+            Your experiment dashboard will show an orange badge for pending
+            retries or a red badge if all retries have been exhausted. You can
+            expand the queued files panel to see the status of each file,
+            including the reason for failure and the number of retry attempts.
+          </Text>
+          <Text>
+            You can also download any cached file directly from the dashboard
+            at any time, so you always have a way to recover your data even if
+            the automatic retries do not succeed.
           </Text>
         </FAQItem>
         <FAQItem value="item-3" question="How much does it cost?">
