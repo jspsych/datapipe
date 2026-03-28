@@ -33,6 +33,20 @@ function formatDate(value) {
   }).format(date);
 }
 
+function timeRemaining(createdAt) {
+  if (!createdAt) return null;
+  const created = createdAt.toDate ? createdAt.toDate() : new Date(createdAt);
+  const expiresAt = created.getTime() + 7 * 24 * 60 * 60 * 1000;
+  const msLeft = expiresAt - Date.now();
+  if (msLeft <= 0) return "expiring soon";
+  const hoursLeft = Math.floor(msLeft / (60 * 60 * 1000));
+  if (hoursLeft >= 24) {
+    const days = Math.floor(hoursLeft / 24);
+    return `${days}d ${hoursLeft % 24}h remaining`;
+  }
+  return `${hoursLeft}h remaining`;
+}
+
 export default function QueuePanel({ entries, experimentId }) {
   const [downloading, setDownloading] = useState(null);
 
@@ -98,7 +112,7 @@ export default function QueuePanel({ entries, experimentId }) {
                   <Table.Row>
                     <Table.ColumnHeader>FILENAME</Table.ColumnHeader>
                     <Table.ColumnHeader>STATUS</Table.ColumnHeader>
-                    <Table.ColumnHeader>QUEUED AT</Table.ColumnHeader>
+                    <Table.ColumnHeader>EXPIRES</Table.ColumnHeader>
                     <Table.ColumnHeader>RETRIES</Table.ColumnHeader>
                     <Table.ColumnHeader>DOWNLOAD</Table.ColumnHeader>
                   </Table.Row>
@@ -115,7 +129,7 @@ export default function QueuePanel({ entries, experimentId }) {
                         )}
                       </Table.Cell>
                       <Table.Cell>{statusBadge(entry.status)}</Table.Cell>
-                      <Table.Cell>{formatDate(entry.createdAt)}</Table.Cell>
+                      <Table.Cell>{timeRemaining(entry.createdAt)}</Table.Cell>
                       <Table.Cell>
                         {entry.retryCount}/{entry.maxRetries}
                       </Table.Cell>
