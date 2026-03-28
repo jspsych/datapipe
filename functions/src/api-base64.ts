@@ -5,8 +5,7 @@ import { db } from "./app.js";
 import writeLog from "./write-log.js";
 import isBase64 from "is-base64";
 import MESSAGES from "./api-messages.js";
-import { refreshAndUpdateUser } from "./refresh-token.js";
-import { decrypt } from "./crypto-utils.js";
+import resolveToken from "./resolve-token.js";
 import { ExperimentData, UserData } from './interfaces';
 
 export const apiBase64 = onRequest({ cors: true }, async (req, res) => {
@@ -79,48 +78,24 @@ export const apiBase64 = onRequest({ cors: true }, async (req, res) => {
     return;
   }
 
-  let token: string = "";
+  let tokenResult;
   try {
-    if (user_data.usingPersonalToken) {
-      if (!user_data.osfTokenValid) {
-        res.status(400).json(MESSAGES.INVALID_OSF_TOKEN);
-        await writeLog(experimentID, "logError", MESSAGES.INVALID_OSF_TOKEN);
-        return;
-      }
-      else {
-        token = decrypt(user_data.osfToken);
-      }
-    }
-
-    if (!user_data.usingPersonalToken) {
-      if (Date.now() > user_data.authTokenExpires) {
-        let refreshResult;
-        try {
-          refreshResult = await refreshAndUpdateUser(exp_data.owner, decrypt(user_data.refreshToken));
-        } catch (e) {
-          const detail = e instanceof Error ? e.message : "Unknown error";
-          res.status(500).json(MESSAGES.TOKEN_REFRESH_EXCEPTION);
-          await writeLog(experimentID, "logError", {...MESSAGES.TOKEN_REFRESH_EXCEPTION, detail});
-          return;
-        }
-
-        if (!refreshResult.success) {
-          res.status(400).json(MESSAGES.INVALID_REFRESH_TOKEN);
-          await writeLog(experimentID, "logError", MESSAGES.INVALID_REFRESH_TOKEN);
-          return;
-        }
-
-        token = refreshResult.accessToken!;
-      } else {
-        token = decrypt(user_data.authToken);
-      }
-    }
+    tokenResult = await resolveToken(user_data, exp_data);
   } catch (e) {
     const detail = e instanceof Error ? e.message : "Unknown error";
-    res.status(500).json(MESSAGES.TOKEN_DECRYPTION_ERROR);
-    await writeLog(experimentID, "logError", {...MESSAGES.TOKEN_DECRYPTION_ERROR, detail});
+    res.status(500).json(MESSAGES.TOKEN_RESOLUTION_ERROR);
+    await writeLog(experimentID, "logError", {...MESSAGES.TOKEN_RESOLUTION_ERROR, detail});
     return;
   }
+
+  if (!tokenResult.success) {
+    const errorMessage = MESSAGES[tokenResult.error as keyof typeof MESSAGES] || MESSAGES.TOKEN_RESOLUTION_ERROR;
+    res.status(400).json(errorMessage);
+    await writeLog(experimentID, "logError", {...errorMessage, detail: tokenResult.detail});
+    return;
+  }
+
+  const token = tokenResult.token;
 
   let result;
   try {
