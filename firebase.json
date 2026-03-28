@@ -46,6 +46,10 @@
       {
         "source": "/api/getosftoken",
         "function": "getosftoken"
+      },
+      {
+        "source": "/api/queuestatus",
+        "function": "apiqueuestatus"
       }
     ]
   },

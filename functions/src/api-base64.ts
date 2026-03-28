@@ -6,6 +6,7 @@ import writeLog from "./write-log.js";
 import isBase64 from "is-base64";
 import MESSAGES from "./api-messages.js";
 import resolveToken from "./resolve-token.js";
+import queueUpload from "./queue-upload.js";
 import { ExperimentData, UserData, OSFResult } from './interfaces';
 
 export const apiBase64 = onRequest({ cors: true }, async (req, res) => {
@@ -106,10 +107,22 @@ export const apiBase64 = onRequest({ cors: true }, async (req, res) => {
       filename
     );
   } catch (e) {
+    // Network errors, timeouts, etc. — queue for retry
     const detail = e instanceof Error ? e.message : "Unknown error";
-    res.status(500).json(MESSAGES.OSF_UPLOAD_EXCEPTION);
-    await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail});
-    return;
+    try {
+      await queueUpload({
+        experimentID, owner: exp_data.owner, filename, data,
+        dataType: "base64", osfFilesLink: exp_data.osfFilesLink,
+        errorCode: 0, sessionIncremented: false,
+      });
+      res.status(202).json(MESSAGES.OSF_UPLOAD_QUEUED);
+      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail});
+      return;
+    } catch {
+      res.status(500).json(MESSAGES.OSF_UPLOAD_EXCEPTION);
+      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail});
+      return;
+    }
   }
 
   if (!result.success) {
@@ -118,9 +131,21 @@ export const apiBase64 = onRequest({ cors: true }, async (req, res) => {
       await writeLog(experimentID, "logError", MESSAGES.OSF_FILE_EXISTS);
       return;
     }
-    res.status(400).json(MESSAGES.OSF_UPLOAD_ERROR);
-    await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.errorCode, osfStatusText: result.errorText});
-    return;
+    // Queue all other failures for retry
+    try {
+      await queueUpload({
+        experimentID, owner: exp_data.owner, filename, data,
+        dataType: "base64", osfFilesLink: exp_data.osfFilesLink,
+        errorCode: result.errorCode || 0, sessionIncremented: false,
+      });
+      res.status(202).json(MESSAGES.OSF_UPLOAD_QUEUED);
+      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.errorCode, osfStatusText: result.errorText});
+      return;
+    } catch {
+      res.status(400).json(MESSAGES.OSF_UPLOAD_ERROR);
+      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.errorCode, osfStatusText: result.errorText});
+      return;
+    }
   }
 
   res.status(201).json(MESSAGES.SUCCESS);

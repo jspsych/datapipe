@@ -46,7 +46,9 @@ export default async function putFileOSF(
   });
 
   if (osfResult.status !== 201) {
-    return { success: false, errorCode: osfResult.status, errorText: osfResult.statusText };
+    const retryAfterHeader = osfResult.headers.get('Retry-After');
+    const retryAfter = retryAfterHeader ? parseInt(retryAfterHeader, 10) : null;
+    return { success: false, errorCode: osfResult.status, errorText: osfResult.statusText, retryAfter };
   }
 
   return { success: true, errorCode: null, errorText: null };
