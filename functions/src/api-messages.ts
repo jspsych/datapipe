@@ -74,8 +74,16 @@ const MESSAGES = {
     error: "OSF_UPLOAD_ERROR",
     message: "An error occurred while uploading the data to OSF",
   },
-  INVALD_METADATA_ERROR: {
-    error: "INVALD_METADATA_ERROR",
+  OSF_UPLOAD_EXCEPTION: {
+    error: "OSF_UPLOAD_EXCEPTION",
+    message: "An unexpected error occurred while uploading the data to OSF",
+  },
+  TOKEN_RESOLUTION_ERROR: {
+    error: "TOKEN_RESOLUTION_ERROR",
+    message: "Failed to resolve the OSF token",
+  },
+  INVALID_METADATA_ERROR: {
+    error: "INVALID_METADATA_ERROR",
     message: "Metadata produced from incoming data is invalid"
   },
   OSF_METADATA_UPLOAD_ERROR: {

@@ -154,8 +154,10 @@ catch (error) {
 
   if (error instanceof Error){
     errorMessage = error.message;
-  }     
+  }
   else errorMessage = 'An unknown error occurred';
+
+  console.error("Metadata block error:", errorMessage);
 
   const metadataResponse: MetadataResponse = {success: false, ...MESSAGES.METADATA_ERROR, message: errorMessage, ...metadataMessage};
   return metadataResponse;

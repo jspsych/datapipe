@@ -36,6 +36,7 @@ export default async function writeLog(experimentID: string, action: "saveData" 
     }
     return true;
   } catch (error) {
+    console.error(`writeLog failed for experiment ${experimentID}, action ${action}:`, error instanceof Error ? error.message : error);
     return false;
   }
 }
