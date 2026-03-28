@@ -24,12 +24,13 @@ function statusBadge(status) {
   );
 }
 
-function formatDate(isoString) {
-  if (!isoString) return "-";
+function formatDate(value) {
+  if (!value) return "-";
+  const date = value.toDate ? value.toDate() : new Date(value);
   return new Intl.DateTimeFormat("en-GB", {
     dateStyle: "short",
     timeStyle: "short",
-  }).format(new Date(isoString));
+  }).format(date);
 }
 
 export default function QueuePanel({ entries, experimentId }) {
