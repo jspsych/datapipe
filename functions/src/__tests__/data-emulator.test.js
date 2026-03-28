@@ -30,6 +30,18 @@ const config = {
 
 jest.setTimeout(30000);
 
+async function waitForLog(db, docId, field, expectedValue, timeoutMs = 10000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const doc = await db.collection("logs").doc(docId).get();
+    if (doc.exists && doc.data()?.[field] === expectedValue) {
+      return doc;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  return db.collection("logs").doc(docId).get();
+}
+
 beforeAll(async () => {
   initializeApp(config);
   const db = getFirestore();
@@ -71,9 +83,7 @@ describe("apiData", () => {
       data: "test",
       filename: "test",
     });
-    // Wait for in-flight log writes to settle before reading
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    let doc = await db.collection("logs").doc("testlog").get();
+    let doc = await waitForLog(db, "testlog", "saveData", 1);
     expect(doc.data().saveData).toBe(1);
 
     await saveData({
@@ -81,8 +91,7 @@ describe("apiData", () => {
       data: "test",
       filename: "test",
     });
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    doc = await db.collection("logs").doc("testlog").get();
+    doc = await waitForLog(db, "testlog", "saveData", 2);
     expect(doc.data().saveData).toBe(2);
   });
 
@@ -97,10 +106,7 @@ describe("apiData", () => {
       filename: "test",
     });
 
-    // Wait for in-flight log writes to settle before reading
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    let doc = await db.collection("logs").doc("data-testexp").get();
-
+    let doc = await waitForLog(db, "data-testexp", "logError", 1);
     expect(doc.data().logError).toBe(1);
 
     await db.collection("experiments").doc("data-testexp").set(
@@ -118,9 +124,7 @@ describe("apiData", () => {
       filename: "test",
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    doc = await db.collection("logs").doc("data-testexp").get();
-
+    doc = await waitForLog(db, "data-testexp", "logError", 2);
     expect(doc.data().logError).toBe(2);
 
   });
