@@ -30,6 +30,19 @@ const config = {
 
 jest.setTimeout(30000);
 
+async function waitForLog(db, docId, field, expectedValue, timeoutMs = 10000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const doc = await db.collection("logs").doc(docId).get();
+    if (doc.exists && doc.data()?.[field] === expectedValue) {
+      return doc;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  // Return the last read for the assertion to produce a useful error
+  return db.collection("logs").doc(docId).get();
+}
+
 beforeAll(async () => {
   initializeApp(config);
   const db = getFirestore();
@@ -66,23 +79,20 @@ describe("apiData", () => {
   it("should increment the write request log for the experiment when there is a complete request", async () => {
     const db = getFirestore();
     await db.collection("logs").doc("testlog").delete();
-    let response = await saveData({
+    await saveData({
       experimentID: "testlog",
       data: "test",
       filename: "test",
     });
-    // Wait for in-flight log writes to settle before reading
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    let doc = await db.collection("logs").doc("testlog").get();
+    let doc = await waitForLog(db, "testlog", "saveBase64Data", 1);
     expect(doc.data().saveBase64Data).toBe(1);
 
-    response = await saveData({
+    await saveData({
       experimentID: "testlog",
       data: "test",
       filename: "test",
     });
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    doc = await db.collection("logs").doc("testlog").get();
+    doc = await waitForLog(db, "testlog", "saveBase64Data", 2);
     expect(doc.data().saveBase64Data).toBe(2);
   });
 
@@ -97,10 +107,7 @@ describe("apiData", () => {
       filename: "test",
     });
 
-    // Wait for in-flight log writes to settle before reading
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    let doc = await db.collection("logs").doc("base64-testexp-active-no-owner").get();
-
+    let doc = await waitForLog(db, "base64-testexp-active-no-owner", "logError", 1);
     expect(doc.data().logError).toBe(1);
 
     await db.collection("experiments").doc("base64-testexp-active-no-owner").set({
@@ -113,9 +120,7 @@ describe("apiData", () => {
       filename: "test",
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    doc = await db.collection("logs").doc("base64-testexp-active-no-owner").get();
-
+    doc = await waitForLog(db, "base64-testexp-active-no-owner", "logError", 2);
     expect(doc.data().logError).toBe(2);
   });
 

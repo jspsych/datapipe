@@ -7,8 +7,7 @@ import { db } from "./app.js";
 import writeLog from "./write-log.js";
 import MESSAGES from "./api-messages.js";
 import blockMetadata from "./metadata-block.js";
-import { refreshAndUpdateUser } from "./refresh-token.js";
-import { decrypt } from "./crypto-utils.js";
+import resolveToken from "./resolve-token.js";
 import { ExperimentData, UserData, MetadataResponse, OSFResult, RequestBody } from './interfaces';
 
 export const apiData = onRequest({ cors: true }, async (req, res) => {
@@ -90,33 +89,24 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
     return;
   }
 
-  let token: string = "";
-  if (user_data.usingPersonalToken) {
-    if (!user_data.osfTokenValid) {
-      res.status(400).json(MESSAGES.INVALID_OSF_TOKEN);
-      await writeLog(experimentID, "logError", MESSAGES.INVALID_OSF_TOKEN);
-      return;
-    }
-    else {
-      token = decrypt(user_data.osfToken);
-    }
+  let tokenResult: Awaited<ReturnType<typeof resolveToken>>;
+  try {
+    tokenResult = await resolveToken(user_data, exp_data);
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : "Unknown error";
+    res.status(500).json(MESSAGES.TOKEN_RESOLUTION_ERROR);
+    await writeLog(experimentID, "logError", {...MESSAGES.TOKEN_RESOLUTION_ERROR, detail});
+    return;
   }
 
-  if (!user_data.usingPersonalToken) {
-    if (Date.now() > user_data.authTokenExpires) {
-      const refreshResult = await refreshAndUpdateUser(exp_data.owner, decrypt(user_data.refreshToken));
-
-      if (!refreshResult.success) {
-        res.status(400).json(MESSAGES.INVALID_REFRESH_TOKEN);
-        await writeLog(experimentID, "logError", MESSAGES.INVALID_REFRESH_TOKEN);
-        return;
-      }
-
-      token = refreshResult.accessToken!;
-    } else {
-      token = decrypt(user_data.authToken);
-    }
+  if (!tokenResult.success) {
+    const errorMessage = MESSAGES[tokenResult.error as keyof typeof MESSAGES] || MESSAGES.TOKEN_RESOLUTION_ERROR;
+    res.status(400).json(errorMessage);
+    await writeLog(experimentID, "logError", {...errorMessage, detail: tokenResult.detail});
+    return;
   }
+
+  const token = tokenResult.token;
 
   //METADATA BLOCK START
 
@@ -127,18 +117,27 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
 
   if (metadataResponse.success === false) {
     res.status(400).json(metadataResponse);
+    await writeLog(experimentID, "logError", {...MESSAGES.METADATA_ERROR, detail: metadataResponse.message});
     return;
   }
 
   const metadataMessage: string = metadataResponse.metadataMessage;
   //METADATA BLOCK END
 
-  const result: OSFResult = await putFileOSF(
-    exp_data.osfFilesLink,
-    token,
-    data,
-    filename
-  );  
+  let result: OSFResult;
+  try {
+    result = await putFileOSF(
+      exp_data.osfFilesLink,
+      token,
+      data,
+      filename
+    );
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : "Unknown error";
+    res.status(500).json({...MESSAGES.OSF_UPLOAD_EXCEPTION, metadataMessage});
+    await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail});
+    return;
+  }
 
   if (!result.success) {
     if (result.errorCode === 409 && result.errorText === "Conflict") {
@@ -147,7 +146,7 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
       return;
     }
     res.status(400).json({...MESSAGES.OSF_UPLOAD_ERROR, metadataMessage});
-    await writeLog(experimentID, "logError", MESSAGES.OSF_UPLOAD_ERROR);
+    await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.errorCode, osfStatusText: result.errorText});
     return;
   }
 

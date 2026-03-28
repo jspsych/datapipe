@@ -30,6 +30,18 @@ const config = {
 
 jest.setTimeout(30000);
 
+async function waitForLog(db, docId, field, expectedValue, timeoutMs = 10000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const doc = await db.collection("logs").doc(docId).get();
+    if (doc.exists && doc.data()?.[field] === expectedValue) {
+      return doc;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  return db.collection("logs").doc(docId).get();
+}
+
 beforeAll(async () => {
   initializeApp(config);
   const db = getFirestore();
@@ -62,24 +74,15 @@ describe("getCondition", () => {
   it("should increment the error log for an experiment when errors are caught", async () => {
 
     const db = getFirestore();
-    // Wait briefly for any in-flight writes from previous tests to settle
-    await new Promise((resolve) => setTimeout(resolve, 2000));
     await db.collection("logs").doc("testexp").delete();
 
     await getCondition({ experimentID: "testexp" });
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    let doc = await db.collection("logs").doc("testexp").get();
-
+    let doc = await waitForLog(db, "testexp", "logError", 1);
     expect(doc.data().logError).toBe(1);
 
     await getCondition({ experimentID: "testexp" });
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    doc = await db.collection("logs").doc("testexp").get();
-
+    doc = await waitForLog(db, "testexp", "logError", 2);
     expect(doc.data().logError).toBe(2);
-
 
   });
 
