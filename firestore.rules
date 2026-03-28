@@ -42,5 +42,9 @@ service cloud.firestore {
       allow create: if(request.auth.uid != null) &&
         resource.data.owner == request.auth.uid;
     }
+    match /uploadQueue/{docId} {
+      allow read: if(request.auth.uid != null) &&
+        resource.data.owner == request.auth.uid;
+    }
   }
 }
