@@ -89,7 +89,7 @@ export const apiData = onRequest({ cors: true }, async (req, res) => {
     return;
   }
 
-  let tokenResult;
+  let tokenResult: Awaited<ReturnType<typeof resolveToken>>;
   try {
     tokenResult = await resolveToken(user_data, exp_data);
   } catch (e) {

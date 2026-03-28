@@ -6,7 +6,7 @@ import writeLog from "./write-log.js";
 import isBase64 from "is-base64";
 import MESSAGES from "./api-messages.js";
 import resolveToken from "./resolve-token.js";
-import { ExperimentData, UserData } from './interfaces';
+import { ExperimentData, UserData, OSFResult } from './interfaces';
 
 export const apiBase64 = onRequest({ cors: true }, async (req, res) => {
   const { experimentID, data, filename } = req.body;
@@ -78,7 +78,7 @@ export const apiBase64 = onRequest({ cors: true }, async (req, res) => {
     return;
   }
 
-  let tokenResult;
+  let tokenResult: Awaited<ReturnType<typeof resolveToken>>;
   try {
     tokenResult = await resolveToken(user_data, exp_data);
   } catch (e) {
@@ -97,7 +97,7 @@ export const apiBase64 = onRequest({ cors: true }, async (req, res) => {
 
   const token = tokenResult.token;
 
-  let result;
+  let result: OSFResult;
   try {
     result = await putFileOSF(
       exp_data.osfFilesLink,

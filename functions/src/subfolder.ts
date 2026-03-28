@@ -18,9 +18,9 @@ export default async function parsePath(osfComponent: string, osfToken: string, 
     // The JSON portion has a property called 'data' that contains an array of objects, each of which
     // corresponds to a data file in the OSF project. We access this array.
 
-    const listOfFiles: OSFFile[]= folder['data'];
+    const listOfFiles = folder['data'];
 
-    if (!listOfFiles) {
+    if (!Array.isArray(listOfFiles)) {
       throw new Error("OSF component response did not contain a 'data' array");
     }
 

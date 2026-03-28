@@ -26,7 +26,7 @@ export async function refreshAndUpdateUser(
     grant_type: "refresh_token",
   });
 
-  let tokenResponse;
+  let tokenResponse: Response;
   try {
     tokenResponse = await fetch(
       `https://accounts.${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/oauth2/token`,
