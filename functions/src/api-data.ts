@@ -11,7 +11,7 @@ import resolveToken from "./resolve-token.js";
 import queueUpload from "./queue-upload.js";
 import { ExperimentData, UserData, MetadataResponse, OSFResult, RequestBody } from './interfaces';
 
-export const apiData = onRequest({ cors: true }, async (req, res) => {
+export const apiData = onRequest({ cors: true, memory: "512MiB" }, async (req, res) => {
   const { experimentID, data, filename, metadataOptions }: RequestBody = req.body;
 
   if (!experimentID || !data || !filename) {
