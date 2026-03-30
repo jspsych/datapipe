@@ -80,7 +80,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB" }, async (req, r
   // during heavy processing (metadata, OSF upload).
   let pendingPath: string;
   try {
-    pendingPath = await persistPending(experimentID, filename, data);
+    pendingPath = await persistPending(experimentID, filename, data, metadataOptions);
   } catch (e) {
     const detail = e instanceof Error ? e.message : "Unknown error";
     res.status(500).json(MESSAGES.DATA_PERSIST_ERROR);
