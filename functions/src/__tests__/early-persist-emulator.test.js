@@ -5,6 +5,7 @@
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
+import { startServer } from "../../lib/mock-server.js";
 import MESSAGES from "../api-messages";
 
 process.env.FIRESTORE_EMULATOR_HOST = "localhost:8080";
@@ -48,8 +49,11 @@ const sampleData = `[{
 
 let db;
 let bucket;
+let mockServerInstance;
 
 beforeAll(async () => {
+  mockServerInstance = await startServer();
+
   const app = initializeApp(config);
   db = getFirestore();
   bucket = getStorage(app).bucket();
@@ -71,6 +75,10 @@ beforeAll(async () => {
     active: false,
     owner: "persist-test-user",
   });
+});
+
+afterAll(async () => {
+  mockServerInstance.close();
 });
 
 describe("early persist data loss prevention", () => {
