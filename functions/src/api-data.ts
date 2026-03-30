@@ -111,18 +111,23 @@ export const apiData = onRequest({ cors: true, memory: "512MiB" }, async (req, r
 
   //METADATA BLOCK START
 
-  //Creates or references a document containing the metadata for the experiment in the metdata collection on Firestore.
-  const metadata_doc_ref: DocumentReference<DocumentData> = db.collection("metadata").doc(experimentID);
+  let metadataMessage: string = '';
 
-  const metadataResponse: MetadataResponse = await blockMetadata(exp_data, user_data, metadata_doc_ref, data, metadataOptions);
+  if (exp_data.metadataActive) {
+    //Creates or references a document containing the metadata for the experiment in the metdata collection on Firestore.
+    const metadata_doc_ref: DocumentReference<DocumentData> = db.collection("metadata").doc(experimentID);
 
-  if (metadataResponse.success === false) {
-    res.status(400).json(metadataResponse);
-    await writeLog(experimentID, "logError", {...MESSAGES.METADATA_ERROR, detail: metadataResponse.message});
-    return;
+    const metadataResponse: MetadataResponse = await blockMetadata(exp_data, user_data, metadata_doc_ref, data, metadataOptions);
+
+    if (metadataResponse.success === false) {
+      res.status(400).json(metadataResponse);
+      await writeLog(experimentID, "logError", {...MESSAGES.METADATA_ERROR, detail: metadataResponse.message});
+      return;
+    }
+
+    metadataMessage = metadataResponse.metadataMessage;
   }
 
-  const metadataMessage: string = metadataResponse.metadataMessage;
   //METADATA BLOCK END
 
   let result: OSFResult;
