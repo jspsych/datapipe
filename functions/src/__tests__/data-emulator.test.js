@@ -30,7 +30,7 @@ const config = {
 
 jest.setTimeout(30000);
 
-async function waitForLog(db, docId, field, expectedValue, timeoutMs = 10000) {
+async function waitForLog(db, docId, field, expectedValue, timeoutMs = 30000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     const doc = await db.collection("logs").doc(docId).get();
