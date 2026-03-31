@@ -13,9 +13,29 @@ import {
 import { Download } from "lucide-react";
 import { auth } from "../../lib/firebase";
 
+function friendlyReason(reason) {
+  if (!reason) return null;
+  if (reason.includes("interrupted upload") || reason.includes("memory limit")) {
+    return "Upload was interrupted by a server restart or memory limit.";
+  }
+  if (reason.includes("Upload exception") || reason.includes("fetch failed")) {
+    return "Could not connect to OSF.";
+  }
+  if (reason.includes("OSF error 503") || reason.includes("OSF error 502")) {
+    return "OSF was temporarily unavailable.";
+  }
+  if (reason.includes("OSF error 429")) {
+    return "OSF rate-limited the request.";
+  }
+  if (reason.includes("OSF error 401") || reason.includes("OSF error 403")) {
+    return "Authentication error. Your OSF token may need to be refreshed.";
+  }
+  return reason;
+}
+
 function statusBadge(status) {
   const labels = {
-    pending: { color: "orange", text: "Waiting to retry" },
+    pending: { color: "orange", text: "Retrying" },
     processing: { color: "blue", text: "Retrying now" },
     failed: { color: "red", text: "Failed" },
   };
@@ -27,6 +47,20 @@ function statusBadge(status) {
   );
 }
 
+function nextRetryText(nextRetryAt) {
+  if (!nextRetryAt) return null;
+  const t = nextRetryAt.toDate ? nextRetryAt.toDate() : new Date(nextRetryAt);
+  const msUntil = t.getTime() - Date.now();
+  if (msUntil <= 0) return "soon";
+  const minUntil = Math.ceil(msUntil / (60 * 1000));
+  if (minUntil >= 60) {
+    const hours = Math.floor(minUntil / 60);
+    const mins = minUntil % 60;
+    return `in ${hours}h${mins > 0 ? ` ${mins}m` : ""}`;
+  }
+  return `in ${minUntil}m`;
+}
+
 function timeRemaining(createdAt) {
   if (!createdAt) return null;
   const created = createdAt.toDate ? createdAt.toDate() : new Date(createdAt);
@@ -36,9 +70,9 @@ function timeRemaining(createdAt) {
   const hoursLeft = Math.floor(msLeft / (60 * 60 * 1000));
   if (hoursLeft >= 24) {
     const days = Math.floor(hoursLeft / 24);
-    return `${days}d ${hoursLeft % 24}h remaining`;
+    return `${days}d ${hoursLeft % 24}h`;
   }
-  return `${hoursLeft}h remaining`;
+  return `${hoursLeft}h`;
 }
 
 async function fetchFile(experimentId, entryId) {
@@ -51,7 +85,12 @@ async function fetchFile(experimentId, entryId) {
   );
 }
 
-export default function QueuePanel({ entries, experimentId, errorLog }) {
+/**
+ * QueuePanel — shows all queued uploads (pending + failed) with immediate
+ * download access. Pending items are being retried automatically but the
+ * researcher can download them right away without waiting.
+ */
+export default function QueuePanel({ entries, experimentId }) {
   const [downloading, setDownloading] = useState(null);
   const [downloadingAll, setDownloadingAll] = useState(false);
 
@@ -113,13 +152,18 @@ export default function QueuePanel({ entries, experimentId, errorLog }) {
 
   const plural = (n, word) => `${n} ${word}${n !== 1 ? "s" : ""}`;
 
-  let alertTitle = "";
-  if (pendingCount > 0 && failedCount > 0) {
-    alertTitle = `${plural(pendingCount, "file")} waiting to upload, ${plural(failedCount, "file")} failed.`;
-  } else if (pendingCount > 0) {
-    alertTitle = `${plural(pendingCount, "file")} waiting to upload to OSF.`;
-  } else {
+  let alertTitle;
+  let alertDescription;
+
+  if (allFailed) {
     alertTitle = `${plural(failedCount, "file")} could not be uploaded to OSF.`;
+    alertDescription = "All retries were exhausted. Download these files and upload them to your OSF project manually to prevent data loss.";
+  } else if (failedCount > 0) {
+    alertTitle = `${plural(entries.length, "file")} did not upload to OSF.`;
+    alertDescription = `${plural(pendingCount, "file")} still being retried. ${plural(failedCount, "file")} failed permanently. You can download all files below.`;
+  } else {
+    alertTitle = `${plural(pendingCount, "file")} did not upload to OSF.`;
+    alertDescription = "DataPipe is retrying automatically. You can also download the files now.";
   }
 
   return (
@@ -127,30 +171,38 @@ export default function QueuePanel({ entries, experimentId, errorLog }) {
       <Alert.Indicator />
       <Box flex="1">
         <Alert.Title mb={1}>{alertTitle}</Alert.Title>
-        <Text fontSize="sm" mb={4}>
-          {allFailed
-            ? "These files could not be delivered after multiple attempts. Download them to avoid data loss."
-            : "DataPipe will keep retrying automatically. Files are stored for up to 1 week. You can also download them below."}
-        </Text>
+        <Text fontSize="sm" mb={4}>{alertDescription}</Text>
         <Accordion.Root collapsible size="sm" mb={4}>
           <Accordion.Item value="why">
             <Accordion.ItemTrigger>
               <Box as="span" flex="1" textAlign="left" fontSize="sm">
-                Why am I seeing this?
+                Why did these uploads fail?
               </Box>
               <Accordion.ItemIndicator />
             </Accordion.ItemTrigger>
             <Accordion.ItemContent>
               <Text fontSize="sm" pb={3}>
                 When a participant submits data, DataPipe tries to upload it to
-                your OSF project immediately. If that transfer fails — for
-                example, because OSF is temporarily unavailable, rate-limiting
-                requests, or there is a configuration issue with your project —
-                DataPipe saves a copy of the data and retries automatically over
-                the next several days. The files listed here are those saved
-                copies. Once a retry succeeds the file will disappear from this
-                list. If all retries are exhausted, you can still download the
-                data and upload it to OSF manually.
+                your OSF project immediately. If that fails, DataPipe saves a
+                copy and retries automatically. Common reasons include:
+              </Text>
+              <Box as="ul" fontSize="sm" pl={5} pb={3} listStyleType="disc">
+                <Box as="li" mb={1}>
+                  <strong>Server memory limit</strong> — Large data submissions
+                  can occasionally exceed the server&apos;s memory capacity.
+                </Box>
+                <Box as="li" mb={1}>
+                  <strong>OSF unavailable</strong> — OSF may be temporarily
+                  down or rate-limiting requests.
+                </Box>
+                <Box as="li" mb={1}>
+                  <strong>Configuration issue</strong> — There may be a problem
+                  with your OSF project settings or authentication token.
+                </Box>
+              </Box>
+              <Text fontSize="sm" pb={3}>
+                Files are stored for up to 7 days. If retries don&apos;t succeed,
+                download the files and upload them to OSF manually.
               </Text>
             </Accordion.ItemContent>
           </Accordion.Item>
@@ -167,78 +219,68 @@ export default function QueuePanel({ entries, experimentId, errorLog }) {
             Download all as ZIP
           </Button>
         </HStack>
-        <Accordion.Root collapsible defaultValue={allFailed ? ["queue-list"] : []}>
-          <Accordion.Item value="queue-list">
-            <Accordion.ItemTrigger>
-              <Box as="span" flex="1" textAlign="left">
-                View file details
-              </Box>
-              <Accordion.ItemIndicator />
-            </Accordion.ItemTrigger>
-            <Accordion.ItemContent pb={4}>
-              <Table.Root variant="line" size="sm">
-                <Table.Header>
-                  <Table.Row>
-                    <Table.ColumnHeader>FILENAME</Table.ColumnHeader>
-                    <Table.ColumnHeader>STATUS</Table.ColumnHeader>
-                    <Table.ColumnHeader>EXPIRES</Table.ColumnHeader>
-                    <Table.ColumnHeader>ATTEMPTS</Table.ColumnHeader>
-                    <Table.ColumnHeader>DOWNLOAD</Table.ColumnHeader>
-                  </Table.Row>
-                </Table.Header>
-                <Table.Body>
-                  {entries.map((entry) => (
-                    <Table.Row key={entry.id}>
-                      <Table.Cell>
-                        {entry.filename}
-                        {entry.failureReason && (
-                          <Text fontSize="xs" color="red.300" mt={1}>
-                            {entry.failureReason}
-                          </Text>
-                        )}
-                      </Table.Cell>
-                      <Table.Cell>{statusBadge(entry.status)}</Table.Cell>
-                      <Table.Cell>{timeRemaining(entry.createdAt)}</Table.Cell>
-                      <Table.Cell>
-                        {entry.retryCount}/{entry.maxRetries}
-                      </Table.Cell>
-                      <Table.Cell>
-                        <IconButton
-                          aria-label="Download file"
-                          size="xs"
-                          variant="ghost"
-                          loading={downloading === entry.id}
-                          onClick={() => handleDownload(entry)}
-                        >
-                          <Download size={14} />
-                        </IconButton>
-                      </Table.Cell>
-                    </Table.Row>
-                  ))}
-                  {errorLog && errorLog.map((error, index) => (
-                    <Table.Row key={`error-${index}`}>
-                      <Table.Cell>
-                        <Text>{error.error}</Text>
-                        <Text fontSize="xs" color="red.300" mt={1}>
-                          {error.time}
-                        </Text>
-                      </Table.Cell>
-                      <Table.Cell>
-                        <Badge colorPalette="red" variant="solid" px={2}>
-                          Error
-                        </Badge>
-                      </Table.Cell>
-                      <Table.Cell>-</Table.Cell>
-                      <Table.Cell>-</Table.Cell>
-                      <Table.Cell>-</Table.Cell>
-                    </Table.Row>
-                  ))}
-                </Table.Body>
-              </Table.Root>
-            </Accordion.ItemContent>
-          </Accordion.Item>
-        </Accordion.Root>
+        <Table.Root variant="line" size="sm">
+          <Table.Header>
+            <Table.Row>
+              <Table.ColumnHeader>FILENAME</Table.ColumnHeader>
+              <Table.ColumnHeader>STATUS</Table.ColumnHeader>
+              <Table.ColumnHeader>REASON</Table.ColumnHeader>
+              <Table.ColumnHeader>STORED FOR</Table.ColumnHeader>
+              <Table.ColumnHeader></Table.ColumnHeader>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
+            {entries.map((entry) => (
+              <Table.Row key={entry.id}>
+                <Table.Cell>{entry.filename}</Table.Cell>
+                <Table.Cell>
+                  {statusBadge(entry.status)}
+                  {(entry.status === "pending" || entry.status === "processing") &&
+                    entry.nextRetryAt && (
+                      <Text fontSize="xs" color="gray.400" mt={1}>
+                        Next retry {nextRetryText(entry.nextRetryAt)}
+                      </Text>
+                    )}
+                </Table.Cell>
+                <Table.Cell>
+                  <Text fontSize="xs">
+                    {friendlyReason(entry.failureReason) || "\u2014"}
+                  </Text>
+                </Table.Cell>
+                <Table.Cell>
+                  <Text fontSize="xs">
+                    {timeRemaining(entry.createdAt) || "\u2014"}
+                  </Text>
+                </Table.Cell>
+                <Table.Cell>
+                  <IconButton
+                    aria-label={`Download ${entry.filename}`}
+                    size="xs"
+                    variant="ghost"
+                    loading={downloading === entry.id}
+                    onClick={() => handleDownload(entry)}
+                  >
+                    <Download size={14} />
+                  </IconButton>
+                </Table.Cell>
+              </Table.Row>
+            ))}
+          </Table.Body>
+        </Table.Root>
       </Box>
+    </Alert.Root>
+  );
+}
+
+/**
+ * UploadsResolvedNotice — brief success confirmation shown when
+ * previously pending/failed uploads have all been resolved.
+ */
+export function UploadsResolvedNotice() {
+  return (
+    <Alert.Root status="success" variant="subtle" size="sm">
+      <Alert.Indicator />
+      <Alert.Title fontSize="sm">All queued uploads completed successfully.</Alert.Title>
     </Alert.Root>
   );
 }

@@ -9,6 +9,7 @@ import MESSAGES from "./api-messages.js";
 import blockMetadata from "./metadata-block.js";
 import resolveToken from "./resolve-token.js";
 import queueUpload from "./queue-upload.js";
+import { persistPending, cleanupPending } from "./persist-pending.js";
 import { ExperimentData, UserData, MetadataResponse, OSFResult, RequestBody } from './interfaces';
 
 export const apiData = onRequest({ cors: true, memory: "512MiB" }, async (req, res) => {
@@ -72,6 +73,19 @@ export const apiData = onRequest({ cors: true, memory: "512MiB" }, async (req, r
       await writeLog(experimentID, "logError", MESSAGES.INVALID_DATA);
       return;
     }
+  }
+
+  // Persist data to Cloud Storage immediately after validation.
+  // This ensures the data survives even if the function OOM-crashes
+  // during heavy processing (metadata, OSF upload).
+  let pendingPath: string;
+  try {
+    pendingPath = await persistPending(experimentID, filename, data, metadataOptions);
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : "Unknown error";
+    res.status(500).json(MESSAGES.DATA_PERSIST_ERROR);
+    await writeLog(experimentID, "logError", {...MESSAGES.DATA_PERSIST_ERROR, detail});
+    return;
   }
 
   const user_doc: DocumentSnapshot = await db.doc(`users/${exp_data.owner}`).get();
@@ -149,6 +163,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB" }, async (req, r
         failureReason: `Upload exception: ${detail}`,
       });
       await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
+      await cleanupPending(pendingPath); // queue-upload has its own copy
       res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
       await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail});
       return;
@@ -174,6 +189,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB" }, async (req, r
         failureReason: `OSF error ${result.errorCode}: ${result.errorText}`,
       });
       await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
+      await cleanupPending(pendingPath); // queue-upload has its own copy
       res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
       await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.errorCode, osfStatusText: result.errorText});
       return;
@@ -185,6 +201,9 @@ export const apiData = onRequest({ cors: true, memory: "512MiB" }, async (req, r
   }
 
   await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
+
+  // Data successfully uploaded to OSF — clean up the pending copy.
+  await cleanupPending(pendingPath);
 
   res.status(201).json({...MESSAGES.SUCCESS, metadataMessage});
 });
