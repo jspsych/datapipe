@@ -13,6 +13,26 @@ import {
 import { Download } from "lucide-react";
 import { auth } from "../../lib/firebase";
 
+function friendlyReason(reason) {
+  if (!reason) return null;
+  if (reason.includes("interrupted upload") || reason.includes("memory limit")) {
+    return "Upload was interrupted by a server restart or memory limit. Data was automatically recovered.";
+  }
+  if (reason.includes("Upload exception") || reason.includes("fetch failed")) {
+    return "Could not connect to OSF. This is usually temporary.";
+  }
+  if (reason.includes("OSF error 503") || reason.includes("OSF error 502")) {
+    return "OSF is temporarily unavailable.";
+  }
+  if (reason.includes("OSF error 429")) {
+    return "OSF is rate-limiting requests. Retries are spaced out automatically.";
+  }
+  if (reason.includes("OSF error 401") || reason.includes("OSF error 403")) {
+    return "Authentication error. Your OSF token may need to be refreshed.";
+  }
+  return reason;
+}
+
 function statusBadge(status) {
   const labels = {
     pending: { color: "orange", text: "Waiting to retry" },
@@ -143,14 +163,29 @@ export default function QueuePanel({ entries, experimentId, errorLog }) {
             <Accordion.ItemContent>
               <Text fontSize="sm" pb={3}>
                 When a participant submits data, DataPipe tries to upload it to
-                your OSF project immediately. If that transfer fails — for
-                example, because OSF is temporarily unavailable, rate-limiting
-                requests, or there is a configuration issue with your project —
-                DataPipe saves a copy of the data and retries automatically over
-                the next several days. The files listed here are those saved
-                copies. Once a retry succeeds the file will disappear from this
-                list. If all retries are exhausted, you can still download the
-                data and upload it to OSF manually.
+                your OSF project immediately. If that transfer fails, DataPipe
+                saves a copy of the data and retries automatically over the next
+                several days. Common reasons for failures include:
+              </Text>
+              <Box as="ul" fontSize="sm" pl={5} pb={3} listStyleType="disc">
+                <Box as="li" mb={1}>
+                  <strong>Server memory limit</strong> — Large data submissions
+                  can occasionally exceed the server&apos;s memory capacity. DataPipe
+                  automatically recovers the data and queues it for retry.
+                </Box>
+                <Box as="li" mb={1}>
+                  <strong>OSF unavailable</strong> — OSF may be temporarily down,
+                  rate-limiting requests, or experiencing other issues.
+                </Box>
+                <Box as="li" mb={1}>
+                  <strong>Configuration issue</strong> — There may be a problem
+                  with your OSF project settings or authentication token.
+                </Box>
+              </Box>
+              <Text fontSize="sm" pb={3}>
+                Once a retry succeeds the file will disappear from this list. If
+                all retries are exhausted, you can still download the data and
+                upload it to OSF manually.
               </Text>
             </Accordion.ItemContent>
           </Accordion.Item>
@@ -193,7 +228,7 @@ export default function QueuePanel({ entries, experimentId, errorLog }) {
                         {entry.filename}
                         {entry.failureReason && (
                           <Text fontSize="xs" color="red.300" mt={1}>
-                            {entry.failureReason}
+                            {friendlyReason(entry.failureReason)}
                           </Text>
                         )}
                       </Table.Cell>
