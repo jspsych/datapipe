@@ -14,11 +14,7 @@ import ExperimentValidation from "../../components/dashboard/ExperimentValidatio
 import MetadataControl from "../../components/dashboard/MetadataControl";
 import CodeHints from "../../components/dashboard/CodeHints";
 import ErrorPanel from "../../components/dashboard/ErrorPanel";
-import {
-  FailedUploadsPanel,
-  PendingUploadsInfo,
-  UploadsResolvedNotice,
-} from "../../components/dashboard/QueuePanel";
+import QueuePanel, { UploadsResolvedNotice } from "../../components/dashboard/QueuePanel";
 
 export async function getServerSideProps() {
   return { props: {} };
@@ -52,9 +48,6 @@ function ExperimentPageDashboard({ experiment_id }) {
   const logs = useDocumentData(logsRef)?.[0] || null;
   const [, , , queueSnapshot] = useCollectionData(queueRef);
   const queueEntries = queueSnapshot?.docs.map(d => ({ id: d.id, ...d.data() })) || [];
-
-  const pendingEntries = queueEntries.filter(e => e.status === "pending" || e.status === "processing");
-  const failedEntries = queueEntries.filter(e => e.status === "failed");
 
   const uploadError = logs?.logError;
   const errorLog = logs?.errors;
@@ -92,17 +85,21 @@ function ExperimentPageDashboard({ experiment_id }) {
                 Data upload errors
               </Badge>
             )}
-            {failedEntries.length > 0 && (
-              <Badge colorPalette="red" variant="solid" px={2} py={1}>
-                {failedEntries.length} failed upload{failedEntries.length !== 1 ? "s" : ""}
+            {queueEntries.length > 0 && (
+              <Badge
+                colorPalette={queueEntries.some(e => e.status === "failed") ? "red" : "orange"}
+                variant="solid"
+                px={2}
+                py={1}
+              >
+                {queueEntries.length} upload{queueEntries.length !== 1 ? "s" : ""} queued
               </Badge>
             )}
-            <PendingUploadsInfo entries={pendingEntries} />
           </HStack>
           {showResolved && <UploadsResolvedNotice />}
           {uploadError && queueEntries.length === 0 && !showResolved && <ErrorPanel errors={errorLog} />}
-          {failedEntries.length > 0 && (
-            <FailedUploadsPanel entries={failedEntries} experimentId={experiment_id} />
+          {queueEntries.length > 0 && (
+            <QueuePanel entries={queueEntries} experimentId={experiment_id} />
           )}
           <Flex w="100%" gap={8} wrap="wrap" alignItems="flex-start">
             <VStack flex="1" minW="300px" gap={0} align="stretch">
