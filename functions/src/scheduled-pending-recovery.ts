@@ -119,51 +119,59 @@ async function promoteToQueue(
     return;
   }
 
-  // Check for deduplication — don't create a queue entry if one already exists
+  // Check for deduplication and atomically create the queue entry via transaction.
+  // This prevents duplicate entries if two recovery runs overlap.
   const deduplicationKey = `${experimentID}:${filename}`;
   const docId = deduplicationKey.replace(/[/\\]/g, "_");
   const docRef = db.collection("uploadQueue").doc(docId);
 
-  const existingDoc = await docRef.get();
-  if (existingDoc.exists) {
-    const status = existingDoc.data()?.status;
-    if (status === "pending" || status === "processing") {
-      // Already queued — just clean up the pending file
-      console.log(`Queue entry already exists for ${deduplicationKey}. Cleaning up pending file.`);
-      await cleanupPending(file.name);
-      return;
+  const storagePath = `upload-queue/${docId}`;
+
+  const created = await db.runTransaction(async (transaction) => {
+    const existingDoc = await transaction.get(docRef);
+    if (existingDoc.exists) {
+      const status = existingDoc.data()?.status;
+      if (status === "pending" || status === "processing") {
+        return false; // Already queued
+      }
     }
+
+    const now = Timestamp.now();
+    const nextRetryAt = Timestamp.fromMillis(now.toMillis() + 60 * 1000); // 1 minute — retry soon
+
+    transaction.set(docRef, {
+      experimentID,
+      owner: expData.owner,
+      filename,
+      storagePath,
+      dataType: "data",
+      osfFilesLink: expData.osfFilesLink,
+      status: "pending",
+      errorCode: 0,
+      retryCount: 0,
+      maxRetries: MAX_RETRIES,
+      createdAt: now,
+      lastAttemptAt: null,
+      nextRetryAt,
+      completedAt: null,
+      failureReason: "Recovered from interrupted upload (server restart or memory limit)",
+      deduplicationKey,
+      sessionIncremented: false,
+    });
+
+    return true;
+  });
+
+  if (!created) {
+    console.log(`Queue entry already exists for ${deduplicationKey}. Cleaning up pending file.`);
+    await cleanupPending(file.name);
+    return;
   }
 
   // Write data to upload-queue/ storage (where the queue-status API expects it)
-  const storagePath = `upload-queue/${docId}`;
   const bucket = storage.bucket();
   const queueFile = bucket.file(storagePath);
   await queueFile.save(data, { contentType: "text/plain" });
-
-  // Create the uploadQueue Firestore document
-  const now = Timestamp.now();
-  const nextRetryAt = Timestamp.fromMillis(now.toMillis() + 60 * 1000); // 1 minute — retry soon
-
-  await docRef.set({
-    experimentID,
-    owner: expData.owner,
-    filename,
-    storagePath,
-    dataType: "data",
-    osfFilesLink: expData.osfFilesLink,
-    status: "pending",
-    errorCode: 0,
-    retryCount: 0,
-    maxRetries: MAX_RETRIES,
-    createdAt: now,
-    lastAttemptAt: null,
-    nextRetryAt,
-    completedAt: null,
-    failureReason: "Recovered from interrupted upload (server restart or memory limit)",
-    deduplicationKey,
-    sessionIncremented: false,
-  });
 
   // Clean up the pending-data/ file
   await cleanupPending(file.name);

@@ -134,6 +134,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB" }, async (req, r
     const metadataResponse: MetadataResponse = await blockMetadata(exp_data, user_data, metadata_doc_ref, data, metadataOptions);
 
     if (metadataResponse.success === false) {
+      await cleanupPending(pendingPath);
       res.status(400).json(metadataResponse);
       await writeLog(experimentID, "logError", {...MESSAGES.METADATA_ERROR, detail: metadataResponse.message});
       return;

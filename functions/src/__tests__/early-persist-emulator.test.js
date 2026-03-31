@@ -50,19 +50,23 @@ const sampleData = `[{
 let db;
 let bucket;
 let mockServerInstance;
+let mockServerPort;
 
-function createMockOSFServer(port) {
+function createMockOSFServer() {
   const app = express();
   app.put("/endpoint", (req, res) => {
     res.status(201).json({ data: { attributes: { name: req.query.name || "uploaded.json" } } });
   });
   return new Promise((resolve) => {
-    const server = app.listen(port, () => resolve(server));
+    const server = app.listen(0, () => {
+      resolve(server);
+    });
   });
 }
 
 beforeAll(async () => {
-  mockServerInstance = await createMockOSFServer(3001);
+  mockServerInstance = await createMockOSFServer();
+  mockServerPort = mockServerInstance.address().port;
 
   const app = initializeApp(config);
   db = getFirestore();
@@ -78,7 +82,7 @@ beforeAll(async () => {
     active: true,
     metadataActive: false,
     owner: "persist-test-user",
-    osfFilesLink: "http://localhost:3001/endpoint",
+    osfFilesLink: `http://localhost:${mockServerPort}/endpoint`,
   });
 
   await db.collection("experiments").doc("persist-test-inactive").set({

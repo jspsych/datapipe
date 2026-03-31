@@ -7,6 +7,7 @@ import isBase64 from "is-base64";
 import MESSAGES from "./api-messages.js";
 import resolveToken from "./resolve-token.js";
 import queueUpload from "./queue-upload.js";
+import { persistPending, cleanupPending } from "./persist-pending.js";
 import { ExperimentData, UserData, OSFResult } from './interfaces';
 
 export const apiBase64 = onRequest({ cors: true, memory: "512MiB" }, async (req, res) => {
@@ -64,6 +65,19 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB" }, async (req,
     return;
   }
 
+  // Persist data to Cloud Storage immediately after validation.
+  // This ensures the data survives even if the function OOM-crashes
+  // during heavy processing (OSF upload).
+  let pendingPath: string;
+  try {
+    pendingPath = await persistPending(experimentID, filename, data);
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : "Unknown error";
+    res.status(500).json(MESSAGES.DATA_PERSIST_ERROR);
+    await writeLog(experimentID, "logError", {...MESSAGES.DATA_PERSIST_ERROR, detail});
+    return;
+  }
+
   const user_doc = await db.doc(`users/${exp_data.owner}`).get();
   if (!user_doc.exists) {
     res.status(400).json(MESSAGES.INVALID_OWNER);
@@ -116,6 +130,7 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB" }, async (req,
         errorCode: 0, sessionIncremented: false,
         failureReason: `Upload exception: ${detail}`,
       });
+      await cleanupPending(pendingPath); // queue-upload has its own copy
       res.status(202).json(MESSAGES.OSF_UPLOAD_QUEUED);
       await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail});
       return;
@@ -140,6 +155,7 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB" }, async (req,
         errorCode: result.errorCode || 0, sessionIncremented: false,
         failureReason: `OSF error ${result.errorCode}: ${result.errorText}`,
       });
+      await cleanupPending(pendingPath); // queue-upload has its own copy
       res.status(202).json(MESSAGES.OSF_UPLOAD_QUEUED);
       await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.errorCode, osfStatusText: result.errorText});
       return;
@@ -149,6 +165,9 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB" }, async (req,
       return;
     }
   }
+
+  // Data successfully uploaded to OSF — clean up the pending copy.
+  await cleanupPending(pendingPath);
 
   res.status(201).json(MESSAGES.SUCCESS);
 });
