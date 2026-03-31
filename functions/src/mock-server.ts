@@ -32,11 +32,6 @@ app.get('/endpoint', async (req, res) => {
   res.json(result);
 });
 
-app.put('/endpoint', async (req, res) => {
-  // Simulate successful OSF file upload (Waterbutler returns 201)
-  res.status(201).json({ data: { attributes: { name: req.query.name || 'uploaded.json' } } });
-});
-
 const startServer = (): Promise<ReturnType<typeof app.listen>> => {
     return new Promise((resolve) => {
       const server = app.listen(port, () => {

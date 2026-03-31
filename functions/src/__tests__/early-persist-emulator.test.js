@@ -5,7 +5,7 @@
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
-import { startServer } from "../../lib/mock-server.js";
+import express from "express";
 import MESSAGES from "../api-messages";
 
 process.env.FIRESTORE_EMULATOR_HOST = "localhost:8080";
@@ -51,8 +51,18 @@ let db;
 let bucket;
 let mockServerInstance;
 
+function createMockOSFServer(port) {
+  const app = express();
+  app.put("/endpoint", (req, res) => {
+    res.status(201).json({ data: { attributes: { name: req.query.name || "uploaded.json" } } });
+  });
+  return new Promise((resolve) => {
+    const server = app.listen(port, () => resolve(server));
+  });
+}
+
 beforeAll(async () => {
-  mockServerInstance = await startServer();
+  mockServerInstance = await createMockOSFServer(3001);
 
   const app = initializeApp(config);
   db = getFirestore();
@@ -68,7 +78,7 @@ beforeAll(async () => {
     active: true,
     metadataActive: false,
     owner: "persist-test-user",
-    osfFilesLink: "http://localhost:3000/endpoint",
+    osfFilesLink: "http://localhost:3001/endpoint",
   });
 
   await db.collection("experiments").doc("persist-test-inactive").set({
