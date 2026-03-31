@@ -1,12 +1,8 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
-import { FieldValue, DocumentReference, DocumentData } from "firebase-admin/firestore";
+import { Timestamp } from "firebase-admin/firestore";
 import { db, storage } from "./app.js";
-import putFileOSF from "./put-file-osf.js";
-import resolveToken from "./resolve-token.js";
-import blockMetadata from "./metadata-block.js";
-import writeLog from "./write-log.js";
 import { readPendingEnvelope, cleanupPending } from "./persist-pending.js";
-import { ExperimentData, UserData, MetadataResponse } from "./interfaces.js";
+import { ExperimentData } from "./interfaces.js";
 
 const PENDING_PREFIX = "pending-data/";
 
@@ -17,14 +13,19 @@ const STALE_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes
 // Process at most this many files per run to stay within time/memory limits.
 const MAX_FILES_PER_RUN = 10;
 
+const MAX_RETRIES = 5;
+
 /**
  * Scheduled function that runs every 15 minutes to recover data that was
  * persisted to Cloud Storage but never uploaded to OSF (e.g., because the
  * original api-data function OOM-crashed).
  *
- * This replays the full processing pipeline: token resolution, metadata
- * processing, and OSF upload. Memory is kept low (256 MiB) because we
- * process one file at a time without concurrent metadata/OSF operations.
+ * Instead of attempting the OSF upload directly, this function promotes
+ * orphaned pending files into the existing uploadQueue system. This means:
+ * - The data immediately appears in the researcher's dashboard QueuePanel
+ * - The existing scheduled-upload-retry handles retries with exponential backoff
+ * - The researcher can download the data manually if all retries fail
+ * - No duplicate retry infrastructure is needed
  */
 export const scheduledPendingRecovery = onSchedule(
   { schedule: "*/15 * * * *", memory: "256MiB" },
@@ -64,7 +65,7 @@ async function recoverPendingUploads() {
     console.log(`Recovering pending data: ${file.name}`);
 
     try {
-      await recoverFile(file);
+      await promoteToQueue(file);
       processed++;
     } catch (e) {
       const detail = e instanceof Error ? e.message : "Unknown error";
@@ -73,14 +74,23 @@ async function recoverPendingUploads() {
   }
 
   if (processed > 0) {
-    console.log(`Recovered ${processed} pending upload(s).`);
+    console.log(`Promoted ${processed} pending file(s) to upload queue.`);
   }
 }
 
-async function recoverFile(
+/**
+ * Promote an orphaned pending file into the uploadQueue system.
+ *
+ * 1. Read the pending envelope to get experiment/filename/data
+ * 2. Look up the experiment to get the owner and osfFilesLink
+ * 3. Copy the data to upload-queue/ storage (where queue-status API expects it)
+ * 4. Create an uploadQueue Firestore document
+ * 5. Clean up the pending-data/ file
+ */
+async function promoteToQueue(
   file: ReturnType<ReturnType<typeof storage.bucket>["file"]>
 ) {
-  // Read the envelope which contains all the original request data
+  // Read the envelope
   let envelope;
   try {
     envelope = await readPendingEnvelope(file.name);
@@ -91,11 +101,10 @@ async function recoverFile(
     return;
   }
 
-  const { experimentID, filename, data, metadataOptions } = envelope;
+  const { experimentID, filename, data } = envelope;
 
-  // Look up the experiment
-  const expDocRef: DocumentReference<DocumentData> = db.collection("experiments").doc(experimentID);
-  const expDoc = await expDocRef.get();
+  // Look up the experiment to get owner and osfFilesLink
+  const expDoc = await db.collection("experiments").doc(experimentID).get();
   if (!expDoc.exists) {
     console.warn(`Experiment ${experimentID} not found. Deleting orphaned file ${file.name}.`);
     await cleanupPending(file.name);
@@ -110,70 +119,54 @@ async function recoverFile(
     return;
   }
 
-  // Look up the owner
-  const userDoc = await db.doc(`users/${expData.owner}`).get();
-  if (!userDoc.exists) {
-    console.warn(`Owner ${expData.owner} not found. Deleting orphaned file ${file.name}.`);
-    await cleanupPending(file.name);
-    return;
-  }
+  // Check for deduplication — don't create a queue entry if one already exists
+  const deduplicationKey = `${experimentID}:${filename}`;
+  const docId = deduplicationKey.replace(/[/\\]/g, "_");
+  const docRef = db.collection("uploadQueue").doc(docId);
 
-  const userData = userDoc.data() as UserData;
-
-  // Resolve the OSF token
-  let token: string;
-  try {
-    const tokenResult = await resolveToken(userData, expData);
-    if (!tokenResult.success) {
-      console.error(`Token resolution failed for ${experimentID}: ${tokenResult.error}. Will retry next run.`);
-      // Don't delete — token may be temporarily invalid
+  const existingDoc = await docRef.get();
+  if (existingDoc.exists) {
+    const status = existingDoc.data()?.status;
+    if (status === "pending" || status === "processing") {
+      // Already queued — just clean up the pending file
+      console.log(`Queue entry already exists for ${deduplicationKey}. Cleaning up pending file.`);
+      await cleanupPending(file.name);
       return;
     }
-    token = tokenResult.token;
-  } catch (e) {
-    const detail = e instanceof Error ? e.message : "Unknown error";
-    console.error(`Token resolution exception for ${experimentID}: ${detail}. Will retry next run.`);
-    return;
   }
 
-  // Run metadata processing if the experiment has it enabled
-  if (expData.metadataActive) {
-    try {
-      const metadataDocRef = db.collection("metadata").doc(experimentID);
-      const metadataResponse: MetadataResponse = await blockMetadata(
-        expData, userData, metadataDocRef, data, metadataOptions || {}
-      );
-      if (metadataResponse.success === false) {
-        console.warn(`Metadata processing failed for recovered ${experimentID}: ${metadataResponse.message}`);
-        // Continue with the data upload — metadata failure shouldn't block data recovery
-      }
-    } catch (e) {
-      const detail = e instanceof Error ? e.message : "Unknown error";
-      console.warn(`Metadata exception during recovery for ${experimentID}: ${detail}. Continuing with data upload.`);
-    }
-  }
+  // Write data to upload-queue/ storage (where the queue-status API expects it)
+  const storagePath = `upload-queue/${docId}`;
+  const bucket = storage.bucket();
+  const queueFile = bucket.file(storagePath);
+  await queueFile.save(data, { contentType: "text/plain" });
 
-  // Upload to OSF
-  const result = await putFileOSF(expData.osfFilesLink, token, data, filename);
+  // Create the uploadQueue Firestore document
+  const now = Timestamp.now();
+  const nextRetryAt = Timestamp.fromMillis(now.toMillis() + 60 * 1000); // 1 minute — retry soon
 
-  if (result.success) {
-    console.log(`Successfully recovered and uploaded ${filename} for experiment ${experimentID}.`);
-    await cleanupPending(file.name);
-    await expDocRef.set({ sessions: FieldValue.increment(1) }, { merge: true });
-    await writeLog(experimentID, "saveData");
-    return;
-  }
+  await docRef.set({
+    experimentID,
+    owner: expData.owner,
+    filename,
+    storagePath,
+    dataType: "data",
+    osfFilesLink: expData.osfFilesLink,
+    status: "pending",
+    errorCode: 0,
+    retryCount: 0,
+    maxRetries: MAX_RETRIES,
+    createdAt: now,
+    lastAttemptAt: null,
+    nextRetryAt,
+    completedAt: null,
+    failureReason: "Recovered from interrupted upload (server restart or memory limit)",
+    deduplicationKey,
+    sessionIncremented: false,
+  });
 
-  if (result.errorCode === 409) {
-    // File already exists in OSF — the original upload may have succeeded
-    // after persisting but before cleanup. Safe to delete.
-    console.log(`File ${filename} already exists in OSF for ${experimentID}. Cleaning up pending copy.`);
-    await cleanupPending(file.name);
-    return;
-  }
+  // Clean up the pending-data/ file
+  await cleanupPending(file.name);
 
-  // Other OSF errors — leave the file for next retry
-  console.error(
-    `OSF upload failed for recovered ${filename} (experiment ${experimentID}): ${result.errorCode} ${result.errorText}. Will retry next run.`
-  );
+  console.log(`Promoted ${filename} (experiment ${experimentID}) to upload queue.`);
 }
