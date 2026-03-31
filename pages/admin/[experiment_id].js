@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from "react";
 import AuthCheck from "../../components/AuthCheck";
 import { useRouter } from "next/router";
 import { useDocumentData, useCollectionData } from "react-firebase-hooks/firestore";
@@ -13,7 +14,11 @@ import ExperimentValidation from "../../components/dashboard/ExperimentValidatio
 import MetadataControl from "../../components/dashboard/MetadataControl";
 import CodeHints from "../../components/dashboard/CodeHints";
 import ErrorPanel from "../../components/dashboard/ErrorPanel";
-import QueuePanel from "../../components/dashboard/QueuePanel";
+import {
+  FailedUploadsPanel,
+  PendingUploadsInfo,
+  UploadsResolvedNotice,
+} from "../../components/dashboard/QueuePanel";
 
 export async function getServerSideProps() {
   return { props: {} };
@@ -48,9 +53,25 @@ function ExperimentPageDashboard({ experiment_id }) {
   const [, , , queueSnapshot] = useCollectionData(queueRef);
   const queueEntries = queueSnapshot?.docs.map(d => ({ id: d.id, ...d.data() })) || [];
 
-  const pendingUploads = queueEntries.filter(e => e.status === "pending" || e.status === "processing").length;
+  const pendingEntries = queueEntries.filter(e => e.status === "pending" || e.status === "processing");
+  const failedEntries = queueEntries.filter(e => e.status === "failed");
+
   const uploadError = logs?.logError;
   const errorLog = logs?.errors;
+
+  // Track resolved state: show success notice when queue goes from non-empty to empty
+  const [showResolved, setShowResolved] = useState(false);
+  const prevQueueCount = useRef(0);
+
+  useEffect(() => {
+    const currentCount = queueEntries.length;
+    if (prevQueueCount.current > 0 && currentCount === 0) {
+      setShowResolved(true);
+      const timer = setTimeout(() => setShowResolved(false), 8000);
+      return () => clearTimeout(timer);
+    }
+    prevQueueCount.current = currentCount;
+  }, [queueEntries.length]);
 
   return (
     <>
@@ -66,24 +87,23 @@ function ExperimentPageDashboard({ experiment_id }) {
             <Text fontSize="sm" color="gray.400">
               {data.sessions || 0} session{data.sessions !== 1 ? "s" : ""}
             </Text>
-            {uploadError && queueEntries.length === 0 && (
+            {uploadError && queueEntries.length === 0 && !showResolved && (
               <Badge colorPalette="red" variant="solid" px={2} py={1}>
                 Data upload errors
               </Badge>
             )}
-            {pendingUploads > 0 && (
-              <Badge colorPalette="orange" variant="solid" px={2} py={1}>
-                {pendingUploads} upload{pendingUploads !== 1 ? "s" : ""} waiting
-              </Badge>
-            )}
-            {pendingUploads === 0 && queueEntries.length > 0 && (
+            {failedEntries.length > 0 && (
               <Badge colorPalette="red" variant="solid" px={2} py={1}>
-                {queueEntries.length} failed upload{queueEntries.length !== 1 ? "s" : ""}
+                {failedEntries.length} failed upload{failedEntries.length !== 1 ? "s" : ""}
               </Badge>
             )}
+            <PendingUploadsInfo entries={pendingEntries} />
           </HStack>
-          {uploadError && queueEntries.length === 0 && <ErrorPanel errors={errorLog} />}
-          {queueEntries.length > 0 && <QueuePanel entries={queueEntries} experimentId={experiment_id} errorLog={uploadError ? errorLog : null} />}
+          {showResolved && <UploadsResolvedNotice />}
+          {uploadError && queueEntries.length === 0 && !showResolved && <ErrorPanel errors={errorLog} />}
+          {failedEntries.length > 0 && (
+            <FailedUploadsPanel entries={failedEntries} experimentId={experiment_id} />
+          )}
           <Flex w="100%" gap={8} wrap="wrap" alignItems="flex-start">
             <VStack flex="1" minW="300px" gap={0} align="stretch">
               <ExperimentInfo data={data} />

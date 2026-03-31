@@ -33,20 +33,6 @@ function friendlyReason(reason) {
   return reason;
 }
 
-function statusBadge(status) {
-  const labels = {
-    pending: { color: "orange", text: "Waiting to retry" },
-    processing: { color: "blue", text: "Retrying now" },
-    failed: { color: "red", text: "Failed" },
-  };
-  const { color, text } = labels[status] || { color: "gray", text: status };
-  return (
-    <Badge colorPalette={color} variant="solid" px={2}>
-      {text}
-    </Badge>
-  );
-}
-
 function timeRemaining(createdAt) {
   if (!createdAt) return null;
   const created = createdAt.toDate ? createdAt.toDate() : new Date(createdAt);
@@ -71,7 +57,11 @@ async function fetchFile(experimentId, entryId) {
   );
 }
 
-export default function QueuePanel({ entries, experimentId, errorLog }) {
+/**
+ * FailedUploadsPanel — shown only when uploads have exhausted all retries
+ * and the researcher needs to download the data manually.
+ */
+export function FailedUploadsPanel({ entries, experimentId }) {
   const [downloading, setDownloading] = useState(null);
   const [downloadingAll, setDownloadingAll] = useState(false);
 
@@ -125,57 +115,42 @@ export default function QueuePanel({ entries, experimentId, errorLog }) {
     }
   };
 
-  const pendingCount = entries.filter(
-    (e) => e.status === "pending" || e.status === "processing"
-  ).length;
-  const failedCount = entries.filter((e) => e.status === "failed").length;
-  const allFailed = failedCount > 0 && pendingCount === 0;
-
   const plural = (n, word) => `${n} ${word}${n !== 1 ? "s" : ""}`;
 
-  let alertTitle = "";
-  if (pendingCount > 0 && failedCount > 0) {
-    alertTitle = `${plural(pendingCount, "file")} waiting to upload, ${plural(failedCount, "file")} failed.`;
-  } else if (pendingCount > 0) {
-    alertTitle = `${plural(pendingCount, "file")} waiting to upload to OSF.`;
-  } else {
-    alertTitle = `${plural(failedCount, "file")} could not be uploaded to OSF.`;
-  }
-
   return (
-    <Alert.Root status={allFailed ? "error" : "warning"} variant="solid">
+    <Alert.Root status="error" variant="solid">
       <Alert.Indicator />
       <Box flex="1">
-        <Alert.Title mb={1}>{alertTitle}</Alert.Title>
+        <Alert.Title mb={1}>
+          {plural(entries.length, "file")} could not be uploaded to OSF.
+        </Alert.Title>
         <Text fontSize="sm" mb={4}>
-          {allFailed
-            ? "These files could not be delivered after multiple attempts. Download them to avoid data loss."
-            : "DataPipe will keep retrying automatically. Files are stored for up to 1 week. You can also download them below."}
+          These files could not be delivered after multiple attempts. Download
+          them below to avoid data loss, then upload them to your OSF project
+          manually.
         </Text>
         <Accordion.Root collapsible size="sm" mb={4}>
           <Accordion.Item value="why">
             <Accordion.ItemTrigger>
               <Box as="span" flex="1" textAlign="left" fontSize="sm">
-                Why am I seeing this?
+                Why did these uploads fail?
               </Box>
               <Accordion.ItemIndicator />
             </Accordion.ItemTrigger>
             <Accordion.ItemContent>
               <Text fontSize="sm" pb={3}>
                 When a participant submits data, DataPipe tries to upload it to
-                your OSF project immediately. If that transfer fails, DataPipe
-                saves a copy of the data and retries automatically over the next
-                several days. Common reasons for failures include:
+                your OSF project immediately. If that fails, it retries
+                automatically over the next several days. Common reasons include:
               </Text>
               <Box as="ul" fontSize="sm" pl={5} pb={3} listStyleType="disc">
                 <Box as="li" mb={1}>
                   <strong>Server memory limit</strong> — Large data submissions
-                  can occasionally exceed the server&apos;s memory capacity. DataPipe
-                  automatically recovers the data and queues it for retry.
+                  can occasionally exceed the server&apos;s memory capacity.
                 </Box>
                 <Box as="li" mb={1}>
-                  <strong>OSF unavailable</strong> — OSF may be temporarily down,
-                  rate-limiting requests, or experiencing other issues.
+                  <strong>OSF unavailable</strong> — OSF may be temporarily
+                  down or rate-limiting requests.
                 </Box>
                 <Box as="li" mb={1}>
                   <strong>Configuration issue</strong> — There may be a problem
@@ -183,9 +158,8 @@ export default function QueuePanel({ entries, experimentId, errorLog }) {
                 </Box>
               </Box>
               <Text fontSize="sm" pb={3}>
-                Once a retry succeeds the file will disappear from this list. If
-                all retries are exhausted, you can still download the data and
-                upload it to OSF manually.
+                These files exhausted all retry attempts. Download them and
+                upload to OSF manually to avoid data loss.
               </Text>
             </Accordion.ItemContent>
           </Accordion.Item>
@@ -202,7 +176,7 @@ export default function QueuePanel({ entries, experimentId, errorLog }) {
             Download all as ZIP
           </Button>
         </HStack>
-        <Accordion.Root collapsible defaultValue={allFailed ? ["queue-list"] : []}>
+        <Accordion.Root collapsible defaultValue={["queue-list"]}>
           <Accordion.Item value="queue-list">
             <Accordion.ItemTrigger>
               <Box as="span" flex="1" textAlign="left">
@@ -215,27 +189,24 @@ export default function QueuePanel({ entries, experimentId, errorLog }) {
                 <Table.Header>
                   <Table.Row>
                     <Table.ColumnHeader>FILENAME</Table.ColumnHeader>
-                    <Table.ColumnHeader>STATUS</Table.ColumnHeader>
-                    <Table.ColumnHeader>EXPIRES</Table.ColumnHeader>
-                    <Table.ColumnHeader>ATTEMPTS</Table.ColumnHeader>
+                    <Table.ColumnHeader>REASON</Table.ColumnHeader>
+                    <Table.ColumnHeader>AUTO-CLEANUP</Table.ColumnHeader>
                     <Table.ColumnHeader>DOWNLOAD</Table.ColumnHeader>
                   </Table.Row>
                 </Table.Header>
                 <Table.Body>
                   {entries.map((entry) => (
                     <Table.Row key={entry.id}>
+                      <Table.Cell>{entry.filename}</Table.Cell>
                       <Table.Cell>
-                        {entry.filename}
-                        {entry.failureReason && (
-                          <Text fontSize="xs" color="red.300" mt={1}>
-                            {friendlyReason(entry.failureReason)}
-                          </Text>
-                        )}
+                        <Text fontSize="xs">
+                          {friendlyReason(entry.failureReason) || "Unknown error"}
+                        </Text>
                       </Table.Cell>
-                      <Table.Cell>{statusBadge(entry.status)}</Table.Cell>
-                      <Table.Cell>{timeRemaining(entry.createdAt)}</Table.Cell>
                       <Table.Cell>
-                        {entry.retryCount}/{entry.maxRetries}
+                        <Text fontSize="xs">
+                          {timeRemaining(entry.createdAt) || "\u2014"}
+                        </Text>
                       </Table.Cell>
                       <Table.Cell>
                         <IconButton
@@ -250,24 +221,6 @@ export default function QueuePanel({ entries, experimentId, errorLog }) {
                       </Table.Cell>
                     </Table.Row>
                   ))}
-                  {errorLog && errorLog.map((error, index) => (
-                    <Table.Row key={`error-${index}`}>
-                      <Table.Cell>
-                        <Text>{error.error}</Text>
-                        <Text fontSize="xs" color="red.300" mt={1}>
-                          {error.time}
-                        </Text>
-                      </Table.Cell>
-                      <Table.Cell>
-                        <Badge colorPalette="red" variant="solid" px={2}>
-                          Error
-                        </Badge>
-                      </Table.Cell>
-                      <Table.Cell>-</Table.Cell>
-                      <Table.Cell>-</Table.Cell>
-                      <Table.Cell>-</Table.Cell>
-                    </Table.Row>
-                  ))}
                 </Table.Body>
               </Table.Root>
             </Accordion.ItemContent>
@@ -277,3 +230,79 @@ export default function QueuePanel({ entries, experimentId, errorLog }) {
     </Alert.Root>
   );
 }
+
+/**
+ * PendingUploadsInfo — a light, non-alarming indicator for uploads
+ * that are being retried automatically. Shown near the header badges.
+ */
+export function PendingUploadsInfo({ entries }) {
+  if (entries.length === 0) return null;
+
+  const processingCount = entries.filter((e) => e.status === "processing").length;
+
+  // Find the soonest next retry time among pending entries
+  const pendingEntries = entries.filter((e) => e.status === "pending");
+  let nextRetryText = null;
+  if (pendingEntries.length > 0) {
+    const soonest = pendingEntries.reduce((earliest, entry) => {
+      const t = entry.nextRetryAt?.toDate
+        ? entry.nextRetryAt.toDate()
+        : entry.nextRetryAt
+          ? new Date(entry.nextRetryAt)
+          : null;
+      if (!t) return earliest;
+      if (!earliest) return t;
+      return t < earliest ? t : earliest;
+    }, null);
+
+    if (soonest) {
+      const msUntil = soonest.getTime() - Date.now();
+      if (msUntil <= 0) {
+        nextRetryText = "Retrying now";
+      } else {
+        const minUntil = Math.ceil(msUntil / (60 * 1000));
+        if (minUntil >= 60) {
+          const hours = Math.floor(minUntil / 60);
+          const mins = minUntil % 60;
+          nextRetryText = `Next retry in ${hours}h ${mins > 0 ? `${mins}m` : ""}`;
+        } else {
+          nextRetryText = `Next retry in ${minUntil}m`;
+        }
+      }
+    }
+  }
+
+  const plural = (n, word) => `${n} ${word}${n !== 1 ? "s" : ""}`;
+
+  let statusText;
+  if (processingCount > 0) {
+    statusText = `Retrying ${plural(processingCount, "upload")} now.`;
+  } else {
+    statusText = `${plural(entries.length, "upload")} being retried automatically.`;
+  }
+
+  return (
+    <Text fontSize="xs" color="gray.400">
+      {statusText}
+      {nextRetryText && processingCount === 0 && (
+        <> {nextRetryText}.</>
+      )}
+    </Text>
+  );
+}
+
+/**
+ * UploadsResolvedNotice — brief success confirmation shown when
+ * previously pending/failed uploads have all been resolved.
+ */
+export function UploadsResolvedNotice() {
+  return (
+    <Alert.Root status="success" variant="subtle" size="sm">
+      <Alert.Indicator />
+      <Alert.Title fontSize="sm">All queued uploads completed successfully.</Alert.Title>
+    </Alert.Root>
+  );
+}
+
+// Default export kept for backward compatibility
+export default FailedUploadsPanel;
