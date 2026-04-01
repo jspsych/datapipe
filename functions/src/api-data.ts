@@ -18,7 +18,7 @@ function logMemory(label: string, experimentID: string, dataSize: number) {
   console.log(`[MEMORY] ${label} | experiment=${experimentID} | dataSize=${mb(dataSize)}MB | rss=${mb(mem.rss)}MB | heapUsed=${mb(mem.heapUsed)}MB | heapTotal=${mb(mem.heapTotal)}MB | external=${mb(mem.external)}MB`);
 }
 
-export const apiData = onRequest({ cors: true, memory: "512MiB" }, async (req, res) => {
+export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 }, async (req, res) => {
   const { experimentID, data, filename, metadataOptions }: RequestBody = req.body;
 
   if (!experimentID || !data || !filename) {

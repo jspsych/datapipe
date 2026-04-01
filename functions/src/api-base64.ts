@@ -10,7 +10,7 @@ import queueUpload from "./queue-upload.js";
 import { persistPending, cleanupPending } from "./persist-pending.js";
 import { ExperimentData, UserData, OSFResult } from './interfaces';
 
-export const apiBase64 = onRequest({ cors: true, memory: "512MiB" }, async (req, res) => {
+export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 1 }, async (req, res) => {
   const { experimentID, data, filename } = req.body;
 
   if (!experimentID || !data || !filename) {
