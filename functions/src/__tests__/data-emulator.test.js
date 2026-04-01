@@ -30,17 +30,6 @@ const config = {
 
 jest.setTimeout(30000);
 
-async function waitForLog(db, docId, field, expectedValue, timeoutMs = 30000) {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const doc = await db.collection("logs").doc(docId).get();
-    if (doc.exists && doc.data()?.[field] === expectedValue) {
-      return doc;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  return db.collection("logs").doc(docId).get();
-}
 
 beforeAll(async () => {
   initializeApp(config);
@@ -78,12 +67,17 @@ describe("apiData", () => {
   it("should increment the write request log for the experiment when there is a complete request", async () => {
     const db = getFirestore();
     await db.collection("logs").doc("testlog").delete();
+    // writeLog is awaited inside apiData before the response is sent,
+    // so the log document should exist by the time we get the response.
     await saveData({
       experimentID: "testlog",
       data: "test",
       filename: "test",
     });
-    let doc = await waitForLog(db, "testlog", "saveData", 1);
+    // Small delay to allow Firestore emulator to sync
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    let doc = await db.collection("logs").doc("testlog").get();
+    expect(doc.exists).toBe(true);
     expect(doc.data().saveData).toBe(1);
 
     await saveData({
@@ -91,7 +85,8 @@ describe("apiData", () => {
       data: "test",
       filename: "test",
     });
-    doc = await waitForLog(db, "testlog", "saveData", 2);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    doc = await db.collection("logs").doc("testlog").get();
     expect(doc.data().saveData).toBe(2);
   });
 
@@ -106,7 +101,9 @@ describe("apiData", () => {
       filename: "test",
     });
 
-    let doc = await waitForLog(db, "data-testexp", "logError", 1);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    let doc = await db.collection("logs").doc("data-testexp").get();
+    expect(doc.exists).toBe(true);
     expect(doc.data().logError).toBe(1);
 
     await db.collection("experiments").doc("data-testexp").set(
@@ -124,7 +121,8 @@ describe("apiData", () => {
       filename: "test",
     });
 
-    doc = await waitForLog(db, "data-testexp", "logError", 2);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    doc = await db.collection("logs").doc("data-testexp").get();
     expect(doc.data().logError).toBe(2);
 
   });
