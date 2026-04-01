@@ -109,6 +109,10 @@ const MESSAGES = {
   METADATA_IN_OSF_AND_FIRESTORE: {
     metadataMessage : "Metadata is in OSF and in Firestore",
   },
+  DATA_PERSIST_ERROR: {
+    error: "DATA_PERSIST_ERROR",
+    message: "Failed to save data. The data was not stored. If this is from a live experiment, participants may need to resubmit.",
+  },
   OSF_UPLOAD_QUEUED: {
     error: null,
     message: "Data received. OSF upload will be retried automatically.",
