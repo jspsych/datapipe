@@ -12,6 +12,12 @@ import queueUpload from "./queue-upload.js";
 import { persistPending, cleanupPending } from "./persist-pending.js";
 import { ExperimentData, UserData, MetadataResponse, OSFResult, RequestBody } from './interfaces';
 
+function logMemory(label: string, experimentID: string, dataSize: number) {
+  const mem = process.memoryUsage();
+  const mb = (bytes: number) => (bytes / 1024 / 1024).toFixed(1);
+  console.log(`[MEMORY] ${label} | experiment=${experimentID} | dataSize=${mb(dataSize)}MB | rss=${mb(mem.rss)}MB | heapUsed=${mb(mem.heapUsed)}MB | heapTotal=${mb(mem.heapTotal)}MB | external=${mb(mem.external)}MB`);
+}
+
 export const apiData = onRequest({ cors: true, memory: "512MiB" }, async (req, res) => {
   const { experimentID, data, filename, metadataOptions }: RequestBody = req.body;
 
@@ -19,6 +25,9 @@ export const apiData = onRequest({ cors: true, memory: "512MiB" }, async (req, r
     res.status(400).json(MESSAGES.MISSING_PARAMETER);
     return;
   }
+
+  const dataSize = typeof data === 'string' ? data.length : 0;
+  logMemory('request-received', experimentID, dataSize);
 
   await writeLog(experimentID, "saveData");
 
@@ -88,6 +97,8 @@ export const apiData = onRequest({ cors: true, memory: "512MiB" }, async (req, r
     return;
   }
 
+  logMemory('after-persist', experimentID, dataSize);
+
   const user_doc: DocumentSnapshot = await db.doc(`users/${exp_data.owner}`).get();
 
   if (!user_doc.exists) {
@@ -144,6 +155,8 @@ export const apiData = onRequest({ cors: true, memory: "512MiB" }, async (req, r
   }
 
   //METADATA BLOCK END
+
+  logMemory('after-metadata', experimentID, dataSize);
 
   let result: OSFResult;
   try {
@@ -205,6 +218,8 @@ export const apiData = onRequest({ cors: true, memory: "512MiB" }, async (req, r
 
   // Data successfully uploaded to OSF — clean up the pending copy.
   await cleanupPending(pendingPath);
+
+  logMemory('after-osf-upload', experimentID, dataSize);
 
   res.status(201).json({...MESSAGES.SUCCESS, metadataMessage});
 });
