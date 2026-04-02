@@ -182,6 +182,50 @@ export default function FAQ() {
             active only while you are collecting data.
           </Text>
         </FAQItem>
+        <FAQItem value="item-9b" question="Is there a limit on how much data I can send?">
+          <Text mb={2}>
+            Yes. DataPipe has a <strong>32 MB limit</strong> on the size of a
+            single request. This limit is enforced by the server infrastructure
+            and cannot be increased. Most experiment data is well under this
+            limit — a typical jsPsych dataset is 50 KB to 5 MB.
+          </Text>
+          <Text mb={2}>
+            If you are using version 0.6.0 or later of the{" "}
+            <Link
+              href="https://github.com/jspsych/jspsych-contrib/tree/main/packages/plugin-pipe"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              @jspsych-contrib/plugin-pipe
+            </Link>{" "}
+            plugin, request bodies are automatically compressed with gzip before
+            sending. Text data (JSON, CSV) typically compresses by 2–10x, which
+            effectively raises the upload limit to roughly 60–300 MB for most
+            experiment data. Compression is enabled by default and requires no
+            configuration.
+          </Text>
+          <Text mb={2}>
+            Compression is less effective for binary data sent via the base64
+            endpoint (e.g., video or audio recordings), because binary data does
+            not compress as well as text. If you need to send individual files
+            larger than about 25 MB through the base64 endpoint, they may still
+            exceed the limit even after compression.
+          </Text>
+          <Text>
+            If you are sending data without the plugin (e.g., using fetch
+            directly), you can compress the request body yourself using the
+            browser&apos;s{" "}
+            <Link
+              href="https://developer.mozilla.org/en-US/docs/Web/API/CompressionStream"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              CompressionStream API
+            </Link>{" "}
+            and setting the <code>Content-Encoding: gzip</code> header. The
+            server will decompress the body automatically.
+          </Text>
+        </FAQItem>
         <FAQItem value="item-10" question="How does condition assignment work?">
           <Text>
             When enabled, DataPipe assigns condition numbers sequentially.
