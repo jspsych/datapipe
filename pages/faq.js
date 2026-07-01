@@ -7,14 +7,32 @@ import {
   Box,
 } from "@chakra-ui/react";
 import NextLink from "next/link";
+import { useState, useEffect } from "react";
 
 export default function FAQ() {
+  const [openItems, setOpenItems] = useState(["item-0"]);
+
+  useEffect(() => {
+    const hash = window.location.hash.replace("#", "");
+    if (!hash) return;
+    setOpenItems((prev) => (prev.includes(hash) ? prev : [...prev, hash]));
+    // Wait for the accordion to expand, then bring the item's trigger into view.
+    // Chakra doesn't forward `id` to the DOM, so target the trigger via its
+    // data-controls attribute and offset for the fixed navbar.
+    setTimeout(() => {
+      const el = document.querySelector(`[data-controls$=":content:${hash}"]`);
+      if (!el) return;
+      const top = el.getBoundingClientRect().top + window.scrollY - 80;
+      window.scrollTo({ top, behavior: "smooth" });
+    }, 350);
+  }, []);
+
   return (
     <Stack maxW={800} w="100%" my={10}>
       <Heading as="h1" my={4}>
         FAQ
       </Heading>
-      <Accordion.Root defaultValue={["item-0"]} multiple collapsible>
+      <Accordion.Root value={openItems} onValueChange={(e) => setOpenItems(e.value)} multiple collapsible>
         <FAQItem value="item-0" question="How do I use DataPipe?">
           <Text>
             Follow our{" "}

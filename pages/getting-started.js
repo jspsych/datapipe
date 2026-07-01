@@ -211,10 +211,12 @@ export default function GettingStarted() {
           </FeatureItem>
           <FeatureItem name="Psych-DS metadata">
             — automatically produce metadata adhering to{" "}
-            <Link href="https://github.com/psych-ds/psych-DS" target="_blank" rel="noopener noreferrer" color="brandOrange.300">
+            <Link href="https://psychds-docs.readthedocs.io/en/latest/" target="_blank" rel="noopener noreferrer" color="brandOrange.300">
               Psych-DS
             </Link>
-            , updated after each session.
+            , updated after each session. See{" "}
+            <Link href="/faq#item-11" color="brandOrange.300">how it works</Link>
+            {" "}in the FAQ.
           </FeatureItem>
         </Stack>
         <Callout>
