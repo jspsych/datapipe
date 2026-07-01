@@ -3,6 +3,7 @@ import {
   HStack,
   Switch,
   Stack,
+  Badge,
 } from "@chakra-ui/react";
 
 import { useState } from "react";
@@ -19,7 +20,10 @@ export default function MetadataControl({ data }) {
     <Stack w="100%" gap={2}>
       <Field.Root>
         <HStack justify="space-between" alignItems="center" w="100%">
-          <Field.Label fontWeight={"normal"} mb={0}>Enable Psych-DS metadata production?</Field.Label>
+          <HStack gap={2} alignItems="center">
+            <Field.Label fontWeight={"normal"} mb={0}>Enable Psych-DS metadata production?</Field.Label>
+            <Badge colorPalette="green" variant="solid" px={2}>Recommended</Badge>
+          </HStack>
           <Switch.Root
             colorPalette="green"
             size="md"

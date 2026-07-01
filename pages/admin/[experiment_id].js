@@ -5,7 +5,9 @@ import { useDocumentData, useCollectionData } from "react-firebase-hooks/firesto
 import { db, auth } from "../../lib/firebase";
 import { doc, collection, query, where, orderBy } from "firebase/firestore";
 
-import { Spinner, Flex, VStack, HStack, Text, Badge, Separator } from "@chakra-ui/react";
+import { Spinner, Flex, VStack, HStack, Text, Badge, Separator, Popover, IconButton, Link } from "@chakra-ui/react";
+import NextLink from "next/link";
+import { CircleHelp } from "lucide-react";
 
 import Title from "../../components/dashboard/Title";
 import ExperimentInfo from "../../components/dashboard/ExperimentInfo";
@@ -118,9 +120,37 @@ function ExperimentPageDashboard({ experiment_id }) {
               <ExperimentValidation data={data} />
 
               <Separator my={5} borderColor="whiteAlpha.200" />
-              <Text fontSize="xs" fontWeight="semibold" textTransform="uppercase" letterSpacing="wide" color="gray.500" mb={3}>
-                Metadata
-              </Text>
+              <HStack gap={1} mb={3} alignItems="center">
+                <Text fontSize="xs" fontWeight="semibold" textTransform="uppercase" letterSpacing="wide" color="gray.500">
+                  Metadata
+                </Text>
+                <Popover.Root>
+                  <Popover.Trigger asChild>
+                    <IconButton
+                      aria-label="What is metadata production?"
+                      variant="ghost"
+                      size="2xs"
+                      color="gray.500"
+                    >
+                      <CircleHelp size={14} />
+                    </IconButton>
+                  </Popover.Trigger>
+                  <Popover.Positioner>
+                    <Popover.Content maxW="xs">
+                      <Popover.Body>
+                        <Text fontSize="sm">
+                          Generates Psych-DS metadata describing your data&apos;s
+                          columns (descriptions, value ranges, and levels), making
+                          your dataset easier to share and reuse.{" "}
+                          <Link asChild color="blue.500">
+                            <NextLink href="/faq">Learn more</NextLink>
+                          </Link>
+                        </Text>
+                      </Popover.Body>
+                    </Popover.Content>
+                  </Popover.Positioner>
+                </Popover.Root>
+              </HStack>
               <MetadataControl data={data} />
             </VStack>
 
