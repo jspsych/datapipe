@@ -7,7 +7,10 @@ import downloadMetadata from "./metadata-download.js";
 import { DocumentReference, DocumentData } from "firebase-admin/firestore";
 import putFileOSF from "./put-file-osf.js";
 import { db } from "./app.js";
+import buildSidecars, { SidecarFile } from "./metadata-sidecars.js";
 import { ExperimentData, Metadata, MetadataResponse } from './interfaces';
+
+export type MetadataBlockResult = MetadataResponse & { sidecars?: SidecarFile[] };
 
 // Sentinel thrown inside the transaction when the merge needs the OSF copy of
 // the metadata as its base. The OSF download must happen outside the
@@ -20,8 +23,9 @@ export default async function blockMetadata(
     osfToken: string,
     metadata_doc_ref: DocumentReference<DocumentData>,
     data: string,
+    filename: string,
     metadataOptions: object,
-  ) {
+  ): Promise<MetadataBlockResult> {
 
 let metadataMessage: {metadataMessage: string} = {metadataMessage: ''};
 
@@ -35,7 +39,13 @@ try {
   }
 
   //Metadata is produced from the incoming data using the metadata module.
-  const incomingMetadata: Metadata = await produceMetadata(data, metadataOptions);
+  const produced = await produceMetadata(data, metadataOptions);
+  const incomingMetadata: Metadata = produced.metadata;
+
+  //Sidecar CSVs for nested array/object columns, mirroring the CLI's per-file
+  //output. Built here; uploaded by the caller only after the participant's
+  //data file itself lands in OSF, so sidecars can never precede their data.
+  const sidecars: SidecarFile[] = buildSidecars(filename, produced);
 
   //Retrieves the metadata ID from the OSF metadata file. If an ID exists, then a metadata file with name:
   //dataset_description.json exists in the OSF project.
@@ -106,7 +116,7 @@ try {
     if (!response.success) throw new Error(MESSAGES.OSF_UPLOAD_ERROR.message);
   }
 
-  const metadataResponse: MetadataResponse = {success: true, ...metadataMessage};
+  const metadataResponse: MetadataBlockResult = {success: true, ...metadataMessage, sidecars};
   return metadataResponse;
 }
 catch (error) {

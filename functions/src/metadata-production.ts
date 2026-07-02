@@ -1,8 +1,13 @@
 import jsPsychMetadata from '@jspsych/metadata';
 import { Metadata } from './interfaces';
+import { ExtractionResult } from './metadata-sidecars.js';
 
-export default async function produceMetadata(data: string, options: object | null = null) {
-  
+export interface ProducedMetadata extends ExtractionResult {
+  metadata: Metadata;
+}
+
+export default async function produceMetadata(data: string, options: object | null = null): Promise<ProducedMetadata> {
+
     // Initializes the metadata object.
     var metadata = new jsPsychMetadata(); // eslint-disable-line no-var
 
@@ -26,7 +31,14 @@ export default async function produceMetadata(data: string, options: object | nu
     if (!incomingMetadata.variableMeasured || !incomingMetadata.variableMeasured[0].name) {
       throw new Error('Invalid metadata generated');
     }
-    
-    return incomingMetadata;
+
+    // Nested array/object columns that generate() expanded into dotted
+    // sub-variables; their per-row data is returned so callers can write
+    // sidecar CSVs (see metadata-sidecars.ts).
+    return {
+      metadata: incomingMetadata,
+      extractedArrays: metadata.getExtractedArrays(),
+      extractedObjects: metadata.getExtractedObjects(),
+      joinKeys: metadata.getArrayJoinKeys(),
+    };
   }
- 

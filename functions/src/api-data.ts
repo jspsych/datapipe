@@ -7,10 +7,12 @@ import { db } from "./app.js";
 import writeLog from "./write-log.js";
 import MESSAGES from "./api-messages.js";
 import blockMetadata from "./metadata-block.js";
+import { SidecarFile } from "./metadata-sidecars.js";
+import { uploadSidecars, queueSidecars } from "./metadata-sidecar-upload.js";
 import resolveToken from "./resolve-token.js";
 import queueUpload from "./queue-upload.js";
 import { persistPending, cleanupPending } from "./persist-pending.js";
-import { ExperimentData, UserData, MetadataResponse, OSFResult, RequestBody } from './interfaces';
+import { ExperimentData, UserData, OSFResult, RequestBody } from './interfaces';
 
 export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 }, async (req, res) => {
   const { experimentID, data, filename, metadataOptions }: RequestBody = req.body;
@@ -126,22 +128,28 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
   //METADATA BLOCK START
 
   let metadataMessage: string = '';
+  //Sidecar CSVs for nested array/object columns, produced by the metadata
+  //block and uploaded only after the participant's data file lands in OSF.
+  let sidecars: SidecarFile[] = [];
 
   if (exp_data.metadataActive) {
     //Creates or references a document containing the metadata for the experiment in the metdata collection on Firestore.
     const metadata_doc_ref: DocumentReference<DocumentData> = db.collection("metadata").doc(experimentID);
 
-    const metadataResponse: MetadataResponse = await blockMetadata(exp_data, token, metadata_doc_ref, data, metadataOptions);
+    const metadataResponse = await blockMetadata(exp_data, token, metadata_doc_ref, data, filename, metadataOptions);
 
     if (metadataResponse.success === false) {
       await cleanupPending(pendingPath);
-      res.status(400).json(metadataResponse);
+      res.status(400).json({...metadataResponse, sidecars: undefined});
       await writeLog(experimentID, "logError", {...MESSAGES.METADATA_ERROR, detail: metadataResponse.message});
       return;
     }
 
     metadataMessage = metadataResponse.metadataMessage;
+    sidecars = metadataResponse.sidecars ?? [];
   }
+
+  const sidecarTarget = { experimentID, owner: exp_data.owner, osfFilesLink: exp_data.osfFilesLink };
 
   //METADATA BLOCK END
 
@@ -165,6 +173,8 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
       });
       await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
       await cleanupPending(pendingPath); // queue-upload has its own copy
+      // OSF is unreachable, so queue the sidecars alongside the data file.
+      await queueSidecars(sidecars, sidecarTarget, `Queued alongside data file: ${detail}`);
       res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
       await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail});
       return;
@@ -191,6 +201,8 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
       });
       await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
       await cleanupPending(pendingPath); // queue-upload has its own copy
+      // OSF is failing, so queue the sidecars alongside the data file.
+      await queueSidecars(sidecars, sidecarTarget, `Queued alongside data file: OSF error ${result.errorCode}`);
       res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
       await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.errorCode, osfStatusText: result.errorText});
       return;
@@ -205,6 +217,10 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
 
   // Data successfully uploaded to OSF — clean up the pending copy.
   await cleanupPending(pendingPath);
+
+  // The data file is safely in OSF; upload its sidecar CSVs (best-effort —
+  // failures are queued for retry and logged, never failing the submission).
+  await uploadSidecars(sidecars, sidecarTarget, token);
 
   res.status(201).json({...MESSAGES.SUCCESS, metadataMessage});
 });
