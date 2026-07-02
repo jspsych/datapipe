@@ -131,7 +131,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
     //Creates or references a document containing the metadata for the experiment in the metdata collection on Firestore.
     const metadata_doc_ref: DocumentReference<DocumentData> = db.collection("metadata").doc(experimentID);
 
-    const metadataResponse: MetadataResponse = await blockMetadata(exp_data, user_data, metadata_doc_ref, data, metadataOptions);
+    const metadataResponse: MetadataResponse = await blockMetadata(exp_data, token, metadata_doc_ref, data, metadataOptions);
 
     if (metadataResponse.success === false) {
       await cleanupPending(pendingPath);
