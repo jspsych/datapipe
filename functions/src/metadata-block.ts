@@ -45,7 +45,7 @@ try {
   //Sidecar CSVs for nested array/object columns, mirroring the CLI's per-file
   //output. Built here; uploaded by the caller only after the participant's
   //data file itself lands in OSF, so sidecars can never precede their data.
-  const sidecars: SidecarFile[] = buildSidecars(filename, produced);
+  const sidecars: SidecarFile[] = buildSidecars(filename, produced, produced.mainRows);
 
   //Retrieves the metadata ID from the OSF metadata file. If an ID exists, then a metadata file with name:
   //dataset_description.json exists in the OSF project.

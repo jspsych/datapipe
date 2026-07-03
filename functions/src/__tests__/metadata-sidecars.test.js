@@ -15,18 +15,25 @@ const extraction = () => ({
   joinKeys: ['trial_index'],
 });
 
+// The main table rows produceMetadata surfaces; buildSidecars only serialises
+// nested columns, so the exact main rows don't affect the sidecar assertions.
+const mainRows = () => ([
+  { trial_index: 0, trial_type: 'survey-text' },
+  { trial_index: 1, trial_type: 'mouse-tracking' },
+]);
+
 describe('buildSidecars', () => {
   it('returns no sidecars when nothing was extracted', () => {
     const sidecars = buildSidecars('data.json', {
       extractedArrays: new Map(),
       extractedObjects: new Map(),
       joinKeys: ['trial_index'],
-    });
+    }, mainRows());
     expect(sidecars).toEqual([]);
   });
 
   it('builds one Psych-DS-named CSV per extracted column', () => {
-    const sidecars = buildSidecars('abc123.json', extraction());
+    const sidecars = buildSidecars('abc123.json', extraction(), mainRows());
 
     expect(sidecars).toHaveLength(2);
     const filenames = sidecars.map((s) => s.filename);
@@ -40,7 +47,7 @@ describe('buildSidecars', () => {
   });
 
   it('writes array rows with join keys and element_index leading', () => {
-    const sidecars = buildSidecars('abc123.json', extraction());
+    const sidecars = buildSidecars('abc123.json', extraction(), mainRows());
     const arraySidecar = sidecars[0];
 
     const [header, ...rows] = arraySidecar.content.trim().split('\n');
@@ -51,7 +58,7 @@ describe('buildSidecars', () => {
   });
 
   it('writes object rows keyed by the join keys with dotted columns', () => {
-    const sidecars = buildSidecars('abc123.json', extraction());
+    const sidecars = buildSidecars('abc123.json', extraction(), mainRows());
     const objectSidecar = sidecars[1];
 
     const [header, ...rows] = objectSidecar.content.trim().split('\n');
@@ -62,7 +69,7 @@ describe('buildSidecars', () => {
   });
 
   it('places sidecars in the same one-level subfolder as the data file', () => {
-    const sidecars = buildSidecars('session1/abc123.json', extraction());
+    const sidecars = buildSidecars('session1/abc123.json', extraction(), mainRows());
     for (const sidecar of sidecars) {
       expect(sidecar.filename.startsWith('session1/')).toBe(true);
       expect(sidecar.filename.slice('session1/'.length)).not.toContain('/');
@@ -70,7 +77,7 @@ describe('buildSidecars', () => {
   });
 
   it('handles filenames without an extension', () => {
-    const sidecars = buildSidecars('test', extraction());
+    const sidecars = buildSidecars('test', extraction(), mainRows());
     expect(sidecars).toHaveLength(2);
     for (const sidecar of sidecars) {
       expect(sidecar.filename).toMatch(/_data\.csv$/);
@@ -83,7 +90,7 @@ describe('buildSidecars', () => {
       extractedArrays: new Map([['my_column', rows], ['my column', rows]]),
       extractedObjects: new Map(),
       joinKeys: ['trial_index'],
-    });
+    }, mainRows());
     expect(sidecars).toHaveLength(2);
     expect(new Set(sidecars.map((s) => s.filename)).size).toBe(2);
   });

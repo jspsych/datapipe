@@ -79,6 +79,28 @@ describe('produceMetadata', () => {
     expect(result.joinKeys).toEqual(['trial_index']);
   });
 
+  it('should surface the parsed main rows for JSON data', async () => {
+    const result = await produceMetadata(sampleData);
+
+    expect(Array.isArray(result.mainRows)).toBe(true);
+    expect(result.mainRows).toHaveLength(1);
+    expect(result.mainRows[0]).toMatchObject({
+      trial_type: 'html-keyboard-response',
+      trial_index: 1,
+      time_elapsed: 776,
+    });
+  });
+
+  it('should parse CSV submissions into main rows', async () => {
+    const csv = 'trial_index,rt\n0,250\n1,300';
+    const result = await produceMetadata(csv);
+
+    expect(result.mainRows).toHaveLength(2);
+    // parseCSV treats every cell as a string (columns:true, no coercion).
+    expect(result.mainRows[0]).toMatchObject({ trial_index: '0', rt: '250' });
+    expect(result.mainRows[1]).toMatchObject({ trial_index: '1', rt: '300' });
+  });
+
   it('should extract nested object and array columns with per-row data', async () => {
     const nestedData = JSON.stringify([
       {

@@ -1,4 +1,4 @@
-import { deriveFallbackBase, deriveArrayFilename, disambiguateArrayFilename, objectsToCSV } from '@jspsych/metadata';
+import { deriveFallbackBase, buildPsychDSDataFiles } from '@jspsych/metadata';
 
 export interface SidecarFile {
   filename: string;
@@ -16,9 +16,13 @@ export interface ExtractionResult {
  * columns, mirroring what the @jspsych/metadata CLI writes per data file:
  * one CSV per array-of-objects column (rows keyed by the join keys plus
  * element_index) and one per plain-object column (one row per trial, keyed
- * by the join keys only). Naming reuses the library's own Psych-DS helpers
- * (deriveFallbackBase + deriveArrayFilename) so DataPipe's sidecar names
- * match the CLI's for the same data.
+ * by the join keys only).
+ *
+ * The naming and CSV serialisation are delegated to the library's shared
+ * buildPsychDSDataFiles (the same function the CLI and browser flows use), so
+ * DataPipe's sidecar output stays byte-identical to theirs for the same data.
+ * We keep only the sidecar files here (kind 'array'/'object'); the main data
+ * CSV (kind 'main') is wired up when api-data adopts the Psych-DS data/ layout.
  *
  * Sidecars are placed in the same one-level subfolder as the data file,
  * matching how putFileOSF resolves "folder/name" filenames.
@@ -26,6 +30,7 @@ export interface ExtractionResult {
 export default function buildSidecars(
   dataFilename: string,
   extraction: ExtractionResult,
+  mainRows: Array<Record<string, unknown>>,
 ): SidecarFile[] {
   const { extractedArrays, extractedObjects, joinKeys } = extraction;
 
@@ -40,30 +45,15 @@ export default function buildSidecars(
 
   const base = deriveFallbackBase(stem);
 
-  //Distinct columns can normalize to the same Psych-DS name; the library's
-  //disambiguation appends a counter, exactly as the CLI does.
-  const usedFilenames = new Set<string>();
-  const reserve = (filename: string): string => {
-    const resolved = disambiguateArrayFilename(filename, usedFilenames);
-    usedFilenames.add(resolved);
-    return resolved;
-  };
+  const files = buildPsychDSDataFiles({
+    base,
+    mainRows,
+    extractedArrays,
+    extractedObjects,
+    joinKeys,
+  });
 
-  const sidecars: SidecarFile[] = [];
-
-  for (const [column, rows] of extractedArrays) {
-    sidecars.push({
-      filename: folder + reserve(deriveArrayFilename(base, column)),
-      content: objectsToCSV(rows, [...joinKeys, 'element_index']),
-    });
-  }
-
-  for (const [column, rows] of extractedObjects) {
-    sidecars.push({
-      filename: folder + reserve(deriveArrayFilename(base, column)),
-      content: objectsToCSV(rows, joinKeys),
-    });
-  }
-
-  return sidecars;
+  return files
+    .filter((file) => file.kind !== 'main')
+    .map((file) => ({ filename: folder + file.filename, content: file.content }));
 }

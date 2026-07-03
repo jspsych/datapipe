@@ -1,9 +1,17 @@
-import jsPsychMetadata from '@jspsych/metadata';
+import jsPsychMetadata, { parseCSV } from '@jspsych/metadata';
 import { Metadata } from './interfaces';
 import { ExtractionResult } from './metadata-sidecars.js';
 
 export interface ProducedMetadata extends ExtractionResult {
   metadata: Metadata;
+  // Parsed rows of the main data table, used as buildPsychDSDataFiles' mainRows
+  // (and, for CSV, for unnamed-column detection). generate() does NOT flatten
+  // nested columns here: the rows keep their nested object/array values, which
+  // objectsToCSV then serialises as JSON strings in the main CSV (lossless) —
+  // the dotted expansion (response.Q0, mouse_tracking_data.x) lives only in
+  // variableMeasured and the sidecars. For JSON this is the parsed trial array;
+  // for CSV it is parsed from the original text via the library's parseCSV.
+  mainRows: Array<Record<string, unknown>>;
 }
 
 export default async function produceMetadata(data: string, options: object | null = null): Promise<ProducedMetadata> {
@@ -32,6 +40,14 @@ export default async function produceMetadata(data: string, options: object | nu
       throw new Error('Invalid metadata generated');
     }
 
+    // Main data rows for the Psych-DS main CSV. For JSON, `data` is the parsed
+    // array (nested columns left intact — see mainRows doc above); for CSV,
+    // parse the original text (the string `data` is untouched — generate()
+    // parses its own copy internally).
+    const mainRows: Array<Record<string, unknown>> = csvFlag
+      ? (await parseCSV(data)) as Array<Record<string, unknown>>
+      : (data as unknown as Array<Record<string, unknown>>);
+
     // Nested array/object columns that generate() expanded into dotted
     // sub-variables; their per-row data is returned so callers can write
     // sidecar CSVs (see metadata-sidecars.ts).
@@ -40,5 +56,6 @@ export default async function produceMetadata(data: string, options: object | nu
       extractedArrays: metadata.getExtractedArrays(),
       extractedObjects: metadata.getExtractedObjects(),
       joinKeys: metadata.getArrayJoinKeys(),
+      mainRows,
     };
   }
