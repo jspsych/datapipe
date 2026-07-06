@@ -46,11 +46,8 @@ jobs:
         run: firebase experiments:enable webframeworks
       - name: Install dependencies 
         run: npm ci
-      - name: Install dependencies and build metadata
-        working-directory: functions/metadata
-        run: |
-          npm ci
-          npm run build
+      # functions/metadata is a pre-built vendored dist (see functions/metadata/README.md);
+      # it is installed as a file: dependency by the functions npm ci below.
       - name: Create functions environment file
         working-directory: functions
         run: |
