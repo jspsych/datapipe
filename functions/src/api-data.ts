@@ -140,8 +140,10 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
     const metadataResponse = await blockMetadata(exp_data, token, metadata_doc_ref, data, filename, metadataOptions);
 
     if (metadataResponse.success === false) {
-      await cleanupPending(pendingPath);
-      res.status(400).json({...metadataResponse, derivedFiles: undefined});
+      // The pending-data copy is deliberately kept (not cleaned up) here: the
+      // participant's raw data never made it to OSF, so scheduled-pending-recovery
+      // salvages it later instead of losing it outright.
+      res.status(400).json(metadataResponse);
       await writeLog(experimentID, "logError", {...MESSAGES.METADATA_ERROR, detail: metadataResponse.message});
       return;
     }

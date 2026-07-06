@@ -34,7 +34,12 @@ export default async function produceMetadata(data: string, options: object | nu
     // array — the standard jsPsych/DataPipe payload — passes through unchanged,
     // and the nonstandard-but-possible { "trials": [...] } wrapper is unwrapped
     // to its array, keeping DataPipe's parsing at parity with the CLI's.
-    if(!csvFlag) data = parseJsonData(data);
+    if (!csvFlag) {
+      data = parseJsonData(data);
+      if (!Array.isArray(data)) {
+        throw new Error('Data must be an array of trials');
+      }
+    }
 
     // Generates the metadata, using the options if they are provided.
     // The vendored @jspsych/metadata (see functions/metadata/) changed generate()'s
@@ -45,7 +50,7 @@ export default async function produceMetadata(data: string, options: object | nu
 
     const incomingMetadata: Metadata = metadata.getMetadata() as Metadata;
 
-    if (!incomingMetadata.variableMeasured || !incomingMetadata.variableMeasured[0].name) {
+    if (!incomingMetadata.variableMeasured?.length || !incomingMetadata.variableMeasured[0].name) {
       throw new Error('Invalid metadata generated');
     }
 
