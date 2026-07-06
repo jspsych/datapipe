@@ -44,7 +44,18 @@ export default async function queueUpload(params: QueueUploadParams): Promise<st
       const bucket = storage.bucket();
       const file = bucket.file(storagePath);
       await file.save(params.data, { contentType: "text/plain" });
-      return docId;
+      // The read above is not atomic with this save: the retry worker could
+      // claim (pending -> processing) or finish (-> completed/failed, which
+      // deletes the storage object) the doc in between. Re-read to confirm.
+      // Still pending/processing: the worker either hasn't started or now owns
+      // the doc and will read the payload we just wrote — either way we're
+      // done. Otherwise the doc finished out from under us and our fresh
+      // payload is orphaned, so fall through to re-queue a clean pending doc.
+      const recheck = await docRef.get();
+      const recheckStatus = recheck.exists ? recheck.data()?.status : undefined;
+      if (recheckStatus === "pending" || recheckStatus === "processing") {
+        return docId;
+      }
     }
   }
 
