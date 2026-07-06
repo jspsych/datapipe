@@ -81,4 +81,23 @@ describe("uploadDerivedFiles", () => {
     expect(docs.docs).toHaveLength(1);
     expect(docs.docs[0].data().filename).toBe("data/measure-x_data.csv");
   });
+
+  it("does not throw when the up-front data/ resolution fails — every file is queued instead", async () => {
+    const files = [
+      { filename: "data/subject-abc_data.csv", content: "main" },
+      { filename: "data/measure-x_data.csv", content: "sidecar" },
+      { filename: ".psychds-ignore", content: "ignore" },
+    ];
+
+    // OSF is unreachable: the up-front resolveFolder rejects, and so does every
+    // per-file re-walk. The best-effort contract requires this never throws and
+    // every file ends up queued for retry rather than lost.
+    fetch.mockRejectedValue(new Error("network down"));
+
+    await expect(uploadDerivedFiles(files, target, TOKEN)).resolves.toBeUndefined();
+
+    const docs = await db.collection("uploadQueue").where("experimentID", "==", experimentID).get();
+    const queued = docs.docs.map((d) => d.data().filename).sort();
+    expect(queued).toEqual([".psychds-ignore", "data/measure-x_data.csv", "data/subject-abc_data.csv"]);
+  });
 });

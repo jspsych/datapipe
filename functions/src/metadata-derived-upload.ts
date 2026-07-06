@@ -31,10 +31,22 @@ export async function uploadDerivedFiles(
   // possibly racing to create) the same path. Folder-create races among
   // concurrent submissions still resolve safely via subfolder.ts's own
   // 409-re-list branch.
+  //
+  // This resolution is best-effort: if it throws (OSF list/create error or a
+  // network failure), fall back to undefined so each under-data/ file re-walks
+  // the path itself inside its own per-file try/catch below — that path still
+  // queues on failure. Letting the throw escape here would instead lose the
+  // derived files entirely (never uploaded, never queued) and fail an already-
+  // successful submission, breaking this function's best-effort contract.
   const needsDataFolder = files.some((file) => file.filename.startsWith(DATA_PREFIX));
-  const dataFolderLink = needsDataFolder
-    ? await resolveFolder(target.osfFilesLink, osfToken, "data")
-    : undefined;
+  let dataFolderLink: string | undefined;
+  if (needsDataFolder) {
+    try {
+      dataFolderLink = await resolveFolder(target.osfFilesLink, osfToken, "data");
+    } catch {
+      dataFolderLink = undefined;
+    }
+  }
 
   await Promise.allSettled(files.map(async (file) => {
     const underData = file.filename.startsWith(DATA_PREFIX);
