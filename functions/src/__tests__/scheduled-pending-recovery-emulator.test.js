@@ -54,12 +54,12 @@ describe("scheduled-pending-recovery layout awareness", () => {
 
     await promoteToQueue(file);
 
-    const expectedDedupKey = `${experimentID}:data/raw/data.json`;
+    const expectedDedupKey = `${experimentID}:data/raw/condition-A-data.json`;
     const docId = expectedDedupKey.replace(/[/\\]/g, "_");
     const doc = await db.collection("uploadQueue").doc(docId).get();
 
     expect(doc.exists).toBe(true);
-    expect(doc.data().filename).toBe("data/raw/data.json");
+    expect(doc.data().filename).toBe("data/raw/condition-A-data.json");
     expect(doc.data().deduplicationKey).toBe(expectedDedupKey);
   });
 
