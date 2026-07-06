@@ -13,12 +13,6 @@ import { ExperimentData, Metadata, MetadataResponse } from './interfaces';
 
 export type MetadataBlockResult = MetadataResponse & { derivedFiles?: DerivedFile[] };
 
-// Sentinel thrown inside the transaction when the merge needs the OSF copy of
-// the metadata as its base. The OSF download must happen outside the
-// transaction (Firestore retries the transaction callback on contention, which
-// would re-run any network call inside it), so we abort, download, and re-run.
-const NEEDS_OSF_METADATA = new Error("needs-osf-metadata");
-
 export default async function blockMetadata(
     exp_data: ExperimentData,
     osfToken: string,
@@ -54,13 +48,23 @@ try {
   //dataset_description.json exists in the OSF project.
   const osfMetadataId: string | undefined = (await processMetadata(exp_data.osfFilesLink, osfToken)).metadataId;
 
-  //Populated only when Firestore has no metadata but OSF does (see sentinel above).
+  //Non-transactional pre-read to decide whether the OSF copy of the metadata
+  //needs downloading as the merge base (the bootstrap case: Firestore empty,
+  //OSF populated). Done outside the transaction below since Firestore retries
+  //a transaction callback on contention, which would otherwise repeat this
+  //network call on every retry.
   let osfMetadata: Metadata | undefined;
+  const preReadFirestoreMetadata: Metadata | undefined = (await metadata_doc_ref.get()).data()?.metadata;
+  if (!preReadFirestoreMetadata && osfMetadataId) {
+    osfMetadata = (await downloadMetadata(exp_data.osfFilesLink, osfToken, osfMetadataId)).metadata;
+  }
 
   //The transaction is Firestore-only: read the metadata doc, merge, write it
-  //back. All OSF network I/O happens before or after, so a transaction retry
-  //can never repeat an OSF call.
-  const runMergeTransaction = () => db.runTransaction(async (t) => {
+  //back. All OSF network I/O happened above, so a transaction retry (e.g. a
+  //concurrent submission populating Firestore between the pre-read and here)
+  //can never repeat an OSF call — firestoreMetadata is re-read here, so that
+  //race still resolves correctly via firestoreMetadata ?? osfMetadata.
+  const updatedMetadata = await db.runTransaction(async (t) => {
     const firestoreMetadata: Metadata | undefined = (await t.get(metadata_doc_ref)).data()?.metadata;
 
     //Record which of the four states we are in. This is set before any
@@ -71,31 +75,16 @@ try {
       metadataMessage = osfMetadataId ? MESSAGES.METADATA_IN_OSF_NOT_IN_FIRESTORE : MESSAGES.METADATA_NOT_IN_FIRESTORE_OR_OSF;
     }
 
-    if (!firestoreMetadata && osfMetadataId && !osfMetadata) {
-      throw NEEDS_OSF_METADATA;
-    }
-
     //When Firestore has metadata, updating is done with respect to Firestore.
     //When only OSF has metadata, the downloaded OSF copy is the base instead.
     //When neither has metadata, the incoming metadata is used as-is.
     const baseMetadata: Metadata | undefined = firestoreMetadata ?? osfMetadata;
-    const updatedMetadata = baseMetadata ? await updateMetadata(baseMetadata, incomingMetadata) : incomingMetadata;
+    const updated = baseMetadata ? await updateMetadata(baseMetadata, incomingMetadata) : incomingMetadata;
 
-    t.set(metadata_doc_ref, {metadata: updatedMetadata}, {merge: true});
+    t.set(metadata_doc_ref, {metadata: updated}, {merge: true});
 
-    return updatedMetadata;
+    return updated;
   });
-
-  let updatedMetadata;
-  try {
-    updatedMetadata = await runMergeTransaction();
-  } catch (error) {
-    if (error !== NEEDS_OSF_METADATA) throw error;
-    //Metadata is in OSF as evidenced by the metadata ID, so it is downloaded
-    //to serve as the merge base, and the transaction is re-run.
-    osfMetadata = (await downloadMetadata(exp_data.osfFilesLink, osfToken, osfMetadataId as string)).metadata;
-    updatedMetadata = await runMergeTransaction();
-  }
 
   //Firestore is now up to date; mirror the merged metadata to OSF. The mirror
   //is best-effort: Firestore is the source of truth and every submission
