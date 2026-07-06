@@ -19,6 +19,10 @@ export interface ProducedMetadata extends ExtractionResult {
   mainContent?: string;
 }
 
+// Internal marker: the payload parsed as JSON but wasn't a trial array. Kept
+// private so it can only be thrown/caught here, never matched by message text.
+class NotATrialArrayError extends Error {}
+
 export default async function produceMetadata(data: string, options: object | null = null): Promise<ProducedMetadata> {
 
     // Initializes the metadata object.
@@ -34,12 +38,17 @@ export default async function produceMetadata(data: string, options: object | nu
     try {
       const parsed = parseJsonData(data);
       if (!Array.isArray(parsed)) {
-        throw new Error('Data must be an array of trials');
+        // Valid JSON, but not a trial array (e.g. a bare object). This is a
+        // real input error, not a "fall back to CSV" signal, so flag it with a
+        // dedicated marker rather than a message string — that way a coincidental
+        // parse error from the library carrying the same text can't be mistaken
+        // for it below.
+        throw new NotATrialArrayError();
       }
       jsonRows = parsed as Array<Record<string, unknown>>;
       csvFlag = false;
     } catch (e) {
-      if (e instanceof Error && e.message === 'Data must be an array of trials') throw e;
+      if (e instanceof NotATrialArrayError) throw new Error('Data must be an array of trials');
       csvFlag = true;
     }
 
