@@ -78,21 +78,24 @@ describe("apiData", () => {
 
   it("should increment the write request log for the experiment when there is a complete request", async () => {
     const db = getFirestore();
-    await db.collection("logs").doc("testlog").delete();
+    // Log doc ID must be unique to this suite: data-emulator.test.js runs in a
+    // parallel jest worker and deletes its own log doc, so sharing "testlog"
+    // let each suite wipe the other's counters mid-test.
+    await db.collection("logs").doc("base64-testlog").delete();
     await saveData({
-      experimentID: "testlog",
+      experimentID: "base64-testlog",
       data: "test",
       filename: "test",
     });
-    let doc = await waitForLog(db, "testlog", "saveBase64Data", 1);
+    let doc = await waitForLog(db, "base64-testlog", "saveBase64Data", 1);
     expect(doc.data().saveBase64Data).toBe(1);
 
     await saveData({
-      experimentID: "testlog",
+      experimentID: "base64-testlog",
       data: "test",
       filename: "test",
     });
-    doc = await waitForLog(db, "testlog", "saveBase64Data", 2);
+    doc = await waitForLog(db, "base64-testlog", "saveBase64Data", 2);
     expect(doc.data().saveBase64Data).toBe(2);
   });
 
