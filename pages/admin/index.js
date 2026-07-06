@@ -19,6 +19,7 @@ import {
   Card,
   CloseButton,
   Link as ChakraLink,
+  Tooltip,
 } from "@chakra-ui/react";
 import { Trash2, Pencil } from "lucide-react";
 
@@ -202,10 +203,10 @@ function ExperimentItem({ exp }) {
             </Text>
           </Link>
           <HStack gap={[2, 4]} flexWrap="wrap" rowGap={1}>
-            <StatusLabel label="Data" on={exp.active} />
-            <StatusLabel label="Base64" on={exp.activeBase64} />
-            <StatusLabel label="Conditions" on={exp.activeConditionAssignment} />
-            <StatusLabel label="Metadata" on={exp.metadataActive} />
+            <StatusLabel label="Data" on={exp.active} feature="Data collection" />
+            <StatusLabel label="Base64" on={exp.activeBase64} feature="Base64 data collection (for binary files like audio, video, and images)" />
+            <StatusLabel label="Conditions" on={exp.activeConditionAssignment} feature="Sequential condition assignment" />
+            <StatusLabel label="Metadata" on={exp.metadataActive} feature="Psych-DS metadata production" />
             {exp.sessions > 0 && (
               <Text fontSize="xs" color="gray.400">
                 {exp.sessions} {exp.sessions === 1 ? "session" : "sessions"}
@@ -219,19 +220,28 @@ function ExperimentItem({ exp }) {
   );
 }
 
-function StatusLabel({ label, on }) {
+function StatusLabel({ label, on, feature }) {
   return (
-    <HStack gap="5px">
-      <Box
-        w="6px"
-        h="6px"
-        borderRadius="full"
-        bg={on ? "green.400" : "gray.600"}
-      />
-      <Text fontSize="xs" color={on ? "gray.300" : "gray.600"}>
-        {label}
-      </Text>
-    </HStack>
+    <Tooltip.Root>
+      <Tooltip.Trigger asChild>
+        <HStack gap="5px">
+          <Box
+            w="6px"
+            h="6px"
+            borderRadius="full"
+            bg={on ? "green.400" : "gray.600"}
+          />
+          <Text fontSize="xs" color={on ? "gray.300" : "gray.600"}>
+            {label}
+          </Text>
+        </HStack>
+      </Tooltip.Trigger>
+      <Tooltip.Positioner>
+        <Tooltip.Content maxW="xs">
+          {feature} is {on ? "enabled" : "disabled"} for this experiment.
+        </Tooltip.Content>
+      </Tooltip.Positioner>
+    </Tooltip.Root>
   );
 }
 

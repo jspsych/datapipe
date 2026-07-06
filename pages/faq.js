@@ -7,14 +7,32 @@ import {
   Box,
 } from "@chakra-ui/react";
 import NextLink from "next/link";
+import { useState, useEffect } from "react";
 
 export default function FAQ() {
+  const [openItems, setOpenItems] = useState(["item-0"]);
+
+  useEffect(() => {
+    const hash = window.location.hash.replace("#", "");
+    if (!hash) return;
+    setOpenItems((prev) => (prev.includes(hash) ? prev : [...prev, hash]));
+    // Wait for the accordion to expand, then bring the item's trigger into view.
+    // Chakra doesn't forward `id` to the DOM, so target the trigger via its
+    // data-controls attribute and offset for the fixed navbar.
+    setTimeout(() => {
+      const el = document.querySelector(`[data-controls$=":content:${hash}"]`);
+      if (!el) return;
+      const top = el.getBoundingClientRect().top + window.scrollY - 80;
+      window.scrollTo({ top, behavior: "smooth" });
+    }, 350);
+  }, []);
+
   return (
     <Stack maxW={800} w="100%" my={10}>
       <Heading as="h1" my={4}>
         FAQ
       </Heading>
-      <Accordion.Root defaultValue={["item-0"]} multiple collapsible>
+      <Accordion.Root value={openItems} onValueChange={(e) => setOpenItems(e.value)} multiple collapsible>
         <FAQItem value="item-0" question="How do I use DataPipe?">
           <Text>
             Follow our{" "}
@@ -238,15 +256,30 @@ export default function FAQ() {
           </Text>
         </FAQItem>
         <FAQItem value="item-11" question="How does metadata production work?">
+          <Text mb={2}>
+            When enabled, DataPipe generates a dataset_description.json file in
+            your OSF project that describes your dataset and its variables
+            according to the Psych-DS specification. The file is updated
+            automatically as new sessions are uploaded.
+          </Text>
+          <Text mb={2}>
+            For each variable, DataPipe records its data type and, when
+            available, a human-readable description from the relevant jsPsych
+            plugin documentation. It also combines information across sessions,
+            such as observed numeric ranges and categorical values.
+          </Text>
           <Text>
-            When enabled, DataPipe generates a metadata file describing your
-            data and its variables, following the{" "}
-            <Link href="https://github.com/psych-ds/psych-DS" target="_blank" rel="noopener noreferrer">
-              Psych-DS
+            Metadata production is recommended when you plan to share or publish
+            your data because it makes the dataset easier to understand and
+            reuse. You can enable it from your experiment dashboard. See the{" "}
+            <Link asChild textDecoration="underline">
+              <NextLink href="/getting-started">getting started guide</NextLink>
             </Link>{" "}
-            specification. The file is stored in your OSF project as
-            dataset_description.json and is updated automatically after
-            each session.
+            for setup instructions, or visit the{" "}
+            <Link href="https://psychds-docs.readthedocs.io/en/latest/" target="_blank" rel="noopener noreferrer" textDecoration="underline">
+              Psych-DS documentation
+            </Link>{" "}
+            to learn more.
           </Text>
         </FAQItem>
         <FAQItem value="item-12" question="What is one-click authentication?">
