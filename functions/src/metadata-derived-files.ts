@@ -26,13 +26,15 @@ export interface DerivedFileSource extends ExtractionResult {
 
 /**
  * Researcher-supplied folder prefixes (e.g. "condition-A/abc.json") are
- * flattened away in the Psych-DS layout: the CLI converts whole directories
- * into a flat data/ folder, and DataPipe matches it, so only the last path
- * segment names the file. Grouping by subfolder is lost under data/.
+ * flattened into the Psych-DS layout: the CLI converts whole directories into
+ * a flat data/ folder, and DataPipe matches it, so the path is encoded into a
+ * single filename rather than nested. Encoding (instead of discarding) the
+ * prefix keeps two submissions with the same leaf name in different
+ * subfolders from colliding at data/raw/<leaf> (and keeps the derived main
+ * CSV/sidecar stems, which follow the same encoded name, collision-free too).
  */
 function flattenName(dataFilename: string): string {
-  const slashIndex = dataFilename.lastIndexOf('/');
-  return slashIndex === -1 ? dataFilename : dataFilename.slice(slashIndex + 1);
+  return dataFilename.replace(/[/\\]+/g, '-');
 }
 
 /**

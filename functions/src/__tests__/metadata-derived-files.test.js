@@ -33,9 +33,13 @@ describe('rawDataPath', () => {
     expect(rawDataPath('abc123.json')).toBe('data/raw/abc123.json');
   });
 
-  it('flattens researcher subfolders', () => {
-    expect(rawDataPath('condition-A/abc123.json')).toBe('data/raw/abc123.json');
-    expect(rawDataPath('a/b/abc123.json')).toBe('data/raw/abc123.json');
+  it('encodes researcher subfolders into the flattened name', () => {
+    expect(rawDataPath('condition-A/abc123.json')).toBe('data/raw/condition-A-abc123.json');
+    expect(rawDataPath('a/b/abc123.json')).toBe('data/raw/a-b-abc123.json');
+  });
+
+  it('keeps two same-leaf-name submissions from different subfolders collision-free', () => {
+    expect(rawDataPath('condition-A/data.json')).not.toBe(rawDataPath('condition-B/data.json'));
   });
 });
 
@@ -96,13 +100,26 @@ describe('buildDerivedFiles', () => {
     expect(rows[0]).toContain('hello');
   });
 
-  it('flattens researcher subfolders into the same flat data/ layout', () => {
+  it('encodes researcher subfolders into distinct, flat data/ filenames', () => {
     const flat = buildDerivedFiles('abc123.json', source());
     const nested = buildDerivedFiles('session1/abc123.json', source());
 
-    expect(nested.map((f) => f.filename)).toEqual(flat.map((f) => f.filename));
-    for (const file of nested) {
-      expect(file.filename).not.toContain('session1');
+    expect(nested.map((f) => f.filename)).not.toEqual(flat.map((f) => f.filename));
+    for (const file of nested.filter((f) => f.filename !== '.psychds-ignore')) {
+      expect(file.filename).toContain('session1');
+      expect(file.filename).not.toContain('/session1/');
+    }
+  });
+
+  it('two submissions with the same leaf name in different subfolders no longer collide', () => {
+    const a = buildDerivedFiles('condition-A/data.json', source());
+    const b = buildDerivedFiles('condition-B/data.json', source());
+
+    const aNames = new Set(a.map((f) => f.filename));
+    const bNames = new Set(b.map((f) => f.filename));
+    for (const name of aNames) {
+      if (name === '.psychds-ignore') continue; // shared file, not a collision
+      expect(bNames.has(name)).toBe(false);
     }
   });
 
