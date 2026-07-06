@@ -24,13 +24,26 @@ export default async function queueUpload(params: QueueUploadParams): Promise<st
   const now = Timestamp.now();
   const nextRetryAt = Timestamp.fromMillis(now.toMillis() + 60 * 60 * 1000); // 1 hour
 
-  // Use set with merge:false — if the doc already exists (pending/processing),
-  // the storage write is idempotent and the Firestore write overwrites with fresh data.
-  // If it was completed/failed, we re-queue it.
+  // If the doc already exists: a "processing" entry is actively being
+  // uploaded, so leave it alone (retry worker owns the storage payload right
+  // now). A "pending" entry has the same dedup key by construction — it's the
+  // same logical submission having failed before — so refresh its Cloud
+  // Storage payload with the latest content and let the existing Firestore
+  // doc/status/retry schedule stand, rather than queueing a doc the retry
+  // worker can never see because a newer call with fresher data returned
+  // early here without ever writing it. Completed/failed docs fall through
+  // and get freshly re-queued below.
   const existingDoc = await docRef.get();
   if (existingDoc.exists) {
     const status = existingDoc.data()?.status;
-    if (status === "pending" || status === "processing") {
+    if (status === "processing") {
+      return docId;
+    }
+    if (status === "pending") {
+      const storagePath = `upload-queue/${docId}`;
+      const bucket = storage.bucket();
+      const file = bucket.file(storagePath);
+      await file.save(params.data, { contentType: "text/plain" });
       return docId;
     }
   }

@@ -109,18 +109,25 @@ try {
     osfFilesLink: exp_data.osfFilesLink,
   };
 
-  try {
-    //If a metadata file exists in OSF, it is updated. Otherwise it is created.
-    if (osfMetadataId) {
-      //Result intentionally unchecked: the queue can only PUT (which would 409
-      //against the existing file), and the next submission updates OSF anyway.
+  //If a metadata file exists in OSF, it is updated. Otherwise it is created.
+  if (osfMetadataId) {
+    try {
       await updateFileOSF(
         exp_data.osfFilesLink,
         osfToken,
         metadataFileContents,
         osfMetadataId
       );
-    } else {
+    } catch {
+      //Result intentionally unchecked and NOT queued: the uploadQueue only
+      //PUTs (create), which is guaranteed to 409 against a file that already
+      //exists — queueing here would just leave a dead entry the retry worker
+      //marks completed without ever applying the update. Firestore is the
+      //source of truth and every submission re-merges and re-mirrors, so the
+      //next submission repairs OSF instead.
+    }
+  } else {
+    try {
       const response = await putFileOSF(
         exp_data.osfFilesLink,
         osfToken,
@@ -134,11 +141,11 @@ try {
         await queueDerivedFiles([{ filename: "dataset_description.json", content: metadataFileContents }],
           queueTarget, `dataset_description OSF error ${response.errorCode}: ${response.errorText}`);
       }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Unknown error";
+      await queueDerivedFiles([{ filename: "dataset_description.json", content: metadataFileContents }],
+        queueTarget, `dataset_description upload exception: ${detail}`);
     }
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : "Unknown error";
-    await queueDerivedFiles([{ filename: "dataset_description.json", content: metadataFileContents }],
-      queueTarget, `dataset_description upload exception: ${detail}`);
   }
 
   const metadataResponse: MetadataBlockResult = {success: true, ...metadataMessage, derivedFiles};
