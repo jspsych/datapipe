@@ -1,6 +1,6 @@
-import jsPsychMetadata, { parseCSV } from '@jspsych/metadata';
+import jsPsychMetadata, { parseCSV, parseJsonData } from '@jspsych/metadata';
 import { Metadata } from './interfaces';
-import { ExtractionResult } from './metadata-sidecars.js';
+import { ExtractionResult } from './metadata-derived-files.js';
 
 export interface ProducedMetadata extends ExtractionResult {
   metadata: Metadata;
@@ -12,6 +12,11 @@ export interface ProducedMetadata extends ExtractionResult {
   // variableMeasured and the sidecars. For JSON this is the parsed trial array;
   // for CSV it is parsed from the original text via the library's parseCSV.
   mainRows: Array<Record<string, unknown>>;
+  // The original CSV text, verbatim, when the submission was CSV — passed to
+  // buildPsychDSDataFiles as mainContent so the main data CSV keeps its exact
+  // bytes (column order, quoting) instead of being re-serialised from mainRows.
+  // Undefined for JSON submissions.
+  mainContent?: string;
 }
 
 export default async function produceMetadata(data: string, options: object | null = null): Promise<ProducedMetadata> {
@@ -24,8 +29,12 @@ export default async function produceMetadata(data: string, options: object | nu
 
     const csvFlag: boolean = isCsv(data);
 
-    // Parses the data if it is JSON object in string format.
-    if(!csvFlag) data = JSON.parse(data);
+    // Parses the data if it is JSON in string format. parseJsonData is the
+    // library's own parser (the CLI and frontend run it too): a bare trial
+    // array — the standard jsPsych/DataPipe payload — passes through unchanged,
+    // and the nonstandard-but-possible { "trials": [...] } wrapper is unwrapped
+    // to its array, keeping DataPipe's parsing at parity with the CLI's.
+    if(!csvFlag) data = parseJsonData(data);
 
     // Generates the metadata, using the options if they are provided.
     // The vendored @jspsych/metadata (see functions/metadata/) changed generate()'s
@@ -50,12 +59,14 @@ export default async function produceMetadata(data: string, options: object | nu
 
     // Nested array/object columns that generate() expanded into dotted
     // sub-variables; their per-row data is returned so callers can write
-    // sidecar CSVs (see metadata-sidecars.ts).
+    // sidecar CSVs (see metadata-derived-files.ts).
     return {
       metadata: incomingMetadata,
       extractedArrays: metadata.getExtractedArrays(),
       extractedObjects: metadata.getExtractedObjects(),
       joinKeys: metadata.getArrayJoinKeys(),
       mainRows,
+      // For CSV, `data` was never reassigned and is still the original text.
+      mainContent: csvFlag ? (data as string) : undefined,
     };
   }

@@ -7,8 +7,8 @@ import { db } from "./app.js";
 import writeLog from "./write-log.js";
 import MESSAGES from "./api-messages.js";
 import blockMetadata from "./metadata-block.js";
-import { SidecarFile } from "./metadata-sidecars.js";
-import { uploadSidecars, queueSidecars } from "./metadata-sidecar-upload.js";
+import { DerivedFile, rawDataPath } from "./metadata-derived-files.js";
+import { uploadDerivedFiles, queueDerivedFiles } from "./metadata-derived-upload.js";
 import resolveToken from "./resolve-token.js";
 import queueUpload from "./queue-upload.js";
 import { persistPending, cleanupPending } from "./persist-pending.js";
@@ -128,9 +128,10 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
   //METADATA BLOCK START
 
   let metadataMessage: string = '';
-  //Sidecar CSVs for nested array/object columns, produced by the metadata
-  //block and uploaded only after the participant's data file lands in OSF.
-  let sidecars: SidecarFile[] = [];
+  //Psych-DS files derived from this submission (main data CSV, sidecar CSVs
+  //for nested columns, .psychds-ignore), produced by the metadata block and
+  //uploaded only after the participant's raw data file lands in OSF.
+  let derivedFiles: DerivedFile[] = [];
 
   if (exp_data.metadataActive) {
     //Creates or references a document containing the metadata for the experiment in the metdata collection on Firestore.
@@ -140,18 +141,24 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
 
     if (metadataResponse.success === false) {
       await cleanupPending(pendingPath);
-      res.status(400).json({...metadataResponse, sidecars: undefined});
+      res.status(400).json({...metadataResponse, derivedFiles: undefined});
       await writeLog(experimentID, "logError", {...MESSAGES.METADATA_ERROR, detail: metadataResponse.message});
       return;
     }
 
     metadataMessage = metadataResponse.metadataMessage;
-    sidecars = metadataResponse.sidecars ?? [];
+    derivedFiles = metadataResponse.derivedFiles ?? [];
   }
 
-  const sidecarTarget = { experimentID, owner: exp_data.owner, osfFilesLink: exp_data.osfFilesLink };
+  const derivedTarget = { experimentID, owner: exp_data.owner, osfFilesLink: exp_data.osfFilesLink };
 
   //METADATA BLOCK END
+
+  //With metadata on, the raw submission is the critical upload and lives at
+  //data/raw/<original name> in the Psych-DS layout (the CSVs above are derived
+  //from it). Session counting and queue-on-failure key off this file. With
+  //metadata off, the layout is unchanged: the raw file goes to the root.
+  const uploadFilename = exp_data.metadataActive ? rawDataPath(filename) : filename;
 
   let result: OSFResult;
   try {
@@ -159,22 +166,22 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
       exp_data.osfFilesLink,
       token,
       data,
-      filename
+      uploadFilename
     );
   } catch (e) {
     // Network errors, timeouts, etc. — queue for retry
     const detail = e instanceof Error ? e.message : "Unknown error";
     try {
       await queueUpload({
-        experimentID, owner: exp_data.owner, filename, data,
+        experimentID, owner: exp_data.owner, filename: uploadFilename, data,
         dataType: "data", osfFilesLink: exp_data.osfFilesLink,
         errorCode: 0, sessionIncremented: true,
         failureReason: `Upload exception: ${detail}`,
       });
       await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
       await cleanupPending(pendingPath); // queue-upload has its own copy
-      // OSF is unreachable, so queue the sidecars alongside the data file.
-      await queueSidecars(sidecars, sidecarTarget, `Queued alongside data file: ${detail}`);
+      // OSF is unreachable, so queue the derived files alongside the raw data.
+      await queueDerivedFiles(derivedFiles, derivedTarget, `Queued alongside data file: ${detail}`);
       res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
       await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail});
       return;
@@ -194,15 +201,15 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
     // Queue all other failures for retry
     try {
       await queueUpload({
-        experimentID, owner: exp_data.owner, filename, data,
+        experimentID, owner: exp_data.owner, filename: uploadFilename, data,
         dataType: "data", osfFilesLink: exp_data.osfFilesLink,
         errorCode: result.errorCode || 0, sessionIncremented: true,
         failureReason: `OSF error ${result.errorCode}: ${result.errorText}`,
       });
       await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
       await cleanupPending(pendingPath); // queue-upload has its own copy
-      // OSF is failing, so queue the sidecars alongside the data file.
-      await queueSidecars(sidecars, sidecarTarget, `Queued alongside data file: OSF error ${result.errorCode}`);
+      // OSF is failing, so queue the derived files alongside the raw data.
+      await queueDerivedFiles(derivedFiles, derivedTarget, `Queued alongside data file: OSF error ${result.errorCode}`);
       res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
       await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.errorCode, osfStatusText: result.errorText});
       return;
@@ -218,9 +225,10 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
   // Data successfully uploaded to OSF — clean up the pending copy.
   await cleanupPending(pendingPath);
 
-  // The data file is safely in OSF; upload its sidecar CSVs (best-effort —
-  // failures are queued for retry and logged, never failing the submission).
-  await uploadSidecars(sidecars, sidecarTarget, token);
+  // The raw data file is safely in OSF; upload the files derived from it
+  // (main data CSV, sidecar CSVs, .psychds-ignore — best-effort: failures are
+  // queued for retry and logged, never failing the submission).
+  await uploadDerivedFiles(derivedFiles, derivedTarget, token);
 
   res.status(201).json({...MESSAGES.SUCCESS, metadataMessage});
 });

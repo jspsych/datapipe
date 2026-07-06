@@ -7,10 +7,11 @@ import downloadMetadata from "./metadata-download.js";
 import { DocumentReference, DocumentData } from "firebase-admin/firestore";
 import putFileOSF from "./put-file-osf.js";
 import { db } from "./app.js";
-import buildSidecars, { SidecarFile } from "./metadata-sidecars.js";
+import buildDerivedFiles, { DerivedFile } from "./metadata-derived-files.js";
+import { queueDerivedFiles } from "./metadata-derived-upload.js";
 import { ExperimentData, Metadata, MetadataResponse } from './interfaces';
 
-export type MetadataBlockResult = MetadataResponse & { sidecars?: SidecarFile[] };
+export type MetadataBlockResult = MetadataResponse & { derivedFiles?: DerivedFile[] };
 
 // Sentinel thrown inside the transaction when the merge needs the OSF copy of
 // the metadata as its base. The OSF download must happen outside the
@@ -42,10 +43,12 @@ try {
   const produced = await produceMetadata(data, metadataOptions);
   const incomingMetadata: Metadata = produced.metadata;
 
-  //Sidecar CSVs for nested array/object columns, mirroring the CLI's per-file
-  //output. Built here; uploaded by the caller only after the participant's
-  //data file itself lands in OSF, so sidecars can never precede their data.
-  const sidecars: SidecarFile[] = buildSidecars(filename, produced, produced.mainRows);
+  //The full Psych-DS file set derived from this submission (main data CSV,
+  //sidecar CSVs for nested columns, .psychds-ignore), mirroring the CLI's
+  //per-file output. Built here; uploaded by the caller only after the
+  //participant's raw data file itself lands in OSF under data/raw/, so
+  //derived files can never precede the data they are derived from.
+  const derivedFiles: DerivedFile[] = buildDerivedFiles(filename, produced);
 
   //Retrieves the metadata ID from the OSF metadata file. If an ID exists, then a metadata file with name:
   //dataset_description.json exists in the OSF project.
@@ -94,29 +97,51 @@ try {
     updatedMetadata = await runMergeTransaction();
   }
 
-  //Firestore is now up to date; mirror the merged metadata to OSF.
+  //Firestore is now up to date; mirror the merged metadata to OSF. The mirror
+  //is best-effort: Firestore is the source of truth and every submission
+  //re-merges and re-mirrors, so a failure here must not reject the
+  //participant's data — it is queued for retry (create) or left for the next
+  //submission to repair (update).
   const metadataFileContents = JSON.stringify(updatedMetadata, null, 2);
+  const queueTarget = {
+    experimentID: metadata_doc_ref.id,
+    owner: exp_data.owner,
+    osfFilesLink: exp_data.osfFilesLink,
+  };
 
-  //If a metadata file exists in OSF, it is updated. Otherwise it is created.
-  if (osfMetadataId) {
-    await updateFileOSF(
-      exp_data.osfFilesLink,
-      osfToken,
-      metadataFileContents,
-      osfMetadataId
-    );
-  } else {
-    const response = await putFileOSF(
-      exp_data.osfFilesLink,
-      osfToken,
-      metadataFileContents,
-      `dataset_description.json`
-    );
+  try {
+    //If a metadata file exists in OSF, it is updated. Otherwise it is created.
+    if (osfMetadataId) {
+      //Result intentionally unchecked: the queue can only PUT (which would 409
+      //against the existing file), and the next submission updates OSF anyway.
+      await updateFileOSF(
+        exp_data.osfFilesLink,
+        osfToken,
+        metadataFileContents,
+        osfMetadataId
+      );
+    } else {
+      const response = await putFileOSF(
+        exp_data.osfFilesLink,
+        osfToken,
+        metadataFileContents,
+        `dataset_description.json`
+      );
 
-    if (!response.success) throw new Error(MESSAGES.OSF_UPLOAD_ERROR.message);
+      //A 409 means a concurrent submission created the file first; the next
+      //submission will fold this one's merge (already in Firestore) into it.
+      if (!response.success && response.errorCode !== 409) {
+        await queueDerivedFiles([{ filename: "dataset_description.json", content: metadataFileContents }],
+          queueTarget, `dataset_description OSF error ${response.errorCode}: ${response.errorText}`);
+      }
+    }
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "Unknown error";
+    await queueDerivedFiles([{ filename: "dataset_description.json", content: metadataFileContents }],
+      queueTarget, `dataset_description upload exception: ${detail}`);
   }
 
-  const metadataResponse: MetadataBlockResult = {success: true, ...metadataMessage, sidecars};
+  const metadataResponse: MetadataBlockResult = {success: true, ...metadataMessage, derivedFiles};
   return metadataResponse;
 }
 catch (error) {

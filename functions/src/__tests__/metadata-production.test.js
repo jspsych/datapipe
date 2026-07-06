@@ -89,6 +89,20 @@ describe('produceMetadata', () => {
       trial_index: 1,
       time_elapsed: 776,
     });
+    // JSON submissions have no verbatim CSV to preserve.
+    expect(result.mainContent).toBeUndefined();
+  });
+
+  it('should unwrap a nonstandard { "trials": [...] } submission like the CLI does', async () => {
+    const wrapped = `{"trials": ${sampleData}}`;
+
+    const bare = await produceMetadata(sampleData);
+    const result = await produceMetadata(wrapped);
+
+    // Parity with the library's parseJsonData: the wrapper is unwrapped, so
+    // metadata and main rows match the bare-array submission exactly.
+    expect(result.metadata).toEqual(bare.metadata);
+    expect(result.mainRows).toEqual(bare.mainRows);
   });
 
   it('should parse CSV submissions into main rows', async () => {
@@ -99,6 +113,9 @@ describe('produceMetadata', () => {
     // parseCSV treats every cell as a string (columns:true, no coercion).
     expect(result.mainRows[0]).toMatchObject({ trial_index: '0', rt: '250' });
     expect(result.mainRows[1]).toMatchObject({ trial_index: '1', rt: '300' });
+    // The original text is surfaced verbatim so the main data CSV can keep
+    // its exact bytes (column order, quoting).
+    expect(result.mainContent).toBe(csv);
   });
 
   it('should extract nested object and array columns with per-row data', async () => {
