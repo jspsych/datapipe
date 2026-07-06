@@ -7,7 +7,7 @@ import { db } from "./app.js";
 import writeLog from "./write-log.js";
 import MESSAGES from "./api-messages.js";
 import blockMetadata from "./metadata-block.js";
-import { DerivedFile, rawDataPath } from "./metadata-derived-files.js";
+import { DerivedFile, uploadPathFor } from "./metadata-derived-files.js";
 import { uploadDerivedFiles, queueDerivedFiles } from "./metadata-derived-upload.js";
 import resolveToken from "./resolve-token.js";
 import queueUpload from "./queue-upload.js";
@@ -158,7 +158,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
   //data/raw/<original name> in the Psych-DS layout (the CSVs above are derived
   //from it). Session counting and queue-on-failure key off this file. With
   //metadata off, the layout is unchanged: the raw file goes to the root.
-  const uploadFilename = exp_data.metadataActive ? rawDataPath(filename) : filename;
+  const uploadFilename = uploadPathFor(exp_data.metadataActive, filename);
 
   let result: OSFResult;
   try {

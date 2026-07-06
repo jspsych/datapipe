@@ -45,6 +45,16 @@ export function rawDataPath(dataFilename: string): string {
 }
 
 /**
+ * The OSF path a raw submission should actually be uploaded to: `data/raw/`
+ * when metadata is on, unchanged at the root otherwise. Callers that key
+ * queue/dedup entries off the upload filename (api-data's request path and
+ * scheduled-pending-recovery) must agree on this, so the rule lives here once.
+ */
+export function uploadPathFor(metadataActive: boolean | undefined, dataFilename: string): string {
+  return metadataActive ? rawDataPath(dataFilename) : dataFilename;
+}
+
+/**
  * Builds the full set of Psych-DS files derived from one submission, mirroring
  * what the @jspsych/metadata CLI writes per data file: the main data table as
  * data/<base>_data.csv, one sidecar CSV per extracted array-of-objects or
