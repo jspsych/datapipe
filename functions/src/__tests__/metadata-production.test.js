@@ -55,7 +55,7 @@ describe('produceMetadata', () => {
 
     const result = await produceMetadata(sampleData);
 
-    expect(result).toEqual(sampleMetadata);
+    expect(result.metadata).toEqual(sampleMetadata);
   });
 
   it('should generate metadata with provided options', async () => {
@@ -68,6 +68,100 @@ describe('produceMetadata', () => {
     const optionMetadata = structuredClone(sampleMetadata);
     optionMetadata.randomField = "this is a field";
 
-    expect(result).toEqual(optionMetadata);
+    expect(result.metadata).toEqual(optionMetadata);
+  });
+
+  it('should report no extracted columns for flat data', async () => {
+    const result = await produceMetadata(sampleData);
+
+    expect(result.extractedArrays.size).toBe(0);
+    expect(result.extractedObjects.size).toBe(0);
+    expect(result.joinKeys).toEqual(['trial_index']);
+  });
+
+  it('should surface the parsed main rows for JSON data', async () => {
+    const result = await produceMetadata(sampleData);
+
+    expect(Array.isArray(result.mainRows)).toBe(true);
+    expect(result.mainRows).toHaveLength(1);
+    expect(result.mainRows[0]).toMatchObject({
+      trial_type: 'html-keyboard-response',
+      trial_index: 1,
+      time_elapsed: 776,
+    });
+    // JSON submissions have no verbatim CSV to preserve.
+    expect(result.mainContent).toBeUndefined();
+  });
+
+  it('should unwrap a nonstandard { "trials": [...] } submission like the CLI does', async () => {
+    const wrapped = `{"trials": ${sampleData}}`;
+
+    const bare = await produceMetadata(sampleData);
+    const result = await produceMetadata(wrapped);
+
+    // Parity with the library's parseJsonData: the wrapper is unwrapped, so
+    // metadata and main rows match the bare-array submission exactly.
+    expect(result.metadata).toEqual(bare.metadata);
+    expect(result.mainRows).toEqual(bare.mainRows);
+  });
+
+  it('should parse CSV submissions into main rows', async () => {
+    const csv = 'trial_index,rt\n0,250\n1,300';
+    const result = await produceMetadata(csv);
+
+    expect(result.mainRows).toHaveLength(2);
+    // parseCSV treats every cell as a string (columns:true, no coercion).
+    expect(result.mainRows[0]).toMatchObject({ trial_index: '0', rt: '250' });
+    expect(result.mainRows[1]).toMatchObject({ trial_index: '1', rt: '300' });
+    // The original text is surfaced verbatim so the main data CSV can keep
+    // its exact bytes (column order, quoting).
+    expect(result.mainContent).toBe(csv);
+  });
+
+  it('should extract nested object and array columns with per-row data', async () => {
+    const nestedData = JSON.stringify([
+      {
+        trial_type: "survey-text",
+        trial_index: 0,
+        time_elapsed: 500,
+        response: { Q0: "hello", Q1: "world" },
+      },
+      {
+        trial_type: "mouse-tracking",
+        trial_index: 1,
+        time_elapsed: 900,
+        mouse_tracking_data: [
+          { x: 1, y: 2, t: 10 },
+          { x: 3, y: 4, t: 20 },
+        ],
+      },
+    ]);
+
+    const result = await produceMetadata(nestedData);
+
+    // The nested columns are expanded into dotted sub-variables...
+    const variableNames = result.metadata.variableMeasured.map((v) => v.name);
+    expect(variableNames).toEqual(expect.arrayContaining([
+      'response.Q0', 'response.Q1',
+      'mouse_tracking_data.x', 'mouse_tracking_data.y', 'mouse_tracking_data.t',
+    ]));
+
+    // ...and their per-row data is available for sidecar CSVs.
+    expect([...result.extractedObjects.keys()]).toEqual(['response']);
+    expect([...result.extractedArrays.keys()]).toEqual(['mouse_tracking_data']);
+
+    const arrayRows = result.extractedArrays.get('mouse_tracking_data');
+    expect(arrayRows).toHaveLength(2);
+    expect(arrayRows[0]).toMatchObject({
+      trial_index: 1,
+      element_index: 0,
+      'mouse_tracking_data.x': 1,
+      'mouse_tracking_data.y': 2,
+      'mouse_tracking_data.t': 10,
+    });
+
+    const objectRows = result.extractedObjects.get('response');
+    expect(objectRows).toHaveLength(1);
+    expect(objectRows[0]).toMatchObject({ trial_index: 0, 'response.Q0': 'hello', 'response.Q1': 'world' });
   });
 });

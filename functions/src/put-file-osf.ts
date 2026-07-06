@@ -1,5 +1,4 @@
-import fetch from "node-fetch";
-import parsePath from "./subfolder.js";
+import resolveFolder from "./subfolder.js";
 
 export default async function putFileOSF(
   osfComponent: string,
@@ -8,41 +7,33 @@ export default async function putFileOSF(
   filename: string
 ) {
 
-  //if a filepath is detected in the filename, we need to create the subfolder or find the subfolder.
-  let path;
+  // A filename may carry a path prefix (e.g. "data/raw/abc123.json"). Split it
+  // into folder segments and the file name; each folder level is found-or-created
+  // in turn (WaterButler has no atomic deep-path create), walking down to the
+  // folder that will hold the file. A bare "abc123.json" has no segments and
+  // uploads straight to the storage root.
+  const segments = filename.split('/');
+  const fileName = segments.pop() as string;
 
-  if (filename.includes('/')) {
-    // Split filename argument into subfolder name and datafile name.
-    const components = filename.split('/');
-
-    // Waterbutler API requires folders to be referenced with trailing slashes.
-
-    const queryParams = new URLSearchParams({
-      kind: "file",
-      name: components[1],
-    });
-
-    path = `${(await parsePath(osfComponent, osfToken, components[0]))}?${queryParams.toString()}`;
-    
-    }
-  else {
-    // If no subfolder is detected, we just upload the file to the default storage component root.
-
-    const queryParams = new URLSearchParams({
-      kind: "file",
-      name: filename,
-    });
-
-    path = `${osfComponent}?${queryParams.toString()}`;
+  let targetUrl = osfComponent;
+  for (const folder of segments) {
+    targetUrl = await resolveFolder(targetUrl, osfToken, folder);
   }
 
-  const osfResult = await fetch(`${path}`, {
+  const queryParams = new URLSearchParams({
+    kind: "file",
+    name: fileName,
+  });
+
+  const osfResult = await fetch(`${targetUrl}?${queryParams.toString()}`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${osfToken}`,
     },
-    body: filedata,
+    // Buffer is a valid fetch body at runtime; the cast sidesteps a @types/node
+    // generic-Buffer vs BodyInit mismatch.
+    body: filedata as BodyInit,
   });
 
   if (osfResult.status !== 201) {
