@@ -53,8 +53,18 @@ try {
   //OSF populated). Done outside the transaction below since Firestore retries
   //a transaction callback on contention, which would otherwise repeat this
   //network call on every retry.
-  let osfMetadata: Metadata | undefined;
   const preReadFirestoreMetadata: Metadata | undefined = (await metadata_doc_ref.get()).data()?.metadata;
+
+  //Record which of the four states we are in before the download below (which
+  //can throw) so error responses still report the state, same as a successful
+  //response would.
+  if (preReadFirestoreMetadata) {
+    metadataMessage = osfMetadataId ? MESSAGES.METADATA_IN_OSF_AND_FIRESTORE : MESSAGES.METADATA_IN_FIRESTORE_NOT_IN_OSF;
+  } else {
+    metadataMessage = osfMetadataId ? MESSAGES.METADATA_IN_OSF_NOT_IN_FIRESTORE : MESSAGES.METADATA_NOT_IN_FIRESTORE_OR_OSF;
+  }
+
+  let osfMetadata: Metadata | undefined;
   if (!preReadFirestoreMetadata && osfMetadataId) {
     osfMetadata = (await downloadMetadata(exp_data.osfFilesLink, osfToken, osfMetadataId)).metadata;
   }
