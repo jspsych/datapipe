@@ -6,7 +6,6 @@ import { db, auth } from "../../lib/firebase";
 import { doc, collection, query, where, orderBy } from "firebase/firestore";
 
 import { Spinner, Flex, VStack, HStack, Text, Badge, Separator, Popover, IconButton, Link } from "@chakra-ui/react";
-import NextLink from "next/link";
 import { CircleHelp } from "lucide-react";
 
 import Title from "../../components/dashboard/Title";
@@ -142,8 +141,8 @@ function ExperimentPageDashboard({ experiment_id }) {
                           Generates Psych-DS metadata describing your data&apos;s
                           columns (descriptions, value ranges, and levels), making
                           your dataset easier to share and reuse.{" "}
-                          <Link asChild color="blue.500">
-                            <NextLink href="/faq">Learn more</NextLink>
+                          <Link href="https://psychds-docs.readthedocs.io/en/latest/" target="_blank" rel="noopener noreferrer" color="blue.500">
+                            Learn more
                           </Link>
                         </Text>
                       </Popover.Body>
