@@ -13,18 +13,26 @@ export default function FAQ() {
   const [openItems, setOpenItems] = useState(["item-0"]);
 
   useEffect(() => {
-    const hash = window.location.hash.replace("#", "");
-    if (!hash) return;
-    setOpenItems((prev) => (prev.includes(hash) ? prev : [...prev, hash]));
-    // Wait for the accordion to expand, then bring the item's trigger into view.
-    // Chakra doesn't forward `id` to the DOM, so target the trigger via its
-    // data-controls attribute and offset for the fixed navbar.
-    setTimeout(() => {
-      const el = document.querySelector(`[data-controls$=":content:${hash}"]`);
-      if (!el) return;
-      const top = el.getBoundingClientRect().top + window.scrollY - 80;
-      window.scrollTo({ top, behavior: "smooth" });
-    }, 350);
+    function scrollToHash() {
+      const hash = window.location.hash.replace("#", "");
+      if (!hash) return;
+      setOpenItems((prev) => (prev.includes(hash) ? prev : [...prev, hash]));
+      // Each FAQItem owns a Box with id={value} that isn't part of the
+      // collapsible content, so it's always in the DOM to target — no need to
+      // wait on the accordion's expand animation. Offset for the fixed navbar.
+      requestAnimationFrame(() => {
+        const el = document.getElementById(hash);
+        if (!el) return;
+        const top = el.getBoundingClientRect().top + window.scrollY - 80;
+        window.scrollTo({ top, behavior: "smooth" });
+      });
+    }
+
+    scrollToHash();
+    // Also handle hash changes while already on this page (e.g. clicking
+    // another #item-N link without a full navigation/mount).
+    window.addEventListener("hashchange", scrollToHash);
+    return () => window.removeEventListener("hashchange", scrollToHash);
   }, []);
 
   return (
@@ -325,18 +333,20 @@ export default function FAQ() {
 
 function FAQItem({ question, children, value }) {
   return (
-    <Accordion.Item value={value}>
-      <Accordion.ItemTrigger>
-        <Heading as="h2" size="md" my={2} flex="1" textAlign="left">
-          {question}
-        </Heading>
-        <Accordion.ItemIndicator />
-      </Accordion.ItemTrigger>
-      <Accordion.ItemContent>
-        <Box pb={4} style={{ whiteSpace: "pre-line" }}>
-          {children}
-        </Box>
-      </Accordion.ItemContent>
-    </Accordion.Item>
+    <Box id={value}>
+      <Accordion.Item value={value}>
+        <Accordion.ItemTrigger>
+          <Heading as="h2" size="md" my={2} flex="1" textAlign="left">
+            {question}
+          </Heading>
+          <Accordion.ItemIndicator />
+        </Accordion.ItemTrigger>
+        <Accordion.ItemContent>
+          <Box pb={4} style={{ whiteSpace: "pre-line" }}>
+            {children}
+          </Box>
+        </Accordion.ItemContent>
+      </Accordion.Item>
+    </Box>
   );
 }

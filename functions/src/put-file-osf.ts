@@ -4,18 +4,23 @@ export default async function putFileOSF(
   osfComponent: string,
   osfToken: string,
   filedata: string | Buffer,
-  filename: string
+  filename: string,
+  // Optional pre-resolved link for the folder `filename`'s remaining segments
+  // are relative to (e.g. already resolved "data/" for a caller uploading many
+  // files under data/). Skips re-walking that portion of the path. Defaults to
+  // osfComponent (the component root) when omitted.
+  startUrl?: string,
 ) {
 
   // A filename may carry a path prefix (e.g. "data/raw/abc123.json"). Split it
   // into folder segments and the file name; each folder level is found-or-created
   // in turn (WaterButler has no atomic deep-path create), walking down to the
   // folder that will hold the file. A bare "abc123.json" has no segments and
-  // uploads straight to the storage root.
+  // uploads straight to the storage root (or to startUrl, if given).
   const segments = filename.split('/');
   const fileName = segments.pop() as string;
 
-  let targetUrl = osfComponent;
+  let targetUrl = startUrl ?? osfComponent;
   for (const folder of segments) {
     targetUrl = await resolveFolder(targetUrl, osfToken, folder);
   }

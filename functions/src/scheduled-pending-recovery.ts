@@ -3,6 +3,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { db, storage } from "./app.js";
 import { readPendingEnvelope, cleanupPending } from "./persist-pending.js";
 import { ExperimentData } from "./interfaces.js";
+import { uploadPathFor } from "./metadata-derived-files.js";
 
 const PENDING_PREFIX = "pending-data/";
 
@@ -87,7 +88,7 @@ async function recoverPendingUploads() {
  * 4. Create an uploadQueue Firestore document
  * 5. Clean up the pending-data/ file
  */
-async function promoteToQueue(
+export async function promoteToQueue(
   file: ReturnType<ReturnType<typeof storage.bucket>["file"]>
 ) {
   // Read the envelope
@@ -119,9 +120,21 @@ async function promoteToQueue(
     return;
   }
 
+  // Layout-aware upload path: metadata-active experiments store their raw
+  // file at data/raw/, same as api-data.ts's live-submission path. Recovered
+  // sessions get no metadata/derived files regenerated here (recovery has no
+  // metadata pipeline and the raw file is the source of truth; the next live
+  // submission re-merges Firestore metadata into dataset_description.json
+  // anyway) — full parity would be separate work.
+  const uploadFilename = uploadPathFor(expData.metadataActive, filename);
+
   // Check for deduplication and atomically create the queue entry via transaction.
-  // This prevents duplicate entries if two recovery runs overlap.
-  const deduplicationKey = `${experimentID}:${filename}`;
+  // This prevents duplicate entries if two recovery runs overlap. Keyed off
+  // uploadFilename (not the envelope's original filename) so this matches the
+  // key api-data.ts uses for the same eventual OSF path — otherwise a crash
+  // between queueUpload and cleanupPending could upload the same submission
+  // twice, once under each filename.
+  const deduplicationKey = `${experimentID}:${uploadFilename}`;
   const docId = deduplicationKey.replace(/[/\\]/g, "_");
   const docRef = db.collection("uploadQueue").doc(docId);
 
@@ -142,7 +155,7 @@ async function promoteToQueue(
     transaction.set(docRef, {
       experimentID,
       owner: expData.owner,
-      filename,
+      filename: uploadFilename,
       storagePath,
       dataType: "data",
       osfFilesLink: expData.osfFilesLink,

@@ -7,7 +7,7 @@ import { db } from "./app.js";
 import writeLog from "./write-log.js";
 import MESSAGES from "./api-messages.js";
 import blockMetadata from "./metadata-block.js";
-import { DerivedFile, rawDataPath } from "./metadata-derived-files.js";
+import { DerivedFile, uploadPathFor } from "./metadata-derived-files.js";
 import { uploadDerivedFiles, queueDerivedFiles } from "./metadata-derived-upload.js";
 import resolveToken from "./resolve-token.js";
 import queueUpload from "./queue-upload.js";
@@ -140,8 +140,10 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
     const metadataResponse = await blockMetadata(exp_data, token, metadata_doc_ref, data, filename, metadataOptions);
 
     if (metadataResponse.success === false) {
-      await cleanupPending(pendingPath);
-      res.status(400).json({...metadataResponse, derivedFiles: undefined});
+      // The pending-data copy is deliberately kept (not cleaned up) here: the
+      // participant's raw data never made it to OSF, so scheduled-pending-recovery
+      // salvages it later instead of losing it outright.
+      res.status(400).json(metadataResponse);
       await writeLog(experimentID, "logError", {...MESSAGES.METADATA_ERROR, detail: metadataResponse.message});
       return;
     }
@@ -158,7 +160,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
   //data/raw/<original name> in the Psych-DS layout (the CSVs above are derived
   //from it). Session counting and queue-on-failure key off this file. With
   //metadata off, the layout is unchanged: the raw file goes to the root.
-  const uploadFilename = exp_data.metadataActive ? rawDataPath(filename) : filename;
+  const uploadFilename = uploadPathFor(exp_data.metadataActive, filename);
 
   let result: OSFResult;
   try {

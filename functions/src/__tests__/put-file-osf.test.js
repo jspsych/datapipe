@@ -131,6 +131,30 @@ describe('putFileOSF', () => {
     ]);
   });
 
+  it('uploads straight into a pre-resolved startUrl, skipping the walk entirely', async () => {
+    fetch.mockReturnValueOnce(fileOk());
+
+    const result = await putFileOSF(ROOT, TOKEN, 'data', 'abc123.json', move('data'));
+
+    expect(result.success).toBe(true);
+    expect(callUrls()).toEqual([`${move('data')}?kind=file&name=abc123.json`]);
+  });
+
+  it('walks remaining segments starting from a pre-resolved startUrl', async () => {
+    fetch
+      .mockReturnValueOnce(listing([]))
+      .mockReturnValueOnce(folderCreated('raw'))
+      .mockReturnValueOnce(fileOk());
+
+    await putFileOSF(ROOT, TOKEN, '{}', 'raw/abc123.json', move('data'));
+
+    expect(callUrls()).toEqual([
+      `${move('data')}?meta=`,
+      `${move('data')}?kind=folder&name=raw`,
+      `${move('raw')}?kind=file&name=abc123.json`,
+    ]);
+  });
+
   it('returns the OSF error when the file upload fails', async () => {
     fetch.mockReturnValueOnce(fileFail(409, 'Conflict'));
 

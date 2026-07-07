@@ -164,4 +164,13 @@ describe('produceMetadata', () => {
     expect(objectRows).toHaveLength(1);
     expect(objectRows[0]).toMatchObject({ trial_index: 0, 'response.Q0': 'hello', 'response.Q1': 'world' });
   });
+
+  it('throws a clean error instead of a TypeError when the trial array is empty', async () => {
+    await expect(produceMetadata('[]')).rejects.toThrow('Invalid metadata generated');
+  });
+
+  it('throws a clean error for a bare JSON object instead of letting it reach generate()', async () => {
+    await expect(produceMetadata('{"trial_type": "html-keyboard-response"}'))
+      .rejects.toThrow('Data must be an array of trials');
+  });
 });
