@@ -11,7 +11,13 @@ import buildDerivedFiles, { DerivedFile } from "./metadata-derived-files.js";
 import { queueDerivedFiles } from "./metadata-derived-upload.js";
 import { ExperimentData, Metadata, MetadataResponse } from './interfaces';
 
-export type MetadataBlockResult = MetadataResponse & { derivedFiles?: DerivedFile[] };
+// Discriminated on `success` so the compiler guarantees derivedFiles can only
+// ride on a success — a failure response structurally cannot carry them, so
+// callers (api-data's 400 path) can send it verbatim with no risk of leaking a
+// half-built derived-file set.
+type MetadataSuccess = Omit<MetadataResponse, 'success'> & { success: true; derivedFiles?: DerivedFile[] };
+type MetadataFailure = Omit<MetadataResponse, 'success'> & { success: false };
+export type MetadataBlockResult = MetadataSuccess | MetadataFailure;
 
 export default async function blockMetadata(
     exp_data: ExperimentData,
@@ -29,7 +35,7 @@ try {
   //Only run if metadata collection is enabled.
   if (!exp_data.metadataActive) {
     metadataMessage = MESSAGES.METADATA_NOT_ACTIVE;
-    const metadataResponse: MetadataResponse = {success: true, ...metadataMessage};
+    const metadataResponse: MetadataSuccess = {success: true, ...metadataMessage};
     return metadataResponse;
   }
 
@@ -147,7 +153,7 @@ try {
     }
   }
 
-  const metadataResponse: MetadataBlockResult = {success: true, ...metadataMessage, derivedFiles};
+  const metadataResponse: MetadataSuccess = {success: true, ...metadataMessage, derivedFiles};
   return metadataResponse;
 }
 catch (error) {
@@ -160,7 +166,7 @@ catch (error) {
 
   console.error("Metadata block error:", errorMessage);
 
-  const metadataResponse: MetadataResponse = {success: false, ...MESSAGES.METADATA_ERROR, message: errorMessage, ...metadataMessage};
+  const metadataResponse: MetadataFailure = {success: false, ...MESSAGES.METADATA_ERROR, message: errorMessage, ...metadataMessage};
   return metadataResponse;
 //METADATA BLOCK END
   };
