@@ -51,5 +51,19 @@ export default async function putFileOSF(
     return { success: false, errorCode: osfResult.status, errorText: osfResult.statusText, retryAfter };
   }
 
-  return { success: true, errorCode: null, errorText: null };
+  // Parse the created-file reference out of the response body. Tolerate a
+  // missing/unparseable body — the upload itself already succeeded (status
+  // 201), so a body we can't read must never turn this into a failure.
+  let fileId: string | undefined;
+  let fileName: string | undefined;
+  try {
+    const body = (await osfResult.json()) as { data?: { id?: string; attributes?: { name?: string } } };
+    fileId = body?.data?.id;
+    fileName = body?.data?.attributes?.name;
+  } catch {
+    fileId = undefined;
+    fileName = undefined;
+  }
+
+  return { success: true, errorCode: null, errorText: null, fileId, fileName };
 }

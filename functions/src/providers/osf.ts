@@ -60,10 +60,11 @@ export const osfProvider: StorageProvider = {
     const result = await putFileOSF(osfContainer.filesLink, auth.token, data, filename);
 
     if (result.success) {
+      const storedFilename = result.fileName ?? filename;
       return {
         success: true,
-        fileRef: { name: filename },
-        storedFilename: filename,
+        fileRef: { name: storedFilename, id: result.fileId },
+        storedFilename,
       };
     }
 
