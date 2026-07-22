@@ -1,7 +1,7 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { Timestamp } from "firebase-admin/firestore";
 import { db, storage } from "./app.js";
-import putFileOSF from "./put-file-osf.js";
+import { osfProvider } from "./providers/osf.js";
 import resolveToken from "./resolve-token.js";
 import { ExperimentData, UserData } from "./interfaces.js";
 
@@ -135,7 +135,14 @@ async function processQueueItem(queueDoc: FirebaseFirestore.QueryDocumentSnapsho
 
   // Attempt the upload
   try {
-    const result = await putFileOSF(data.osfFilesLink, token, fileData, data.filename);
+    const container = { provider: "osf" as const, filesLink: data.osfFilesLink };
+    const result = await osfProvider.writeSessionFile(
+      { token },
+      container,
+      data.filename,
+      fileData,
+      { size: Buffer.byteLength(fileData), contentType: "application/json" }
+    );
 
     if (result.success) {
       await markCompleted(docRef, data);
@@ -143,14 +150,14 @@ async function processQueueItem(queueDoc: FirebaseFirestore.QueryDocumentSnapsho
       return;
     }
 
-    if (result.errorCode === 409) {
+    if (result.error === "NAME_CONFLICT") {
       // File already exists — treat as success (original upload may have worked)
       await markCompleted(docRef, data);
       console.log(`Upload ${queueDoc.id} marked complete — file already exists in OSF.`);
       return;
     }
 
-    await handleRetryFailure(docRef, data, `OSF error ${result.errorCode}: ${result.errorText}`, result.retryAfter);
+    await handleRetryFailure(docRef, data, `OSF error ${result.providerStatus}: ${result.providerMessage}`, result.retryAfter);
   } catch (e) {
     const detail = e instanceof Error ? e.message : "Unknown error";
     await handleRetryFailure(docRef, data, `Upload exception: ${detail}`);

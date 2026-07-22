@@ -2,13 +2,12 @@ import MESSAGES from "./api-messages.js";
 import processMetadata from "./metadata-process.js";
 import updateMetadata from "./metadata-update.js";
 import produceMetadata from "./metadata-production.js";
-import updateFileOSF from "./update-file-osf.js";
 import downloadMetadata from "./metadata-download.js";
 import { DocumentReference, DocumentData } from "firebase-admin/firestore";
-import putFileOSF from "./put-file-osf.js";
 import { db } from "./app.js";
 import { decrypt } from "./crypto-utils.js";
 import { refreshAndUpdateUser } from "./refresh-token.js";
+import { osfProvider } from "./providers/osf.js";
 import { ExperimentData, UserData, Metadata, MetadataResponse } from './interfaces';
 
 
@@ -77,28 +76,32 @@ try {
 
         t.update(metadata_doc_ref, {metadata: updatedMetadata});
 
-        //If a metadata file exists in OSF, it is updated with the above metadata.        
+        //If a metadata file exists in OSF, it is updated with the above metadata.
         if (osfMetadataId){
-          await updateFileOSF(
-          exp_data.osfFilesLink,
-          decryptedOsfToken,
+          await osfProvider.updateFile(
+          { token: decryptedOsfToken },
+          { provider: "osf", filesLink: exp_data.osfFilesLink },
+          { id: osfMetadataId, name: "dataset_description.json" },
           JSON.stringify(updatedMetadata, null, 2),
-          osfMetadataId
+          { size: Buffer.byteLength(JSON.stringify(updatedMetadata, null, 2)), contentType: "application/json" }
         )
 
         }
         //If a metadata file does not exist in OSF, it is created with the above metadata.
         else {
 
-          const response = await putFileOSF(
-            exp_data.osfFilesLink,
-            decryptedOsfToken,
+          const response = await osfProvider.writeSessionFile(
+            { token: decryptedOsfToken },
+            { provider: "osf", filesLink: exp_data.osfFilesLink },
+            `dataset_description.json`,
             JSON.stringify(updatedMetadata, null, 2),
-            `dataset_description.json`
+            { size: Buffer.byteLength(JSON.stringify(updatedMetadata, null, 2)), contentType: "application/json" }
           );
 
-          if (response.errorCode !== 210) throw new Error(MESSAGES.OSF_UPLOAD_ERROR.message);
-          
+          // Latent pre-existing bug preserved verbatim — removed in build step 3 (see design doc, "Collision detection")
+          const status = response.success ? null : response.providerStatus;
+          if (status !== 210) throw new Error(MESSAGES.OSF_UPLOAD_ERROR.message);
+
         }
       }
       //When OSF has metadata but firestore does not, updating is done with respect to OSF.
@@ -119,11 +122,12 @@ try {
         t.set(metadata_doc_ref, {metadata: updatedMetadata}, {merge: true});
 
         //Since metadata exists in OSF, it is updated and not set.
-        await updateFileOSF(
-          exp_data.osfFilesLink,
-          decryptedOsfToken,
+        await osfProvider.updateFile(
+          { token: decryptedOsfToken },
+          { provider: "osf", filesLink: exp_data.osfFilesLink },
+          { id: osfMetadataId, name: "dataset_description.json" },
           JSON.stringify(incomingMetadata, null, 2),
-          osfMetadataId
+          { size: Buffer.byteLength(JSON.stringify(incomingMetadata, null, 2)), contentType: "application/json" }
         );
 
       }
@@ -136,11 +140,12 @@ try {
 
         t.set(metadata_doc_ref, {metadata: incomingMetadata}, {merge: true});
 
-        await putFileOSF( 
-            exp_data.osfFilesLink,
-            decryptedOsfToken,
+        await osfProvider.writeSessionFile(
+            { token: decryptedOsfToken },
+            { provider: "osf", filesLink: exp_data.osfFilesLink },
+            `dataset_description.json`,
             JSON.stringify(incomingMetadata, null, 2),
-            `dataset_description.json`
+            { size: Buffer.byteLength(JSON.stringify(incomingMetadata, null, 2)), contentType: "application/json" }
           );
 
         }

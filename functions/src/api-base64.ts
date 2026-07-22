@@ -1,6 +1,5 @@
 import { onRequest } from "firebase-functions/v2/https";
 import { DocumentReference, DocumentData, DocumentSnapshot } from "firebase-admin/firestore";
-import putFileOSF from "./put-file-osf.js";
 import { db } from "./app.js";
 import writeLog from "./write-log.js";
 import isBase64 from "is-base64";
@@ -8,7 +7,9 @@ import MESSAGES from "./api-messages.js";
 import resolveToken from "./resolve-token.js";
 import queueUpload from "./queue-upload.js";
 import { persistPending, cleanupPending } from "./persist-pending.js";
-import { ExperimentData, UserData, OSFResult } from './interfaces';
+import { getProviderForExperiment } from "./providers/index.js";
+import { WriteResult } from "./providers/types.js";
+import { ExperimentData, UserData } from './interfaces';
 
 export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 1 }, async (req, res) => {
   const { experimentID, data, filename } = req.body;
@@ -112,13 +113,16 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 
 
   const token = tokenResult.token;
 
-  let result: OSFResult;
+  const { provider, container } = getProviderForExperiment(exp_data);
+
+  let result: WriteResult;
   try {
-    result = await putFileOSF(
-      exp_data.osfFilesLink,
-      token,
+    result = await provider.writeSessionFile(
+      { token },
+      container,
+      filename,
       buffer,
-      filename
+      { size: buffer.length, contentType: "application/octet-stream" }
     );
   } catch (e) {
     // Network errors, timeouts, etc. — queue for retry
@@ -142,7 +146,7 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 
   }
 
   if (!result.success) {
-    if (result.errorCode === 409 && result.errorText === "Conflict") {
+    if (result.error === "NAME_CONFLICT" && result.providerMessage === "Conflict") {
       res.status(400).json(MESSAGES.OSF_FILE_EXISTS);
       await writeLog(experimentID, "logError", MESSAGES.OSF_FILE_EXISTS);
       return;
@@ -152,16 +156,16 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 
       await queueUpload({
         experimentID, owner: exp_data.owner, filename, data,
         dataType: "base64", osfFilesLink: exp_data.osfFilesLink,
-        errorCode: result.errorCode || 0, sessionIncremented: false,
-        failureReason: `OSF error ${result.errorCode}: ${result.errorText}`,
+        errorCode: result.providerStatus || 0, sessionIncremented: false,
+        failureReason: `OSF error ${result.providerStatus}: ${result.providerMessage}`,
       });
       await cleanupPending(pendingPath); // queue-upload has its own copy
       res.status(202).json(MESSAGES.OSF_UPLOAD_QUEUED);
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.errorCode, osfStatusText: result.errorText});
+      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.providerStatus, osfStatusText: result.providerMessage});
       return;
     } catch {
       res.status(400).json(MESSAGES.OSF_UPLOAD_ERROR);
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.errorCode, osfStatusText: result.errorText});
+      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.providerStatus, osfStatusText: result.providerMessage});
       return;
     }
   }

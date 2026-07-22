@@ -2,7 +2,6 @@ import { onRequest } from "firebase-functions/v2/https";
 import { FieldValue, DocumentReference, DocumentData, DocumentSnapshot } from "firebase-admin/firestore";
 import validateJSON from "./validate-json.js";
 import validateCSV from "./validate-csv.js";
-import putFileOSF from "./put-file-osf.js";
 import { db } from "./app.js";
 import writeLog from "./write-log.js";
 import MESSAGES from "./api-messages.js";
@@ -10,7 +9,9 @@ import blockMetadata from "./metadata-block.js";
 import resolveToken from "./resolve-token.js";
 import queueUpload from "./queue-upload.js";
 import { persistPending, cleanupPending } from "./persist-pending.js";
-import { ExperimentData, UserData, MetadataResponse, OSFResult, RequestBody } from './interfaces';
+import { getProviderForExperiment } from "./providers/index.js";
+import { WriteResult } from "./providers/types.js";
+import { ExperimentData, UserData, MetadataResponse, RequestBody } from './interfaces';
 
 export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 }, async (req, res) => {
   const { experimentID, data, filename, metadataOptions }: RequestBody = req.body;
@@ -145,13 +146,16 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
 
   //METADATA BLOCK END
 
-  let result: OSFResult;
+  const { provider, container } = getProviderForExperiment(exp_data);
+
+  let result: WriteResult;
   try {
-    result = await putFileOSF(
-      exp_data.osfFilesLink,
-      token,
+    result = await provider.writeSessionFile(
+      { token },
+      container,
+      filename,
       data,
-      filename
+      { size: Buffer.byteLength(data), contentType: "application/json" }
     );
   } catch (e) {
     // Network errors, timeouts, etc. — queue for retry
@@ -176,7 +180,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
   }
 
   if (!result.success) {
-    if (result.errorCode === 409 && result.errorText === "Conflict") {
+    if (result.error === "NAME_CONFLICT" && result.providerMessage === "Conflict") {
       res.status(400).json({...MESSAGES.OSF_FILE_EXISTS, metadataMessage});
       await writeLog(experimentID, "logError", MESSAGES.OSF_FILE_EXISTS);
       return;
@@ -186,17 +190,17 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
       await queueUpload({
         experimentID, owner: exp_data.owner, filename, data,
         dataType: "data", osfFilesLink: exp_data.osfFilesLink,
-        errorCode: result.errorCode || 0, sessionIncremented: true,
-        failureReason: `OSF error ${result.errorCode}: ${result.errorText}`,
+        errorCode: result.providerStatus || 0, sessionIncremented: true,
+        failureReason: `OSF error ${result.providerStatus}: ${result.providerMessage}`,
       });
       await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
       await cleanupPending(pendingPath); // queue-upload has its own copy
       res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.errorCode, osfStatusText: result.errorText});
+      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.providerStatus, osfStatusText: result.providerMessage});
       return;
     } catch {
       res.status(400).json({...MESSAGES.OSF_UPLOAD_ERROR, metadataMessage});
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.errorCode, osfStatusText: result.errorText});
+      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.providerStatus, osfStatusText: result.providerMessage});
       return;
     }
   }
