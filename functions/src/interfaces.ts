@@ -96,7 +96,9 @@ export interface ExperimentData {
     filename: string;
     storagePath: string;
     dataType: "data" | "base64";
-    osfFilesLink: string;
+    // Optional — undefined for provider-migrated (e.g. gdrive) queue
+    // entries, which carry storageProvider/providerContainer instead.
+    osfFilesLink?: string;
     status: "pending" | "processing" | "completed" | "failed";
     errorCode: number;
     retryCount: number;
@@ -112,6 +114,10 @@ export interface ExperimentData {
     // entries queued before the collision cache existed — those skip the
     // cache entirely on retry).
     claimToken?: string;
+    // Provider-migration fields (additive; absent = legacy OSF queue entry,
+    // which falls back to the osfFilesLink-based container above).
+    storageProvider?: StorageProviderId;
+    providerContainer?: ContainerRef;
   }
 
   export interface OSFFile{

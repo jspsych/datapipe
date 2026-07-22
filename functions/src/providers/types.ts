@@ -59,6 +59,18 @@ export type WriteResult =
       retryAfter?: number | null;
     };
 
+export type DownloadResult =
+  | {
+      success: true;
+      content: string;
+    }
+  | {
+      success: false;
+      error: ProviderErrorCode;
+      providerStatus: number | null;
+      providerMessage: string | null;
+    };
+
 // Descriptive (UI hints, subfolder fallback, size-cap warnings) — never a
 // correctness gate. Collision detection lives in Firestore, not here.
 export interface ProviderCapabilities {
@@ -115,6 +127,15 @@ export interface StorageProvider {
   // Full listing (adapters paginate internally). Used for collision-cache
   // rehydration and dashboard file counts.
   listFiles(auth: ResolvedAuth, container: ContainerRef): Promise<FileRef[]>;
+
+  // Fetches a file's contents as text. Used by metadata-block.ts to read
+  // back an existing dataset_description.json. Never throws — failures come
+  // back as a DownloadResult, same shape convention as WriteResult.
+  downloadFile(
+    auth: ResolvedAuth,
+    container: ContainerRef,
+    fileRef: FileRef
+  ): Promise<DownloadResult>;
 }
 
 // users/{uid}.connectedAccounts.* shapes (additive Firestore schema).

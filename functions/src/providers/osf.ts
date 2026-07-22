@@ -9,6 +9,7 @@ import {
   FileRef,
   FileMeta,
   WriteResult,
+  DownloadResult,
   ProviderErrorCode,
 } from "./types.js";
 
@@ -114,5 +115,32 @@ export const osfProvider: StorageProvider = {
     return listOfFiles
       .filter((file) => file.attributes.kind === "file")
       .map((file) => ({ name: file.attributes.name, id: file.id }));
+  },
+
+  async downloadFile(
+    auth: ResolvedAuth,
+    container: ContainerRef,
+    fileRef: FileRef
+  ): Promise<DownloadResult> {
+    const osfContainer = container as OSFContainerRef;
+
+    const response = await fetch(`${osfContainer.filesLink}${fileRef.id}`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${auth.token}`,
+      },
+    });
+
+    if (response.status !== 200) {
+      return {
+        success: false,
+        error: mapStatus(response.status),
+        providerStatus: response.status,
+        providerMessage: response.statusText,
+      };
+    }
+
+    const content = await response.text();
+    return { success: true, content };
   },
 };

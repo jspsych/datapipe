@@ -166,6 +166,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
         await queueUpload({
           experimentID, owner: exp_data.owner, filename, data,
           dataType: "data", osfFilesLink: exp_data.osfFilesLink,
+          storageProvider: exp_data.storageProvider, providerContainer: exp_data.providerContainer,
           errorCode: 0, sessionIncremented: true,
           failureReason: `Collision cache rehydration failed: ${detail}`,
           claimToken,
@@ -197,6 +198,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
       await queueUpload({
         experimentID, owner: exp_data.owner, filename, data,
         dataType: "data", osfFilesLink: exp_data.osfFilesLink,
+        storageProvider: exp_data.storageProvider, providerContainer: exp_data.providerContainer,
         errorCode: 0, sessionIncremented: true,
         failureReason: "Collision cache rehydrating",
         claimToken,
@@ -230,6 +232,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
       await queueUpload({
         experimentID, owner: exp_data.owner, filename, data,
         dataType: "data", osfFilesLink: exp_data.osfFilesLink,
+        storageProvider: exp_data.storageProvider, providerContainer: exp_data.providerContainer,
         errorCode: 0, sessionIncremented: true,
         failureReason: `Upload exception: ${detail}`,
         claimToken,
@@ -266,6 +269,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
       await queueUpload({
         experimentID, owner: exp_data.owner, filename, data,
         dataType: "data", osfFilesLink: exp_data.osfFilesLink,
+        storageProvider: exp_data.storageProvider, providerContainer: exp_data.providerContainer,
         errorCode: result.providerStatus || 0, sessionIncremented: true,
         failureReason: `OSF error ${result.providerStatus}: ${result.providerMessage}`,
         claimToken,

@@ -1,16 +1,31 @@
 import MESSAGES from "./api-messages.js";
 import updateMetadata from "./metadata-update.js";
 import produceMetadata from "./metadata-production.js";
-import downloadMetadata from "./metadata-download.js";
 import { DocumentReference, DocumentData } from "firebase-admin/firestore";
 import { db } from "./app.js";
-import { decrypt } from "./crypto-utils.js";
-import { refreshAndUpdateUser } from "./refresh-token.js";
-import { osfProvider } from "./providers/osf.js";
-import { FileRef } from "./providers/types.js";
+import resolveToken from "./resolve-token.js";
+import { getProviderForExperiment } from "./providers/index.js";
+import { FileRef, ProviderErrorCode } from "./providers/types.js";
 import { ExperimentData, UserData, Metadata, MetadataResponse } from './interfaces';
 
+// Thrown by performUpdate below when a provider's updateFile call fails
+// (either by throwing, in OSF's case, or by returning a failure WriteResult,
+// in gdrive's case). Carries the provider's error code, when known, so
+// callers can distinguish a self-healable failure (stale ref) from one that
+// recreating the file can't fix (auth/quota/rate-limit).
+class ProviderUpdateError extends Error {
+  code?: ProviderErrorCode;
+  constructor(message: string, code?: ProviderErrorCode) {
+    super(message);
+    this.code = code;
+  }
+}
 
+// Failure codes for which recreating the metadata file is pointless: an
+// auth or quota problem isn't fixed by writing a new file, and self-healing
+// on RATE_LIMITED would double the write load exactly when the provider is
+// telling us to back off.
+const NON_HEALABLE_CODES: ProviderErrorCode[] = ["AUTH_EXPIRED", "RATE_LIMITED", "QUOTA_EXCEEDED"];
 
 export default async function blockMetadata(
     exp_data: ExperimentData,
@@ -22,26 +37,13 @@ export default async function blockMetadata(
 
 let metadataMessage: {metadataMessage: string} = {metadataMessage: ''};
 
-let decryptedOsfToken: string;
-if (user_data.usingPersonalToken) {
-  decryptedOsfToken = decrypt(user_data.osfToken);
-} else {
-  if (Date.now() > user_data.authTokenExpires) {
-    const refreshResult = await refreshAndUpdateUser(exp_data.owner, decrypt(user_data.refreshToken));
-    if (!refreshResult.success) {
-      // Fall back to PAT if available
-      if (user_data.osfTokenValid && user_data.osfToken) {
-        decryptedOsfToken = decrypt(user_data.osfToken);
-      } else {
-        return { success: false, metadataMessage: "OAuth token refresh failed" };
-      }
-    } else {
-      decryptedOsfToken = refreshResult.accessToken!;
-    }
-  } else {
-    decryptedOsfToken = decrypt(user_data.authToken);
-  }
+const tokenResult = await resolveToken(user_data, exp_data);
+if (!tokenResult.success) {
+  return { success: false, metadataMessage: tokenResult.detail };
 }
+const token = tokenResult.token;
+
+const { provider, container } = getProviderForExperiment(exp_data);
 
 try {
 
@@ -73,9 +75,9 @@ try {
       // tracking. Afterward the ref (possibly null) is stored so this never
       // runs again for this experiment.
       if (metadataFileRef === undefined) {
-        const providerFiles = await osfProvider.listFiles(
-          { token: decryptedOsfToken },
-          { provider: "osf", filesLink: exp_data.osfFilesLink }
+        const providerFiles = await provider.listFiles(
+          { token },
+          container
         );
 
         const found = providerFiles.find((file) => file.name === "dataset_description.json");
@@ -91,9 +93,9 @@ try {
       async function createMetadataFile(payload: object) {
         const serialized = JSON.stringify(payload, null, 2);
 
-        const response = await osfProvider.writeSessionFile(
-          { token: decryptedOsfToken },
-          { provider: "osf", filesLink: exp_data.osfFilesLink },
+        const response = await provider.writeSessionFile(
+          { token },
+          container,
           `dataset_description.json`,
           serialized,
           { size: Buffer.byteLength(serialized), contentType: "application/json" }
@@ -114,6 +116,28 @@ try {
         }
       }
 
+      // Updates the ref'd metadata file. Throws a ProviderUpdateError on any
+      // failure — OSF's updateFile already throws on non-200 responses;
+      // gdrive's never throws, so a returned {success:false} is converted
+      // into the same ProviderUpdateError shape here so callers can handle
+      // both provider styles identically.
+      async function performUpdate(fileRef: FileRef, serialized: string) {
+        const result = await provider.updateFile(
+          { token },
+          container,
+          fileRef,
+          serialized,
+          { size: Buffer.byteLength(serialized), contentType: "application/json" }
+        );
+
+        if (!result.success) {
+          throw new ProviderUpdateError(
+            `Error updating metadata file: ${result.providerMessage}`,
+            result.error
+          );
+        }
+      }
+
       //When a ref and firestore metadata both exist, updating is done with respect to firestore.
       if (metadataFileRef && firestoreMetadata) {
 
@@ -128,17 +152,17 @@ try {
 
         try {
           //The ref'd metadata file is updated with the above metadata.
-          await osfProvider.updateFile(
-            { token: decryptedOsfToken },
-            { provider: "osf", filesLink: exp_data.osfFilesLink },
-            metadataFileRef,
-            serialized,
-            { size: Buffer.byteLength(serialized), contentType: "application/json" }
-          );
+          await performUpdate(metadataFileRef, serialized);
         } catch (e) {
-          // Self-heal: the ref is stale (the file was deleted provider-side).
-          // Create a fresh metadata file and store its new ref rather than
-          // failing the whole request.
+          // A returned failure with a non-healable code (auth/quota/rate
+          // limit) must propagate rather than self-heal — recreating the
+          // file can't fix any of those, and re-creating under rate-limiting
+          // would only make things worse.
+          if (e instanceof ProviderUpdateError && e.code && NON_HEALABLE_CODES.includes(e.code)) {
+            throw e;
+          }
+          // Self-heal: the ref is stale (the file was deleted provider-side),
+          // or the failure is otherwise recoverable by recreating the file.
           await createMetadataFile(updatedMetadata);
         }
       }
@@ -147,29 +171,32 @@ try {
 
         metadataMessage = MESSAGES.METADATA_IN_OSF_NOT_IN_FIRESTORE;
 
-        //Metadata is downloaded from OSF, and is compared to incoming metadata to produce an updated version.
-        // ********[IMPORTANT]***********
-        // Since Metadata is in OSF as evidenced by the ref, it is downloaded, and the type is asserted.
-        const downloadResponse = await downloadMetadata(exp_data.osfFilesLink, decryptedOsfToken, metadataFileRef.id as string);
+        //Metadata is downloaded from the provider, and is compared to incoming metadata to produce an updated version.
+        const downloadResult = await provider.downloadFile({ token }, container, metadataFileRef);
 
-        const osfMetadata: Metadata  = downloadResponse.metadata;
+        if (!downloadResult.success) {
+          throw new Error(`Error downloading metadata file: ${downloadResult.providerMessage}`);
+        }
 
-        const updatedMetadata = await updateMetadata(osfMetadata, incomingMetadata);
+        let providerMetadata: Metadata;
+        try {
+          providerMetadata = JSON.parse(downloadResult.content) as Metadata;
+        } catch (e) {
+          throw new Error(`Error parsing downloaded metadata: ${e instanceof Error ? e.message : "Unknown error"}`);
+        }
+
+        const updatedMetadata = await updateMetadata(providerMetadata, incomingMetadata);
 
         //Up to date metadata is uploaded to firestore.
         t.set(metadata_doc_ref, {metadata: updatedMetadata}, {merge: true});
 
-        //Since metadata exists in OSF, it is updated and not set.
-        await osfProvider.updateFile(
-          { token: decryptedOsfToken },
-          { provider: "osf", filesLink: exp_data.osfFilesLink },
-          metadataFileRef,
-          JSON.stringify(incomingMetadata, null, 2),
-          { size: Buffer.byteLength(JSON.stringify(incomingMetadata, null, 2)), contentType: "application/json" }
-        );
+        //Since metadata exists in the provider, it is updated and not set.
+        // No self-heal here (matches pre-existing behavior) — any failure
+        // propagates to the outer catch as METADATA_ERROR.
+        await performUpdate(metadataFileRef, JSON.stringify(incomingMetadata, null, 2));
 
       }
-      // When no ref exists but firestore has metadata, the metadata file is (re)created in OSF.
+      // When no ref exists but firestore has metadata, the metadata file is (re)created in the provider.
       else if (!metadataFileRef && firestoreMetadata) {
 
         metadataMessage = MESSAGES.METADATA_IN_FIRESTORE_NOT_IN_OSF;
@@ -179,15 +206,15 @@ try {
 
         t.update(metadata_doc_ref, {metadata: updatedMetadata});
 
-        //If a metadata file does not exist in OSF, it is created with the above metadata.
+        //If a metadata file does not exist in the provider, it is created with the above metadata.
         await createMetadataFile(updatedMetadata);
       }
-      // When neither a ref nor firestore metadata exist, the metadata is created in OSF and firestore.
+      // When neither a ref nor firestore metadata exist, the metadata is created in the provider and firestore.
       else {
 
         metadataMessage = MESSAGES.METADATA_NOT_IN_FIRESTORE_OR_OSF;
 
-        //Incoming metadata is uploaded to firestore and OSF.
+        //Incoming metadata is uploaded to firestore and the provider.
 
         t.set(metadata_doc_ref, {metadata: incomingMetadata}, {merge: true});
 
@@ -195,7 +222,7 @@ try {
 
         }
   });
-  
+
   const metadataResponse: MetadataResponse = {success: true, ...metadataMessage};
   return metadataResponse;
 }

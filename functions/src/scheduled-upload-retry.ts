@@ -1,7 +1,8 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { Timestamp } from "firebase-admin/firestore";
 import { db, storage } from "./app.js";
-import { osfProvider } from "./providers/osf.js";
+import { getProvider } from "./providers/index.js";
+import { ContainerRef, StorageProviderId } from "./providers/types.js";
 import resolveToken from "./resolve-token.js";
 import { claimFilename, confirmClaim, CollisionCacheUnavailableError } from "./collision-cache.js";
 import { ExperimentData, UserData } from "./interfaces.js";
@@ -134,16 +135,23 @@ async function processQueueItem(queueDoc: FirebaseFirestore.QueryDocumentSnapsho
     return;
   }
 
-  const container = { provider: "osf" as const, filesLink: data.osfFilesLink };
+  // Provider/container come from the queue doc's provider-migration fields
+  // when present; legacy entries (queued before this generalization) fall
+  // back to the OSF shape built from osfFilesLink.
+  const providerId: StorageProviderId = (data.storageProvider as StorageProviderId) || "osf";
+  const provider = getProvider(providerId);
+  const container: ContainerRef = data.providerContainer
+    ? (data.providerContainer as ContainerRef)
+    : { provider: "osf", filesLink: data.osfFilesLink };
 
   // Collision cache: only entries queued after the cache existed carry a
   // claimToken. Entries queued before it skip the cache entirely — legacy
-  // behavior, OSF's own 409 backstop still applies to them.
+  // behavior, the provider's own conflict backstop still applies to them.
   if (data.claimToken) {
     let claimResult: Awaited<ReturnType<typeof claimFilename>>;
     try {
       claimResult = await claimFilename(data.experimentID, data.filename, data.claimToken, () =>
-        osfProvider.listFiles({ token }, container)
+        provider.listFiles({ token }, container)
       );
     } catch (e) {
       if (e instanceof CollisionCacheUnavailableError) {
@@ -169,7 +177,7 @@ async function processQueueItem(queueDoc: FirebaseFirestore.QueryDocumentSnapsho
 
   // Attempt the upload
   try {
-    const result = await osfProvider.writeSessionFile(
+    const result = await provider.writeSessionFile(
       { token },
       container,
       data.filename,
@@ -192,11 +200,11 @@ async function processQueueItem(queueDoc: FirebaseFirestore.QueryDocumentSnapsho
       }
       // File already exists — treat as success (original upload may have worked)
       await markCompleted(docRef, data);
-      console.log(`Upload ${queueDoc.id} marked complete — file already exists in OSF.`);
+      console.log(`Upload ${queueDoc.id} marked complete — file already exists provider-side.`);
       return;
     }
 
-    await handleRetryFailure(docRef, data, `OSF error ${result.providerStatus}: ${result.providerMessage}`, result.retryAfter);
+    await handleRetryFailure(docRef, data, `Provider error ${result.providerStatus}: ${result.providerMessage}`, result.retryAfter);
   } catch (e) {
     const detail = e instanceof Error ? e.message : "Unknown error";
     await handleRetryFailure(docRef, data, `Upload exception: ${detail}`);
