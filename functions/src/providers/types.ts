@@ -1,0 +1,149 @@
+// Storage-provider abstraction (docs/provider-migration-design.md).
+// Nothing imports these types yet except the registry; adapters arrive in
+// later build steps, starting with the OSF refactor.
+
+export type StorageProviderId = "osf" | "gdrive" | "figshare" | "dataverse";
+
+export type AuthMethod = "oauth2" | "static-token";
+
+// Generic error taxonomy that every adapter maps its provider's errors into.
+// QUOTA_EXCEEDED covers both storage-full and file-too-large.
+export type ProviderErrorCode =
+  | "RATE_LIMITED"
+  | "AUTH_EXPIRED"
+  | "NAME_CONFLICT"
+  | "QUOTA_EXCEEDED"
+  | "UNAVAILABLE";
+
+// A resolved, decrypted credential handed to adapter calls. serverUrl is only
+// present for federated providers (Dataverse).
+export interface ResolvedAuth {
+  token: string;
+  serverUrl?: string;
+}
+
+// Opaque, provider-shaped reference to the container an experiment writes
+// into (OSF component, Drive folder, Figshare article, Dataverse dataset).
+// Only the owning adapter interprets fields beyond `provider`.
+export interface ContainerRef {
+  provider: StorageProviderId;
+  [key: string]: unknown;
+}
+
+export interface FileRef {
+  name: string;
+  id?: string;
+  path?: string;
+  rev?: string;
+}
+
+export interface FileMeta {
+  size: number;
+  contentType: string;
+}
+
+export type WriteResult =
+  | {
+      success: true;
+      fileRef: FileRef;
+      // The filename the provider REPORTS having stored — callers compare it
+      // against the requested name to detect silent renames (Dataverse).
+      storedFilename: string;
+    }
+  | {
+      success: false;
+      error: ProviderErrorCode;
+      // Raw provider response, preserved for logs and the retry queue.
+      providerStatus: number | null;
+      providerMessage: string | null;
+      retryAfter?: number | null;
+    };
+
+// Descriptive (UI hints, subfolder fallback, size-cap warnings) — never a
+// correctness gate. Collision detection lives in Firestore, not here.
+export interface ProviderCapabilities {
+  nativeSubfolders: boolean;
+  supportsRegion: boolean;
+  maxFileSizeBytes: number | null;
+  quotaNote: string | null;
+}
+
+export interface OAuthEndpointConfig {
+  authorizeUrl: string;
+  tokenUrl: string;
+  clientId: string;
+  clientSecret: string;
+  scope: string;
+}
+
+export interface StorageProvider {
+  id: StorageProviderId;
+  authMethod: AuthMethod;
+  capabilities: ProviderCapabilities;
+
+  // oauth2 providers only
+  oauth?: OAuthEndpointConfig;
+
+  // static-token providers only
+  validateStaticToken?(auth: ResolvedAuth): Promise<boolean>;
+
+  // One-time setup at experiment creation. researcherInput is provider-shaped
+  // (e.g. parent project for Figshare, collection + serverUrl for Dataverse).
+  createDataContainer(
+    auth: ResolvedAuth,
+    researcherInput: Record<string, unknown>
+  ): Promise<ContainerRef>;
+
+  writeSessionFile(
+    auth: ResolvedAuth,
+    container: ContainerRef,
+    filename: string,
+    data: string | Buffer,
+    meta: FileMeta
+  ): Promise<WriteResult>;
+
+  // Figshare has no in-place update: its adapter implements this as
+  // delete + re-upload, so callers must tolerate a non-atomic window.
+  updateFile(
+    auth: ResolvedAuth,
+    container: ContainerRef,
+    existingFileRef: FileRef,
+    data: string | Buffer,
+    meta: FileMeta
+  ): Promise<WriteResult>;
+
+  // Full listing (adapters paginate internally). Used for collision-cache
+  // rehydration and dashboard file counts.
+  listFiles(auth: ResolvedAuth, container: ContainerRef): Promise<FileRef[]>;
+}
+
+// users/{uid}.connectedAccounts.* shapes (additive Firestore schema).
+export interface OAuth2AccountConnection {
+  authMethod: "oauth2";
+  encryptedToken: string;
+  encryptedRefreshToken: string;
+  tokenExpiresAt: number;
+  providerAccountId?: string;
+}
+
+export interface StaticTokenAccountConnection {
+  authMethod: "static-token";
+  encryptedToken: string;
+  serverUrl: string;
+  // Dataverse tokens expire (~yearly); drives the expiry-warning job.
+  tokenExpiresAt?: number;
+}
+
+export interface ConnectedAccounts {
+  gdrive?: OAuth2AccountConnection;
+  figshare?: OAuth2AccountConnection;
+  dataverse?: StaticTokenAccountConnection;
+}
+
+// experiments/{id}.collisionCache (additive Firestore schema). The salt is a
+// per-experiment nonce retained indefinitely; claims themselves live in a
+// subcollection keyed by salted filename hash and expire via TTL.
+export interface CollisionCacheState {
+  salt: string;
+  warmUntil: FirebaseFirestore.Timestamp;
+}

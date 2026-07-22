@@ -1,3 +1,11 @@
+import {
+    StorageProviderId,
+    ContainerRef,
+    FileRef,
+    CollisionCacheState,
+    ConnectedAccounts,
+  } from './providers/types';
+
 export interface ExperimentData {
     active: boolean;
     activeBase64: boolean;
@@ -14,8 +22,13 @@ export interface ExperimentData {
     requiredFields: string[];
     owner: string;
     osfFilesLink: string;
+    // Provider-migration fields (additive; absent = legacy OSF experiment).
+    storageProvider?: StorageProviderId;
+    providerContainer?: ContainerRef;
+    metadataFileRef?: FileRef | null;
+    collisionCache?: CollisionCacheState;
   }
-  
+
   export interface UserData {
     email: string;
     uid: string;
@@ -24,10 +37,12 @@ export interface ExperimentData {
     experiments: string[];
     usingPersonalToken: boolean;
     refreshToken: string;
-    refreshTokenExpires: number; 
+    refreshTokenExpires: number;
     authToken: string;
     authTokenExpires: number;
-  } 
+    // Provider-migration field (additive; legacy OSF fields above stay as-is).
+    connectedAccounts?: ConnectedAccounts;
+  }
   
   export interface RequestBody {
     experimentID: string;
