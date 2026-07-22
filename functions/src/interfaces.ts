@@ -108,6 +108,10 @@ export interface ExperimentData {
     failureReason: string | null;
     deduplicationKey: string;
     sessionIncremented: boolean;
+    // Collision-cache claim owned by this queue entry (additive; absent for
+    // entries queued before the collision cache existed — those skip the
+    // cache entirely on retry).
+    claimToken?: string;
   }
 
   export interface OSFFile{

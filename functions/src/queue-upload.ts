@@ -11,6 +11,7 @@ interface QueueUploadParams {
   errorCode: number;
   sessionIncremented: boolean;
   failureReason?: string;
+  claimToken?: string;
 }
 
 const MAX_RETRIES = 5;
@@ -60,6 +61,7 @@ export default async function queueUpload(params: QueueUploadParams): Promise<st
     failureReason: params.failureReason || null,
     deduplicationKey,
     sessionIncremented: params.sessionIncremented,
+    claimToken: params.claimToken || null,
   });
 
   return docId;

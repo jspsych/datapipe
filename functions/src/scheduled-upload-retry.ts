@@ -3,6 +3,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { db, storage } from "./app.js";
 import { osfProvider } from "./providers/osf.js";
 import resolveToken from "./resolve-token.js";
+import { claimFilename, confirmClaim, CollisionCacheUnavailableError } from "./collision-cache.js";
 import { ExperimentData, UserData } from "./interfaces.js";
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -133,9 +134,41 @@ async function processQueueItem(queueDoc: FirebaseFirestore.QueryDocumentSnapsho
     return;
   }
 
+  const container = { provider: "osf" as const, filesLink: data.osfFilesLink };
+
+  // Collision cache: only entries queued after the cache existed carry a
+  // claimToken. Entries queued before it skip the cache entirely — legacy
+  // behavior, OSF's own 409 backstop still applies to them.
+  if (data.claimToken) {
+    let claimResult: Awaited<ReturnType<typeof claimFilename>>;
+    try {
+      claimResult = await claimFilename(data.experimentID, data.filename, data.claimToken, () =>
+        osfProvider.listFiles({ token }, container)
+      );
+    } catch (e) {
+      if (e instanceof CollisionCacheUnavailableError) {
+        await handleRetryFailure(docRef, data, `Collision cache rehydration failed: ${e.message}`);
+        return;
+      }
+      throw e;
+    }
+
+    if (!claimResult.claimed) {
+      if (claimResult.reason === "duplicate") {
+        // Someone else confirmed this name while we were queued — mirrors
+        // today's 409-on-retry-means-done semantics.
+        await markCompleted(docRef, data);
+        console.log(`Upload ${queueDoc.id} marked complete — file already exists in OSF.`);
+        return;
+      }
+      // reason === "rehydrating"
+      await handleRetryFailure(docRef, data, "Collision cache rehydrating");
+      return;
+    }
+  }
+
   // Attempt the upload
   try {
-    const container = { provider: "osf" as const, filesLink: data.osfFilesLink };
     const result = await osfProvider.writeSessionFile(
       { token },
       container,
@@ -145,12 +178,18 @@ async function processQueueItem(queueDoc: FirebaseFirestore.QueryDocumentSnapsho
     );
 
     if (result.success) {
+      if (data.claimToken) {
+        await confirmClaim(data.experimentID, data.filename, data.claimToken);
+      }
       await markCompleted(docRef, data);
       console.log(`Successfully retried upload ${queueDoc.id} (${data.filename})`);
       return;
     }
 
     if (result.error === "NAME_CONFLICT") {
+      if (data.claimToken) {
+        await confirmClaim(data.experimentID, data.filename, data.claimToken);
+      }
       // File already exists — treat as success (original upload may have worked)
       await markCompleted(docRef, data);
       console.log(`Upload ${queueDoc.id} marked complete — file already exists in OSF.`);

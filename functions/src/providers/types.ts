@@ -146,4 +146,7 @@ export interface ConnectedAccounts {
 export interface CollisionCacheState {
   salt: string;
   warmUntil: FirebaseFirestore.Timestamp;
+  // Set while a rehydration pass is in flight (leases the rehydration work
+  // to one request at a time); cleared on completion or failure.
+  rehydratingUntil?: FirebaseFirestore.Timestamp;
 }
