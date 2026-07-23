@@ -237,7 +237,7 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 
         dataType: "base64", osfFilesLink: exp_data.osfFilesLink,
         storageProvider: exp_data.storageProvider, providerContainer: exp_data.providerContainer,
         errorCode: result.providerStatus || 0, sessionIncremented: false,
-        failureReason: `OSF error ${result.providerStatus}: ${result.providerMessage}`,
+        failureReason: `Provider error ${result.providerStatus}: ${result.providerMessage}`,
         claimToken,
       });
       await cleanupPending(pendingPath); // queue-upload has its own copy

@@ -257,7 +257,7 @@ export const gdriveProvider: StorageProvider = {
 
     return {
       success: true,
-      fileRef: { id: responseBody.id, name: responseBody.name } as unknown as FileRef,
+      fileRef: { id: responseBody.id, name: storedFilename },
       storedFilename,
     };
   },

@@ -59,7 +59,7 @@ const config = { projectId: "datapipe-test" };
 const TOKEN_ENCRYPTION_KEY = "ab".repeat(32);
 const GDRIVE_AUTHORIZE_URL = "http://127.0.0.1:3580/authorize";
 const GDRIVE_CLIENT_ID = "test-client-id";
-const GDRIVE_REDIRECT_URI = "http://localhost:3000/oauth2/gdrive";
+const GDRIVE_REDIRECT_URI = "http://localhost:3000/oauth2/connect";
 const GDRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 const TOKEN_PORT = 3580;
 

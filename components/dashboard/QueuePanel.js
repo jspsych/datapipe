@@ -21,13 +21,16 @@ function friendlyReason(reason) {
   if (reason.includes("Upload exception") || reason.includes("fetch failed")) {
     return "Could not connect to your storage provider.";
   }
-  if (reason.includes("OSF error 503") || reason.includes("OSF error 502")) {
+  // Older queue docs say "OSF error <status>"; current writes say
+  // "Provider error <status>". Both must keep mapping.
+  const status = reason.match(/(?:OSF|Provider) error (\d{3})/)?.[1];
+  if (status === "503" || status === "502") {
     return "Your storage provider was temporarily unavailable.";
   }
-  if (reason.includes("OSF error 429")) {
+  if (status === "429") {
     return "Your storage provider rate-limited the request.";
   }
-  if (reason.includes("OSF error 401") || reason.includes("OSF error 403")) {
+  if (status === "401" || status === "403") {
     return "Authentication error. Your storage provider connection may need to be refreshed.";
   }
   return reason;

@@ -29,6 +29,13 @@ const entries = [
     failureReason: "OSF error 503: Service Unavailable",
     createdAt: new Date(),
   },
+  {
+    id: "e3",
+    filename: "sub-03_data.csv",
+    status: "failed",
+    failureReason: "Provider error 429: Too Many Requests",
+    createdAt: new Date(),
+  },
 ];
 
 function renderPanel() {
@@ -64,6 +71,16 @@ describe("QueuePanel — provider-neutral copy", () => {
     ).toBeInTheDocument();
     expect(
       screen.queryByText(/^OSF was temporarily unavailable\.?$/i)
+    ).not.toBeInTheDocument();
+
+    // Both the legacy "OSF error <status>" prefix (older queue docs) and
+    // the current "Provider error <status>" prefix must map to friendly
+    // copy — neither raw string may reach the UI.
+    expect(
+      screen.getByText(/storage provider rate-limited the request/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Provider error 429/)
     ).not.toBeInTheDocument();
   });
 });

@@ -274,7 +274,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
         dataType: "data", osfFilesLink: exp_data.osfFilesLink,
         storageProvider: exp_data.storageProvider, providerContainer: exp_data.providerContainer,
         errorCode: result.providerStatus || 0, sessionIncremented: true,
-        failureReason: `OSF error ${result.providerStatus}: ${result.providerMessage}`,
+        failureReason: `Provider error ${result.providerStatus}: ${result.providerMessage}`,
         claimToken,
       });
       await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
