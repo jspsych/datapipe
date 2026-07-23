@@ -355,6 +355,34 @@ provider, it does not trigger a redesign.
   flow has more failure modes than a single PUT; verify behavior under
   concurrent submissions, including media-sized files.
 
+## Deployment checklist (gdrive launch)
+
+Accumulated from build steps 1–7; everything below is required before the
+Google Drive provider is announced:
+
+1. **Google OAuth app** (step 0): register the OAuth client (drive.file
+   scope), set the consent screen, and complete Google's verification to
+   published status — until then refresh tokens last 7 days and the app is
+   capped at 100 users. Weeks of lead time.
+2. **Functions env**: `GDRIVE_CLIENT_ID`, `GDRIVE_CLIENT_SECRET`,
+   `GDRIVE_REDIRECT_URI` (must point at `https://pipe.jspsych.org/oauth2/connect`).
+   `GDRIVE_API_BASE`/`GDRIVE_TOKEN_URL`/`GDRIVE_AUTHORIZE_URL` default to
+   the real Google endpoints and need no production values.
+3. **Firestore TTL policy** on `filenameClaims` `expiresAt` field
+   (console/gcloud). Cost-boundedness only — correctness never depends on
+   it.
+4. **Firestore index**: the scheduled gdrive refresh queries
+   `connectedAccounts.gdrive.tokenExpiresAt` — confirm the single-field
+   index exists in production (auto-indexing normally covers it; the
+   emulator does not prove it).
+5. **FAQ / user docs**: announce Drive support, its quota caveat (15 GB
+   shared with Gmail/Photos), and the app-created "DataPipe" folder
+   behavior. Copy deliberately not drafted by the migration — researcher-
+   facing wording is an editorial decision.
+6. **Deploy order**: functions + rules + hosting can ship together; the
+   collision cache dual-runs against OSF's 409 for legacy experiments, so
+   no data migration or flag-flip is needed.
+
 ## Open questions
 
 - **Test-suite hazard (pre-existing, discovered during step 4b)**: the OSF
