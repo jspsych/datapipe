@@ -57,6 +57,14 @@
       {
         "source": "/api/createexperiment",
         "function": "createexperiment"
+      },
+      {
+        "source": "/api/connectprovider",
+        "function": "connectprovider"
+      },
+      {
+        "source": "/api/disconnectprovider",
+        "function": "disconnectprovider"
       }
     ]
   },

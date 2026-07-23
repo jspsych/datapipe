@@ -19,16 +19,16 @@ function friendlyReason(reason) {
     return "Upload was interrupted by a server restart or memory limit.";
   }
   if (reason.includes("Upload exception") || reason.includes("fetch failed")) {
-    return "Could not connect to OSF.";
+    return "Could not connect to your storage provider.";
   }
   if (reason.includes("OSF error 503") || reason.includes("OSF error 502")) {
-    return "OSF was temporarily unavailable.";
+    return "Your storage provider was temporarily unavailable.";
   }
   if (reason.includes("OSF error 429")) {
-    return "OSF rate-limited the request.";
+    return "Your storage provider rate-limited the request.";
   }
   if (reason.includes("OSF error 401") || reason.includes("OSF error 403")) {
-    return "Authentication error. Your OSF token may need to be refreshed.";
+    return "Authentication error. Your storage provider connection may need to be refreshed.";
   }
   return reason;
 }
@@ -156,13 +156,13 @@ export default function QueuePanel({ entries, experimentId }) {
   let alertDescription;
 
   if (allFailed) {
-    alertTitle = `${plural(failedCount, "file")} could not be uploaded to OSF.`;
-    alertDescription = "All retries were exhausted. Download these files and upload them to your OSF project manually to prevent data loss.";
+    alertTitle = `${plural(failedCount, "file")} could not be uploaded to your storage provider.`;
+    alertDescription = "All retries were exhausted. Download these files and upload them to your storage provider manually to prevent data loss.";
   } else if (failedCount > 0) {
-    alertTitle = `${plural(entries.length, "file")} did not upload to OSF.`;
+    alertTitle = `${plural(entries.length, "file")} did not upload to your storage provider.`;
     alertDescription = `${plural(pendingCount, "file")} still being retried. ${plural(failedCount, "file")} failed permanently. You can download all files below.`;
   } else {
-    alertTitle = `${plural(pendingCount, "file")} did not upload to OSF.`;
+    alertTitle = `${plural(pendingCount, "file")} did not upload to your storage provider.`;
     alertDescription = "DataPipe is retrying automatically. You can also download the files now.";
   }
 
@@ -183,7 +183,7 @@ export default function QueuePanel({ entries, experimentId }) {
             <Accordion.ItemContent>
               <Text fontSize="sm" pb={3}>
                 When a participant submits data, DataPipe tries to upload it to
-                your OSF project immediately. If that fails, DataPipe saves a
+                your storage provider immediately. If that fails, DataPipe saves a
                 copy and retries automatically. Common reasons include:
               </Text>
               <Box as="ul" fontSize="sm" pl={5} pb={3} listStyleType="disc">
@@ -192,17 +192,17 @@ export default function QueuePanel({ entries, experimentId }) {
                   can occasionally exceed the server&apos;s memory capacity.
                 </Box>
                 <Box as="li" mb={1}>
-                  <strong>OSF unavailable</strong> — OSF may be temporarily
-                  down or rate-limiting requests.
+                  <strong>Storage provider unavailable</strong> — Your storage
+                  provider may be temporarily down or rate-limiting requests.
                 </Box>
                 <Box as="li" mb={1}>
                   <strong>Configuration issue</strong> — There may be a problem
-                  with your OSF project settings or authentication token.
+                  with your storage provider settings or authentication token.
                 </Box>
               </Box>
               <Text fontSize="sm" pb={3}>
                 Files are stored for up to 7 days. If retries don&apos;t succeed,
-                download the files and upload them to OSF manually.
+                download the files and upload them to your storage provider manually.
               </Text>
             </Accordion.ItemContent>
           </Accordion.Item>

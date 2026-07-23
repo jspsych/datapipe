@@ -5,6 +5,7 @@ import ChangePassword from "../../components/account/ChangePassword";
 import DeleteAccount from "../../components/account/DeleteAccount";
 import { useState, useContext } from "react";
 import SelectAuth from "../../components/account/SelectAuth";
+import ProviderConnections from "../../components/account/ProviderConnections";
 import { UserContext } from "../../lib/context";
 import { useDocumentData } from "react-firebase-hooks/firestore";
 import { doc } from "firebase/firestore";
@@ -45,6 +46,13 @@ export default function AccountPage({}) {
         ) : (
           <SelectAuth />
         )}
+
+        {/* Storage Providers Section */}
+        <Separator my={6} borderColor="whiteAlpha.200" />
+        <Text fontSize="xs" fontWeight="semibold" textTransform="uppercase" letterSpacing="wide" color="gray.500" mb={3}>
+          Storage Providers
+        </Text>
+        <ProviderConnections />
 
         {/* Account Section - only for email users */}
         {!isOAuthUser && (
