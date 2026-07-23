@@ -1,6 +1,6 @@
-import { decrypt, encrypt } from "./crypto-utils.js";
+import { decrypt } from "./crypto-utils.js";
 import { refreshAndUpdateUser } from "./refresh-token.js";
-import { db } from "./app.js";
+import { refreshGdriveToken } from "./providers/gdrive-oauth.js";
 import { ExperimentData, UserData } from './interfaces';
 
 type TokenResult = {
@@ -63,51 +63,13 @@ async function resolveGdriveToken(
     return { success: true, token: decrypt(gdrive.encryptedToken) };
   }
 
-  const tokenUrl = process.env.GDRIVE_TOKEN_URL || "https://oauth2.googleapis.com/token";
-  const params = new URLSearchParams({
-    grant_type: "refresh_token",
-    refresh_token: decrypt(gdrive.encryptedRefreshToken),
-    client_id: process.env.GDRIVE_CLIENT_ID as string,
-    client_secret: process.env.GDRIVE_CLIENT_SECRET as string,
-  });
+  const refreshResult = await refreshGdriveToken(exp_data.owner, gdrive);
 
-  let tokenResponse: Response;
-  try {
-    tokenResponse = await fetch(tokenUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: params.toString(),
-    });
-  } catch (e) {
-    const detail = e instanceof Error ? e.message : "Unknown network error";
-    return { success: false, error: "INVALID_REFRESH_TOKEN", detail };
+  if (!refreshResult.success) {
+    return { success: false, error: refreshResult.error, detail: refreshResult.detail };
   }
 
-  if (!tokenResponse.ok) {
-    const detail = await tokenResponse.text();
-    return { success: false, error: "INVALID_REFRESH_TOKEN", detail: detail || "Refresh token is not valid" };
-  }
-
-  const tokenData = await tokenResponse.json();
-
-  const newTokenExpiresAt = Date.now() + tokenData.expires_in * 1000;
-
-  const update: Record<string, unknown> = {
-    "connectedAccounts.gdrive.encryptedToken": encrypt(tokenData.access_token),
-    "connectedAccounts.gdrive.tokenExpiresAt": newTokenExpiresAt,
-  };
-
-  // Only rotate the refresh token when the provider actually issued a new
-  // one — otherwise leave the existing one in place.
-  if (tokenData.refresh_token) {
-    update["connectedAccounts.gdrive.encryptedRefreshToken"] = encrypt(tokenData.refresh_token);
-  }
-
-  await db.doc(`users/${exp_data.owner}`).update(update);
-
-  return { success: true, token: tokenData.access_token };
+  return { success: true, token: refreshResult.accessToken };
 }
 
 export default async function resolveToken(

@@ -11,6 +11,7 @@ import { scheduledUploadRetry } from "./scheduled-upload-retry.js";
 import { scheduledPendingRecovery } from "./scheduled-pending-recovery.js";
 import { apiQueueStatus } from "./api-queue-status.js";
 import { generateOAuthState } from "./generate-oauth-state.js";
+import { connectProvider, disconnectProvider } from "./connect-provider.js";
 import { saveOsfToken } from "./save-osf-token.js";
 import { getOsfToken } from "./get-osf-token.js";
 import { onUserDeleted } from "./on-user-deleted.js";
@@ -31,6 +32,8 @@ export {
   scheduledPendingRecovery as scheduledpendingrecovery,
   apiQueueStatus as apiqueuestatus,
   generateOAuthState as generateoauthstate,
+  connectProvider as connectprovider,
+  disconnectProvider as disconnectprovider,
   saveOsfToken as saveosftoken,
   getOsfToken as getosftoken,
   onUserDeleted as onuserdeleted

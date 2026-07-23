@@ -357,6 +357,13 @@ provider, it does not trigger a redesign.
 
 ## Open questions
 
+- **Test-suite hazard (pre-existing, discovered during step 4b)**: the OSF
+  token-refresh path has no URL override (unlike GDRIVE_TOKEN_URL), so an
+  emulator test that seeds a refresh-due OSF user makes a REAL network call
+  to production accounts.osf.io using the credentials in functions/.env.
+  The scheduled-refresh regression test deliberately pins a network-free
+  path because of this. Fix: introduce an OSF_TOKEN_URL override mirroring
+  the gdrive pattern, then pin the live-refresh branch properly.
 - Decide the exact collision-cache TTL window (90 days proposed, not yet
   validated against real usage patterns).
 - Decide the UX for Dataverse's federated `serverUrl` requirement (does
