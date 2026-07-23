@@ -255,12 +255,15 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
       // says it's taken. OSF is still the backstop — record the
       // disagreement and confirm the claim (the name is now provably taken).
       await confirmClaim(experimentID, filename, claimToken);
-      res.status(400).json({...MESSAGES.OSF_FILE_EXISTS, metadataMessage});
+      // Logs are written BEFORE the response here (unlike other branches):
+      // the disagreement entry is the dual-run's whole audit trail, and
+      // responding first races observers of the log against the write.
       await writeLog(experimentID, "logError", MESSAGES.OSF_FILE_EXISTS);
       await writeLog(experimentID, "logError", {
         collisionCacheDisagreement: true,
         direction: "cache-free-provider-conflict",
       });
+      res.status(400).json({...MESSAGES.OSF_FILE_EXISTS, metadataMessage});
       return;
     }
     // Queue all other failures for retry. The claim stays pending so the
