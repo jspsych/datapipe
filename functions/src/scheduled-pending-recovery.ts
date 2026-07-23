@@ -139,13 +139,20 @@ async function promoteToQueue(
     const now = Timestamp.now();
     const nextRetryAt = Timestamp.fromMillis(now.toMillis() + 60 * 1000); // 1 minute — retry soon
 
-    transaction.set(docRef, {
+    // osfFilesLink/storageProvider/providerContainer are included only when
+    // present -- Firestore rejects undefined field values, and a gdrive
+    // experiment has no osfFilesLink just as a legacy OSF experiment has no
+    // storageProvider/providerContainer. Same omit-if-undefined convention as
+    // queue-upload.ts, whose callers (api-data.ts) already pass these
+    // through; this re-queue path must carry them too, or a recovered
+    // pending upload for a gdrive experiment falls back to the legacy OSF
+    // shape and fails when scheduled-upload-retry.ts processes it.
+    const queueDocData: Record<string, unknown> = {
       experimentID,
       owner: expData.owner,
       filename,
       storagePath,
       dataType: "data",
-      osfFilesLink: expData.osfFilesLink,
       status: "pending",
       errorCode: 0,
       retryCount: 0,
@@ -157,7 +164,19 @@ async function promoteToQueue(
       failureReason: "Recovered from interrupted upload (server restart or memory limit)",
       deduplicationKey,
       sessionIncremented: false,
-    });
+    };
+
+    if (expData.osfFilesLink !== undefined) {
+      queueDocData.osfFilesLink = expData.osfFilesLink;
+    }
+    if (expData.storageProvider !== undefined) {
+      queueDocData.storageProvider = expData.storageProvider;
+    }
+    if (expData.providerContainer !== undefined) {
+      queueDocData.providerContainer = expData.providerContainer;
+    }
+
+    transaction.set(docRef, queueDocData);
 
     return true;
   });

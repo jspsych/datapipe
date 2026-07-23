@@ -26,7 +26,7 @@ export function getProviderForExperiment(exp_data: ExperimentData): {
   };
 }
 
-export { registerProvider, getProvider } from "./registry.js";
+export { registerProvider, getProvider, listProviders } from "./registry.js";
 export { osfProvider } from "./osf.js";
 export { gdriveProvider } from "./gdrive.js";
 export * from "./types.js";

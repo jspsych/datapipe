@@ -297,23 +297,42 @@ function createMockDriveServer() {
     res.status(200).json({ access_token: "mock-refreshed-token", expires_in: 3600, token_type: "Bearer" });
   });
 
-  return new Promise((resolve) => {
-    const server = app.listen(DRIVE_PORT, () => {
-      resolve({
-        server,
-        port: DRIVE_PORT,
-        getUploadCount: (name) => uploadCountsByName.get(name) || 0,
-        getUpdateCount: (id) => updateCountsById.get(id) || 0,
-        forceStatus: (nameOrId, status) => forcedStatus.set(nameOrId, status),
-        reset: () => {
-          filesById.clear();
-          uploadCountsByName.clear();
-          updateCountsById.clear();
-          forcedStatus.clear();
-          nextSeq = 1;
-        },
+  // Fixed-port bind, shared with create-experiment-emulator.test.js's mock
+  // Drive server (both read the same GDRIVE_API_BASE=http://127.0.0.1:3579
+  // wired into functions/.env.datapipe-test). Jest may schedule the two test
+  // files onto different, truly-concurrent workers, so this retries on
+  // EADDRINUSE (with backoff) instead of assuming the port is free --
+  // whichever suite starts first grabs it, the other waits for that suite's
+  // afterAll() to release it. Defensive only: no two tests actually hold the
+  // port at the same instant.
+  return new Promise((resolve, reject) => {
+    const tryListen = (retriesLeft) => {
+      const server = app.listen(DRIVE_PORT);
+      server.once("listening", () => {
+        resolve({
+          server,
+          port: DRIVE_PORT,
+          getUploadCount: (name) => uploadCountsByName.get(name) || 0,
+          getUpdateCount: (id) => updateCountsById.get(id) || 0,
+          forceStatus: (nameOrId, status) => forcedStatus.set(nameOrId, status),
+          reset: () => {
+            filesById.clear();
+            uploadCountsByName.clear();
+            updateCountsById.clear();
+            forcedStatus.clear();
+            nextSeq = 1;
+          },
+        });
       });
-    });
+      server.once("error", (err) => {
+        if (err.code === "EADDRINUSE" && retriesLeft > 0) {
+          setTimeout(() => tryListen(retriesLeft - 1), 500);
+        } else {
+          reject(err);
+        }
+      });
+    };
+    tryListen(60); // up to ~30s, in case create-experiment-emulator.test.js's suite holds the port
   });
 }
 

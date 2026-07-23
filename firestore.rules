@@ -17,8 +17,14 @@ service cloud.firestore {
         (isAccountCreation() || isTokenMethodUpdate() || isExperimentsUpdate());
     }
     match /experiments/{experimentId} {
+      function baseFields() {
+        return request.resource.data.keys().hasAll(['active', 'activeBase64', 'activeConditionAssignment', 'id', 'owner', 'title', 'sessions', 'nConditions', 'currentCondition', 'useValidation', 'allowJSON', 'allowCSV', 'requiredFields', 'maxSessions', 'limitSessions'])
+      }
       function verifyFields() {
-        return request.resource.data.keys().hasAll(['active', 'activeBase64', 'activeConditionAssignment', 'id', 'osfRepo', 'osfComponent', 'osfFilesLink', 'owner', 'title', 'sessions', 'nConditions', 'currentCondition', 'useValidation', 'allowJSON', 'allowCSV', 'requiredFields', 'maxSessions', 'limitSessions'])
+        return baseFields() &&
+          (('storageProvider' in request.resource.data)
+            ? request.resource.data.keys().hasAll(['storageProvider', 'providerContainer'])
+            : request.resource.data.keys().hasAll(['osfRepo', 'osfComponent', 'osfFilesLink']));
       }
       allow read: if(request.auth.uid != null) &&
         resource.data.owner == request.auth.uid;

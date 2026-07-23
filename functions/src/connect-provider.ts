@@ -13,11 +13,11 @@ import { db, auth } from "./app.js";
 import { encrypt } from "./crypto-utils.js";
 import { getOAuthConfig } from "./providers/oauth-config.js";
 
-type AuthCheckResult =
+export type AuthCheckResult =
   | { ok: true }
   | { ok: false; status: number; error: string };
 
-async function verifyOwnership(uid: string, idToken: string | undefined): Promise<AuthCheckResult> {
+export async function verifyOwnership(uid: string, idToken: string | undefined): Promise<AuthCheckResult> {
   if (!idToken) {
     return { ok: false, status: 401, error: 'Authentication required' };
   }
