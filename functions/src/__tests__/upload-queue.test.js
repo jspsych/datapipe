@@ -198,7 +198,7 @@ describe("queue entry lifecycle in Firestore", () => {
       await docRef.update({
         status: "failed",
         retryCount: newRetryCount,
-        failureReason: "OSF error 500: Internal Server Error",
+        failureReason: "Provider error 500: Internal Server Error",
       });
     }
 
@@ -206,7 +206,7 @@ describe("queue entry lifecycle in Firestore", () => {
     expect(result.data().status).toBe("failed");
     expect(result.data().retryCount).toBe(5);
     expect(result.data().failureReason).toBe(
-      "OSF error 500: Internal Server Error"
+      "Provider error 500: Internal Server Error"
     );
   });
 });

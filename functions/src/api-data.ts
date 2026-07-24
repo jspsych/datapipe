@@ -1,8 +1,8 @@
 import { onRequest } from "firebase-functions/v2/https";
+import { randomUUID } from "crypto";
 import { FieldValue, DocumentReference, DocumentData, DocumentSnapshot } from "firebase-admin/firestore";
 import validateJSON from "./validate-json.js";
 import validateCSV from "./validate-csv.js";
-import putFileOSF from "./put-file-osf.js";
 import { db } from "./app.js";
 import writeLog from "./write-log.js";
 import MESSAGES from "./api-messages.js";
@@ -12,7 +12,10 @@ import { uploadDerivedFiles, queueDerivedFiles } from "./metadata-derived-upload
 import resolveToken from "./resolve-token.js";
 import queueUpload from "./queue-upload.js";
 import { persistPending, cleanupPending } from "./persist-pending.js";
-import { ExperimentData, UserData, OSFResult, RequestBody } from './interfaces';
+import { getProviderForExperiment } from "./providers/index.js";
+import { WriteResult } from "./providers/types.js";
+import { claimFilename, confirmClaim, CollisionCacheUnavailableError } from "./collision-cache.js";
+import { ExperimentData, UserData, RequestBody } from './interfaces';
 
 export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 }, async (req, res) => {
   const { experimentID, data, filename, metadataOptions }: RequestBody = req.body;
@@ -152,9 +155,17 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
     derivedFiles = metadataResponse.derivedFiles ?? [];
   }
 
-  const derivedTarget = { experimentID, owner: exp_data.owner, osfFilesLink: exp_data.osfFilesLink };
+  const derivedTarget = {
+    experimentID,
+    owner: exp_data.owner,
+    storageProvider: exp_data.storageProvider,
+    providerContainer: exp_data.providerContainer,
+    osfFilesLink: exp_data.osfFilesLink,
+  };
 
   //METADATA BLOCK END
+
+  const { provider, container } = getProviderForExperiment(exp_data);
 
   //With metadata on, the raw submission is the critical upload and lives at
   //data/raw/<original name> in the Psych-DS layout (the CSVs above are derived
@@ -162,23 +173,95 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
   //metadata off, the layout is unchanged: the raw file goes to the root.
   const uploadFilename = uploadPathFor(exp_data.metadataActive, filename);
 
-  let result: OSFResult;
+  // Collision detection: claim the filename in the Firestore cache
+  // immediately before the provider write. The provider's own conflict
+  // response (NAME_CONFLICT) stays wired up below as a dual-run backstop.
+  // Claimed on the RAW leaf filename (unchanged by the Psych-DS layout), not
+  // uploadFilename, so dedup keys off what the participant actually submitted.
+  const claimToken = randomUUID();
+  let claimResult: Awaited<ReturnType<typeof claimFilename>>;
   try {
-    result = await putFileOSF(
-      exp_data.osfFilesLink,
-      token,
-      data,
-      uploadFilename
+    claimResult = await claimFilename(experimentID, filename, claimToken, () =>
+      provider.listFiles({ token }, container)
     );
   } catch (e) {
-    // Network errors, timeouts, etc. — queue for retry
+    if (e instanceof CollisionCacheUnavailableError) {
+      const detail = e.message;
+      try {
+        await queueUpload({
+          experimentID, owner: exp_data.owner, filename, data,
+          dataType: "data", osfFilesLink: exp_data.osfFilesLink,
+          storageProvider: exp_data.storageProvider, providerContainer: exp_data.providerContainer,
+          errorCode: 0, sessionIncremented: true,
+          failureReason: `Collision cache rehydration failed: ${detail}`,
+          claimToken,
+        });
+        await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
+        await cleanupPending(pendingPath); // queue-upload has its own copy
+        res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
+        await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail: `Collision cache rehydration failed: ${detail}`});
+        return;
+      } catch {
+        res.status(500).json({...MESSAGES.OSF_UPLOAD_EXCEPTION, metadataMessage});
+        await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail});
+        return;
+      }
+    }
+    throw e;
+  }
+
+  if (!claimResult.claimed) {
+    if (claimResult.reason === "duplicate") {
+      await cleanupPending(pendingPath);
+      res.status(400).json({...MESSAGES.OSF_FILE_EXISTS, metadataMessage});
+      await writeLog(experimentID, "logError", MESSAGES.OSF_FILE_EXISTS);
+      return;
+    }
+
+    // reason === "rehydrating" — another request holds the rehydration
+    // lease; queue this upload and let the retry land after it expires.
+    try {
+      await queueUpload({
+        experimentID, owner: exp_data.owner, filename, data,
+        dataType: "data", osfFilesLink: exp_data.osfFilesLink,
+        storageProvider: exp_data.storageProvider, providerContainer: exp_data.providerContainer,
+        errorCode: 0, sessionIncremented: true,
+        failureReason: "Collision cache rehydrating",
+        claimToken,
+      });
+      await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
+      await cleanupPending(pendingPath); // queue-upload has its own copy
+      res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
+      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail: "Collision cache rehydrating"});
+      return;
+    } catch {
+      res.status(500).json({...MESSAGES.OSF_UPLOAD_EXCEPTION, metadataMessage});
+      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail: "Collision cache rehydrating"});
+      return;
+    }
+  }
+
+  let result: WriteResult;
+  try {
+    result = await provider.writeSessionFile(
+      { token },
+      container,
+      uploadFilename,
+      data,
+      { size: Buffer.byteLength(data), contentType: "application/json" }
+    );
+  } catch (e) {
+    // Network errors, timeouts, etc. — queue for retry. The claim stays
+    // pending so the retry can re-enter it with the same token.
     const detail = e instanceof Error ? e.message : "Unknown error";
     try {
       await queueUpload({
         experimentID, owner: exp_data.owner, filename: uploadFilename, data,
         dataType: "data", osfFilesLink: exp_data.osfFilesLink,
+        storageProvider: exp_data.storageProvider, providerContainer: exp_data.providerContainer,
         errorCode: 0, sessionIncremented: true,
         failureReason: `Upload exception: ${detail}`,
+        claimToken,
       });
       await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
       await cleanupPending(pendingPath); // queue-upload has its own copy
@@ -195,32 +278,51 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
   }
 
   if (!result.success) {
-    if (result.errorCode === 409 && result.errorText === "Conflict") {
-      res.status(400).json({...MESSAGES.OSF_FILE_EXISTS, metadataMessage});
+    if (result.error === "NAME_CONFLICT" && result.providerMessage === "Conflict") {
+      // Dual-run disagreement: the cache thought the name was free but OSF
+      // says it's taken. OSF is still the backstop — record the
+      // disagreement and confirm the claim (the name is now provably taken).
+      await confirmClaim(experimentID, filename, claimToken);
+      // Logs are written BEFORE the response here (unlike other branches):
+      // the disagreement entry is the dual-run's whole audit trail, and
+      // responding first races observers of the log against the write.
       await writeLog(experimentID, "logError", MESSAGES.OSF_FILE_EXISTS);
+      await writeLog(experimentID, "logError", {
+        collisionCacheDisagreement: true,
+        direction: "cache-free-provider-conflict",
+      });
+      await cleanupPending(pendingPath);
+      res.status(400).json({...MESSAGES.OSF_FILE_EXISTS, metadataMessage});
       return;
     }
-    // Queue all other failures for retry
+    // Queue all other failures for retry. The claim stays pending so the
+    // retry can re-enter it with the same token.
     try {
       await queueUpload({
         experimentID, owner: exp_data.owner, filename: uploadFilename, data,
         dataType: "data", osfFilesLink: exp_data.osfFilesLink,
-        errorCode: result.errorCode || 0, sessionIncremented: true,
-        failureReason: `OSF error ${result.errorCode}: ${result.errorText}`,
+        storageProvider: exp_data.storageProvider, providerContainer: exp_data.providerContainer,
+        errorCode: result.providerStatus || 0, sessionIncremented: true,
+        failureReason: `Provider error ${result.providerStatus}: ${result.providerMessage}`,
+        claimToken,
       });
       await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
       await cleanupPending(pendingPath); // queue-upload has its own copy
       // OSF is failing, so queue the derived files alongside the raw data.
-      await queueDerivedFiles(derivedFiles, derivedTarget, `Queued alongside data file: OSF error ${result.errorCode}`);
+      await queueDerivedFiles(derivedFiles, derivedTarget, `Queued alongside data file: OSF error ${result.providerStatus}`);
       res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.errorCode, osfStatusText: result.errorText});
+      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.providerStatus, osfStatusText: result.providerMessage});
       return;
     } catch {
       res.status(400).json({...MESSAGES.OSF_UPLOAD_ERROR, metadataMessage});
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.errorCode, osfStatusText: result.errorText});
+      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.providerStatus, osfStatusText: result.providerMessage});
       return;
     }
   }
+
+  // Successful write — confirm the claim (best-effort; a confirm failure
+  // must not fail a request that already succeeded against the provider).
+  await confirmClaim(experimentID, filename, claimToken);
 
   await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
 

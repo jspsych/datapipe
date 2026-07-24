@@ -1,8 +1,10 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { Timestamp } from "firebase-admin/firestore";
 import { db, storage } from "./app.js";
-import putFileOSF from "./put-file-osf.js";
+import { getProvider } from "./providers/index.js";
+import { ContainerRef, StorageProviderId } from "./providers/types.js";
 import resolveToken from "./resolve-token.js";
+import { claimFilename, confirmClaim, CollisionCacheUnavailableError } from "./collision-cache.js";
 import { ExperimentData, UserData } from "./interfaces.js";
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -133,24 +135,76 @@ async function processQueueItem(queueDoc: FirebaseFirestore.QueryDocumentSnapsho
     return;
   }
 
+  // Provider/container come from the queue doc's provider-migration fields
+  // when present; legacy entries (queued before this generalization) fall
+  // back to the OSF shape built from osfFilesLink.
+  const providerId: StorageProviderId = (data.storageProvider as StorageProviderId) || "osf";
+  const provider = getProvider(providerId);
+  const container: ContainerRef = data.providerContainer
+    ? (data.providerContainer as ContainerRef)
+    : { provider: "osf", filesLink: data.osfFilesLink };
+
+  // Collision cache: only entries queued after the cache existed carry a
+  // claimToken. Entries queued before it skip the cache entirely — legacy
+  // behavior, the provider's own conflict backstop still applies to them.
+  if (data.claimToken) {
+    let claimResult: Awaited<ReturnType<typeof claimFilename>>;
+    try {
+      claimResult = await claimFilename(data.experimentID, data.filename, data.claimToken, () =>
+        provider.listFiles({ token }, container)
+      );
+    } catch (e) {
+      if (e instanceof CollisionCacheUnavailableError) {
+        await handleRetryFailure(docRef, data, `Collision cache rehydration failed: ${e.message}`);
+        return;
+      }
+      throw e;
+    }
+
+    if (!claimResult.claimed) {
+      if (claimResult.reason === "duplicate") {
+        // Someone else confirmed this name while we were queued — mirrors
+        // today's 409-on-retry-means-done semantics.
+        await markCompleted(docRef, data);
+        console.log(`Upload ${queueDoc.id} marked complete — file already exists in OSF.`);
+        return;
+      }
+      // reason === "rehydrating"
+      await handleRetryFailure(docRef, data, "Collision cache rehydrating");
+      return;
+    }
+  }
+
   // Attempt the upload
   try {
-    const result = await putFileOSF(data.osfFilesLink, token, fileData, data.filename);
+    const result = await provider.writeSessionFile(
+      { token },
+      container,
+      data.filename,
+      fileData,
+      { size: Buffer.byteLength(fileData), contentType: "application/json" }
+    );
 
     if (result.success) {
+      if (data.claimToken) {
+        await confirmClaim(data.experimentID, data.filename, data.claimToken);
+      }
       await markCompleted(docRef, data);
       console.log(`Successfully retried upload ${queueDoc.id} (${data.filename})`);
       return;
     }
 
-    if (result.errorCode === 409) {
+    if (result.error === "NAME_CONFLICT") {
+      if (data.claimToken) {
+        await confirmClaim(data.experimentID, data.filename, data.claimToken);
+      }
       // File already exists — treat as success (original upload may have worked)
       await markCompleted(docRef, data);
-      console.log(`Upload ${queueDoc.id} marked complete — file already exists in OSF.`);
+      console.log(`Upload ${queueDoc.id} marked complete — file already exists provider-side.`);
       return;
     }
 
-    await handleRetryFailure(docRef, data, `OSF error ${result.errorCode}: ${result.errorText}`, result.retryAfter);
+    await handleRetryFailure(docRef, data, `Provider error ${result.providerStatus}: ${result.providerMessage}`, result.retryAfter);
   } catch (e) {
     const detail = e instanceof Error ? e.message : "Unknown error";
     await handleRetryFailure(docRef, data, `Upload exception: ${detail}`);

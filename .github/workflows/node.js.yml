@@ -59,4 +59,7 @@ jobs:
       - name: Select project
         run: firebase use test
       - name: Launch firestore emulator and test
-        run: firebase emulators:exec 'npm run test-ci'
+        # maxWorkers=2: the emulator-backed suites contend under full
+        # parallel load (pre-existing data-emulator timing flake); capping
+        # workers reproduces consistently-green runs.
+        run: firebase emulators:exec 'npm run test-ci -- --maxWorkers=2'

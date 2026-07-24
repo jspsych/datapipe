@@ -39,6 +39,10 @@ const MESSAGES = {
     error: "INVALID_REFRESH_TOKEN",
     message: "The experiment owner's refresh token is not valid",
   },
+  PROVIDER_NOT_CONNECTED: {
+    error: "PROVIDER_NOT_CONNECTED",
+    message: "The experiment owner has not connected an account for this experiment's storage provider",
+  },
   INVALID_BASE64_DATA: {
     error: "INVALID_BASE64_DATA",
     message: "The data are not valid base64 data",

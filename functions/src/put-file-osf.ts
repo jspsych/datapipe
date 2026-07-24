@@ -1,3 +1,4 @@
+import fetch from "node-fetch";
 import resolveFolder from "./subfolder.js";
 
 export default async function putFileOSF(
@@ -18,7 +19,7 @@ export default async function putFileOSF(
   // folder that will hold the file. A bare "abc123.json" has no segments and
   // uploads straight to the storage root (or to startUrl, if given).
   const segments = filename.split('/');
-  const fileName = segments.pop() as string;
+  const requestedFileName = segments.pop() as string;
 
   let targetUrl = startUrl ?? osfComponent;
   for (const folder of segments) {
@@ -27,7 +28,7 @@ export default async function putFileOSF(
 
   const queryParams = new URLSearchParams({
     kind: "file",
-    name: fileName,
+    name: requestedFileName,
   });
 
   const osfResult = await fetch(`${targetUrl}?${queryParams.toString()}`, {
@@ -36,9 +37,7 @@ export default async function putFileOSF(
       "Content-Type": "application/json",
       Authorization: `Bearer ${osfToken}`,
     },
-    // Buffer is a valid fetch body at runtime; the cast sidesteps a @types/node
-    // generic-Buffer vs BodyInit mismatch.
-    body: filedata as BodyInit,
+    body: filedata,
   });
 
   if (osfResult.status !== 201) {
@@ -47,5 +46,19 @@ export default async function putFileOSF(
     return { success: false, errorCode: osfResult.status, errorText: osfResult.statusText, retryAfter };
   }
 
-  return { success: true, errorCode: null, errorText: null };
+  // Parse the created-file reference out of the response body. Tolerate a
+  // missing/unparseable body — the upload itself already succeeded (status
+  // 201), so a body we can't read must never turn this into a failure.
+  let fileId: string | undefined;
+  let fileName: string | undefined;
+  try {
+    const body = (await osfResult.json()) as { data?: { id?: string; attributes?: { name?: string } } };
+    fileId = body?.data?.id;
+    fileName = body?.data?.attributes?.name;
+  } catch {
+    fileId = undefined;
+    fileName = undefined;
+  }
+
+  return { success: true, errorCode: null, errorText: null, fileId, fileName };
 }

@@ -53,6 +53,18 @@
       {
         "source": "/api/queuestatus",
         "function": "apiqueuestatus"
+      },
+      {
+        "source": "/api/createexperiment",
+        "function": "createexperiment"
+      },
+      {
+        "source": "/api/connectprovider",
+        "function": "connectprovider"
+      },
+      {
+        "source": "/api/disconnectprovider",
+        "function": "disconnectprovider"
       }
     ]
   },

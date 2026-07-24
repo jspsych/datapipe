@@ -1,3 +1,4 @@
+import fetch from "node-fetch";
 import { OSFFile } from './interfaces';
 
 /**
@@ -32,7 +33,7 @@ export default async function resolveFolder(
   });
 
   if (created.ok) {
-    const body = await created.json();
+    const body = (await created.json()) as { data?: { links?: { move?: string } } };
     const move = body?.data?.links?.move;
     if (!move) {
       throw new Error(`OSF subfolder creation response missing expected 'data.links.move' path`);
@@ -68,7 +69,7 @@ async function findChildFolder(parentUrl: string, osfToken: string, name: string
     throw new Error(`Failed to list files in OSF folder (status ${osfResult.status}: ${osfResult.statusText})`);
   }
 
-  const folder = await osfResult.json();
+  const folder = (await osfResult.json()) as { data?: unknown };
   const listOfFiles = folder['data'];
 
   if (!Array.isArray(listOfFiles)) {

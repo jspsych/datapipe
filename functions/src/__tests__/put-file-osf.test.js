@@ -1,3 +1,16 @@
+// Mocked at the module level (matching put-file-osf-ref.test.js /
+// providers-osf.test.js): put-file-osf.ts imports its own `fetch` from the
+// "node-fetch" package (provider-migration's documented architecture — see
+// providers-osf.test.js's header comment) rather than using the global
+// fetch, so assigning global.fetch here would never be seen by the code
+// under test.
+const mockFetch = jest.fn();
+
+jest.mock("node-fetch", () => ({
+  __esModule: true,
+  default: (...args) => mockFetch(...args),
+}));
+
 import putFileOSF from '../../lib/put-file-osf.js';
 
 const ROOT = 'https://files.osf.io/v1/resources/abc/providers/osfstorage/';
@@ -29,28 +42,28 @@ const fileFail = (status, statusText, retryAfter = null) => Promise.resolve({
   headers: { get: (h) => (h === 'Retry-After' ? retryAfter : null) },
 });
 
-const callUrls = () => fetch.mock.calls.map((c) => c[0]);
+const callUrls = () => mockFetch.mock.calls.map((c) => c[0]);
 
 beforeEach(() => {
-  global.fetch = jest.fn();
+  mockFetch.mockClear();
 });
 
 describe('putFileOSF', () => {
   it('uploads a bare filename straight to the storage root', async () => {
-    fetch.mockReturnValueOnce(fileOk());
+    mockFetch.mockReturnValueOnce(fileOk());
 
     const result = await putFileOSF(ROOT, TOKEN, 'hello', 'subject01.csv');
 
     expect(result).toEqual({ success: true, errorCode: null, errorText: null });
-    expect(fetch).toHaveBeenCalledTimes(1);
-    const [url, opts] = fetch.mock.calls[0];
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [url, opts] = mockFetch.mock.calls[0];
     expect(url).toBe(`${ROOT}?kind=file&name=subject01.csv`);
     expect(opts.method).toBe('PUT');
     expect(opts.body).toBe('hello');
   });
 
   it('uploads into an existing one-level subfolder', async () => {
-    fetch
+    mockFetch
       .mockReturnValueOnce(listing(['session1', 'other']))
       .mockReturnValueOnce(fileOk());
 
@@ -64,7 +77,7 @@ describe('putFileOSF', () => {
   });
 
   it('creates a missing one-level subfolder before uploading', async () => {
-    fetch
+    mockFetch
       .mockReturnValueOnce(listing([]))
       .mockReturnValueOnce(folderCreated('session1'))
       .mockReturnValueOnce(fileOk());
@@ -76,11 +89,11 @@ describe('putFileOSF', () => {
       `${ROOT}?kind=folder&name=session1`,
       `${move('session1')}?kind=file&name=abc.json`,
     ]);
-    expect(fetch.mock.calls[1][1].method).toBe('PUT');
+    expect(mockFetch.mock.calls[1][1].method).toBe('PUT');
   });
 
   it('walks and creates a two-level path (data/raw/)', async () => {
-    fetch
+    mockFetch
       .mockReturnValueOnce(listing([]))            // root has no data/
       .mockReturnValueOnce(folderCreated('data'))
       .mockReturnValueOnce(listing([]))            // data/ has no raw/
@@ -99,7 +112,7 @@ describe('putFileOSF', () => {
   });
 
   it('walks an existing two-level path without creating folders', async () => {
-    fetch
+    mockFetch
       .mockReturnValueOnce(listing(['data']))
       .mockReturnValueOnce(listing(['raw']))
       .mockReturnValueOnce(fileOk());
@@ -114,7 +127,7 @@ describe('putFileOSF', () => {
   });
 
   it('treats a 409 on folder creation as already-exists and re-resolves', async () => {
-    fetch
+    mockFetch
       .mockReturnValueOnce(listing([]))            // not found on first list
       .mockReturnValueOnce(conflict())             // create loses the race
       .mockReturnValueOnce(listing(['session1']))  // re-list finds the winner's folder
@@ -132,7 +145,7 @@ describe('putFileOSF', () => {
   });
 
   it('uploads straight into a pre-resolved startUrl, skipping the walk entirely', async () => {
-    fetch.mockReturnValueOnce(fileOk());
+    mockFetch.mockReturnValueOnce(fileOk());
 
     const result = await putFileOSF(ROOT, TOKEN, 'data', 'abc123.json', move('data'));
 
@@ -141,7 +154,7 @@ describe('putFileOSF', () => {
   });
 
   it('walks remaining segments starting from a pre-resolved startUrl', async () => {
-    fetch
+    mockFetch
       .mockReturnValueOnce(listing([]))
       .mockReturnValueOnce(folderCreated('raw'))
       .mockReturnValueOnce(fileOk());
@@ -156,7 +169,7 @@ describe('putFileOSF', () => {
   });
 
   it('returns the OSF error when the file upload fails', async () => {
-    fetch.mockReturnValueOnce(fileFail(409, 'Conflict'));
+    mockFetch.mockReturnValueOnce(fileFail(409, 'Conflict'));
 
     const result = await putFileOSF(ROOT, TOKEN, 'data', 'dup.json');
 
@@ -164,7 +177,7 @@ describe('putFileOSF', () => {
   });
 
   it('parses Retry-After on a throttled upload', async () => {
-    fetch.mockReturnValueOnce(fileFail(503, 'Service Unavailable', '30'));
+    mockFetch.mockReturnValueOnce(fileFail(503, 'Service Unavailable', '30'));
 
     const result = await putFileOSF(ROOT, TOKEN, 'data', 'x.json');
 
@@ -172,13 +185,13 @@ describe('putFileOSF', () => {
   });
 
   it('throws when a folder listing request fails', async () => {
-    fetch.mockReturnValueOnce(Promise.resolve({ ok: false, status: 500, statusText: 'Server Error' }));
+    mockFetch.mockReturnValueOnce(Promise.resolve({ ok: false, status: 500, statusText: 'Server Error' }));
 
     await expect(putFileOSF(ROOT, TOKEN, 'd', 'session1/a.json')).rejects.toThrow(/Failed to list files/);
   });
 
   it('throws when a 409 folder conflict cannot be re-resolved', async () => {
-    fetch
+    mockFetch
       .mockReturnValueOnce(listing([]))
       .mockReturnValueOnce(conflict())
       .mockReturnValueOnce(listing([])); // still not there on re-list

@@ -1,5 +1,6 @@
 import { decrypt } from "./crypto-utils.js";
 import { refreshAndUpdateUser } from "./refresh-token.js";
+import { refreshGdriveToken } from "./providers/gdrive-oauth.js";
 import { ExperimentData, UserData } from './interfaces';
 
 type TokenResult = {
@@ -15,7 +16,7 @@ function hasValidPAT(user_data: UserData): boolean {
   return user_data.osfTokenValid && !!user_data.osfToken;
 }
 
-export default async function resolveToken(
+async function resolveOsfToken(
   user_data: UserData,
   exp_data: ExperimentData,
 ): Promise<TokenResult> {
@@ -42,4 +43,50 @@ export default async function resolveToken(
   }
 
   return { success: true, token: decrypt(user_data.authToken) };
+}
+
+async function resolveGdriveToken(
+  user_data: UserData,
+  exp_data: ExperimentData,
+): Promise<TokenResult> {
+  const gdrive = user_data.connectedAccounts?.gdrive;
+
+  if (!gdrive) {
+    return {
+      success: false,
+      error: "PROVIDER_NOT_CONNECTED",
+      detail: "No connected Google Drive account for this experiment's owner",
+    };
+  }
+
+  if (gdrive.tokenExpiresAt > Date.now()) {
+    return { success: true, token: decrypt(gdrive.encryptedToken) };
+  }
+
+  const refreshResult = await refreshGdriveToken(exp_data.owner, gdrive);
+
+  if (!refreshResult.success) {
+    return { success: false, error: refreshResult.error, detail: refreshResult.detail };
+  }
+
+  return { success: true, token: refreshResult.accessToken };
+}
+
+export default async function resolveToken(
+  user_data: UserData,
+  exp_data: ExperimentData,
+): Promise<TokenResult> {
+  if (!exp_data.storageProvider || exp_data.storageProvider === "osf") {
+    return resolveOsfToken(user_data, exp_data);
+  }
+
+  if (exp_data.storageProvider === "gdrive") {
+    return resolveGdriveToken(user_data, exp_data);
+  }
+
+  return {
+    success: false,
+    error: "PROVIDER_NOT_CONNECTED",
+    detail: `Unsupported storage provider: ${exp_data.storageProvider}`,
+  };
 }

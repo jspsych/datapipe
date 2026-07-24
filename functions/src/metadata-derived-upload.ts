@@ -1,62 +1,69 @@
-import putFileOSF from "./put-file-osf.js";
+import { getProvider } from "./providers/index.js";
+import { StorageProviderId, ContainerRef } from "./providers/types.js";
 import queueUpload from "./queue-upload.js";
 import writeLog from "./write-log.js";
 import MESSAGES from "./api-messages.js";
 import { DerivedFile } from "./metadata-derived-files.js";
-import resolveFolder from "./subfolder.js";
-
-const DATA_PREFIX = "data/";
 
 export interface DerivedUploadTarget {
   experimentID: string;
   owner: string;
-  osfFilesLink: string;
+  // undefined ⇒ legacy OSF experiment (predates the provider-migration schema).
+  storageProvider?: StorageProviderId;
+  providerContainer?: ContainerRef;
+  // Legacy fallback: only meaningful when storageProvider is absent.
+  osfFilesLink?: string;
+}
+
+// Resolves the provider + container the same way scheduled-upload-retry.ts
+// does: provider-migration fields when present, otherwise the legacy OSF
+// shape built from osfFilesLink.
+function resolveProviderAndContainer(target: DerivedUploadTarget) {
+  const providerId = (target.storageProvider as StorageProviderId) || "osf";
+  const provider = getProvider(providerId);
+  const container: ContainerRef = target.providerContainer
+    ? (target.providerContainer as ContainerRef)
+    : { provider: "osf", filesLink: target.osfFilesLink };
+  return { provider, container };
+}
+
+function contentTypeFor(filename: string): string {
+  if (filename.endsWith(".csv")) return "text/csv";
+  if (filename.endsWith(".json")) return "application/json";
+  return "text/plain";
 }
 
 /**
  * Uploads derived Psych-DS files (main data CSV, sidecar CSVs, .psychds-ignore)
- * to OSF, best-effort: the participant's raw data file is already safely in
- * OSF by the time this runs, and every derived file is reproducible from it,
- * so a failure is queued for retry (the same uploadQueue the data files use)
- * and logged — it never fails the submission.
- * A 409 means an earlier attempt already landed the file; nothing to do.
+ * through the experiment's storage provider, best-effort: the participant's
+ * raw data file is already safely stored by the time this runs, and every
+ * derived file is reproducible from it, so a failure is queued for retry (the
+ * same uploadQueue the data files use) and logged — it never fails the
+ * submission.
+ * A NAME_CONFLICT means an earlier attempt already landed the file; nothing
+ * to do. Each file's writeSessionFile walks its own path — no shared
+ * up-front folder resolution — concurrent folder-create races are handled
+ * inside the provider adapters themselves.
  */
 export async function uploadDerivedFiles(
   files: DerivedFile[],
   target: DerivedUploadTarget,
-  osfToken: string,
+  token: string,
 ): Promise<void> {
-  // Every derived file under data/ shares that one folder; resolve it once up
-  // front instead of each of the N uploads below independently walking (and
-  // possibly racing to create) the same path. Folder-create races among
-  // concurrent submissions still resolve safely via subfolder.ts's own
-  // 409-re-list branch.
-  //
-  // This resolution is best-effort: if it throws (OSF list/create error or a
-  // network failure), fall back to undefined so each under-data/ file re-walks
-  // the path itself inside its own per-file try/catch below — that path still
-  // queues on failure. Letting the throw escape here would instead lose the
-  // derived files entirely (never uploaded, never queued) and fail an already-
-  // successful submission, breaking this function's best-effort contract.
-  const needsDataFolder = files.some((file) => file.filename.startsWith(DATA_PREFIX));
-  let dataFolderLink: string | undefined;
-  if (needsDataFolder) {
-    try {
-      dataFolderLink = await resolveFolder(target.osfFilesLink, osfToken, "data");
-    } catch {
-      dataFolderLink = undefined;
-    }
-  }
+  const { provider, container } = resolveProviderAndContainer(target);
 
   await Promise.allSettled(files.map(async (file) => {
-    const underData = file.filename.startsWith(DATA_PREFIX);
-    const uploadFilename = underData ? file.filename.slice(DATA_PREFIX.length) : file.filename;
-    const startUrl = underData ? dataFolderLink : undefined;
-
     try {
-      const result = await putFileOSF(target.osfFilesLink, osfToken, file.content, uploadFilename, startUrl);
-      if (result.success || result.errorCode === 409) return;
-      await queueDerivedFiles([file], target, `Derived file OSF error ${result.errorCode}: ${result.errorText}`);
+      const result = await provider.writeSessionFile(
+        { token },
+        container,
+        file.filename,
+        file.content,
+        { size: Buffer.byteLength(file.content), contentType: contentTypeFor(file.filename) }
+      );
+      if (result.success) return;
+      if (result.error === "NAME_CONFLICT") return;
+      await queueDerivedFiles([file], target, `Derived file provider error ${result.providerStatus}: ${result.providerMessage}`);
     } catch (e) {
       const detail = e instanceof Error ? e.message : "Unknown error";
       await queueDerivedFiles([file], target, `Derived file upload exception: ${detail}`);
@@ -66,9 +73,9 @@ export async function uploadDerivedFiles(
 
 /**
  * Queues derived files for retried upload without attempting one first — used
- * when the raw data file itself just failed to reach OSF (it was queued, so
- * OSF is known to be unavailable). sessionIncremented is true because only
- * the raw data file accounts for the session count.
+ * when the raw data file itself just failed to reach the provider (it was
+ * queued, so the provider is known to be unavailable). sessionIncremented is
+ * true because only the raw data file accounts for the session count.
  */
 export async function queueDerivedFiles(
   files: DerivedFile[],
@@ -84,6 +91,8 @@ export async function queueDerivedFiles(
         data: file.content,
         dataType: "data",
         osfFilesLink: target.osfFilesLink,
+        storageProvider: target.storageProvider,
+        providerContainer: target.providerContainer,
         errorCode: 0,
         sessionIncremented: true,
         failureReason,
