@@ -153,6 +153,7 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 
 
   if (!claimResult.claimed) {
     if (claimResult.reason === "duplicate") {
+      await cleanupPending(pendingPath);
       res.status(400).json(MESSAGES.OSF_FILE_EXISTS);
       await writeLog(experimentID, "logError", MESSAGES.OSF_FILE_EXISTS);
       return;
@@ -226,6 +227,7 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 
         collisionCacheDisagreement: true,
         direction: "cache-free-provider-conflict",
       });
+      await cleanupPending(pendingPath);
       res.status(400).json(MESSAGES.OSF_FILE_EXISTS);
       return;
     }

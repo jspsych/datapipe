@@ -39,7 +39,7 @@ describe("ExperimentInfo — provider-aware rendering", () => {
     });
 
     expect(screen.getByText("Google Drive Folder")).toBeInTheDocument();
-    const link = screen.getByRole("link", { name: /folder123/ });
+    const link = screen.getByRole("link", { name: /Open folder/ });
     expect(link).toHaveAttribute(
       "href",
       "https://drive.google.com/drive/folders/folder123"

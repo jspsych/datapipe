@@ -187,6 +187,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
 
   if (!claimResult.claimed) {
     if (claimResult.reason === "duplicate") {
+      await cleanupPending(pendingPath);
       res.status(400).json({...MESSAGES.OSF_FILE_EXISTS, metadataMessage});
       await writeLog(experimentID, "logError", MESSAGES.OSF_FILE_EXISTS);
       return;
@@ -263,6 +264,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
         collisionCacheDisagreement: true,
         direction: "cache-free-provider-conflict",
       });
+      await cleanupPending(pendingPath);
       res.status(400).json({...MESSAGES.OSF_FILE_EXISTS, metadataMessage});
       return;
     }

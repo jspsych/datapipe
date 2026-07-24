@@ -74,7 +74,7 @@ describe("ProviderConnections", () => {
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalled());
     const [url, options] = global.fetch.mock.calls[0];
-    expect(url).toBe(process.env.NEXT_PUBLIC_GENERATE_STATE);
+    expect(url).toBe("/api/generateoauthstate");
     expect(JSON.parse(options.body)).toEqual({ provider: "gdrive" });
 
     await waitFor(() =>

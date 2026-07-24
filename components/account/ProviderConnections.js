@@ -19,7 +19,7 @@ export default function ProviderConnections() {
   const handleConnect = async (providerId) => {
     setConnectingId(providerId);
     try {
-      const stateRes = await fetch(process.env.NEXT_PUBLIC_GENERATE_STATE, {
+      const stateRes = await fetch("/api/generateoauthstate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ provider: providerId }),

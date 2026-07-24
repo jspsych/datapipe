@@ -25,7 +25,7 @@ export default function ExperimentInfo({ data }) {
             target="_blank"
             rel="noopener noreferrer"
           >
-            {data.providerContainer?.folderId} <ExternalLink style={{ display: "inline", width: "0.9em", height: "0.9em" }} />
+            {provider.containerLinkText} <ExternalLink style={{ display: "inline", width: "0.9em", height: "0.9em" }} />
           </Link>
         </HStack>
       ) : (

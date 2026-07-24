@@ -32,6 +32,7 @@ describe("STORAGE_PROVIDERS.gdrive", () => {
     expect(STORAGE_PROVIDERS.gdrive.containerLabel).toBe(
       "Google Drive Folder"
     );
+    expect(STORAGE_PROVIDERS.gdrive.containerLinkText).toBe("Open folder");
     expect(STORAGE_PROVIDERS.gdrive.id).toBe("gdrive");
   });
 
