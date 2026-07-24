@@ -56,6 +56,9 @@ jobs:
           echo "REDIRECT_URI=https://datapipe-test.web.app/oauth2/callback" >> .env
           echo "TOKEN_ENCRYPTION_KEY=${{ secrets.FIRESTORE_KEY_TEST }}" >> .env
           echo "NEXT_PUBLIC_OSF_ENV=" >> .env
+          # Google Drive client secret for the deployed test site. Client id and
+          # redirect uri are non-secret and live in functions/.env.datapipe-test.
+          echo "GDRIVE_CLIENT_SECRET=${{ secrets.TEST_GDRIVE_CLIENT_SECRET }}" >> .env
       - name: Install dependencies and build functions
         working-directory: functions
         run: |

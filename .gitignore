@@ -135,6 +135,8 @@ yarn-error.log*
 
 # local env files
 .env*.local
+# ...except the committed emulator/CI overrides (never deployed by Firebase)
+!functions/.env.local
 
 # vercel
 .vercel
