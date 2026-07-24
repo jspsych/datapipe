@@ -7,13 +7,15 @@ import { db } from "./app.js";
 import writeLog from "./write-log.js";
 import MESSAGES from "./api-messages.js";
 import blockMetadata from "./metadata-block.js";
+import { DerivedFile, uploadPathFor } from "./metadata-derived-files.js";
+import { uploadDerivedFiles, queueDerivedFiles } from "./metadata-derived-upload.js";
 import resolveToken from "./resolve-token.js";
 import queueUpload from "./queue-upload.js";
 import { persistPending, cleanupPending } from "./persist-pending.js";
 import { getProviderForExperiment } from "./providers/index.js";
 import { WriteResult } from "./providers/types.js";
 import { claimFilename, confirmClaim, CollisionCacheUnavailableError } from "./collision-cache.js";
-import { ExperimentData, UserData, MetadataResponse, RequestBody } from './interfaces';
+import { ExperimentData, UserData, RequestBody } from './interfaces';
 
 export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 }, async (req, res) => {
   const { experimentID, data, filename, metadataOptions }: RequestBody = req.body;
@@ -129,30 +131,53 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
   //METADATA BLOCK START
 
   let metadataMessage: string = '';
+  //Psych-DS files derived from this submission (main data CSV, sidecar CSVs
+  //for nested columns, .psychds-ignore), produced by the metadata block and
+  //uploaded only after the participant's raw data file lands in OSF.
+  let derivedFiles: DerivedFile[] = [];
 
   if (exp_data.metadataActive) {
     //Creates or references a document containing the metadata for the experiment in the metdata collection on Firestore.
     const metadata_doc_ref: DocumentReference<DocumentData> = db.collection("metadata").doc(experimentID);
 
-    const metadataResponse: MetadataResponse = await blockMetadata(exp_data, user_data, metadata_doc_ref, data, metadataOptions);
+    const metadataResponse = await blockMetadata(exp_data, token, metadata_doc_ref, data, filename, metadataOptions);
 
     if (metadataResponse.success === false) {
-      await cleanupPending(pendingPath);
+      // The pending-data copy is deliberately kept (not cleaned up) here: the
+      // participant's raw data never made it to OSF, so scheduled-pending-recovery
+      // salvages it later instead of losing it outright.
       res.status(400).json(metadataResponse);
       await writeLog(experimentID, "logError", {...MESSAGES.METADATA_ERROR, detail: metadataResponse.message});
       return;
     }
 
     metadataMessage = metadataResponse.metadataMessage;
+    derivedFiles = metadataResponse.derivedFiles ?? [];
   }
+
+  const derivedTarget = {
+    experimentID,
+    owner: exp_data.owner,
+    storageProvider: exp_data.storageProvider,
+    providerContainer: exp_data.providerContainer,
+    osfFilesLink: exp_data.osfFilesLink,
+  };
 
   //METADATA BLOCK END
 
   const { provider, container } = getProviderForExperiment(exp_data);
 
+  //With metadata on, the raw submission is the critical upload and lives at
+  //data/raw/<original name> in the Psych-DS layout (the CSVs above are derived
+  //from it). Session counting and queue-on-failure key off this file. With
+  //metadata off, the layout is unchanged: the raw file goes to the root.
+  const uploadFilename = uploadPathFor(exp_data.metadataActive, filename);
+
   // Collision detection: claim the filename in the Firestore cache
   // immediately before the provider write. The provider's own conflict
   // response (NAME_CONFLICT) stays wired up below as a dual-run backstop.
+  // Claimed on the RAW leaf filename (unchanged by the Psych-DS layout), not
+  // uploadFilename, so dedup keys off what the participant actually submitted.
   const claimToken = randomUUID();
   let claimResult: Awaited<ReturnType<typeof claimFilename>>;
   try {
@@ -221,7 +246,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
     result = await provider.writeSessionFile(
       { token },
       container,
-      filename,
+      uploadFilename,
       data,
       { size: Buffer.byteLength(data), contentType: "application/json" }
     );
@@ -231,7 +256,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
     const detail = e instanceof Error ? e.message : "Unknown error";
     try {
       await queueUpload({
-        experimentID, owner: exp_data.owner, filename, data,
+        experimentID, owner: exp_data.owner, filename: uploadFilename, data,
         dataType: "data", osfFilesLink: exp_data.osfFilesLink,
         storageProvider: exp_data.storageProvider, providerContainer: exp_data.providerContainer,
         errorCode: 0, sessionIncremented: true,
@@ -240,6 +265,8 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
       });
       await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
       await cleanupPending(pendingPath); // queue-upload has its own copy
+      // OSF is unreachable, so queue the derived files alongside the raw data.
+      await queueDerivedFiles(derivedFiles, derivedTarget, `Queued alongside data file: ${detail}`);
       res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
       await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail});
       return;
@@ -272,7 +299,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
     // retry can re-enter it with the same token.
     try {
       await queueUpload({
-        experimentID, owner: exp_data.owner, filename, data,
+        experimentID, owner: exp_data.owner, filename: uploadFilename, data,
         dataType: "data", osfFilesLink: exp_data.osfFilesLink,
         storageProvider: exp_data.storageProvider, providerContainer: exp_data.providerContainer,
         errorCode: result.providerStatus || 0, sessionIncremented: true,
@@ -281,6 +308,8 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
       });
       await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
       await cleanupPending(pendingPath); // queue-upload has its own copy
+      // OSF is failing, so queue the derived files alongside the raw data.
+      await queueDerivedFiles(derivedFiles, derivedTarget, `Queued alongside data file: OSF error ${result.providerStatus}`);
       res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
       await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.providerStatus, osfStatusText: result.providerMessage});
       return;
@@ -299,6 +328,11 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
 
   // Data successfully uploaded to OSF — clean up the pending copy.
   await cleanupPending(pendingPath);
+
+  // The raw data file is safely in OSF; upload the files derived from it
+  // (main data CSV, sidecar CSVs, .psychds-ignore — best-effort: failures are
+  // queued for retry and logged, never failing the submission).
+  await uploadDerivedFiles(derivedFiles, derivedTarget, token);
 
   res.status(201).json({...MESSAGES.SUCCESS, metadataMessage});
 });

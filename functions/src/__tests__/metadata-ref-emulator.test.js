@@ -64,6 +64,7 @@ function createMockOSFServer() {
 
   let listingContents = [];
   let nextId = 1;
+  let nextFolderId = 1;
   const createCallsByFilename = new Map();
   const updateCallsById = new Map();
   let listingCallCount = 0;
@@ -75,8 +76,23 @@ function createMockOSFServer() {
     res.json({ data: listingContents });
   });
 
-  app.put("/files", (req, res) => {
+  // Handles both a file create (kind=file, the pre-existing behavior) and a
+  // folder create (kind=folder). The latter is new: now that a
+  // metadata-active raw file uploads under data/raw/ (Psych-DS layout),
+  // subfolder.ts's resolveFolder needs to walk/create that path, and its
+  // folder-create step requires a WaterButler-shaped `data.links.move` in the
+  // response (see subfolder.ts) -- without it resolveFolder throws and the
+  // raw upload gets queued instead of succeeding. The shape mirrors
+  // put-file-osf.test.js's `folderCreated` helper.
+  function handleFilesPut(req, res) {
     const filename = String(req.query.name || "");
+
+    if (req.query.kind === "folder") {
+      const moveLink = `${req.protocol}://${req.get("host")}/folder-${nextFolderId++}/`;
+      res.status(201).json({ data: { links: { move: moveLink } } });
+      return;
+    }
+
     createCallsByFilename.set(filename, (createCallsByFilename.get(filename) || 0) + 1);
 
     const forced = forcedCreateStatus.get(filename);
@@ -87,7 +103,9 @@ function createMockOSFServer() {
 
     const id = `mock-file-${nextId++}`;
     res.status(201).json({ data: { id, attributes: { name: filename, kind: "file" } } });
-  });
+  }
+
+  app.put("/files", handleFilesPut);
 
   app.put("/files/:id", (req, res) => {
     const id = req.params.id;
@@ -101,6 +119,18 @@ function createMockOSFServer() {
 
     res.status(200).json({});
   });
+
+  // Every folder resolveFolder creates gets its own `/folder-N/` path,
+  // reused for both listing (always empty, so a multi-level path like
+  // data/raw/ always creates fresh at each level -- deliberately NOT wired
+  // to listingCallCount, which tracks only the container-root listing used
+  // for metadata discovery/collision-cache) and the next level's
+  // create/upload, same behavior as the root /files route above.
+  app.get("/folder-:n", (req, res) => {
+    res.json({ data: [] });
+  });
+
+  app.put("/folder-:n", handleFilesPut);
 
   return new Promise((resolve) => {
     const server = app.listen(0, () => {
@@ -242,7 +272,16 @@ describe("4. second submission updates the existing metadata file via its stored
     expect(response.status).toBe(201);
     expect(mockOSF.getUpdateCount(existingMetaId)).toBe(1);
     expect(mockOSF.getCreateCount("dataset_description.json")).toBe(0);
-    expect(mockOSF.getListingCallCount()).toBe(0);
+    // Not 0: the metadata subsystem itself still does no re-discovery (the
+    // ref is known, confirmed by the two assertions above -- update, not
+    // create). The two calls counted here are unrelated to metadata: the raw
+    // file's own data/raw/ folder resolution, and the derived main-data-CSV
+    // upload's own data/ folder resolution (each writeSessionFile call walks
+    // its own path independently now -- the up-front "resolve data/ once"
+    // optimization was intentionally dropped when uploads were generalized
+    // behind the provider interface), each hitting the same container-root
+    // listing endpoint metadata discovery would also use.
+    expect(mockOSF.getListingCallCount()).toBe(2);
   });
 });
 

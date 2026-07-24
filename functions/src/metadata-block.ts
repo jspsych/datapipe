@@ -3,10 +3,18 @@ import updateMetadata from "./metadata-update.js";
 import produceMetadata from "./metadata-production.js";
 import { DocumentReference, DocumentData } from "firebase-admin/firestore";
 import { db } from "./app.js";
-import resolveToken from "./resolve-token.js";
 import { getProviderForExperiment } from "./providers/index.js";
 import { FileRef, ProviderErrorCode } from "./providers/types.js";
-import { ExperimentData, UserData, Metadata, MetadataResponse } from './interfaces';
+import buildDerivedFiles, { DerivedFile } from "./metadata-derived-files.js";
+import { ExperimentData, Metadata, MetadataResponse } from './interfaces';
+
+// Discriminated on `success` so the compiler guarantees derivedFiles can only
+// ride on a success — a failure response structurally cannot carry them, so
+// callers (api-data's 400 path) can send it verbatim with no risk of leaking a
+// half-built derived-file set.
+type MetadataSuccess = Omit<MetadataResponse, 'success'> & { success: true; derivedFiles?: DerivedFile[] };
+type MetadataFailure = Omit<MetadataResponse, 'success'> & { success: false };
+export type MetadataBlockResult = MetadataSuccess | MetadataFailure;
 
 // Thrown by performUpdate below when a provider's updateFile call fails
 // (either by throwing, in OSF's case, or by returning a failure WriteResult,
@@ -29,32 +37,45 @@ const NON_HEALABLE_CODES: ProviderErrorCode[] = ["AUTH_EXPIRED", "RATE_LIMITED",
 
 export default async function blockMetadata(
     exp_data: ExperimentData,
-    user_data: UserData,
+    token: string,                       // already-resolved provider token (passed by api-data)
     metadata_doc_ref: DocumentReference<DocumentData>,
     data: string,
+    filename: string,
     metadataOptions: object,
-  ) {
+  ): Promise<MetadataBlockResult> {
 
 let metadataMessage: {metadataMessage: string} = {metadataMessage: ''};
 
-const tokenResult = await resolveToken(user_data, exp_data);
-if (!tokenResult.success) {
-  return { success: false, metadataMessage: tokenResult.detail };
+//Only run if metadata collection is enabled.
+if (!exp_data.metadataActive) {
+  metadataMessage = MESSAGES.METADATA_NOT_ACTIVE;
+  const metadataResponse: MetadataSuccess = {success: true, ...metadataMessage};
+  return metadataResponse;
 }
-const token = tokenResult.token;
 
 const { provider, container } = getProviderForExperiment(exp_data);
 
-try {
+// The full Psych-DS file set derived from this submission (main data CSV,
+// sidecar CSVs for nested columns, .psychds-ignore), mirroring the CLI's
+// per-file output. Built inside the transaction below (from the same
+// `produced` result the incoming metadata comes from) and captured here so
+// it can ride on the success response after the transaction commits.
+let derivedFiles: DerivedFile[] = [];
 
-  //Only run if metadata collection is enabled.
-  if (exp_data.metadataActive) {
+try {
 
   //All metadata processing is done within a transaction to ensure consistency.
   await db.runTransaction(async (t) => {
 
-      //Metadata is produced from the incoming data using the metdata module.
-      const incomingMetadata: Metadata = (await produceMetadata(data, metadataOptions));
+      //Metadata is produced from the incoming data using the metadata module.
+      const produced = await produceMetadata(data, metadataOptions);
+      const incomingMetadata: Metadata = produced.metadata;
+
+      //The full Psych-DS file set derived from this submission -- built here,
+      //uploaded by the caller only after the participant's raw data file
+      //itself lands in the provider under data/raw/, so derived files can
+      //never precede the data they are derived from.
+      derivedFiles = buildDerivedFiles(filename, produced);
 
       //Retrieves the metadata from the Firestore metadata document.
       const firestoreMetadataObj: DocumentData | undefined = (await t.get(metadata_doc_ref)).data();
@@ -223,14 +244,8 @@ try {
         }
   });
 
-  const metadataResponse: MetadataResponse = {success: true, ...metadataMessage};
+  const metadataResponse: MetadataSuccess = {success: true, ...metadataMessage, derivedFiles};
   return metadataResponse;
-}
-else {
-    metadataMessage = MESSAGES.METADATA_NOT_ACTIVE;
-    const metadataResponse: MetadataResponse = {success: true, ...metadataMessage};
-    return metadataResponse;
- }
 }
 catch (error) {
   let errorMessage: string;
@@ -242,7 +257,7 @@ catch (error) {
 
   console.error("Metadata block error:", errorMessage);
 
-  const metadataResponse: MetadataResponse = {success: false, ...MESSAGES.METADATA_ERROR, message: errorMessage, ...metadataMessage};
+  const metadataResponse: MetadataFailure = {success: false, ...MESSAGES.METADATA_ERROR, message: errorMessage, ...metadataMessage};
   return metadataResponse;
 //METADATA BLOCK END
   };

@@ -398,7 +398,7 @@ describe("3. error mapping", () => {
 });
 
 describe("4. listFiles pagination", () => {
-  it("follows nextPageToken until exhausted, concatenates results, filters out folders, and both requests carry the same q filter", async () => {
+  it("follows nextPageToken until exhausted, concatenates results, recurses into subfolders, and same-level requests carry the same q filter", async () => {
     mockFetch.mockResolvedValueOnce(
       mockResponse({
         status: 200,
@@ -419,29 +419,46 @@ describe("4. listFiles pagination", () => {
         jsonBody: { files: [{ id: "f2", name: "b.csv", mimeType: "text/csv" }] },
       })
     );
+    // Recursion: a third request lists the "subdir" folder (folder1) found
+    // above, since listFiles now walks into subfolders (nested Psych-DS
+    // paths like data/raw/ live there) instead of only listing the top level.
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({
+        status: 200,
+        statusText: "OK",
+        jsonBody: { files: [{ id: "f3", name: "c.csv", mimeType: "text/csv" }] },
+      })
+    );
 
     const container = { provider: "gdrive", folderId: "folder-xyz" };
     const result = await gdriveProvider.listFiles(auth, container);
 
+    // Files from every level are concatenated, keyed by their own leaf name
+    // (not qualified by folder) so hashing `salt:name` matches a claim made
+    // on the raw leaf filename.
     expect(result).toEqual([
       { name: "a.csv", id: "f1" },
       { name: "b.csv", id: "f2" },
+      { name: "c.csv", id: "f3" },
     ]);
 
-    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch).toHaveBeenCalledTimes(3);
 
     const url1 = new URL(callArgs(0).url);
     const url2 = new URL(callArgs(1).url);
+    const url3 = new URL(callArgs(2).url);
 
     expect(url1.searchParams.get("q")).toBe("'folder-xyz' in parents and trashed=false");
     expect(url2.searchParams.get("q")).toBe(url1.searchParams.get("q"));
+    expect(url3.searchParams.get("q")).toBe("'folder1' in parents and trashed=false");
     expect(url1.searchParams.get("fields")).toBe("nextPageToken,files(id,name,mimeType)");
     expect(url1.searchParams.get("pageSize")).toBe("1000");
 
-    // The defining pagination assertion: only the second request carries the
-    // page token from the first response.
+    // The defining pagination assertion: only the second request (same
+    // folder, page 2) carries the page token from the first response.
     expect(url1.searchParams.get("pageToken")).toBeNull();
     expect(url2.searchParams.get("pageToken")).toBe("page2tok");
+    expect(url3.searchParams.get("pageToken")).toBeNull();
   });
 
   it("stops after a single page when no nextPageToken is returned", async () => {

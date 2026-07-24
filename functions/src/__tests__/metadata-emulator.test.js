@@ -100,8 +100,31 @@ const downloadedMetadata = {
 function createMockOSFServer() {
   const app = express();
   let nextId = 1;
+  let nextFolderId = 1;
   const createCallsByFilename = new Map();
   const updateCallsById = new Map();
+
+  // Handles both a file create (kind=file, the pre-existing behavior) and a
+  // folder create (kind=folder). The latter is new: now that a
+  // metadata-active raw file uploads under data/raw/ (Psych-DS layout),
+  // subfolder.ts's resolveFolder needs to walk/create that path, and its
+  // folder-create step requires a WaterButler-shaped `data.links.move` in the
+  // response (see subfolder.ts) -- without it resolveFolder throws and the
+  // raw upload gets queued instead of succeeding. The shape mirrors
+  // put-file-osf.test.js's `folderCreated` helper.
+  function handleFilesPut(req, res) {
+    const filename = String(req.query.name || "");
+
+    if (req.query.kind === "folder") {
+      const moveLink = `${req.protocol}://${req.get("host")}/folder-${nextFolderId++}/`;
+      res.status(201).json({ data: { links: { move: moveLink } } });
+      return;
+    }
+
+    createCallsByFilename.set(filename, (createCallsByFilename.get(filename) || 0) + 1);
+    const id = `mock-file-${nextId++}`;
+    res.status(201).json({ data: { id, attributes: { name: filename, kind: "file" } } });
+  }
 
   app.get("/files", (req, res) => {
     res.json({ data: [] });
@@ -111,18 +134,23 @@ function createMockOSFServer() {
     res.json(downloadedMetadata);
   });
 
-  app.put("/files", (req, res) => {
-    const filename = String(req.query.name || "");
-    createCallsByFilename.set(filename, (createCallsByFilename.get(filename) || 0) + 1);
-    const id = `mock-file-${nextId++}`;
-    res.status(201).json({ data: { id, attributes: { name: filename, kind: "file" } } });
-  });
+  app.put("/files", handleFilesPut);
 
   app.put("/files/:id", (req, res) => {
     const id = req.params.id;
     updateCallsById.set(id, (updateCallsById.get(id) || 0) + 1);
     res.status(200).json({});
   });
+
+  // Every folder resolveFolder creates gets its own `/folder-N/` path,
+  // reused for both listing (always empty, so a multi-level path like
+  // data/raw/ always creates fresh at each level) and the next level's
+  // create/upload -- same behavior as the root /files route above.
+  app.get("/folder-:n", (req, res) => {
+    res.json({ data: [] });
+  });
+
+  app.put("/folder-:n", handleFilesPut);
 
   return new Promise((resolve) => {
     const server = app.listen(0, () => {

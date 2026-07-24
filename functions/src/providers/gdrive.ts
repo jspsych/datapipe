@@ -212,24 +212,26 @@ export const gdriveProvider: StorageProvider = {
   ): Promise<WriteResult> {
     const gdriveContainer = container as GdriveContainerRef;
 
-    let parentId = gdriveContainer.folderId;
-    let uploadFilename = filename;
+    // A filename may carry a multi-level path prefix (e.g.
+    // "data/raw/abc123.json"). Walk every segment, finding-or-creating each
+    // folder level in turn, so nested Psych-DS paths land in the matching
+    // nested Drive folders instead of only the first level.
+    const segments = filename.split("/");
+    const uploadFilename = segments.pop() as string;
 
-    const slashIndex = filename.indexOf("/");
-    if (slashIndex !== -1) {
-      const subfolderName = filename.slice(0, slashIndex);
-      uploadFilename = filename.slice(slashIndex + 1);
-      try {
-        parentId = await findOrCreateFolder(auth, subfolderName, gdriveContainer.folderId);
-      } catch (e) {
-        return {
-          success: false,
-          error: "UNAVAILABLE",
-          providerStatus: null,
-          providerMessage: e instanceof Error ? e.message : "Unknown error",
-          retryAfter: null,
-        };
+    let parentId = gdriveContainer.folderId;
+    try {
+      for (const segment of segments) {
+        parentId = await findOrCreateFolder(auth, segment, parentId);
       }
+    } catch (e) {
+      return {
+        success: false,
+        error: "UNAVAILABLE",
+        providerStatus: null,
+        providerMessage: e instanceof Error ? e.message : "Unknown error",
+        retryAfter: null,
+      };
     }
 
     const body = buildMultipartBody(
@@ -257,7 +259,11 @@ export const gdriveProvider: StorageProvider = {
 
     return {
       success: true,
-      fileRef: { id: responseBody.id, name: storedFilename },
+      // fileRef.name intentionally mirrors the raw response (possibly
+      // undefined) rather than falling back to storedFilename — callers
+      // compare storedFilename against the requested name to detect a silent
+      // rename, and a fabricated fileRef.name would defeat that.
+      fileRef: { id: responseBody.id, name: responseBody.name as string },
       storedFilename,
     };
   },
@@ -295,51 +301,62 @@ export const gdriveProvider: StorageProvider = {
 
   async listFiles(auth: ResolvedAuth, container: ContainerRef): Promise<FileRef[]> {
     const gdriveContainer = container as GdriveContainerRef;
-    const q = `'${gdriveContainer.folderId}' in parents and trashed=false`;
 
+    // Recurses into subfolders (BFS) so collision-cache rehydration finds raw
+    // files now stored under nested Psych-DS paths (e.g. data/raw/). Every
+    // FILE entry is collected under its own leaf name — regardless of which
+    // folder it was found in — so hashing `salt:name` matches the claim made
+    // on the raw leaf filename. A failed listing at ANY level MUST throw
+    // (never return a partial/empty result): collision-cache rehydration
+    // treats the returned list as the complete set of existing filenames, and
+    // Drive has no 409 backstop — silently returning a partial list here
+    // would warm the cache incomplete and let duplicates through. The throw
+    // surfaces as CollisionCacheUnavailableError.
     const results: FileRef[] = [];
-    let pageToken: string | undefined;
+    const foldersToVisit: string[] = [gdriveContainer.folderId];
 
-    do {
-      const url = new URL(`${getApiBase()}/drive/v3/files`);
-      url.searchParams.set("q", q);
-      url.searchParams.set("fields", "nextPageToken,files(id,name,mimeType)");
-      url.searchParams.set("pageSize", "1000");
-      if (pageToken) {
-        url.searchParams.set("pageToken", pageToken);
-      }
+    while (foldersToVisit.length > 0) {
+      const folderId = foldersToVisit.shift() as string;
+      const q = `'${folderId}' in parents and trashed=false`;
+      let pageToken: string | undefined;
 
-      const response = await fetch(url.toString(), {
-        method: "GET",
-        headers: authHeaders(auth),
-      });
-
-      // A failed listing MUST throw, never return a partial/empty result:
-      // collision-cache rehydration treats the returned list as the complete
-      // set of existing filenames, and Drive has no 409 backstop — silently
-      // returning [] here would warm the cache empty and let duplicates
-      // through. The throw surfaces as CollisionCacheUnavailableError.
-      if (!isSuccessStatus(response.status)) {
-        const mapped = await mapErrorResponse(response);
-        throw new Error(
-          `Google Drive listing failed: ${mapped.providerStatus} ${mapped.providerMessage}`
-        );
-      }
-
-      const body = (await response.json()) as {
-        nextPageToken?: string;
-        files?: { id: string; name: string; mimeType: string }[];
-      };
-
-      for (const file of body.files || []) {
-        if (file.mimeType === FOLDER_MIME) {
-          continue;
+      do {
+        const url = new URL(`${getApiBase()}/drive/v3/files`);
+        url.searchParams.set("q", q);
+        url.searchParams.set("fields", "nextPageToken,files(id,name,mimeType)");
+        url.searchParams.set("pageSize", "1000");
+        if (pageToken) {
+          url.searchParams.set("pageToken", pageToken);
         }
-        results.push({ id: file.id, name: file.name });
-      }
 
-      pageToken = body.nextPageToken;
-    } while (pageToken);
+        const response = await fetch(url.toString(), {
+          method: "GET",
+          headers: authHeaders(auth),
+        });
+
+        if (!isSuccessStatus(response.status)) {
+          const mapped = await mapErrorResponse(response);
+          throw new Error(
+            `Google Drive listing failed: ${mapped.providerStatus} ${mapped.providerMessage}`
+          );
+        }
+
+        const body = (await response.json()) as {
+          nextPageToken?: string;
+          files?: { id: string; name: string; mimeType: string }[];
+        };
+
+        for (const file of body.files || []) {
+          if (file.mimeType === FOLDER_MIME) {
+            foldersToVisit.push(file.id);
+            continue;
+          }
+          results.push({ id: file.id, name: file.name });
+        }
+
+        pageToken = body.nextPageToken;
+      } while (pageToken);
+    }
 
     return results;
   },
