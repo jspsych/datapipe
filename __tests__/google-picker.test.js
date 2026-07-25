@@ -23,14 +23,17 @@ describe("pickDriveFolder", () => {
       picker: {
         ViewId: { FOLDERS: "folders", DOCS: "docs" },
         Action: { PICKED: "picked", CANCEL: "cancel" },
+        Feature: { SUPPORT_DRIVES: "supportDrives" },
         DocsView: jest.fn().mockImplementation(() => ({
           setParent: jest.fn().mockReturnThis(),
           setMimeTypes: jest.fn().mockReturnThis(),
           setSelectFolderEnabled: jest.fn().mockReturnThis(),
           setIncludeFolders: jest.fn().mockReturnThis(),
+          setEnableDrives: jest.fn().mockReturnThis(),
         })),
         PickerBuilder: jest.fn().mockImplementation(() => ({
           addView: jest.fn().mockReturnThis(),
+          enableFeature: jest.fn().mockReturnThis(),
           setOAuthToken: jest.fn().mockReturnThis(),
           setDeveloperKey: jest.fn().mockReturnThis(),
           setAppId: jest.fn().mockReturnThis(),

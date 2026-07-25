@@ -119,6 +119,10 @@ async function findFolder(
   const url = new URL(`${getApiBase()}/drive/v3/files`);
   const q = `name='${escapeQueryValue(name)}' and '${parentId}' in parents and mimeType='${FOLDER_MIME}' and trashed=false`;
   url.searchParams.set("q", q);
+  // Shared Drives require these on every list/query call, or folders that
+  // live in a shared drive are invisible to the query.
+  url.searchParams.set("supportsAllDrives", "true");
+  url.searchParams.set("includeItemsFromAllDrives", "true");
 
   const response = await fetch(url.toString(), {
     method: "GET",
@@ -136,7 +140,7 @@ async function findFolder(
 }
 
 async function createFolder(auth: ResolvedAuth, name: string, parentId: string): Promise<string> {
-  const response = await fetch(`${getApiBase()}/drive/v3/files`, {
+  const response = await fetch(`${getApiBase()}/drive/v3/files?supportsAllDrives=true`, {
     method: "POST",
     headers: {
       ...authHeaders(auth),
@@ -252,7 +256,7 @@ export const gdriveProvider: StorageProvider = {
       meta.contentType
     );
 
-    const response = await fetch(`${getApiBase()}/upload/drive/v3/files?uploadType=multipart`, {
+    const response = await fetch(`${getApiBase()}/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true`, {
       method: "POST",
       headers: {
         ...authHeaders(auth),
@@ -288,7 +292,7 @@ export const gdriveProvider: StorageProvider = {
     meta: FileMeta
   ): Promise<WriteResult> {
     const response = await fetch(
-      `${getApiBase()}/upload/drive/v3/files/${existingFileRef.id}?uploadType=media`,
+      `${getApiBase()}/upload/drive/v3/files/${existingFileRef.id}?uploadType=media&supportsAllDrives=true`,
       {
         method: "PATCH",
         headers: {
@@ -337,6 +341,10 @@ export const gdriveProvider: StorageProvider = {
         url.searchParams.set("q", q);
         url.searchParams.set("fields", "nextPageToken,files(id,name,mimeType)");
         url.searchParams.set("pageSize", "1000");
+        // Shared Drives require these on every list/query call, or folders
+        // that live in a shared drive are invisible to the query.
+        url.searchParams.set("supportsAllDrives", "true");
+        url.searchParams.set("includeItemsFromAllDrives", "true");
         if (pageToken) {
           url.searchParams.set("pageToken", pageToken);
         }
@@ -378,7 +386,7 @@ export const gdriveProvider: StorageProvider = {
     _container: ContainerRef,
     fileRef: FileRef
   ): Promise<DownloadResult> {
-    const response = await fetch(`${getApiBase()}/drive/v3/files/${fileRef.id}?alt=media`, {
+    const response = await fetch(`${getApiBase()}/drive/v3/files/${fileRef.id}?alt=media&supportsAllDrives=true`, {
       method: "GET",
       headers: authHeaders(auth),
     });
