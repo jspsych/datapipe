@@ -104,7 +104,7 @@ describe("1. writeSessionFile success", () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const { url, options } = callArgs(0);
 
-    expect(url).toBe(`${API_BASE}/upload/drive/v3/files?uploadType=multipart`);
+    expect(url).toBe(`${API_BASE}/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true`);
     expect(options.method).toBe("POST");
     expect(header(options.headers, "Authorization")).toBe("Bearer test-token");
 
@@ -217,7 +217,7 @@ describe("2. writeSessionFile subfolder", () => {
     });
 
     const uploadCall = callArgs(2);
-    expect(uploadCall.url).toBe(`${API_BASE}/upload/drive/v3/files?uploadType=multipart`);
+    expect(uploadCall.url).toBe(`${API_BASE}/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true`);
     const uploadBody = uploadCall.options.body.toString();
     expect(uploadBody).toContain('"name":"file.csv"');
     expect(uploadBody).toContain('"parents":["sub-folder-id"]');
@@ -510,7 +510,7 @@ describe("5. updateFile", () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const { url, options } = callArgs(0);
-    expect(url).toBe(`${API_BASE}/upload/drive/v3/files/gdrive-existing-1?uploadType=media`);
+    expect(url).toBe(`${API_BASE}/upload/drive/v3/files/gdrive-existing-1?uploadType=media&supportsAllDrives=true`);
     expect(options.method).toBe("PATCH");
     expect(header(options.headers, "Authorization")).toBe("Bearer test-token");
     expect(options.body).toBe("updated-data");
@@ -616,7 +616,7 @@ describe("7. downloadFile", () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const { url, options } = callArgs(0);
-    expect(url).toBe(`${API_BASE}/drive/v3/files/gdrive-file-9?alt=media`);
+    expect(url).toBe(`${API_BASE}/drive/v3/files/gdrive-file-9?alt=media&supportsAllDrives=true`);
     expect(options.method).toBe("GET");
     expect(header(options.headers, "Authorization")).toBe("Bearer test-token");
 

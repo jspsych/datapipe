@@ -334,6 +334,7 @@ function NewExperimentForm() {
                 <HStack gap={3}>
                   <Button
                     variant="outline"
+                    colorPalette="brandTeal"
                     size="md"
                     loading={folderPickerLoading}
                     onClick={handleChooseFolder}
