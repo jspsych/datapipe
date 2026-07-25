@@ -16,6 +16,7 @@ import { saveOsfToken } from "./save-osf-token.js";
 import { getOsfToken } from "./get-osf-token.js";
 import { onUserDeleted } from "./on-user-deleted.js";
 import { createExperiment } from "./create-experiment.js";
+import { getProviderAccessToken } from "./get-provider-access-token.js";
 
 setGlobalOptions({
   maxInstances: 20
@@ -38,5 +39,6 @@ export {
   saveOsfToken as saveosftoken,
   getOsfToken as getosftoken,
   onUserDeleted as onuserdeleted,
-  createExperiment as createexperiment
+  createExperiment as createexperiment,
+  getProviderAccessToken as getprovideraccesstoken
 };

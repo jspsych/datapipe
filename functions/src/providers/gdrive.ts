@@ -190,15 +190,27 @@ export const gdriveProvider: StorageProvider = {
 
   async createDataContainer(auth: ResolvedAuth, researcherInput: Record<string, unknown>): Promise<ContainerRef> {
     const name = researcherInput.name as string;
+    const parentId = researcherInput.parentId as string | undefined;
 
-    let rootId = await findFolder(auth, "DataPipe", "root");
-    if (!rootId) {
-      rootId = await createFolder(auth, "DataPipe", "root");
+    // A researcher-chosen parent (via the Picker) bypasses the DataPipe-root
+    // convention entirely -- the experiment folder is created directly under
+    // whatever folder they picked. Absent a parentId, fall back to today's
+    // behavior: find-or-create a shared "DataPipe" folder at root and nest
+    // the experiment folder under that.
+    let targetParentId: string;
+    if (parentId) {
+      targetParentId = parentId;
+    } else {
+      let rootId = await findFolder(auth, "DataPipe", "root");
+      if (!rootId) {
+        rootId = await createFolder(auth, "DataPipe", "root");
+      }
+      targetParentId = rootId;
     }
 
     // Experiment folders are always created fresh — Drive allows duplicate
     // names, so there's nothing to find-or-create here.
-    const folderId = await createFolder(auth, name, rootId);
+    const folderId = await createFolder(auth, name, targetParentId);
 
     return { provider: "gdrive", folderId };
   },

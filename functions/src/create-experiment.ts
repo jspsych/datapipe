@@ -59,12 +59,18 @@ export const createExperiment = onRequest({ cors: true }, async (req, res) => {
       idToken,
       uid,
       experimentSettings,
+      parentFolderId,
     }: {
       provider?: string;
       title?: string;
       idToken?: string;
       uid?: string;
       experimentSettings?: ExperimentSettingsOverrides;
+      // Researcher-chosen Drive folder (via the Picker) to create the
+      // experiment's data folder under, instead of the default DataPipe
+      // root. Optional and provider-shaped -- createDataContainer ignores it
+      // for providers that don't understand a parentId.
+      parentFolderId?: string;
     } = req.body || {};
 
     if (!provider || !title || !uid) {
@@ -113,7 +119,7 @@ export const createExperiment = onRequest({ cors: true }, async (req, res) => {
     try {
       providerContainer = await storageProvider.createDataContainer(
         { token: tokenResult.token },
-        { name: title }
+        { name: title, ...(parentFolderId ? { parentId: parentFolderId } : {}) }
       );
     } catch (e) {
       const detail = e instanceof Error ? e.message : "Unknown error";
