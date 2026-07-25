@@ -1,12 +1,12 @@
 // Shared gdrive OAuth token-refresh logic (scratchpad/step4b-oauth-connect-
-// spec.md). Extracted out of resolve-token.ts so the same refresh+persist
-// path can be called both lazily (resolve-token.ts, on-demand when a token
-// has expired) and proactively (scheduled-token-refresh.ts's
-// refreshExpiringGdriveTokens, run on a schedule ahead of expiry).
+// spec.md). Kept separate from gdrive.ts so the same refresh+persist path can
+// be called by both of that adapter's entry points: lazily by resolveToken()
+// (on-demand, when a token has already expired) and proactively by
+// refreshExpiringTokens() (ahead of expiry, from the weekly scheduled pass).
 //
 // Uses the runtime's global `fetch`, not the "node-fetch" package — matches
-// resolve-token.ts's existing OSF refresh sibling (refresh-token.ts) and is
-// pinned by resolve-token-gdrive.test.js, which mocks global.fetch.
+// the OSF refresh sibling (refresh-token.ts) and is pinned by
+// resolve-token-gdrive.test.js, which mocks global.fetch.
 
 import { decrypt, encrypt } from "../crypto-utils.js";
 import { db } from "../app.js";

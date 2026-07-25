@@ -121,6 +121,16 @@ export interface StorageProvider {
   // throwing.
   resolveToken(userData: UserData, owner: string): Promise<TokenResult>;
 
+  // Optional: opt-in proactive refresh, run by the weekly scheduled pass
+  // (scheduled-token-refresh.ts) ahead of expiry. A provider that omits this
+  // is simply skipped by that pass. `windowMs` is optional and EACH PROVIDER
+  // SUPPLIES ITS OWN DEFAULT -- the two existing windows are not
+  // interchangeable and must never be unified: OSF's is 2 weeks, checked
+  // against its REFRESH-token expiry (`refreshTokenExpires`), while gdrive's
+  // is 10 minutes, checked against its ACCESS-token expiry
+  // (`tokenExpiresAt`).
+  refreshExpiringTokens?(windowMs?: number): Promise<void>;
+
   // static-token providers only
   validateStaticToken?(auth: ResolvedAuth): Promise<boolean>;
 

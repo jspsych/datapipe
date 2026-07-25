@@ -1,6 +1,7 @@
 import fetch from "node-fetch";
 import putFileOSF from "../put-file-osf.js";
 import updateFileOSF from "../update-file-osf.js";
+import { db } from "../app.js";
 import { decrypt } from "../crypto-utils.js";
 import { refreshAndUpdateUser } from "../refresh-token.js";
 import { OSFFile, UserData } from "../interfaces.js";
@@ -21,6 +22,8 @@ export interface OSFContainerRef extends ContainerRef {
   provider: "osf";
   filesLink: string;
 }
+
+const TWO_WEEKS_MS = 14 * 24 * 60 * 60 * 1000;
 
 function hasValidPAT(user_data: UserData): boolean {
   return user_data.osfTokenValid && !!user_data.osfToken;
@@ -76,6 +79,68 @@ export const osfProvider: StorageProvider = {
     }
 
     return { success: true, token: decrypt(user_data.authToken) };
+  },
+
+  /**
+   * Proactively refreshes OAuth tokens for users whose refresh tokens are
+   * approaching expiration (default 2 weeks).
+   *
+   * This prevents token expiration for researchers with active experiments
+   * who may not have logged in recently. Each successful refresh obtains
+   * a new refresh token (via rotation), resetting the 1-month expiration window.
+   */
+  async refreshExpiringTokens(windowMs: number = TWO_WEEKS_MS): Promise<void> {
+    const now = Date.now();
+    const expirationThreshold = now + windowMs;
+
+    // Find OAuth users whose refresh tokens expire within the next 2 weeks
+    // OR have already passed their estimated expiration. We still attempt
+    // to refresh "expired" tokens because the expiration is our estimate —
+    // only a failed refresh confirms the token is truly dead.
+    const usersSnapshot = await db
+      .collection("users")
+      .where("usingPersonalToken", "==", false)
+      .where("refreshTokenExpires", "<=", expirationThreshold)
+      .get();
+
+    if (usersSnapshot.empty) {
+      console.log("No tokens approaching expiration. Nothing to refresh.");
+      return;
+    }
+
+    console.log(`Found ${usersSnapshot.size} user(s) with tokens approaching or past estimated expiration.`);
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const userDoc of usersSnapshot.docs) {
+      const userData = userDoc.data() as UserData;
+      const userId = userDoc.id;
+
+      if (!userData.refreshToken) {
+        console.warn(`User ${userId} has no refresh token, skipping.`);
+        continue;
+      }
+
+      try {
+        const result = await refreshAndUpdateUser(userId, decrypt(userData.refreshToken));
+
+        if (result.success) {
+          console.log(`Successfully refreshed token for user ${userId}.`);
+          successCount++;
+        } else {
+          console.error(`Failed to refresh token for user ${userId}: ${result.error}`);
+          failCount++;
+        }
+      } catch (error) {
+        console.error(`Error refreshing token for user ${userId}:`, error);
+        failCount++;
+      }
+    }
+
+    console.log(
+      `Token refresh complete. Success: ${successCount}, Failed: ${failCount}`
+    );
   },
 
   async createDataContainer(): Promise<ContainerRef> {

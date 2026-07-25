@@ -1,5 +1,6 @@
 import fetch from "node-fetch";
 import { decrypt } from "../crypto-utils.js";
+import { db } from "../app.js";
 import { refreshGdriveToken } from "./gdrive-oauth.js";
 import { UserData } from "../interfaces.js";
 import {
@@ -23,6 +24,8 @@ export interface GdriveContainerRef extends ContainerRef {
 }
 
 const FOLDER_MIME = "application/vnd.google-apps.folder";
+
+const GDRIVE_DEFAULT_WINDOW_MS = 10 * 60 * 1000;
 
 // A fixed boundary is fine here — the request body is built and sent in one
 // shot, never streamed/concatenated across requests, so there's no need for
@@ -237,6 +240,48 @@ export const gdriveProvider: StorageProvider = {
     }
 
     return { success: true, token: refreshResult.accessToken };
+  },
+
+  /**
+   * Proactively refreshes gdrive access tokens for users whose token expires
+   * within `windowMs` (default 10 minutes). Mirrors the OSF pass's cadence
+   * convention, but on a much shorter window since gdrive access tokens are
+   * short-lived (~1 hour) rather than the ~1-month OSF refresh-token window.
+   *
+   * Failures are logged and skipped — a single user's refresh failure must
+   * never abort the whole pass, and (in 4b) there is no user-visible state
+   * change on failure: the connection is simply left as-is.
+   */
+  async refreshExpiringTokens(windowMs: number = GDRIVE_DEFAULT_WINDOW_MS): Promise<void> {
+    const expirationThreshold = Date.now() + windowMs;
+
+    const usersSnapshot = await db
+      .collection("users")
+      .where("connectedAccounts.gdrive.tokenExpiresAt", "<", expirationThreshold)
+      .get();
+
+    if (usersSnapshot.empty) {
+      return;
+    }
+
+    for (const userDoc of usersSnapshot.docs) {
+      const userData = userDoc.data() as UserData;
+      const gdrive = userData.connectedAccounts?.gdrive;
+      const userId = userDoc.id;
+
+      if (!gdrive) {
+        continue;
+      }
+
+      try {
+        const result = await refreshGdriveToken(userId, gdrive);
+        if (!result.success) {
+          console.error(`Failed to refresh gdrive token for user ${userId}: ${result.detail}`);
+        }
+      } catch (error) {
+        console.error(`Error refreshing gdrive token for user ${userId}:`, error);
+      }
+    }
   },
 
   async createDataContainer(auth: ResolvedAuth, researcherInput: Record<string, unknown>): Promise<ContainerRef> {
