@@ -122,6 +122,12 @@ function createMockDriveServer() {
             }
             return null;
           },
+          getParents: (name) => {
+            for (const f of filesById.values()) {
+              if (f.name === name) return f.parents;
+            }
+            return null;
+          },
           forceStatus: (name, status) => forcedStatus.set(name, status),
           reset: () => {
             filesById.clear();
@@ -368,5 +374,46 @@ describe("9. createExperiment Drive container-creation failure", () => {
     expect((await experimentsForOwner(uid)).length).toBe(0);
     const userData = (await db.collection("users").doc(uid).get()).data();
     expect(userData?.experiments || []).toEqual([]);
+  });
+});
+
+describe("10. createExperiment with parentFolderId", () => {
+  it("creates the experiment folder directly under the given parent, skipping the DataPipe-root lookup entirely", async () => {
+    const { uid, idToken } = await signUpEmulatorUser();
+    await seedGdriveUser(uid);
+    const title = `Case10 ${randomUUID()}`;
+    const parentFolderId = `picker-folder-${randomUUID()}`;
+
+    const { status, body } = await callCreateExperiment({
+      provider: "gdrive",
+      title,
+      idToken,
+      uid,
+      parentFolderId,
+    });
+
+    expect(status).toBe(200);
+    const folderId = mockDrive.getFolderId(title);
+    expect(typeof folderId).toBe("string");
+    expect(body.providerContainer).toEqual({ provider: "gdrive", folderId });
+    expect(mockDrive.getParents(title)).toEqual([parentFolderId]);
+
+    // The DataPipe-root find-or-create is skipped entirely when a
+    // researcher-chosen parent is supplied.
+    expect(mockDrive.getCreateCount("DataPipe")).toBe(0);
+  });
+
+  it("still lands under the DataPipe root when parentFolderId is omitted (regression)", async () => {
+    const { uid, idToken } = await signUpEmulatorUser();
+    await seedGdriveUser(uid);
+    const title = `Case10b ${randomUUID()}`;
+
+    const { status } = await callCreateExperiment({ provider: "gdrive", title, idToken, uid });
+
+    expect(status).toBe(200);
+    const dataPipeId = mockDrive.getFolderId("DataPipe");
+    expect(typeof dataPipeId).toBe("string");
+    expect(mockDrive.getParents(title)).toEqual([dataPipeId]);
+    expect(mockDrive.getCreateCount("DataPipe")).toBe(1);
   });
 });

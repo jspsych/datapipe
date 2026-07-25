@@ -20,6 +20,11 @@ env:
   NEXT_PUBLIC_GENERATE_STATE: "https://datapipe-test.web.app/api/generateoauthstate"
   NEXT_PUBLIC_BASE_URL: "https://datapipe-test.web.app"
   NEXT_PUBLIC_OSF_ENV: ""
+  # Google Picker (folder selection for gdrive experiments). The API key is
+  # restricted to the Picker API + our domains, so it is safe in the browser
+  # bundle -- not a secret. The project number is public.
+  NEXT_PUBLIC_GOOGLE_PICKER_API_KEY: "AIzaSyDLg6uprrY5BPjY4ClVZGSvy7sd_ug0t9M"
+  NEXT_PUBLIC_GDRIVE_PROJECT_NUMBER: "699904257039"
 
 jobs:
   deploy:

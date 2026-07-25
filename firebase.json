@@ -65,6 +65,10 @@
       {
         "source": "/api/disconnectprovider",
         "function": "disconnectprovider"
+      },
+      {
+        "source": "/api/getprovideraccesstoken",
+        "function": "getprovideraccesstoken"
       }
     ]
   },
