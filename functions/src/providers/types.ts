@@ -94,12 +94,14 @@ export interface ProviderCapabilities {
   quotaNote: string | null;
 }
 
-export interface OAuthEndpointConfig {
+export interface OAuthConfig {
   authorizeUrl: string;
   tokenUrl: string;
   clientId: string;
   clientSecret: string;
+  redirectUri: string;
   scope: string;
+  extraAuthParams: Record<string, string>;
 }
 
 export interface StorageProvider {
@@ -107,8 +109,12 @@ export interface StorageProvider {
   authMethod: AuthMethod;
   capabilities: ProviderCapabilities;
 
-  // oauth2 providers only
-  oauth?: OAuthEndpointConfig;
+  // Optional because only providers on the generic OAuth2 storage-GRANT flow
+  // have one. OSF deliberately does not -- its OAuth is a separate legacy
+  // IDENTITY flow (oauth2-callback.ts) with its own env vars -- and that
+  // absence is precisely what makes getOAuthConfig reject "osf" without
+  // special-casing it.
+  oauthConfig?(): OAuthConfig;
 
   // Decrypts the user's stored credential, checks expiry, and refreshes +
   // persists as needed. Failures come back as a TokenResult rather than

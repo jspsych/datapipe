@@ -11,7 +11,7 @@ import { onRequest } from "firebase-functions/v2/https";
 import { FieldValue } from "firebase-admin/firestore";
 import { db, auth } from "./app.js";
 import { encrypt } from "./crypto-utils.js";
-import { getOAuthConfig } from "./providers/oauth-config.js";
+import { getOAuthConfig } from "./providers/index.js";
 
 export type AuthCheckResult =
   | { ok: true }

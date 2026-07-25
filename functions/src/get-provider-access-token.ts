@@ -14,7 +14,7 @@ import { onRequest } from "firebase-functions/v2/https";
 import { db } from "./app.js";
 import { verifyOwnership } from "./connect-provider.js";
 import resolveToken from "./resolve-token.js";
-import { getOAuthConfig } from "./providers/oauth-config.js";
+import { getOAuthConfig } from "./providers/index.js";
 import { StorageProviderId } from "./providers/types.js";
 import { ExperimentData, UserData } from "./interfaces.js";
 import MESSAGES from "./api-messages.js";
@@ -37,10 +37,10 @@ export const getProviderAccessToken = onRequest({ cors: true }, async (req, res)
       return;
     }
 
-    // getOAuthConfig only has an entry for OAuth2 providers (gdrive today).
-    // OSF deliberately has no entry -- its identity flow is a separate,
-    // legacy path (oauth2-callback.ts) -- so this single check rejects both
-    // "osf" and any unregistered/unknown provider, same as connect-provider.ts.
+    // Only OAuth2 providers implement oauthConfig() (gdrive today). OSF
+    // deliberately does not -- its identity flow is a separate, legacy path
+    // (oauth2-callback.ts) -- so this single check rejects both "osf" and any
+    // unregistered/unknown provider, same as connect-provider.ts.
     try {
       getOAuthConfig(provider);
     } catch {

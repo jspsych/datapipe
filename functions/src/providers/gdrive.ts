@@ -12,6 +12,7 @@ import {
   DownloadResult,
   ProviderErrorCode,
   TokenResult,
+  OAuthConfig,
 } from "./types.js";
 
 // The gdrive container ref shape — only the folderId is meaningful to this
@@ -194,6 +195,24 @@ export const gdriveProvider: StorageProvider = {
     supportsRegion: false,
     maxFileSizeBytes: null,
     quotaNote: "Free Google accounts share 15 GB across Drive, Gmail, and Photos",
+  },
+
+  // A method rather than a static object so env vars are read at CALL time,
+  // not module load -- same reason as getApiBase() above.
+  oauthConfig(): OAuthConfig {
+    return {
+      authorizeUrl:
+        process.env.GDRIVE_AUTHORIZE_URL || "https://accounts.google.com/o/oauth2/v2/auth",
+      tokenUrl: process.env.GDRIVE_TOKEN_URL || "https://oauth2.googleapis.com/token",
+      clientId: process.env.GDRIVE_CLIENT_ID as string,
+      clientSecret: process.env.GDRIVE_CLIENT_SECRET as string,
+      redirectUri: process.env.GDRIVE_REDIRECT_URI as string,
+      scope: "https://www.googleapis.com/auth/drive.file",
+      // Without these, Google won't issue a refresh_token on the consent
+      // grant — a half-connected account (access token, no refresh token)
+      // is treated as a hard failure downstream.
+      extraAuthParams: { access_type: "offline", prompt: "consent" },
+    };
   },
 
   async resolveToken(user_data: UserData, owner: string): Promise<TokenResult> {
