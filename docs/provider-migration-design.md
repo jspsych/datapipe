@@ -355,6 +355,51 @@ provider, it does not trigger a redesign.
   flow has more failure modes than a single PUT; verify behavior under
   concurrent submissions, including media-sized files.
 
+### Dataverse spike — partial findings (source-verified, NOT yet empirical)
+
+Recorded 2026-07-25 alongside the Dataverse adapter (backend only, not
+exposed). These come from reading Dataverse's Java source and its IQSS
+integration tests, **not** from running the spike against a live
+installation. They narrow the gates but do not close them — the live
+`demo.dataverse.org` run described above is still required, especially for
+locking under real burst load.
+
+- **Concurrent-write locking — looks substantially less dangerous than
+  assumed.** `UpdateDatasetVersionCommand` → `checkUpdateDatasetVersionLock`
+  explicitly *exempts* `Ingest` locks: `hasAtLeastOneLockThatIsNotAnIngestLock`
+  gates the block, so a file landing while another file is mid-tabular-ingest
+  is generally allowed. Only non-Ingest locks (`EditInProgress`, `Workflow`,
+  `DcmUpload`, `GlobusUpload`, `finalizePublication`) reject, and they return
+  **HTTP 403** with `Dataset cannot be edited due to dataset lock.` — not the
+  409 the design assumed. Since we send `tabIngest=false`, ingest locks should
+  rarely arise at all. **This was named the most likely disqualifier; the
+  source suggests it probably is not.** Still needs empirical confirmation at
+  30–100 writes/minute.
+- **Tabular ingest — suppressible, and we suppress it.** `tabIngest` defaults
+  to `true` (`OptionalFileParams.java`), so the adapter sends `"false"` on
+  every upload. Version-dependence across installations remains unverified.
+- **Silent rename — confirmed, and handled.** IQSS's `DuplicateFilesIT`
+  asserts a second `README.md` comes back as `README-1.md`. The adapter reads
+  `storedFilename` from `data.files[0].label` and never assumes it matches the
+  request. Dataverse cannot return a NAME_CONFLICT, so the Firestore collision
+  cache is the only duplicate gate for Dataverse experiments.
+
+Two contract details worth carrying forward, both of which contradict the
+published guides:
+
+- `/add` returns **200**, not the documented 201.
+- `/api/files/{id}/replace` is **unavailable on a never-published draft**, and
+  this design keeps datasets in draft indefinitely — so `updateFile` is
+  DELETE + re-add, non-atomic, exactly the caveat already recorded for
+  Figshare. `DELETE /api/files/{id}` physically deletes while unpublished.
+
+Also note for the federated `serverUrl` open question below: because the
+researcher supplies that URL and the backend then makes authenticated
+requests to it, it is an SSRF surface. `connect-provider.ts`'s
+`isAllowedServerUrl` constrains it (https, no credentials, no odd ports, no IP
+literals, no internal/metadata hostnames) — defense in depth only, since a DNS
+name can still resolve internally.
+
 ## Deployment checklist (gdrive launch)
 
 Accumulated from build steps 1–7; everything below is required before the
