@@ -21,9 +21,10 @@ describe("pickDriveFolder", () => {
     const fakePicker = { setVisible: jest.fn() };
     const fakeGoogle = {
       picker: {
-        ViewId: { FOLDERS: "folders" },
+        ViewId: { FOLDERS: "folders", DOCS: "docs" },
         Action: { PICKED: "picked", CANCEL: "cancel" },
         DocsView: jest.fn().mockImplementation(() => ({
+          setParent: jest.fn().mockReturnThis(),
           setMimeTypes: jest.fn().mockReturnThis(),
           setSelectFolderEnabled: jest.fn().mockReturnThis(),
           setIncludeFolders: jest.fn().mockReturnThis(),
