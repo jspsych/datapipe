@@ -1,4 +1,7 @@
 import fetch from "node-fetch";
+import { decrypt } from "../crypto-utils.js";
+import { refreshGdriveToken } from "./gdrive-oauth.js";
+import { UserData } from "../interfaces.js";
 import {
   StorageProvider,
   ResolvedAuth,
@@ -8,6 +11,7 @@ import {
   WriteResult,
   DownloadResult,
   ProviderErrorCode,
+  TokenResult,
 } from "./types.js";
 
 // The gdrive container ref shape — only the folderId is meaningful to this
@@ -190,6 +194,30 @@ export const gdriveProvider: StorageProvider = {
     supportsRegion: false,
     maxFileSizeBytes: null,
     quotaNote: "Free Google accounts share 15 GB across Drive, Gmail, and Photos",
+  },
+
+  async resolveToken(user_data: UserData, owner: string): Promise<TokenResult> {
+    const gdrive = user_data.connectedAccounts?.gdrive;
+
+    if (!gdrive) {
+      return {
+        success: false,
+        error: "PROVIDER_NOT_CONNECTED",
+        detail: "No connected Google Drive account for this experiment's owner",
+      };
+    }
+
+    if (gdrive.tokenExpiresAt > Date.now()) {
+      return { success: true, token: decrypt(gdrive.encryptedToken) };
+    }
+
+    const refreshResult = await refreshGdriveToken(owner, gdrive);
+
+    if (!refreshResult.success) {
+      return { success: false, error: refreshResult.error, detail: refreshResult.detail };
+    }
+
+    return { success: true, token: refreshResult.accessToken };
   },
 
   async createDataContainer(auth: ResolvedAuth, researcherInput: Record<string, unknown>): Promise<ContainerRef> {

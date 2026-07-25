@@ -47,6 +47,18 @@
 // sibling module's convention, so this file mocks global.fetch rather than
 // the "node-fetch" module.
 
+// resolveToken now dispatches through the provider registry
+// (providers/index.js), which registers the osf and gdrive adapters -- and
+// both import their HTTP client from the "node-fetch" package, which is
+// ESM-only with no CJS build for Jest's transform to load. This file never
+// exercises those write paths (it mocks global.fetch for the token
+// endpoint), so node-fetch is mocked out at the module level, exactly as
+// providers-osf.test.js / providers-gdrive.test.js already do.
+jest.mock("node-fetch", () => ({
+  __esModule: true,
+  default: jest.fn(),
+}));
+
 import { initializeApp, getApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { randomUUID } from "crypto";

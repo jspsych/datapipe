@@ -1,3 +1,14 @@
+/**
+ * @jest-environment node
+ */
+
+// Runs in the node environment, not the project-default jsdom: osfProvider
+// now resolves tokens too (osf.ts -> refresh-token.ts -> app.js ->
+// firebase-admin/auth -> jwks-rsa -> jose). Under jsdom, jose resolves to its
+// ESM-only browser build and Jest's CJS transform can't parse it; the node
+// environment picks jose's CJS build. Mirrors resolve-token-gdrive.test.js,
+// which has always carried this docblock for the same reason.
+
 // RED-phase unit tests for step 3b (docs/provider-migration-design.md,
 // scratchpad/step3b-metadata-ref-spec.md), cases 1-2 of the test plan.
 //

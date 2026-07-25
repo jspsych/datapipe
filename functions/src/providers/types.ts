@@ -2,6 +2,12 @@
 // Nothing imports these types yet except the registry; adapters arrive in
 // later build steps, starting with the OSF refactor.
 
+// interfaces.ts imports StorageProviderId/ContainerRef/FileRef/
+// CollisionCacheState/ConnectedAccounts FROM this module, so a value import
+// of UserData here would create a runtime circular dependency. `import type`
+// is erased at compile time and is safe.
+import type { UserData } from "../interfaces.js";
+
 export type StorageProviderId = "osf" | "gdrive" | "figshare" | "dataverse";
 
 export type AuthMethod = "oauth2" | "static-token";
@@ -21,6 +27,14 @@ export interface ResolvedAuth {
   token: string;
   serverUrl?: string;
 }
+
+// Result of resolving a user's stored credential into a usable token. The
+// success variant carries an optional serverUrl for future federated
+// providers (Dataverse) and is structurally assignable to ResolvedAuth above,
+// so callers can pass it straight into adapter write-path calls.
+export type TokenResult =
+  | { success: true; token: string; serverUrl?: string }
+  | { success: false; error: string; detail: string };
 
 // Opaque, provider-shaped reference to the container an experiment writes
 // into (OSF component, Drive folder, Figshare article, Dataverse dataset).
@@ -95,6 +109,11 @@ export interface StorageProvider {
 
   // oauth2 providers only
   oauth?: OAuthEndpointConfig;
+
+  // Decrypts the user's stored credential, checks expiry, and refreshes +
+  // persists as needed. Failures come back as a TokenResult rather than
+  // throwing.
+  resolveToken(userData: UserData, owner: string): Promise<TokenResult>;
 
   // static-token providers only
   validateStaticToken?(auth: ResolvedAuth): Promise<boolean>;

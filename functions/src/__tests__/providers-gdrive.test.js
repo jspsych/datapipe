@@ -1,3 +1,15 @@
+/**
+ * @jest-environment node
+ */
+
+// Runs in the node environment, not the project-default jsdom: the adapters
+// now resolve tokens too (gdrive.ts -> gdrive-oauth.ts, osf.ts ->
+// refresh-token.ts, both -> app.js -> firebase-admin/auth -> jwks-rsa ->
+// jose). Under jsdom, jose resolves to its ESM-only browser build and Jest's
+// CJS transform can't parse it; the node environment picks jose's CJS build.
+// Mirrors resolve-token-gdrive.test.js, which has always carried this
+// docblock for the same reason.
+
 // RED-phase unit tests for step 4a (docs/provider-migration-design.md,
 // scratchpad/step4a-gdrive-adapter-spec.md), cases 1-7 of the test plan.
 //

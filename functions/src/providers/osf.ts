@@ -1,7 +1,9 @@
 import fetch from "node-fetch";
 import putFileOSF from "../put-file-osf.js";
 import updateFileOSF from "../update-file-osf.js";
-import { OSFFile } from "../interfaces.js";
+import { decrypt } from "../crypto-utils.js";
+import { refreshAndUpdateUser } from "../refresh-token.js";
+import { OSFFile, UserData } from "../interfaces.js";
 import {
   StorageProvider,
   ResolvedAuth,
@@ -11,12 +13,17 @@ import {
   WriteResult,
   DownloadResult,
   ProviderErrorCode,
+  TokenResult,
 } from "./types.js";
 
 // The OSF container ref shape — only the filesLink is meaningful to this adapter.
 export interface OSFContainerRef extends ContainerRef {
   provider: "osf";
   filesLink: string;
+}
+
+function hasValidPAT(user_data: UserData): boolean {
+  return user_data.osfTokenValid && !!user_data.osfToken;
 }
 
 function mapStatus(errorCode: number | null): ProviderErrorCode {
@@ -43,6 +50,32 @@ export const osfProvider: StorageProvider = {
     supportsRegion: true,
     maxFileSizeBytes: null,
     quotaNote: null,
+  },
+
+  async resolveToken(user_data: UserData, owner: string): Promise<TokenResult> {
+    if (user_data.usingPersonalToken) {
+      if (!user_data.osfTokenValid) {
+        return { success: false, error: "INVALID_OSF_TOKEN", detail: "The OSF token for this experiment is not valid" };
+      }
+      return { success: true, token: decrypt(user_data.osfToken) };
+    }
+
+    // OAuth path
+    if (Date.now() > user_data.authTokenExpires) {
+      const refreshResult = await refreshAndUpdateUser(owner, decrypt(user_data.refreshToken));
+
+      if (!refreshResult.success) {
+        // Fall back to PAT if available
+        if (hasValidPAT(user_data)) {
+          return { success: true, token: decrypt(user_data.osfToken) };
+        }
+        return { success: false, error: "INVALID_REFRESH_TOKEN", detail: refreshResult.error || "Refresh token is not valid" };
+      }
+
+      return { success: true, token: refreshResult.accessToken! };
+    }
+
+    return { success: true, token: decrypt(user_data.authToken) };
   },
 
   async createDataContainer(): Promise<ContainerRef> {
