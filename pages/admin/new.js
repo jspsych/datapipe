@@ -7,6 +7,7 @@ import { useDocumentData } from "react-firebase-hooks/firestore";
 import Link from "next/link";
 import Router from "next/router";
 import { createExperiment, createProviderExperiment } from "../../lib/experiment-creation";
+import { pickDriveFolder } from "../../lib/google-picker";
 import { STORAGE_PROVIDERS } from "../../lib/provider-config";
 import {
   Button,
@@ -48,6 +49,8 @@ function NewExperimentForm() {
   const [gdriveTitleError, setGdriveTitleError] = useState(false);
   const [gdriveSubmitting, setGdriveSubmitting] = useState(false);
   const [gdriveError, setGdriveError] = useState(null);
+  const [selectedFolder, setSelectedFolder] = useState(null);
+  const [folderPickerLoading, setFolderPickerLoading] = useState(false);
 
   const [data, loading, error] = useDocumentData(doc(db, "users", user.uid));
 
@@ -104,13 +107,67 @@ function NewExperimentForm() {
     }
 
     try {
-      const result = await createProviderExperiment("gdrive", gdriveTitle);
+      const result = await createProviderExperiment(
+        "gdrive",
+        gdriveTitle,
+        selectedFolder?.id
+      );
       Router.push(`/admin/${result.experimentId}`);
     } catch (err) {
       console.error(err);
       setGdriveSubmitting(false);
       setGdriveError(err.message);
     }
+  };
+
+  const handleChooseFolder = async () => {
+    setFolderPickerLoading(true);
+    setGdriveError(null);
+
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        throw new Error("User not authenticated");
+      }
+      const idToken = await user.getIdToken();
+
+      const response = await fetch("/api/getprovideraccesstoken", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: "gdrive",
+          uid: user.uid,
+          idToken,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error || `Failed to get Google Drive access: ${response.status}`
+        );
+      }
+
+      const folder = await pickDriveFolder({
+        accessToken: data.accessToken,
+        apiKey: process.env.NEXT_PUBLIC_GOOGLE_PICKER_API_KEY,
+        appId: process.env.NEXT_PUBLIC_GDRIVE_PROJECT_NUMBER,
+      });
+
+      if (folder) {
+        setSelectedFolder(folder);
+      }
+    } catch (err) {
+      console.error(err);
+      setGdriveError(err.message);
+    } finally {
+      setFolderPickerLoading(false);
+    }
+  };
+
+  const handleClearFolder = () => {
+    setSelectedFolder(null);
   };
 
   return (
@@ -271,6 +328,36 @@ function NewExperimentForm() {
                 <Field.ErrorText color="red.400">
                   This field is required
                 </Field.ErrorText>
+              </Field.Root>
+              <Field.Root>
+                <Field.Label>Parent Drive Folder (optional)</Field.Label>
+                <HStack gap={3}>
+                  <Button
+                    variant="outline"
+                    size="md"
+                    loading={folderPickerLoading}
+                    onClick={handleChooseFolder}
+                  >
+                    Choose Drive folder
+                  </Button>
+                  {selectedFolder && (
+                    <HStack gap={2}>
+                      <Text fontSize="sm">{selectedFolder.name}</Text>
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        onClick={handleClearFolder}
+                      >
+                        Clear
+                      </Button>
+                    </HStack>
+                  )}
+                </HStack>
+                <Field.HelperText color="gray">
+                  {selectedFolder
+                    ? "The experiment's data folder will be created inside this folder."
+                    : "If not set, the experiment's data folder will be created in My Drive/DataPipe."}
+                </Field.HelperText>
               </Field.Root>
               <Button
                 onClick={handleGdriveSubmit}
