@@ -43,6 +43,10 @@ const MESSAGES = {
     error: "PROVIDER_NOT_CONNECTED",
     message: "The experiment owner has not connected an account for this experiment's storage provider",
   },
+  PROVIDER_TOKEN_EXPIRED: {
+    error: "PROVIDER_TOKEN_EXPIRED",
+    message: "The Dataverse API token for this experiment's owner has expired and must be reconnected",
+  },
   INVALID_BASE64_DATA: {
     error: "INVALID_BASE64_DATA",
     message: "The data are not valid base64 data",
