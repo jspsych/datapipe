@@ -4,7 +4,7 @@ import produceMetadata from "./metadata-production.js";
 import { DocumentReference, DocumentData } from "firebase-admin/firestore";
 import { db } from "./app.js";
 import { getProviderForExperiment } from "./providers/index.js";
-import { FileRef, ProviderErrorCode } from "./providers/types.js";
+import { FileRef, ProviderErrorCode, ResolvedAuth } from "./providers/types.js";
 import buildDerivedFiles, { DerivedFile } from "./metadata-derived-files.js";
 import { ExperimentData, Metadata, MetadataResponse } from './interfaces';
 
@@ -37,7 +37,7 @@ const NON_HEALABLE_CODES: ProviderErrorCode[] = ["AUTH_EXPIRED", "RATE_LIMITED",
 
 export default async function blockMetadata(
     exp_data: ExperimentData,
-    token: string,                       // already-resolved provider token (passed by api-data)
+    auth: ResolvedAuth,                  // already-resolved provider auth (passed by api-data)
     metadata_doc_ref: DocumentReference<DocumentData>,
     data: string,
     filename: string,
@@ -97,7 +97,7 @@ try {
       // runs again for this experiment.
       if (metadataFileRef === undefined) {
         const providerFiles = await provider.listFiles(
-          { token },
+          auth,
           container
         );
 
@@ -115,7 +115,7 @@ try {
         const serialized = JSON.stringify(payload, null, 2);
 
         const response = await provider.writeSessionFile(
-          { token },
+          auth,
           container,
           `dataset_description.json`,
           serialized,
@@ -144,7 +144,7 @@ try {
       // both provider styles identically.
       async function performUpdate(fileRef: FileRef, serialized: string) {
         const result = await provider.updateFile(
-          { token },
+          auth,
           container,
           fileRef,
           serialized,
@@ -193,7 +193,7 @@ try {
         metadataMessage = MESSAGES.METADATA_IN_OSF_NOT_IN_FIRESTORE;
 
         //Metadata is downloaded from the provider, and is compared to incoming metadata to produce an updated version.
-        const downloadResult = await provider.downloadFile({ token }, container, metadataFileRef);
+        const downloadResult = await provider.downloadFile(auth, container, metadataFileRef);
 
         if (!downloadResult.success) {
           throw new Error(`Error downloading metadata file: ${downloadResult.providerMessage}`);

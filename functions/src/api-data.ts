@@ -13,7 +13,7 @@ import resolveToken from "./resolve-token.js";
 import queueUpload from "./queue-upload.js";
 import { persistPending, cleanupPending } from "./persist-pending.js";
 import { getProviderForExperiment } from "./providers/index.js";
-import { WriteResult } from "./providers/types.js";
+import { WriteResult, ResolvedAuth } from "./providers/types.js";
 import { claimFilename, confirmClaim, CollisionCacheUnavailableError } from "./collision-cache.js";
 import { ExperimentData, UserData, RequestBody } from './interfaces';
 
@@ -126,7 +126,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
     return;
   }
 
-  const token = tokenResult.token;
+  const auth: ResolvedAuth = { token: tokenResult.token, serverUrl: tokenResult.serverUrl };
 
   //METADATA BLOCK START
 
@@ -140,7 +140,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
     //Creates or references a document containing the metadata for the experiment in the metdata collection on Firestore.
     const metadata_doc_ref: DocumentReference<DocumentData> = db.collection("metadata").doc(experimentID);
 
-    const metadataResponse = await blockMetadata(exp_data, token, metadata_doc_ref, data, filename, metadataOptions);
+    const metadataResponse = await blockMetadata(exp_data, auth, metadata_doc_ref, data, filename, metadataOptions);
 
     if (metadataResponse.success === false) {
       // The pending-data copy is deliberately kept (not cleaned up) here: the
@@ -182,7 +182,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
   let claimResult: Awaited<ReturnType<typeof claimFilename>>;
   try {
     claimResult = await claimFilename(experimentID, filename, claimToken, () =>
-      provider.listFiles({ token }, container)
+      provider.listFiles(auth, container)
     );
   } catch (e) {
     if (e instanceof CollisionCacheUnavailableError) {
@@ -244,7 +244,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
   let result: WriteResult;
   try {
     result = await provider.writeSessionFile(
-      { token },
+      auth,
       container,
       uploadFilename,
       data,
@@ -332,7 +332,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
   // The raw data file is safely in OSF; upload the files derived from it
   // (main data CSV, sidecar CSVs, .psychds-ignore — best-effort: failures are
   // queued for retry and logged, never failing the submission).
-  await uploadDerivedFiles(derivedFiles, derivedTarget, token);
+  await uploadDerivedFiles(derivedFiles, derivedTarget, auth);
 
   res.status(201).json({...MESSAGES.SUCCESS, metadataMessage});
 });

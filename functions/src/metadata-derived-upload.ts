@@ -1,5 +1,5 @@
 import { getProvider } from "./providers/index.js";
-import { StorageProviderId, ContainerRef } from "./providers/types.js";
+import { StorageProviderId, ContainerRef, ResolvedAuth } from "./providers/types.js";
 import queueUpload from "./queue-upload.js";
 import writeLog from "./write-log.js";
 import MESSAGES from "./api-messages.js";
@@ -48,14 +48,14 @@ function contentTypeFor(filename: string): string {
 export async function uploadDerivedFiles(
   files: DerivedFile[],
   target: DerivedUploadTarget,
-  token: string,
+  auth: ResolvedAuth,
 ): Promise<void> {
   const { provider, container } = resolveProviderAndContainer(target);
 
   await Promise.allSettled(files.map(async (file) => {
     try {
       const result = await provider.writeSessionFile(
-        { token },
+        auth,
         container,
         file.filename,
         file.content,

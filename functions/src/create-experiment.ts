@@ -23,7 +23,7 @@ import { db } from "./app.js";
 import { verifyOwnership } from "./connect-provider.js";
 import resolveToken from "./resolve-token.js";
 import { getProvider, listProviders } from "./providers/index.js";
-import { ContainerRef, StorageProviderId } from "./providers/types.js";
+import { ContainerRef, StorageProviderId, ResolvedAuth } from "./providers/types.js";
 import { ExperimentData, UserData } from "./interfaces.js";
 import MESSAGES from "./api-messages.js";
 
@@ -115,10 +115,12 @@ export const createExperiment = onRequest({ cors: true }, async (req, res) => {
       return;
     }
 
+    const auth: ResolvedAuth = { token: tokenResult.token, serverUrl: tokenResult.serverUrl };
+
     let providerContainer: ContainerRef;
     try {
       providerContainer = await storageProvider.createDataContainer(
-        { token: tokenResult.token },
+        auth,
         { name: title, ...(parentFolderId ? { parentId: parentFolderId } : {}) }
       );
     } catch (e) {

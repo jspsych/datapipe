@@ -2,7 +2,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { Timestamp } from "firebase-admin/firestore";
 import { db, storage } from "./app.js";
 import { getProvider } from "./providers/index.js";
-import { ContainerRef, StorageProviderId } from "./providers/types.js";
+import { ContainerRef, StorageProviderId, ResolvedAuth } from "./providers/types.js";
 import resolveToken from "./resolve-token.js";
 import { claimFilename, confirmClaim, CollisionCacheUnavailableError } from "./collision-cache.js";
 import { ExperimentData, UserData } from "./interfaces.js";
@@ -102,14 +102,14 @@ async function processQueueItem(queueDoc: FirebaseFirestore.QueryDocumentSnapsho
   const userData = userDoc.data() as UserData;
   const expData = expDoc.data() as ExperimentData;
 
-  let token: string;
+  let auth: ResolvedAuth;
   try {
     const tokenResult = await resolveToken(userData, expData);
     if (!tokenResult.success) {
       await handleRetryFailure(docRef, data, `Token resolution failed: ${tokenResult.error}`);
       return;
     }
-    token = tokenResult.token;
+    auth = { token: tokenResult.token, serverUrl: tokenResult.serverUrl };
   } catch (e) {
     const detail = e instanceof Error ? e.message : "Unknown error";
     await handleRetryFailure(docRef, data, `Token resolution exception: ${detail}`);
@@ -151,7 +151,7 @@ async function processQueueItem(queueDoc: FirebaseFirestore.QueryDocumentSnapsho
     let claimResult: Awaited<ReturnType<typeof claimFilename>>;
     try {
       claimResult = await claimFilename(data.experimentID, data.filename, data.claimToken, () =>
-        provider.listFiles({ token }, container)
+        provider.listFiles(auth, container)
       );
     } catch (e) {
       if (e instanceof CollisionCacheUnavailableError) {
@@ -178,7 +178,7 @@ async function processQueueItem(queueDoc: FirebaseFirestore.QueryDocumentSnapsho
   // Attempt the upload
   try {
     const result = await provider.writeSessionFile(
-      { token },
+      auth,
       container,
       data.filename,
       fileData,

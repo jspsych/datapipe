@@ -9,7 +9,7 @@ import resolveToken from "./resolve-token.js";
 import queueUpload from "./queue-upload.js";
 import { persistPending, cleanupPending } from "./persist-pending.js";
 import { getProviderForExperiment } from "./providers/index.js";
-import { WriteResult } from "./providers/types.js";
+import { WriteResult, ResolvedAuth } from "./providers/types.js";
 import { claimFilename, confirmClaim, CollisionCacheUnavailableError } from "./collision-cache.js";
 import { ExperimentData, UserData } from './interfaces';
 
@@ -113,7 +113,7 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 
     return;
   }
 
-  const token = tokenResult.token;
+  const auth: ResolvedAuth = { token: tokenResult.token, serverUrl: tokenResult.serverUrl };
 
   const { provider, container } = getProviderForExperiment(exp_data);
 
@@ -124,7 +124,7 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 
   let claimResult: Awaited<ReturnType<typeof claimFilename>>;
   try {
     claimResult = await claimFilename(experimentID, filename, claimToken, () =>
-      provider.listFiles({ token }, container)
+      provider.listFiles(auth, container)
     );
   } catch (e) {
     if (e instanceof CollisionCacheUnavailableError) {
@@ -184,7 +184,7 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 
   let result: WriteResult;
   try {
     result = await provider.writeSessionFile(
-      { token },
+      auth,
       container,
       filename,
       buffer,
