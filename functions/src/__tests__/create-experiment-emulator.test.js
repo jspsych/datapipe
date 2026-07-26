@@ -417,3 +417,87 @@ describe("10. createExperiment with parentFolderId", () => {
     expect(mockDrive.getCreateCount("DataPipe")).toBe(1);
   });
 });
+
+describe("11. createExperiment generic containerInput validation (dataverse)", () => {
+  it("returns 400 naming every missing required field for a dataverse experiment, and creates no experiment doc", async () => {
+    const { uid, idToken } = await signUpEmulatorUser();
+    // Deliberately no connectedAccounts.dataverse seeded, and no
+    // researcherInput sent -- dataverse's containerInput declares
+    // collectionAlias/authorName/contactEmail/description as required (see
+    // providers/dataverse.ts), none of which are present here.
+    const title = `Case11 missing-fields ${randomUUID()}`;
+
+    const { status, body } = await callCreateExperiment({ provider: "dataverse", title, idToken, uid });
+
+    expect(status).toBe(400);
+    expect(body.error).toContain("collectionAlias");
+    expect(body.error).toContain("authorName");
+    expect(body.error).toContain("contactEmail");
+    expect(body.error).toContain("description");
+    // subject is optional -- must NOT be named as missing.
+    expect(body.error).not.toContain("subject");
+    expect((await experimentsForOwner(uid)).length).toBe(0);
+  });
+
+  it("returns 400 before token resolution: the user has no dataverse connection at all, yet the error names missing fields rather than PROVIDER_NOT_CONNECTED", async () => {
+    const { uid, idToken } = await signUpEmulatorUser();
+    // No connectedAccounts.dataverse seeded at all -- if the endpoint
+    // resolved a token before validating containerInput, this would surface
+    // MESSAGES.PROVIDER_NOT_CONNECTED instead. Getting the missing-fields
+    // message proves validation runs first and never reaches resolveToken
+    // (and therefore never reaches any provider HTTP call either).
+    const title = `Case11 no-connection ${randomUUID()}`;
+
+    const { status, body } = await callCreateExperiment({ provider: "dataverse", title, idToken, uid });
+
+    expect(status).toBe(400);
+    expect(body).not.toEqual(expect.objectContaining(MESSAGES.PROVIDER_NOT_CONNECTED));
+    expect(body.error).toContain("Missing required fields for dataverse");
+    expect((await experimentsForOwner(uid)).length).toBe(0);
+  });
+
+  it("succeeds when researcherInput supplies every required dataverse field (regression guard on the happy path, no mock Dataverse server needed since this asserts only the validation gate is passable)", async () => {
+    // This suite has no mock Dataverse HTTP server (createDataContainer would
+    // need to reach a real/mocked installation), so this case only proves
+    // the 400 goes away once every required field is supplied -- pairing
+    // with the two tests above it confirms the gate is neither too strict
+    // nor a no-op. It's expected to fail past validation (no dataverse
+    // account connected, so resolveToken -> PROVIDER_NOT_CONNECTED), which
+    // itself confirms containerInput validation let the request through.
+    const { uid, idToken } = await signUpEmulatorUser();
+    const title = `Case11 complete-fields ${randomUUID()}`;
+
+    const { status, body } = await callCreateExperiment({
+      provider: "dataverse",
+      title,
+      idToken,
+      uid,
+      researcherInput: {
+        collectionAlias: "my-lab",
+        authorName: "Lastname, Firstname",
+        contactEmail: "you@example.edu",
+        description: "A test dataset",
+      },
+    });
+
+    expect(status).toBe(400);
+    expect(body).toEqual(expect.objectContaining(MESSAGES.PROVIDER_NOT_CONNECTED));
+    expect((await experimentsForOwner(uid)).length).toBe(0);
+  });
+});
+
+describe("12. createExperiment gdrive with only a title (regression: gdrive's single containerInput field is optional)", () => {
+  it("succeeds with no parentFolderId and no researcherInput at all", async () => {
+    const { uid, idToken } = await signUpEmulatorUser();
+    await seedGdriveUser(uid);
+    const title = `Case12 ${randomUUID()}`;
+
+    const { status, body } = await callCreateExperiment({ provider: "gdrive", title, idToken, uid });
+
+    expect(status).toBe(200);
+    expect(body.success).toBe(true);
+    const folderId = mockDrive.getFolderId(title);
+    expect(typeof folderId).toBe("string");
+    expect(body.providerContainer).toEqual({ provider: "gdrive", folderId });
+  });
+});

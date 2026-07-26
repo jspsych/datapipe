@@ -60,6 +60,7 @@ export const createExperiment = onRequest({ cors: true }, async (req, res) => {
       uid,
       experimentSettings,
       parentFolderId,
+      researcherInput,
     }: {
       provider?: string;
       title?: string;
@@ -69,8 +70,17 @@ export const createExperiment = onRequest({ cors: true }, async (req, res) => {
       // Researcher-chosen Drive folder (via the Picker) to create the
       // experiment's data folder under, instead of the default DataPipe
       // root. Optional and provider-shaped -- createDataContainer ignores it
-      // for providers that don't understand a parentId.
+      // for providers that don't understand a parentId. This is a LEGACY
+      // wire param that predates the generic containerInput mechanism below;
+      // new providers use researcherInput instead, but this must keep
+      // working because the shipped Drive-picker client sends it and
+      // several tests pin the wire name.
       parentFolderId?: string;
+      // Generic, provider-shaped researcher input for createDataContainer
+      // (e.g. collectionAlias/authorName/... for Dataverse). Validated below
+      // against the target provider's declared containerInput fields --
+      // create-experiment never names a specific provider's shape.
+      researcherInput?: Record<string, unknown>;
     } = req.body || {};
 
     if (!provider || !title || !uid) {
@@ -96,6 +106,34 @@ export const createExperiment = onRequest({ cors: true }, async (req, res) => {
 
     const storageProvider = getProvider(provider as StorageProviderId);
 
+    // Build the container input generically -- no provider is ever named
+    // here. `title` is always injected: every provider needs a human name
+    // for its container, and gdrive's adapter reads it as `name`.
+    const containerInput: Record<string, unknown> = {
+      name: title,
+      title,
+      ...(researcherInput || {}),
+    };
+    // Legacy wire param: this predates the containerInput mechanism above.
+    // The shipped Drive-picker client sends parentFolderId at the top level
+    // (not inside researcherInput), so fold it in unconditionally -- no
+    // provider branch, just "if this legacy field was sent, map it in".
+    // New providers use researcherInput instead.
+    if (parentFolderId) {
+      containerInput.parentId = parentFolderId;
+    }
+
+    // Validate against the provider's declared containerInput spec BEFORE
+    // resolving a token -- no point refreshing/decrypting a credential for a
+    // request that cannot possibly succeed.
+    const missing = storageProvider.containerInput
+      .filter((f) => f.required && !containerInput[f.name])
+      .map((f) => f.name);
+    if (missing.length > 0) {
+      res.status(400).json({ error: `Missing required fields for ${provider}: ${missing.join(", ")}` });
+      return;
+    }
+
     const userDocRef = db.doc(`users/${uid}`);
     const userDoc = await userDocRef.get();
     // A freshly-signed-up user may have no Firestore doc yet -- treat that
@@ -119,10 +157,7 @@ export const createExperiment = onRequest({ cors: true }, async (req, res) => {
 
     let providerContainer: ContainerRef;
     try {
-      providerContainer = await storageProvider.createDataContainer(
-        auth,
-        { name: title, ...(parentFolderId ? { parentId: parentFolderId } : {}) }
-      );
+      providerContainer = await storageProvider.createDataContainer(auth, containerInput);
     } catch (e) {
       const detail = e instanceof Error ? e.message : "Unknown error";
       res.status(502).json({ error: "Failed to create storage container", detail });

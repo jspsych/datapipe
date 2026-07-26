@@ -55,6 +55,11 @@ export const osfProvider: StorageProvider = {
     quotaNote: null,
   },
 
+  // OSF creation stays entirely browser-driven (see lib/experiment-creation.js)
+  // and its createDataContainer below throws "not implemented" -- there is no
+  // researcher input for create-experiment to collect or validate.
+  containerInput: [],
+
   async resolveToken(user_data: UserData, owner: string): Promise<TokenResult> {
     if (user_data.usingPersonalToken) {
       if (!user_data.osfTokenValid) {

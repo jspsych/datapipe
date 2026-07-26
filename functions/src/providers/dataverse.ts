@@ -169,6 +169,14 @@ export const dataverseProvider: StorageProvider = {
     quotaNote: "File size and storage limits are set by the researcher's hosting Dataverse installation",
   },
 
+  containerInput: [
+    { name: "collectionAlias", label: "Collection alias", required: true, placeholder: "my-lab" },
+    { name: "authorName", label: "Author name", required: true, placeholder: "Lastname, Firstname" },
+    { name: "contactEmail", label: "Contact email", required: true, placeholder: "you@example.edu" },
+    { name: "description", label: "Description", required: true, inputType: "textarea" },
+    { name: "subject", label: "Subject", required: false, placeholder: "Social Sciences" },
+  ],
+
   async resolveToken(userData: UserData, _owner: string): Promise<TokenResult> {
     // _owner is unused: Dataverse is a static-token provider with no refresh
     // token to rotate, so there is no persist-back step the way gdrive's

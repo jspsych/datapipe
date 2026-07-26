@@ -104,10 +104,32 @@ export interface OAuthConfig {
   extraAuthParams: Record<string, string>;
 }
 
+// Describes one researcher-supplied value createDataContainer needs beyond
+// the experiment title (which create-experiment always injects itself).
+// This is the SERVER-side source of truth: create-experiment validates a
+// createDataContainer request generically against a provider's
+// containerInput list, so it never needs to name a specific provider or know
+// its researcherInput shape, and adding a new provider never requires
+// editing that endpoint.
+export interface ContainerInputField {
+  name: string;
+  label: string;
+  required: boolean;
+  placeholder?: string;
+  // "hidden" means the client supplies this through a bespoke UI (gdrive's
+  // Google Picker) rather than a rendered text field.
+  inputType?: "text" | "textarea" | "hidden";
+}
+
 export interface StorageProvider {
   id: StorageProviderId;
   authMethod: AuthMethod;
   capabilities: ProviderCapabilities;
+
+  // The researcher-supplied fields this provider's createDataContainer needs
+  // beyond the experiment title. See ContainerInputField above -- this is
+  // the SERVER-side source of truth create-experiment validates against.
+  containerInput: ContainerInputField[];
 
   // Optional because only providers on the generic OAuth2 storage-GRANT flow
   // have one. OSF deliberately does not -- its OAuth is a separate legacy

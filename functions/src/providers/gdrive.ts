@@ -200,6 +200,12 @@ export const gdriveProvider: StorageProvider = {
     quotaNote: "Free Google accounts share 15 GB across Drive, Gmail, and Photos",
   },
 
+  // Supplied by the Google Picker (a bespoke UI), not a rendered text field --
+  // hence inputType "hidden" rather than "text".
+  containerInput: [
+    { name: "parentId", label: "Parent folder", required: false, inputType: "hidden" },
+  ],
+
   // A method rather than a static object so env vars are read at CALL time,
   // not module load -- same reason as getApiBase() above.
   oauthConfig(): OAuthConfig {
