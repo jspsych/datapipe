@@ -269,10 +269,32 @@ export const connectStaticTokenProvider = onRequest({ cors: true }, async (req, 
       return;
     }
 
+    // Best-effort: if the provider can report its credential's expiry (only
+    // Dataverse does today), fetch it now and persist it so resolveToken's
+    // PROVIDER_TOKEN_EXPIRED branch -- previously dead, since nothing ever
+    // set tokenExpiresAt -- actually has data to act on. A failure or an
+    // unknown (null) expiry here MUST NOT fail the connect: the token was
+    // already validated above, and "we don't know when this expires" is not
+    // an error, just the same omitted-field state the endpoint always had.
+    let tokenExpiresAt: number | null = null;
+    if (storageProvider.staticTokenExpiry) {
+      try {
+        tokenExpiresAt = await storageProvider.staticTokenExpiry({ token, serverUrl: normalizedServerUrl });
+      } catch (e) {
+        console.error(
+          'Static token expiry check error:',
+          e instanceof Error ? e.message : 'Unknown error'
+        );
+        tokenExpiresAt = null;
+      }
+    }
+
     // Same dot-path persist convention as connectProvider: set()+mergeFields
     // creates users/{uid} if absent and leaves sibling provider connections
-    // untouched. tokenExpiresAt is deliberately omitted -- Dataverse does not
-    // tell us the expiry at connect time, and the field is optional.
+    // untouched. tokenExpiresAt is included only when it resolved to a
+    // number -- Firestore rejects undefined, and resolveToken already treats
+    // a missing tokenExpiresAt as "no known expiry", so omitting it entirely
+    // when unknown is correct, not a gap.
     const fieldPath = `connectedAccounts.${provider}`;
     await db.doc(`users/${uid}`).set(
       {
@@ -281,6 +303,7 @@ export const connectStaticTokenProvider = onRequest({ cors: true }, async (req, 
             authMethod: 'static-token',
             encryptedToken: encrypt(token),
             serverUrl: normalizedServerUrl,
+            ...(tokenExpiresAt !== null ? { tokenExpiresAt } : {}),
           },
         },
       },

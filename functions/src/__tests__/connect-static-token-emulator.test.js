@@ -181,6 +181,59 @@ describe("connectStaticTokenProvider", () => {
     expect(mockFetch).toHaveBeenCalledWith(`${SERVER_URL}/api/users/:me`, expect.anything());
   });
 
+  it("persists tokenExpiresAt when staticTokenExpiry resolves a number", async () => {
+    const { uid, idToken } = await signUpEmulatorUser();
+    // First call is validateStaticToken (/api/users/:me); second is the new
+    // staticTokenExpiry call (/api/users/token) connect-provider.ts now makes
+    // after a successful validation.
+    mockFetch.mockResolvedValueOnce({ status: 200 });
+    mockFetch.mockResolvedValueOnce({
+      status: 200,
+      json: () =>
+        Promise.resolve({
+          status: "OK",
+          data: { message: "Token 72211678-a30c-4523-81bf-e703c904656e expires on 2027-07-26 14:14:52.317" },
+        }),
+    });
+
+    const { status, body } = await callConnectStaticTokenProvider({
+      provider: "dataverse",
+      uid,
+      idToken,
+      token: "plaintext-dataverse-api-token",
+      serverUrl: SERVER_URL,
+    });
+
+    expect(status).toBe(200);
+    expect(body).toEqual({ success: true, provider: "dataverse" });
+
+    const userData = await getUserData(uid);
+    const dataverse = userData.connectedAccounts.dataverse;
+    expect(typeof dataverse.tokenExpiresAt).toBe("number");
+    expect(new Date(dataverse.tokenExpiresAt).getUTCFullYear()).toBe(2027);
+  });
+
+  it("persists no tokenExpiresAt field when staticTokenExpiry resolves null, and still succeeds", async () => {
+    const { uid, idToken } = await signUpEmulatorUser();
+    mockFetch.mockResolvedValueOnce({ status: 200 }); // validateStaticToken succeeds
+    mockFetch.mockResolvedValueOnce({ status: 404 }); // staticTokenExpiry fails open -> null
+
+    const { status, body } = await callConnectStaticTokenProvider({
+      provider: "dataverse",
+      uid,
+      idToken,
+      token: "plaintext-dataverse-api-token",
+      serverUrl: SERVER_URL,
+    });
+
+    expect(status).toBe(200);
+    expect(body).toEqual({ success: true, provider: "dataverse" });
+
+    const userData = await getUserData(uid);
+    const dataverse = userData.connectedAccounts.dataverse;
+    expect(dataverse).not.toHaveProperty("tokenExpiresAt");
+  });
+
   it("rejects an invalid token with 400 and persists nothing", async () => {
     const { uid, idToken } = await signUpEmulatorUser();
     mockFetch.mockResolvedValueOnce({ status: 401 });

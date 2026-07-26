@@ -193,6 +193,42 @@ export function supportsTabIngest(rawVersion: string): boolean | null {
   return minor >= 11;
 }
 
+// How far ahead of a token's expiry setupWarnings starts telling researchers
+// to recreate + reconnect. 60 days: long enough to act on for a study that
+// might otherwise run unattended for months, short enough that the warning
+// doesn't fire a whole year early.
+const TOKEN_EXPIRY_WARNING_MS = 60 * 24 * 60 * 60 * 1000;
+
+// Extracts the expiry timestamp Dataverse embeds in an ENGLISH SENTENCE --
+// there is no structured field anywhere in GET /api/users/token. Verified
+// live, 2026-07-26: {"status":"OK","data":{"message":"Token <uuid> expires
+// on 2027-07-26 14:14:52.317"}}. The server source is literally
+// `ok(String.format("Token %s expires on %s", token.getTokenString(),
+// token.getExpireTime()))` -- so this is parsing prose, not a contract.
+//
+// Two deliberate trade-offs, both accepted:
+//  1. The timestamp is Java `Timestamp.toString()` format: "yyyy-MM-dd
+//     HH:mm:ss.SSS" -- a SPACE, not "T", and NO TIMEZONE. It's the server's
+//     local time, which we have no way to know, so the result can be off by
+//     up to a day. That's fine for a 60-day-ahead warning and must never be
+//     presented as precise.
+//  2. Parsing a date out of prose is inherently brittle -- if a future
+//     Dataverse version rewords this message, this silently returns null
+//     rather than throwing. That's an accepted fail-open trade-off: an
+//     unparseable expiry means no expiry warning, not a broken connect/setup
+//     flow.
+export function parseTokenExpiry(message: string): number | null {
+  const match = /expires on\s+(.+?)\s*$/.exec(message);
+  if (!match) {
+    return null;
+  }
+  // Normalize Java's space-separated, timezone-less format into something
+  // Date can parse: "2027-07-26 14:14:52.317" -> "2027-07-26T14:14:52.317".
+  const isoish = match[1].replace(" ", "T");
+  const ms = new Date(isoish).getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
+
 interface AddFileResponseBody {
   status?: string;
   data?: {
@@ -264,6 +300,41 @@ export const dataverseProvider: StorageProvider = {
     // Never throw on a non-200 -- a bad/expired token is simply "not valid",
     // not an exceptional condition.
     return response.status === 200;
+  },
+
+  // Reads the token's expiry from the one endpoint that reports it, GET
+  // /api/users/token. Never throws -- a non-200, unexpected body shape, or a
+  // message parseTokenExpiry can't parse all just mean "unknown expiry",
+  // which callers (connect-provider.ts, setupWarnings below) treat as null,
+  // not an error.
+  async staticTokenExpiry(auth: ResolvedAuth): Promise<number | null> {
+    try {
+      const serverUrl = resolveServerUrl(auth);
+      const response = await fetch(`${serverUrl}/api/users/token`, {
+        method: "GET",
+        headers: authHeaders(auth),
+      });
+
+      if (response.status !== 200) {
+        console.warn(`dataverse staticTokenExpiry: /api/users/token returned ${response.status}`);
+        return null;
+      }
+
+      const body = (await response.json()) as { data?: { message?: string } };
+      const message = body.data?.message;
+      if (!message) {
+        console.warn("dataverse staticTokenExpiry: unexpected /api/users/token response shape");
+        return null;
+      }
+
+      return parseTokenExpiry(message);
+    } catch (e) {
+      console.warn(
+        "dataverse staticTokenExpiry: failed to check token expiry:",
+        e instanceof Error ? e.message : "Unknown error"
+      );
+      return null;
+    }
   },
 
   async createDataContainer(auth: ResolvedAuth, researcherInput: Record<string, unknown>): Promise<ContainerRef> {
@@ -524,8 +595,13 @@ export const dataverseProvider: StorageProvider = {
   // every write -- a one-time, non-blocking advisory so a researcher on an
   // old installation finds out now, rather than discovering months later
   // that every CSV they thought was raw got converted to Dataverse's
-  // archival .tab format.
+  // archival .tab format. Runs the version check and the expiry check
+  // independently so BOTH warnings can be returned together (e.g. an old,
+  // soon-to-expire installation) -- one check failing/failing-open must
+  // never suppress the other's warning.
   async setupWarnings(auth: ResolvedAuth): Promise<string[]> {
+    const warnings: string[] = [];
+
     try {
       const serverUrl = resolveServerUrl(auth);
 
@@ -542,33 +618,28 @@ export const dataverseProvider: StorageProvider = {
         console.warn(
           `dataverse setupWarnings: /api/info/version returned ${response.status}, failing open (no warning)`
         );
-        return [];
+      } else {
+        const body = (await response.json()) as { status?: string; data?: { version?: string } };
+        const version = body.data?.version;
+        if (body.status !== "OK" || !version) {
+          console.warn(
+            "dataverse setupWarnings: unexpected /api/info/version response shape, failing open (no warning)"
+          );
+        } else {
+          const supported = supportsTabIngest(version);
+          if (supported === null) {
+            console.warn(
+              `dataverse setupWarnings: could not parse version "${version}", failing open (no warning)`
+            );
+          } else if (!supported) {
+            warnings.push(
+              `This Dataverse installation reports version ${version}, which predates Dataverse 5.11. ` +
+                "Tabular-ingest suppression is unavailable on installations older than 5.11, so CSV files " +
+                "uploaded to this dataset will be converted to Dataverse's archival .tab format. JSON data is unaffected."
+            );
+          }
+        }
       }
-
-      const body = (await response.json()) as { status?: string; data?: { version?: string } };
-      const version = body.data?.version;
-      if (body.status !== "OK" || !version) {
-        console.warn(
-          "dataverse setupWarnings: unexpected /api/info/version response shape, failing open (no warning)"
-        );
-        return [];
-      }
-
-      const supported = supportsTabIngest(version);
-      if (supported === null) {
-        console.warn(`dataverse setupWarnings: could not parse version "${version}", failing open (no warning)`);
-        return [];
-      }
-
-      if (supported) {
-        return [];
-      }
-
-      return [
-        `This Dataverse installation reports version ${version}, which predates Dataverse 5.11. ` +
-          "Tabular-ingest suppression is unavailable on installations older than 5.11, so CSV files " +
-          "uploaded to this dataset will be converted to Dataverse's archival .tab format. JSON data is unaffected.",
-      ];
     } catch (e) {
       // FAIL OPEN, DELIBERATELY. This runs every time a researcher sets up
       // an experiment against this provider, not once -- so a transient
@@ -582,8 +653,35 @@ export const dataverseProvider: StorageProvider = {
         "dataverse setupWarnings: failed to check installation version, failing open (no warning):",
         e instanceof Error ? e.message : "Unknown error"
       );
-      return [];
     }
+
+    // Expiry is fetched LIVE via staticTokenExpiry rather than read from the
+    // stored tokenExpiresAt -- a researcher who recreates their token on the
+    // Dataverse installation moves the expiry out by another year, and the
+    // stored value (set once, at connect time) would otherwise be stale and
+    // pessimistically warn about an expiry that no longer applies.
+    // Non-null assertion: staticTokenExpiry is defined a few lines up on this
+    // same object literal -- it's only optional in the StorageProvider
+    // interface for providers that don't implement it at all.
+    const expiresAt = await dataverseProvider.staticTokenExpiry!(auth);
+    if (expiresAt !== null) {
+      const now = Date.now();
+      if (expiresAt < now) {
+        warnings.push(
+          "The API token for this Dataverse installation has expired and must be recreated and reconnected " +
+            "before data can be saved to this experiment."
+        );
+      } else if (expiresAt - now < TOKEN_EXPIRY_WARNING_MS) {
+        const expiryDate = new Date(expiresAt).toISOString().slice(0, 10);
+        warnings.push(
+          `The API token for this Dataverse installation expires on ${expiryDate}. It must be recreated and ` +
+            "reconnected before then, or data can no longer be saved to this experiment. Dataverse does not " +
+            "surface this expiry anywhere in its own UI."
+        );
+      }
+    }
+
+    return warnings;
   },
 
   async downloadFile(

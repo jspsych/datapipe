@@ -16,7 +16,7 @@ jest.mock("node-fetch", () => ({
   default: (...args) => mockFetch(...args),
 }));
 
-import { dataverseProvider, supportsTabIngest } from "../../lib/providers/dataverse.js";
+import { dataverseProvider, supportsTabIngest, parseTokenExpiry } from "../../lib/providers/dataverse.js";
 
 const SERVER_URL = "https://dataverse.mock.test";
 
@@ -875,14 +875,28 @@ describe("10. supportsTabIngest (version parsing, lenient by design)", () => {
 });
 
 describe("11. setupWarnings", () => {
-  it("returns [] when the installation reports a version >= 5.11", async () => {
+  it("returns [] when the installation reports a version >= 5.11 and the token isn't near expiry", async () => {
     mockFetch.mockResolvedValueOnce(
       mockResponse({ status: 200, statusText: "OK", jsonBody: { status: "OK", data: { version: "6.11" } } })
+    );
+    // setupWarnings also runs the (independent) expiry check -- see suite
+    // 12 below -- so a second call against /api/users/token happens here
+    // too. A far-future expiry keeps this scenario warning-free.
+    const farFuture = new Date(Date.now() + 2 * 365 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .replace("T", " ")
+      .replace("Z", "");
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({
+        status: 200,
+        statusText: "OK",
+        jsonBody: { status: "OK", data: { message: `Token abc expires on ${farFuture}` } },
+      })
     );
 
     const result = await dataverseProvider.setupWarnings(auth);
 
-    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
     const { url, options } = callArgs(0);
     expect(url).toBe(`${SERVER_URL}/api/info/version`);
     expect(options.method).toBe("GET");
@@ -920,6 +934,136 @@ describe("11. setupWarnings", () => {
     const result = await dataverseProvider.setupWarnings(auth);
 
     expect(result).toEqual([]);
+  });
+
+  it("returns an expiry warning naming the date when the token expires within 60 days", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 200, statusText: "OK", jsonBody: { status: "OK", data: { version: "6.11" } } })
+    );
+    const tenDaysOut = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000);
+    const message = `Token abc expires on ${tenDaysOut.toISOString().slice(0, 10)} 14:14:52.317`;
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 200, statusText: "OK", jsonBody: { status: "OK", data: { message } } })
+    );
+
+    const result = await dataverseProvider.setupWarnings(auth);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toContain(tenDaysOut.toISOString().slice(0, 10));
+    expect(result[0]).toMatch(/recreated and reconnected/i);
+  });
+
+  it("returns an expired-token warning when the token's expiry is in the past", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 200, statusText: "OK", jsonBody: { status: "OK", data: { version: "6.11" } } })
+    );
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const message = `Token abc expires on ${yesterday.toISOString().slice(0, 10)} 14:14:52.317`;
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 200, statusText: "OK", jsonBody: { status: "OK", data: { message } } })
+    );
+
+    const result = await dataverseProvider.setupWarnings(auth);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatch(/expired/i);
+    expect(result[0]).toMatch(/recreated and reconnected/i);
+  });
+
+  it("returns no expiry warning when the token expires 2 years out", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 200, statusText: "OK", jsonBody: { status: "OK", data: { version: "6.11" } } })
+    );
+    const twoYearsOut = new Date(Date.now() + 2 * 365 * 24 * 60 * 60 * 1000);
+    const message = `Token abc expires on ${twoYearsOut.toISOString().slice(0, 10)} 14:14:52.317`;
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 200, statusText: "OK", jsonBody: { status: "OK", data: { message } } })
+    );
+
+    const result = await dataverseProvider.setupWarnings(auth);
+
+    expect(result).toEqual([]);
+  });
+
+  it("returns BOTH warnings when an old version AND a near expiry apply together", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 200, statusText: "OK", jsonBody: { status: "OK", data: { version: "5.10" } } })
+    );
+    const tenDaysOut = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000);
+    const message = `Token abc expires on ${tenDaysOut.toISOString().slice(0, 10)} 14:14:52.317`;
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 200, statusText: "OK", jsonBody: { status: "OK", data: { message } } })
+    );
+
+    const result = await dataverseProvider.setupWarnings(auth);
+
+    expect(result).toHaveLength(2);
+    expect(result.some((w) => /5\.10/.test(w) && /5\.11/i.test(w))).toBe(true);
+    expect(result.some((w) => w.includes(tenDaysOut.toISOString().slice(0, 10)))).toBe(true);
+  });
+});
+
+describe("12. parseTokenExpiry", () => {
+  it("parses the real live-verified message into a time in 2027", () => {
+    const ms = parseTokenExpiry("Token 72211678-a30c-4523-81bf-e703c904656e expires on 2027-07-26 14:14:52.317");
+
+    expect(ms).not.toBeNull();
+    expect(new Date(ms).getUTCFullYear()).toBe(2027);
+  });
+
+  it("returns null for a reworded message", () => {
+    expect(parseTokenExpiry("Your token will no longer be valid after 2027-07-26 14:14:52.317")).toBeNull();
+  });
+
+  it("returns null for an empty string", () => {
+    expect(parseTokenExpiry("")).toBeNull();
+  });
+
+  it("returns null for a message with an unparseable date", () => {
+    expect(parseTokenExpiry("Token abc expires on not-a-real-date")).toBeNull();
+  });
+});
+
+describe("13. staticTokenExpiry", () => {
+  it("returns epoch ms on a 200 response with a valid message", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({
+        status: 200,
+        statusText: "OK",
+        jsonBody: {
+          status: "OK",
+          data: { message: "Token 72211678-a30c-4523-81bf-e703c904656e expires on 2027-07-26 14:14:52.317" },
+        },
+      })
+    );
+
+    const result = await dataverseProvider.staticTokenExpiry(auth);
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const { url, options } = callArgs(0);
+    expect(url).toBe(`${SERVER_URL}/api/users/token`);
+    expect(options.method).toBe("GET");
+    expect(header(options.headers, "X-Dataverse-key")).toBe("test-token");
+    expect(result).not.toBeNull();
+    expect(new Date(result).getUTCFullYear()).toBe(2027);
+  });
+
+  it("returns null on a 404", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 404, statusText: "Not Found", jsonBody: { status: "ERROR", message: "not found" } })
+    );
+
+    const result = await dataverseProvider.staticTokenExpiry(auth);
+
+    expect(result).toBeNull();
+  });
+
+  it("returns null (never throws) when fetch rejects", async () => {
+    mockFetch.mockRejectedValueOnce(new Error("network down"));
+
+    const result = await dataverseProvider.staticTokenExpiry(auth);
+
+    expect(result).toBeNull();
   });
 });
 

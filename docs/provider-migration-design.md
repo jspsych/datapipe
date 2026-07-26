@@ -51,9 +51,14 @@ already provider-agnostic and requiring no change. The OSF-specific surface:
    the account, DataPipe never holds a password, access must survive unattended
    for the life of a study (months). **Deliberately relaxed for Dataverse**,
    which only offers static API tokens: accepted because DataPipe already
-   maintains an equivalent PAT path for OSF, but Dataverse tokens expire
-   (commonly yearly, installation-configurable), so the unattended-for-months
-   constraint requires expiry-warning UX, not just token storage.
+   maintains an equivalent PAT path for OSF, but Dataverse tokens expire one
+   year after creation (`generateApiTokenForUser(au, INTERVAL.YEARS, 1)`,
+   verified live: a token created 2026-07-26 reports expiry 2027-07-26) —
+   effectively fixed, no admin setting found that exposes a different
+   lifetime — so the unattended-for-months constraint requires expiry-warning
+   UX, not just token storage. The Dataverse UI never surfaces this expiry;
+   only `GET /api/users/token` does, and DataPipe now reads it at connect
+   time and warns again at experiment setup.
 2. A file-write API that handles **binary media as well as text** — the
    `/api/base64` path (audio/video recordings) is in scope for all providers
    from day one, so per-provider file-size caps and quota behavior are launch
@@ -248,7 +253,7 @@ handling) carry over unchanged — already provider-agnostic.
 | | Google Drive | Figshare | Dataverse |
 |---|---|---|---|
 | Auth | OAuth2, `drive.file` scope | OAuth2, `authorization_code` + `refresh_token` | Static API token — same shape as today's OSF PAT fallback (`usingPersonalToken`) |
-| Auth longevity | Refresh tokens are revoked after ~6 months of disuse — paused studies need reconnect UX. App must reach **published** OAuth verification status: testing mode means 7-day refresh tokens and a 100-user cap | Long-lived; confirm rotation/expiry behavior in the spike | Tokens **expire** (commonly yearly, installation-configurable) — needs expiry-warning UX, not just storage |
+| Auth longevity | Refresh tokens are revoked after ~6 months of disuse — paused studies need reconnect UX. App must reach **published** OAuth verification status: testing mode means 7-day refresh tokens and a 100-user cap | Long-lived; confirm rotation/expiry behavior in the spike | Tokens **expire one year after creation**, effectively fixed — no admin setting found that exposes a different lifetime (confirmed via `generateApiTokenForUser(au, INTERVAL.YEARS, 1)`; a search of `SettingsServiceBean`'s key enum found only `MinutesUntilConfirmEmailTokenExpires`, which is email confirmation, not API tokens). The Dataverse UI does not surface this expiry at all — only `GET /api/users/token` does, which DataPipe now reads at connect time and warns on again at experiment setup — needs expiry-warning UX, not just storage |
 | Container | **App-created "DataPipe" folder at Drive root.** Under `drive.file` the app can only touch files it created or the user explicitly picked — a researcher-picked parent would force a Google Picker frontend integration for little gain. Revisit only if researchers demand placement control | Article inside a Project (two levels only) | Dataset inside a Collection |
 | Subfolders | Native | **None** — filename-prefix fallback, surfaced in UI as a known limitation | Native via `directoryLabel` |
 | Media / size limits | Free quota is 15 GB **shared with Gmail/Photos** — quota exhaustion is an expected support scenario for audio/video studies, not an edge case | Per-file and total-quota caps on the free tier; upload is a multi-step multipart flow (initiate → parts → complete) with correspondingly more failure modes; no in-place update (delete + re-upload) | Per-installation size caps (federation → varies); CSV uploads are **"ingested"** into archival `.tab` format unless suppressed via `tabIngest`, which requires **Dataverse >= 5.11** (released 2022-06-13); older installations silently ignore it. The adapter's `setupWarnings` checks `/api/info/version` and warns at experiment setup |

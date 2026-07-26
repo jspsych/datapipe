@@ -165,6 +165,12 @@ export interface StorageProvider {
   // static-token providers only
   validateStaticToken?(auth: ResolvedAuth): Promise<boolean>;
 
+  // static-token providers only. Returns the credential's absolute expiry as
+  // epoch milliseconds, or null when the provider does not report one or it
+  // cannot be determined. Never throws -- callers treat null as "unknown"
+  // and must not fail on it.
+  staticTokenExpiry?(auth: ResolvedAuth): Promise<number | null>;
+
   // Optional, non-blocking, researcher-facing advisories checked when an
   // experiment is being set up against this provider (see
   // provider-setup-warnings.ts). Returns human-readable strings for the UI
