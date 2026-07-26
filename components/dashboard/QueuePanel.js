@@ -13,7 +13,35 @@ import {
 import { Download } from "lucide-react";
 import { auth } from "../../lib/firebase";
 
-function friendlyReason(reason) {
+// Copy keyed off the provider-agnostic error taxonomy that adapters map their
+// own failures into (functions/src/providers/types.ts's ProviderErrorCode).
+// This is the preferred classification: guessing from an HTTP status (below)
+// was an OSF-era assumption that does not survive other providers -- Dataverse
+// returns 400 for BOTH write contention and quota-exceeded, so a status-based
+// map either mislabels them or, as before this change, shows the researcher a
+// raw string like "Provider error 400: Failed to add file to dataset."
+const PROVIDER_ERROR_COPY = {
+  // Contention is routine and self-resolving: some providers (Dataverse)
+  // accept only one write per container at a time, so simultaneous
+  // submissions collide. The retry lands within a couple of minutes, so this
+  // copy is deliberately reassuring rather than alarming.
+  CONTENTION:
+    "Your storage provider was busy with another upload from this experiment. This is normal when several participants finish at once, and it is being retried automatically.",
+  RATE_LIMITED: "Your storage provider rate-limited the request.",
+  AUTH_EXPIRED:
+    "Authentication error. Your storage provider connection may need to be refreshed.",
+  QUOTA_EXCEEDED:
+    "Your storage provider is out of space, or this file is larger than it allows.",
+  NAME_CONFLICT:
+    "A file with this name already exists in your storage provider.",
+  UNAVAILABLE: "Your storage provider was temporarily unavailable.",
+};
+
+// Fallback for queue docs written before providerErrorCode was stored on them,
+// and for failures that never reached the provider at all (interrupted
+// uploads, collision-cache and metadata problems), which carry no taxonomy
+// code.
+function legacyFriendlyReason(reason) {
   if (!reason) return null;
   if (reason.includes("interrupted upload") || reason.includes("memory limit")) {
     return "Upload was interrupted by a server restart or memory limit.";
@@ -34,6 +62,12 @@ function friendlyReason(reason) {
     return "Authentication error. Your storage provider connection may need to be refreshed.";
   }
   return reason;
+}
+
+function friendlyReason(entry) {
+  const copy = PROVIDER_ERROR_COPY[entry?.providerErrorCode];
+  if (copy) return copy;
+  return legacyFriendlyReason(entry?.failureReason);
 }
 
 function statusBadge(status) {
@@ -247,7 +281,7 @@ export default function QueuePanel({ entries, experimentId }) {
                 </Table.Cell>
                 <Table.Cell>
                   <Text fontSize="xs">
-                    {friendlyReason(entry.failureReason) || "\u2014"}
+                    {friendlyReason(entry) || "\u2014"}
                   </Text>
                 </Table.Cell>
                 <Table.Cell>

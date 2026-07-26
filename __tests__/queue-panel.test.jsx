@@ -38,6 +38,40 @@ const entries = [
   },
 ];
 
+// Entries carrying the provider-agnostic taxonomy code, which is now the
+// preferred classification. The three above deliberately have NO
+// providerErrorCode -- they pin the legacy status/string fallback for queue
+// docs written before that field existed.
+const codedEntries = [
+  {
+    id: "c1",
+    filename: "sub-10_data.csv",
+    status: "pending",
+    providerErrorCode: "CONTENTION",
+    // A raw, alarming reason that must NOT reach the researcher now that a
+    // taxonomy code is present.
+    failureReason: "Provider error 400: Failed to add file to dataset.",
+    createdAt: new Date(),
+    nextRetryAt: null,
+  },
+  {
+    id: "c2",
+    filename: "sub-11_data.csv",
+    status: "failed",
+    providerErrorCode: "QUOTA_EXCEEDED",
+    failureReason: "Provider error 400: This file size (2.0 GB) exceeds the size limit of 1.0 GB.",
+    createdAt: new Date(),
+  },
+];
+
+function renderCodedPanel() {
+  return render(
+    <ChakraProvider value={system}>
+      <QueuePanel entries={codedEntries} experimentId="exp1" />
+    </ChakraProvider>
+  );
+}
+
 function renderPanel() {
   return render(
     <ChakraProvider value={system}>
@@ -82,5 +116,37 @@ describe("QueuePanel — provider-neutral copy", () => {
     expect(
       screen.queryByText(/Provider error 429/)
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("QueuePanel provider error taxonomy", () => {
+  it("CONTENTION reads as routine and self-resolving, not as a raw 400", () => {
+    renderCodedPanel();
+
+    expect(
+      screen.getByText(/busy with another upload from this experiment/i)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/retried automatically/i)).toBeInTheDocument();
+    // The raw provider string must not leak through -- it reads like data
+    // loss for what is a benign, auto-resolving collision.
+    expect(
+      screen.queryByText(/Failed to add file to dataset/i)
+    ).not.toBeInTheDocument();
+  });
+
+  it("QUOTA_EXCEEDED is explained rather than shown as a 400", () => {
+    renderCodedPanel();
+
+    expect(
+      screen.getByText(/out of space, or this file is larger than it allows/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/exceeds the size limit/i)).not.toBeInTheDocument();
+  });
+
+  it("the taxonomy code wins over the status embedded in failureReason", () => {
+    // c1's failureReason carries a 400 that the legacy path would have shown
+    // verbatim; the code is what decides the copy now.
+    renderCodedPanel();
+    expect(screen.queryByText(/^Provider error 400/)).not.toBeInTheDocument();
   });
 });

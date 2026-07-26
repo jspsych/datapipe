@@ -171,7 +171,7 @@ export default function CodeHints({ expId }) {
           <Tabs.Content value="send-base64-js">
             <VStack alignItems={"start"} gap={3}>
               <Text fontSize="sm" color="gray.400">
-                POST base64-encoded binary data. The server decodes and uploads the file to OSF.
+                POST base64-encoded binary data. The server decodes and uploads the file to your storage provider.
               </Text>
               <CodeBlock>
                 {`
