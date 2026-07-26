@@ -166,6 +166,33 @@ function buildMultipartBody(
   return Buffer.concat([Buffer.from(preamble), dataBuffer, Buffer.from(middle), Buffer.from(epilogue)]);
 }
 
+// tabIngest (writeSessionFile's suppression of Dataverse's CSV->.tab
+// archival rewrite) was added in Dataverse 5.11 (released 13 June 2022). On
+// an older installation the parameter is silently ignored -- no error
+// anywhere -- and researchers' CSVs get transformed with no signal that it
+// happened. This compares the (major, minor) of a version string against
+// (5, 11), ignoring patch/suffix.
+//
+// PARSING IS DELIBERATELY LENIENT, not strict semver -- verified live against
+// real installations, 2026-07-26:
+//   - demo.dataverse.org      -> "6.11"
+//   - dataverse.harvard.edu   -> "6.10.1"
+//   - borealisdata.ca         -> "v6.8.2-SP"  (leading "v", trailing "-SP")
+// /^v?(\d+)\.(\d+)/ tolerates all three; anything that doesn't match at
+// least major.minor returns null (unparseable) rather than throwing.
+export function supportsTabIngest(rawVersion: string): boolean | null {
+  const match = /^v?(\d+)\.(\d+)/.exec(rawVersion);
+  if (!match) {
+    return null;
+  }
+  const major = parseInt(match[1], 10);
+  const minor = parseInt(match[2], 10);
+  if (major !== 5) {
+    return major > 5;
+  }
+  return minor >= 11;
+}
+
 interface AddFileResponseBody {
   status?: string;
   data?: {
@@ -491,6 +518,72 @@ export const dataverseProvider: StorageProvider = {
     }
 
     return results;
+  },
+
+  // Checked at experiment SETUP time (provider-setup-warnings.ts), not on
+  // every write -- a one-time, non-blocking advisory so a researcher on an
+  // old installation finds out now, rather than discovering months later
+  // that every CSV they thought was raw got converted to Dataverse's
+  // archival .tab format.
+  async setupWarnings(auth: ResolvedAuth): Promise<string[]> {
+    try {
+      const serverUrl = resolveServerUrl(auth);
+
+      // GET /api/info/version is UNAUTHENTICATED on every Dataverse
+      // installation -- verified live -- but the key is sent anyway for
+      // consistency with every other call this adapter makes; the server
+      // just ignores it here.
+      const response = await fetch(`${serverUrl}/api/info/version`, {
+        method: "GET",
+        headers: authHeaders(auth),
+      });
+
+      if (response.status !== 200) {
+        console.warn(
+          `dataverse setupWarnings: /api/info/version returned ${response.status}, failing open (no warning)`
+        );
+        return [];
+      }
+
+      const body = (await response.json()) as { status?: string; data?: { version?: string } };
+      const version = body.data?.version;
+      if (body.status !== "OK" || !version) {
+        console.warn(
+          "dataverse setupWarnings: unexpected /api/info/version response shape, failing open (no warning)"
+        );
+        return [];
+      }
+
+      const supported = supportsTabIngest(version);
+      if (supported === null) {
+        console.warn(`dataverse setupWarnings: could not parse version "${version}", failing open (no warning)`);
+        return [];
+      }
+
+      if (supported) {
+        return [];
+      }
+
+      return [
+        `This Dataverse installation reports version ${version}, which predates Dataverse 5.11. ` +
+          "Tabular-ingest suppression is unavailable on installations older than 5.11, so CSV files " +
+          "uploaded to this dataset will be converted to Dataverse's archival .tab format. JSON data is unaffected.",
+      ];
+    } catch (e) {
+      // FAIL OPEN, DELIBERATELY. This runs every time a researcher sets up
+      // an experiment against this provider, not once -- so a transient
+      // network blip (or resolveServerUrl throwing because neither auth nor
+      // a container carries a serverUrl) must not cry wolf at every
+      // researcher who happens to hit it. The trade-off this accepts: an
+      // installation that is genuinely unreachable (down, firewalled,
+      // misconfigured URL) gets NO warning either, indistinguishable here
+      // from one that's healthy and modern.
+      console.warn(
+        "dataverse setupWarnings: failed to check installation version, failing open (no warning):",
+        e instanceof Error ? e.message : "Unknown error"
+      );
+      return [];
+    }
   },
 
   async downloadFile(

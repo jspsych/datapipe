@@ -16,7 +16,7 @@ jest.mock("node-fetch", () => ({
   default: (...args) => mockFetch(...args),
 }));
 
-import { dataverseProvider } from "../../lib/providers/dataverse.js";
+import { dataverseProvider, supportsTabIngest } from "../../lib/providers/dataverse.js";
 
 const SERVER_URL = "https://dataverse.mock.test";
 
@@ -838,6 +838,88 @@ describe("8. federated serverUrl resolution", () => {
     await expect(
       dataverseProvider.downloadFile(authWithoutServer, container, { id: "42", name: "data.json" })
     ).rejects.toThrow(/serverUrl/i);
+  });
+});
+
+describe("10. supportsTabIngest (version parsing, lenient by design)", () => {
+  // tabIngest was added in Dataverse 5.11. Real installations return version
+  // strings in inconsistent shapes -- verified live, 2026-07-26 -- so parsing
+  // must tolerate all of them rather than requiring strict semver.
+  it("returns true for demo.dataverse.org's \"6.11\"", () => {
+    expect(supportsTabIngest("6.11")).toBe(true);
+  });
+
+  it("returns true for dataverse.harvard.edu's \"6.10.1\"", () => {
+    expect(supportsTabIngest("6.10.1")).toBe(true);
+  });
+
+  it("returns true for borealisdata.ca's \"v6.8.2-SP\" (leading v, trailing -SP suffix)", () => {
+    expect(supportsTabIngest("v6.8.2-SP")).toBe(true);
+  });
+
+  it("returns true at the exact boundary, \"5.11\" (supported)", () => {
+    expect(supportsTabIngest("5.11")).toBe(true);
+  });
+
+  it("returns false just below the boundary, \"5.10\" (unsupported)", () => {
+    expect(supportsTabIngest("5.10")).toBe(false);
+  });
+
+  it("returns false for an old major version, \"4.20\" (unsupported)", () => {
+    expect(supportsTabIngest("4.20")).toBe(false);
+  });
+
+  it("returns null for an unparseable version string", () => {
+    expect(supportsTabIngest("unknown")).toBeNull();
+  });
+});
+
+describe("11. setupWarnings", () => {
+  it("returns [] when the installation reports a version >= 5.11", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 200, statusText: "OK", jsonBody: { status: "OK", data: { version: "6.11" } } })
+    );
+
+    const result = await dataverseProvider.setupWarnings(auth);
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const { url, options } = callArgs(0);
+    expect(url).toBe(`${SERVER_URL}/api/info/version`);
+    expect(options.method).toBe("GET");
+    // The key is sent for consistency even though the endpoint is
+    // unauthenticated and ignores it.
+    expect(header(options.headers, "X-Dataverse-key")).toBe("test-token");
+    expect(result).toEqual([]);
+  });
+
+  it("returns a single warning naming the detected version when it predates 5.11", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 200, statusText: "OK", jsonBody: { status: "OK", data: { version: "5.10" } } })
+    );
+
+    const result = await dataverseProvider.setupWarnings(auth);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatch(/5\.10/);
+    expect(result[0]).toMatch(/5\.11/i);
+  });
+
+  it("returns [] (fails open) on a non-OK response", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 500, statusText: "Internal Server Error", jsonBody: undefined })
+    );
+
+    const result = await dataverseProvider.setupWarnings(auth);
+
+    expect(result).toEqual([]);
+  });
+
+  it("returns [] (fails open) when fetch rejects", async () => {
+    mockFetch.mockRejectedValueOnce(new Error("network down"));
+
+    const result = await dataverseProvider.setupWarnings(auth);
+
+    expect(result).toEqual([]);
   });
 });
 

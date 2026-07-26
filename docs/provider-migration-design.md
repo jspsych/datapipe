@@ -251,7 +251,7 @@ handling) carry over unchanged — already provider-agnostic.
 | Auth longevity | Refresh tokens are revoked after ~6 months of disuse — paused studies need reconnect UX. App must reach **published** OAuth verification status: testing mode means 7-day refresh tokens and a 100-user cap | Long-lived; confirm rotation/expiry behavior in the spike | Tokens **expire** (commonly yearly, installation-configurable) — needs expiry-warning UX, not just storage |
 | Container | **App-created "DataPipe" folder at Drive root.** Under `drive.file` the app can only touch files it created or the user explicitly picked — a researcher-picked parent would force a Google Picker frontend integration for little gain. Revisit only if researchers demand placement control | Article inside a Project (two levels only) | Dataset inside a Collection |
 | Subfolders | Native | **None** — filename-prefix fallback, surfaced in UI as a known limitation | Native via `directoryLabel` |
-| Media / size limits | Free quota is 15 GB **shared with Gmail/Photos** — quota exhaustion is an expected support scenario for audio/video studies, not an edge case | Per-file and total-quota caps on the free tier; upload is a multi-step multipart flow (initiate → parts → complete) with correspondingly more failure modes; no in-place update (delete + re-upload) | Per-installation size caps (federation → varies); CSV uploads are **"ingested"** into archival `.tab` format unless suppressed, which transforms presentation and extends dataset locking — suppression support is version-dependent |
+| Media / size limits | Free quota is 15 GB **shared with Gmail/Photos** — quota exhaustion is an expected support scenario for audio/video studies, not an edge case | Per-file and total-quota caps on the free tier; upload is a multi-step multipart flow (initiate → parts → complete) with correspondingly more failure modes; no in-place update (delete + re-upload) | Per-installation size caps (federation → varies); CSV uploads are **"ingested"** into archival `.tab` format unless suppressed via `tabIngest`, which requires **Dataverse >= 5.11** (released 2022-06-13); older installations silently ignore it. The adapter's `setupWarnings` checks `/api/info/version` and warns at experiment setup |
 | Federation | Single global service | Single global service | **Federated** — Harvard, Borealis, DataverseNL, etc. are different servers; `serverUrl` must be stored per researcher, and DataPipe integrates whatever software version each installation runs (version drift is a permanent fact of this adapter) |
 | DOI/publish | N/A | Publishing an Article snapshots it | Dataset publish bumps a major version — dataset should stay in **draft indefinitely**; publish (and DOI mint) becomes a manual researcher action at study completion, not something DataPipe triggers |
 | Gating spike | None (comfortable fit) — but OAuth app verification has **weeks of lead time**; start it at build step 0 | See "Gating spikes" below — duplicate-filename behavior, per-item **file-count cap** (historically ~500 files/item; a semester-long study can exceed it), multipart burst behavior | See "Gating spikes" below — **dataset locking under concurrent adds** (most likely disqualifier in the plan), tabular-ingest suppression, silent-rename response shape |
@@ -339,9 +339,15 @@ provider, it does not trigger a redesign.
   queue softens this, but if the spike shows writes serialize through a lock at
   a rate that can't absorb a class section, that is disqualifying. This is the
   single most likely spike to fail in the plan.
-- **Dataverse — tabular ingest.** Confirm CSV ingest-into-`.tab` can be
-  suppressed on the installations researchers actually use (suppression is
-  version-dependent, and federation means DataPipe doesn't choose the version).
+- **Dataverse — tabular ingest.** RESOLVED. `tabIngest` was added in
+  Dataverse **5.11** (released 2022-06-13, per its release notes: "Tabular
+  ingest can be skipped via API. Issue #8525, PR #8532"). Below that the
+  parameter is silently ignored. Since federation means DataPipe doesn't
+  choose the version, `dataverseProvider.setupWarnings` reads
+  `/api/info/version` and warns the researcher at experiment setup rather
+  than leaving it as a docs caveat. Version parsing must stay lenient: real
+  installations report `6.11` (demo), `6.10.1` (Harvard) and `v6.8.2-SP`
+  (Borealis) — a leading `v` and arbitrary suffixes both occur.
 - **Dataverse — silent rename.** Confirm the exact response shape on a
   duplicate filename so DataPipe compares `storedFilename` against the request
   rather than trusting it blindly.
@@ -377,10 +383,12 @@ exceeds the requirement, and the fast retry tier absorbs the contention.
 The condition is that tier — without it, collided submissions waited 1–2
 hours.
 
-Still open: this is demo.dataverse.org. Ingest suppression is
-version-dependent and federation means DataPipe does not choose the version,
-so a run against a real institutional installation is still worth doing
-before launch. `scripts/dataverse-spike.mjs` takes `DATAVERSE_SERVER`.
+Still open: these numbers come from demo.dataverse.org, so a burst run
+against a real institutional installation is worth doing before launch —
+`scripts/dataverse-spike.mjs` takes `DATAVERSE_SERVER`. The ingest-version
+question is no longer part of that: `tabIngest` needs Dataverse >= 5.11 and
+the adapter now checks and warns at setup (demo 6.11, Harvard 6.10.1 and
+Borealis v6.8.2-SP all clear it comfortably).
 
 The original analysis follows, kept because the concurrency measurements and
 the API corrections in it remain accurate — only the verdict changed.

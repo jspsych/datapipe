@@ -177,8 +177,19 @@ describe("NewExperimentPage — Google Drive provider selector", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /^Create$/i }));
 
-    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
-    const [url, options] = global.fetch.mock.calls[0];
+    // Look up the createexperiment call by URL rather than assuming index 0:
+    // selecting a connected provider also fires a background
+    // /api/providersetupwarnings fetch (see pages/admin/new.js's
+    // setup-warnings effect), which can land in the mock's call log before
+    // this one.
+    await waitFor(() =>
+      expect(
+        global.fetch.mock.calls.some(([callUrl]) => callUrl === "/api/createexperiment")
+      ).toBe(true)
+    );
+    const [url, options] = global.fetch.mock.calls.find(
+      ([callUrl]) => callUrl === "/api/createexperiment"
+    );
     expect(url).toBe("/api/createexperiment");
     expect(JSON.parse(options.body)).toEqual({
       provider: "gdrive",
@@ -366,8 +377,16 @@ describe("NewExperimentPage — Dataverse provider (provider-generic rendering)"
 
     fireEvent.click(screen.getByRole("button", { name: /^Create$/i }));
 
-    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
-    const [url, options] = global.fetch.mock.calls[0];
+    // Look up the createexperiment call by URL rather than assuming index 0
+    // -- same reasoning as the gdrive submit test above.
+    await waitFor(() =>
+      expect(
+        global.fetch.mock.calls.some(([callUrl]) => callUrl === "/api/createexperiment")
+      ).toBe(true)
+    );
+    const [url, options] = global.fetch.mock.calls.find(
+      ([callUrl]) => callUrl === "/api/createexperiment"
+    );
     expect(url).toBe("/api/createexperiment");
     const body = JSON.parse(options.body);
     expect(body.provider).toBe("dataverse");
@@ -467,5 +486,124 @@ describe("NewExperimentPage — Dataverse provider (provider-generic rendering)"
     expect(screen.getByLabelText(/Contact email/i)).toHaveValue("");
     expect(screen.getByLabelText(/Description/i)).toHaveValue("");
     expect(screen.getByLabelText(/Subject/i)).toHaveValue("");
+  });
+});
+
+describe("NewExperimentPage — provider setup warnings (Dataverse)", () => {
+  function selectDataverse() {
+    fireEvent.click(screen.getByLabelText(/^Dataverse$/i));
+  }
+
+  it("selecting a connected Dataverse shows a warning returned by /api/providersetupwarnings", async () => {
+    useDocumentData.mockReturnValue([
+      { refreshToken: "osf-refresh-token", connectedAccounts: { dataverse: true } },
+      false,
+      undefined,
+    ]);
+    // Dispatch by URL, per the file's existing convention (see the
+    // Google-Drive-folder-leak test above), rather than a blanket
+    // mockResolvedValue -- this endpoint is called alongside others.
+    global.fetch.mockImplementation((url) => {
+      if (url.includes("/api/providersetupwarnings")) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              warnings: [
+                "This Dataverse installation reports version 5.10, which predates Dataverse 5.11.",
+              ],
+            }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+
+    renderPage();
+    selectDataverse();
+
+    await waitFor(() =>
+      expect(screen.getByText(/predates Dataverse 5\.11/i)).toBeInTheDocument()
+    );
+  });
+
+  it("an empty warnings array shows nothing", async () => {
+    useDocumentData.mockReturnValue([
+      { refreshToken: "osf-refresh-token", connectedAccounts: { dataverse: true } },
+      false,
+      undefined,
+    ]);
+    global.fetch.mockImplementation((url) => {
+      if (url.includes("/api/providersetupwarnings")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ warnings: [] }) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+
+    renderPage();
+    selectDataverse();
+
+    await waitFor(() =>
+      expect(
+        global.fetch.mock.calls.some(([callUrl]) => callUrl.includes("/api/providersetupwarnings"))
+      ).toBe(true)
+    );
+
+    expect(screen.queryByText(/predates Dataverse/i)).not.toBeInTheDocument();
+    // The rest of the connected-provider form still renders normally.
+    expect(screen.getByLabelText(/^Title$/i)).toBeInTheDocument();
+  });
+
+  it("a failed warnings fetch is silent -- the form still renders and submission is not blocked", async () => {
+    useDocumentData.mockReturnValue([
+      { refreshToken: "osf-refresh-token", connectedAccounts: { dataverse: true } },
+      false,
+      undefined,
+    ]);
+    global.fetch.mockImplementation((url) => {
+      if (url.includes("/api/providersetupwarnings")) {
+        return Promise.reject(new Error("network down"));
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ success: true, experimentID: "exp-warn-fail" }),
+      });
+    });
+    const consoleErrorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+
+    renderPage();
+    selectDataverse();
+
+    // Let the failed warnings fetch settle before interacting further.
+    await waitFor(() =>
+      expect(
+        global.fetch.mock.calls.some(([callUrl]) => callUrl.includes("/api/providersetupwarnings"))
+      ).toBe(true)
+    );
+
+    expect(screen.getByLabelText(/^Title$/i)).toBeInTheDocument();
+    expect(screen.queryByText(/predates Dataverse/i)).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/^Title$/i), {
+      target: { value: "My Dataverse Study" },
+    });
+    fireEvent.change(screen.getByLabelText(/Collection alias/i), { target: { value: "my-lab" } });
+    fireEvent.change(screen.getByLabelText(/Author name/i), { target: { value: "Smith, Jane" } });
+    fireEvent.change(screen.getByLabelText(/Contact email/i), {
+      target: { value: "jane@example.edu" },
+    });
+    fireEvent.change(screen.getByLabelText(/Description/i), {
+      target: { value: "A study about things" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /^Create$/i }));
+
+    await waitFor(() =>
+      expect(
+        global.fetch.mock.calls.some(([callUrl]) => callUrl === "/api/createexperiment")
+      ).toBe(true)
+    );
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/admin/exp-warn-fail"));
+
+    consoleErrorSpy.mockRestore();
   });
 });

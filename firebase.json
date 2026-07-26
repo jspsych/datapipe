@@ -73,6 +73,10 @@
       {
         "source": "/api/getprovideraccesstoken",
         "function": "getprovideraccesstoken"
+      },
+      {
+        "source": "/api/providersetupwarnings",
+        "function": "providersetupwarnings"
       }
     ]
   },

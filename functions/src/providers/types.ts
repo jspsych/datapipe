@@ -165,6 +165,16 @@ export interface StorageProvider {
   // static-token providers only
   validateStaticToken?(auth: ResolvedAuth): Promise<boolean>;
 
+  // Optional, non-blocking, researcher-facing advisories checked when an
+  // experiment is being set up against this provider (see
+  // provider-setup-warnings.ts). Returns human-readable strings for the UI
+  // to display; an empty array means nothing to report. Never throws -- a
+  // provider that cannot determine its answer returns [] rather than
+  // failing setup. Motivating case: Dataverse's tabIngest suppression param
+  // (writeSessionFile) is silently ignored by installations older than
+  // 5.11, so dataverse.ts's implementation warns when it detects one.
+  setupWarnings?(auth: ResolvedAuth): Promise<string[]>;
+
   // One-time setup at experiment creation. researcherInput is provider-shaped
   // (e.g. parent project for Figshare, collection + serverUrl for Dataverse).
   createDataContainer(

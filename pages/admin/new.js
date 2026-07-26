@@ -1,7 +1,7 @@
 import AuthCheck from "../../components/AuthCheck";
 import { doc } from "firebase/firestore";
 import { db, auth } from "../../lib/firebase";
-import { useContext, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { UserContext } from "../../lib/context";
 import { useDocumentData } from "react-firebase-hooks/firestore";
 import Link from "next/link";
@@ -23,6 +23,7 @@ import {
   VStack,
   Text,
   NativeSelect,
+  Alert,
 } from "@chakra-ui/react";
 
 export default function NewExperimentPage({}) {
@@ -58,6 +59,12 @@ function NewExperimentForm() {
   const [containerFieldErrors, setContainerFieldErrors] = useState({});
   const [selectedFolder, setSelectedFolder] = useState(null);
   const [folderPickerLoading, setFolderPickerLoading] = useState(false);
+  // Non-blocking, researcher-facing advisories about the connected
+  // provider's installation (e.g. a Dataverse server too old to honor
+  // tabIngest suppression -- see functions/src/providers/dataverse.ts's
+  // setupWarnings). Cleared on every provider change so a warning from one
+  // provider never carries over and is momentarily shown against another.
+  const [providerWarnings, setProviderWarnings] = useState([]);
 
   const [data, loading, error] = useDocumentData(doc(db, "users", user.uid));
 
@@ -76,7 +83,52 @@ function NewExperimentForm() {
     // harmless, but sending it at all is wrong.) The title deliberately
     // survives a provider change: it describes the study, not the storage.
     setSelectedFolder(null);
+    setProviderWarnings([]);
   };
+
+  // Fetch setup warnings for the selected provider: on every provider
+  // change, and on initial mount when a non-osf, already-connected provider
+  // is preselected. Never fires for osf (it has no StorageProvider adapter,
+  // hence no setupWarnings) and never fires while the provider is not yet
+  // connected (there is no resolvable token to check against). A failed
+  // fetch is silent (console only) -- this is advisory only and must never
+  // block or error the form.
+  useEffect(() => {
+    if (provider === "osf" || !providerConnected) {
+      setProviderWarnings([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const currentUser = auth.currentUser;
+        if (!currentUser) return;
+        const idToken = await currentUser.getIdToken();
+
+        const response = await fetch("/api/providersetupwarnings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ provider, uid: currentUser.uid, idToken }),
+        });
+        const body = await response.json();
+
+        if (!cancelled) {
+          setProviderWarnings(response.ok && Array.isArray(body.warnings) ? body.warnings : []);
+        }
+      } catch (err) {
+        console.error(err);
+        if (!cancelled) {
+          setProviderWarnings([]);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [provider, providerConnected]);
 
   const handleContainerValueChange = (name, value) => {
     setContainerValues((prev) => ({ ...prev, [name]: value }));
@@ -380,6 +432,12 @@ function NewExperimentForm() {
                   {providerError}
                 </Text>
               )}
+              {providerWarnings.map((warning, index) => (
+                <Alert.Root key={index} status="warning" variant="subtle" borderRadius="md">
+                  <Alert.Indicator />
+                  <Alert.Description>{warning}</Alert.Description>
+                </Alert.Root>
+              ))}
               <Field.Root invalid={providerTitleError}>
                 <Field.Label>Title</Field.Label>
                 <Input
