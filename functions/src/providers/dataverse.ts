@@ -94,6 +94,28 @@ function mapDataverseError(
     (/exceeds the size limit/i.test(message) || /exceeds the remaining storage quota/i.test(message))
   ) {
     error = "QUOTA_EXCEEDED";
+  } else if (status === 400 && /failed to add file/i.test(message) && !/same content/i.test(message)) {
+    // Live-verified against demo.dataverse.org, 2026-07-26: Dataverse accepts
+    // exactly ONE concurrent write per dataset and rejects every other
+    // in-flight write with this generic 400 in ~250ms. It clears in seconds
+    // (sequential writes are flawless), so this is CONTENTION, not an
+    // outage -- the queue retries it on a fast tier instead of the
+    // hours-scale backoff UNAVAILABLE gets.
+    //
+    // The "same content" exclusion is essential. Dataverse ALSO rejects
+    // byte-identical content with `This file has the same content as X that
+    // is in the dataset. \nFailed to add file to dataset.`, which matches
+    // "failed to add file" too but is NOT transient -- retrying it fast would
+    // spin uselessly. That case is deliberately excluded here and falls
+    // through to UNAVAILABLE below, unchanged.
+    //
+    // Open question, not fixed here: if a write actually succeeded
+    // server-side but the response was lost (timeout, dropped connection),
+    // the retry re-uploads identical content and gets THIS same-content 400.
+    // Treating that as a failure can mark an upload that already SUCCEEDED
+    // as failed. Worth a separate look -- see also WriteResult's lack of an
+    // idempotent "already there" signal for this case.
+    error = "CONTENTION";
   } else if (status === 429) {
     error = "RATE_LIMITED";
   } else {

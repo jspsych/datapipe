@@ -14,12 +14,21 @@ export type AuthMethod = "oauth2" | "static-token";
 
 // Generic error taxonomy that every adapter maps its provider's errors into.
 // QUOTA_EXCEEDED covers both storage-full and file-too-large.
+// CONTENTION: the provider rejected a write because another write to the
+// same container was already in flight. Transient and clears in seconds --
+// unlike the other codes here, this is never an outage or something a human
+// needs to act on -- so the upload queue retries it on a fast tier instead of
+// the outage-scale exponential backoff the other codes get. Motivating case:
+// Dataverse allows exactly one concurrent write per dataset and rejects every
+// other in-flight write with a generic 400 (verified live against
+// demo.dataverse.org, 2026-07-26 -- see mapDataverseError in dataverse.ts).
 export type ProviderErrorCode =
   | "RATE_LIMITED"
   | "AUTH_EXPIRED"
   | "NAME_CONFLICT"
   | "QUOTA_EXCEEDED"
-  | "UNAVAILABLE";
+  | "UNAVAILABLE"
+  | "CONTENTION";
 
 // A resolved, decrypted credential handed to adapter calls. serverUrl is only
 // present for federated providers (Dataverse).

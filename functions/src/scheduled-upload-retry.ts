@@ -6,41 +6,70 @@ import { ContainerRef, StorageProviderId, ResolvedAuth } from "./providers/types
 import resolveToken from "./resolve-token.js";
 import { claimFilename, confirmClaim, CollisionCacheUnavailableError } from "./collision-cache.js";
 import { ExperimentData, UserData } from "./interfaces.js";
+import { isFastRetry } from "./queue-upload.js";
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-const MAX_BACKOFF_MS = 24 * 60 * 60 * 1000; // 24 hours
+const MAX_BACKOFF_MS = 24 * 60 * 60 * 1000; // 24 hours (slow tier cap, unchanged)
+// Fast tier (CONTENTION/RATE_LIMITED, see queue-upload.ts's isFastRetry): a
+// much shorter cap, since these clear in seconds/minutes rather than needing
+// an outage to end.
+const FAST_MAX_BACKOFF_MS = 30 * 60 * 1000; // 30 minutes
 
 /**
- * Scheduled function that runs every hour to retry failed OSF uploads.
- * Processes up to 10 pending items per run, applies exponential backoff,
- * and cleans up entries older than 7 days.
+ * Scheduled function that runs every 5 minutes to retry failed uploads.
+ * Processes up to 25 pending items per run, applies tiered exponential
+ * backoff, and cleans up entries older than 7 days.
+ *
+ * The 5-minute cadence (was hourly) is what makes the fast retry tier real:
+ * queueUpload can set a 60-second nextRetryAt for CONTENTION/RATE_LIMITED
+ * failures, but that's meaningless if this worker only wakes up once an
+ * hour. The query below already gates on `nextRetryAt <= now`, so slow-tier
+ * items are unaffected by the faster cadence — they simply aren't due yet
+ * most of the times this runs.
  */
-export const scheduledUploadRetry = onSchedule("0 * * * *", async () => {
+export const scheduledUploadRetry = onSchedule("*/5 * * * *", async () => {
   await retryPendingUploads();
   await cleanupOldEntries();
 });
 
-async function retryPendingUploads() {
+/**
+ * `ownerScope` is a TEST SEAM, defaulting to production behavior (every
+ * pending item). This worker sweeps the whole uploadQueue collection and
+ * mutates what it finds, so a test that runs it unscoped against the shared
+ * emulator processes whatever other suites have queued -- the same
+ * cross-suite hazard that recoverPendingUploads' `prefix` seam exists for
+ * (see ddef109). Filtering happens in memory rather than in the query so the
+ * production query shape, and therefore its Firestore index, is untouched.
+ */
+export async function retryPendingUploads(ownerScope?: string) {
   const now = Timestamp.now();
 
+  // 25 items processed serially at ~600ms per provider write is ~15s of
+  // work per run — safely inside the scheduled-function budget — and lifts
+  // the drain rate from 10/hour (old hourly cadence) to 25 * 12 runs/hour =
+  // 300/hour under the new 5-minute cadence.
   const pendingItems = await db
     .collection("uploadQueue")
     .where("status", "==", "pending")
     .where("nextRetryAt", "<=", now)
     .orderBy("nextRetryAt", "asc")
-    .limit(10)
+    .limit(25)
     .get();
 
-  if (pendingItems.empty) {
+  const dueDocs = ownerScope
+    ? pendingItems.docs.filter((d) => d.data().owner === ownerScope)
+    : pendingItems.docs;
+
+  if (dueDocs.length === 0) {
     console.log("No pending uploads to retry.");
     return;
   }
 
-  console.log(`Found ${pendingItems.size} pending upload(s) to retry.`);
+  console.log(`Found ${dueDocs.length} pending upload(s) to retry.`);
 
   // Group by owner to avoid hammering same user's rate limit
   const byOwner = new Map<string, FirebaseFirestore.QueryDocumentSnapshot[]>();
-  for (const doc of pendingItems.docs) {
+  for (const doc of dueDocs) {
     const owner = doc.data().owner;
     if (!byOwner.has(owner)) {
       byOwner.set(owner, []);
@@ -244,10 +273,22 @@ async function handleRetryFailure(
     return;
   }
 
-  // Honor Retry-After header if provided, otherwise use exponential backoff
+  // Tier the backoff by the provider error code stored on the queue doc (set
+  // by queue-upload.ts at initial queue time). CONTENTION/RATE_LIMITED are
+  // "the provider is busy right now" and resolve in seconds, unlike
+  // AUTH_EXPIRED / QUOTA_EXCEEDED / UNAVAILABLE (or no code at all), which
+  // need human action or an outage to end — so the fast tier gets a
+  // minutes-scale base/cap (~2, 4, 8, 16, 30 minutes) instead of the
+  // hours-scale one (~2, 4, 8, 16, 24 hours, unchanged).
+  const fastTier = isFastRetry(data.providerErrorCode);
+  const baseMs = fastTier ? 60 * 1000 : 60 * 60 * 1000;
+  const capMs = fastTier ? FAST_MAX_BACKOFF_MS : MAX_BACKOFF_MS;
+
+  // Honor Retry-After header if provided, otherwise use exponential backoff.
+  // A Retry-After still wins where present, clamped to this item's tier cap.
   const backoffMs = retryAfterSeconds
-    ? Math.min(retryAfterSeconds * 1000, MAX_BACKOFF_MS)
-    : Math.min(Math.pow(2, newRetryCount) * 60 * 60 * 1000, MAX_BACKOFF_MS);
+    ? Math.min(retryAfterSeconds * 1000, capMs)
+    : Math.min(Math.pow(2, newRetryCount) * baseMs, capMs);
   const nextRetryAt = Timestamp.fromMillis(Date.now() + backoffMs);
 
   console.log(`Upload ${docRef.id} retry ${newRetryCount} failed: ${reason}. Next retry at ${nextRetryAt.toDate().toISOString()}`);

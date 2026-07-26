@@ -302,14 +302,15 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
         experimentID, owner: exp_data.owner, filename: uploadFilename, data,
         dataType: "data", osfFilesLink: exp_data.osfFilesLink,
         storageProvider: exp_data.storageProvider, providerContainer: exp_data.providerContainer,
-        errorCode: result.providerStatus || 0, sessionIncremented: true,
+        errorCode: result.providerStatus || 0, providerErrorCode: result.error, sessionIncremented: true,
         failureReason: `Provider error ${result.providerStatus}: ${result.providerMessage}`,
         claimToken,
       });
       await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
       await cleanupPending(pendingPath); // queue-upload has its own copy
-      // OSF is failing, so queue the derived files alongside the raw data.
-      await queueDerivedFiles(derivedFiles, derivedTarget, `Queued alongside data file: OSF error ${result.providerStatus}`);
+      // OSF is failing, so queue the derived files alongside the raw data —
+      // same provider error code, since it's the same provider write path.
+      await queueDerivedFiles(derivedFiles, derivedTarget, `Queued alongside data file: OSF error ${result.providerStatus}`, result.error);
       res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
       await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.providerStatus, osfStatusText: result.providerMessage});
       return;

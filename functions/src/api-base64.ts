@@ -238,7 +238,7 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 
         experimentID, owner: exp_data.owner, filename, data,
         dataType: "base64", osfFilesLink: exp_data.osfFilesLink,
         storageProvider: exp_data.storageProvider, providerContainer: exp_data.providerContainer,
-        errorCode: result.providerStatus || 0, sessionIncremented: false,
+        errorCode: result.providerStatus || 0, providerErrorCode: result.error, sessionIncremented: false,
         failureReason: `Provider error ${result.providerStatus}: ${result.providerMessage}`,
         claimToken,
       });

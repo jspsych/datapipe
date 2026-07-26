@@ -357,6 +357,82 @@ describe("3. error mapping", () => {
     });
   });
 
+  it("maps a 400 'Failed to add file to dataset.' to CONTENTION (concurrent write rejected)", async () => {
+    // Live-verified against demo.dataverse.org, 2026-07-26: exactly one
+    // concurrent write per dataset succeeds, every other in-flight write is
+    // rejected with this generic 400 in ~250ms. It clears in seconds, so the
+    // upload queue should retry it on the fast tier rather than the
+    // outage-scale backoff UNAVAILABLE gets.
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({
+        status: 400,
+        statusText: "Bad Request",
+        jsonBody: { status: "ERROR", message: "Failed to add file to dataset." },
+      })
+    );
+
+    const result = await dataverseProvider.writeSessionFile(auth, container, "file.json", "data", {
+      size: 4,
+      contentType: "application/json",
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: "CONTENTION",
+      providerStatus: 400,
+      providerMessage: "Failed to add file to dataset.",
+      retryAfter: null,
+    });
+  });
+
+  it("does NOT map a 400 'same content' rejection to CONTENTION (regression guard for the exclusion)", async () => {
+    // Dataverse also rejects byte-identical content with this message, which
+    // also contains "Failed to add file to dataset." -- but re-uploading
+    // identical content is not transient the way a concurrent-write
+    // collision is, so this must NOT be treated as CONTENTION (retrying fast
+    // would just spin uselessly). It falls through to the existing
+    // UNAVAILABLE mapping instead.
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({
+        status: 400,
+        statusText: "Bad Request",
+        jsonBody: {
+          status: "ERROR",
+          message: "This file has the same content as an existing file. \nFailed to add file to dataset.",
+        },
+      })
+    );
+
+    const result = await dataverseProvider.writeSessionFile(auth, container, "file.json", "data", {
+      size: 4,
+      contentType: "application/json",
+    });
+
+    expect(result.error).toBe("UNAVAILABLE");
+    expect(result.error).not.toBe("CONTENTION");
+  });
+
+  it("still maps the existing size-limit 400 to QUOTA_EXCEEDED, not CONTENTION (order-of-checks regression guard)", async () => {
+    // The size-limit/quota checks must keep winning over the new CONTENTION
+    // check for their own 400 messages -- they don't mention "failed to add
+    // file" so this mostly documents the existing behavior stays intact
+    // after the new branch was inserted between them and the 429 check.
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({
+        status: 400,
+        statusText: "Bad Request",
+        jsonBody: { status: "ERROR", message: "the file exceeds the size limit of 1000 bytes" },
+      })
+    );
+
+    const result = await dataverseProvider.writeSessionFile(auth, container, "file.json", "data", {
+      size: 4,
+      contentType: "application/json",
+    });
+
+    expect(result.error).toBe("QUOTA_EXCEEDED");
+  });
+
   it("maps anything else (e.g. 500) to UNAVAILABLE", async () => {
     mockFetch.mockResolvedValueOnce(mockResponse({ status: 500, statusText: "Internal Server Error", jsonBody: undefined }));
 
