@@ -68,9 +68,9 @@ describe("ProviderConnections", () => {
     renderComponent();
 
     expect(
-      screen.getByRole("button", { name: /Connect/i })
+      screen.getByRole("button", { name: /^Connect Google Drive$/i })
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Connect/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Connect Google Drive$/i }));
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalled());
     const [url, options] = global.fetch.mock.calls[0];
@@ -84,6 +84,104 @@ describe("ProviderConnections", () => {
     );
     expect(localStorage.getItem("latestCSRFToken")).toBe("state-abc");
     expect(localStorage.getItem("providerConnectFlow")).toBe("gdrive");
+  });
+
+  it("static-token provider: Connect opens an inline form instead of redirecting", async () => {
+    useDocumentData.mockReturnValue([{ connectedAccounts: {} }, false, undefined]);
+
+    renderComponent();
+
+    fireEvent.click(screen.getByRole("button", { name: /^Connect Dataverse$/i }));
+
+    // Federated: the researcher must say WHICH installation.
+    expect(screen.getByLabelText(/Dataverse server URL/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/API token/i)).toBeInTheDocument();
+    // No OAuth redirect for a static-token provider.
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(window.location.assign).not.toHaveBeenCalled();
+  });
+
+  it("static-token provider: Save posts token + serverUrl to connectstatictokenprovider", async () => {
+    useDocumentData.mockReturnValue([{ connectedAccounts: {} }, false, undefined]);
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ success: true, provider: "dataverse" }),
+    });
+
+    renderComponent();
+    fireEvent.click(screen.getByRole("button", { name: /^Connect Dataverse$/i }));
+
+    fireEvent.change(screen.getByLabelText(/Dataverse server URL/i), {
+      target: { value: "https://dataverse.harvard.edu" },
+    });
+    fireEvent.change(screen.getByLabelText(/API token/i), {
+      target: { value: "  tok-abc  " },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Save Dataverse connection$/i })
+    );
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    const [url, options] = global.fetch.mock.calls[0];
+    expect(url).toBe("/api/connectstatictokenprovider");
+    expect(JSON.parse(options.body)).toEqual({
+      provider: "dataverse",
+      uid: "user-1",
+      idToken: "id-token-123",
+      token: "tok-abc",
+      serverUrl: "https://dataverse.harvard.edu",
+    });
+  });
+
+  it("static-token provider: Save stays disabled until both fields are filled", async () => {
+    useDocumentData.mockReturnValue([{ connectedAccounts: {} }, false, undefined]);
+
+    renderComponent();
+    fireEvent.click(screen.getByRole("button", { name: /^Connect Dataverse$/i }));
+
+    const save = screen.getByRole("button", {
+      name: /^Save Dataverse connection$/i,
+    });
+    expect(save).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText(/API token/i), {
+      target: { value: "tok-abc" },
+    });
+    // serverUrl still empty -- a federated provider cannot be addressed without it.
+    expect(save).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText(/Dataverse server URL/i), {
+      target: { value: "https://dataverse.harvard.edu" },
+    });
+    expect(save).toBeEnabled();
+  });
+
+  it("static-token provider: a rejected server URL is explained, not surfaced verbatim", async () => {
+    useDocumentData.mockReturnValue([{ connectedAccounts: {} }, false, undefined]);
+    global.fetch.mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: () => Promise.resolve({ error: "Invalid server URL" }),
+    });
+
+    renderComponent();
+    fireEvent.click(screen.getByRole("button", { name: /^Connect Dataverse$/i }));
+    fireEvent.change(screen.getByLabelText(/Dataverse server URL/i), {
+      target: { value: "http://10.0.0.1" },
+    });
+    fireEvent.change(screen.getByLabelText(/API token/i), {
+      target: { value: "tok-abc" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Save Dataverse connection$/i })
+    );
+
+    // The backend's opaque "Invalid server URL" becomes actionable guidance,
+    // and the form stays open so the value can be corrected.
+    await waitFor(() =>
+      expect(screen.getByText(/full https:\/\/ address/i)).toBeInTheDocument()
+    );
+    expect(screen.getByLabelText(/Dataverse server URL/i)).toBeInTheDocument();
   });
 
   it("8. connected: shows Connected status + Disconnect; click posts to disconnectprovider", async () => {
@@ -100,7 +198,7 @@ describe("ProviderConnections", () => {
     renderComponent();
 
     expect(screen.getByText(/Connected/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Disconnect/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Disconnect Google Drive$/i }));
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalled());
     const [url, options] = global.fetch.mock.calls[0];

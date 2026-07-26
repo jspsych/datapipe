@@ -63,6 +63,10 @@
         "function": "connectprovider"
       },
       {
+        "source": "/api/connectstatictokenprovider",
+        "function": "connectstatictokenprovider"
+      },
+      {
         "source": "/api/disconnectprovider",
         "function": "disconnectprovider"
       },
