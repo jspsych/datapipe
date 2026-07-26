@@ -355,7 +355,37 @@ provider, it does not trigger a redesign.
   flow has more failure modes than a single PUT; verify behavior under
   concurrent submissions, including media-sized files.
 
-### Dataverse spike — RESULT: GATE A FAILED (live, demo.dataverse.org, 2026-07-26)
+### Dataverse spike — RESULT: CONDITIONAL PASS (revised 2026-07-26)
+
+**Revised verdict, after fixing the retry tier.** The original FAIL below
+measured the wrong thing: it assumed 30 *simultaneous* writes, which is not
+how a class submits. Re-run with realistic random arrivals — 30 submissions
+across 60 seconds, the worst realistic case — against demo.dataverse.org:
+
+- **21/30 succeeded on the first attempt**
+- **9 collided, all 9 correctly mapped to `CONTENTION`**, 0 other failures
+
+A 30% collision rate, all of it transient and now on a 60-second retry tier
+(`ff5d805`), so the whole cohort lands inside ~2 minutes. Nine items is well
+under the worker's 25-per-run limit, so they drain in a single pass.
+Collisions fall off sharply as the window widens (~6% over 5 minutes, ~3%
+over 10).
+
+So Dataverse's concurrency-1 limit is a real constraint but not a
+disqualifying one: sequential throughput (~100 files/minute) comfortably
+exceeds the requirement, and the fast retry tier absorbs the contention.
+The condition is that tier — without it, collided submissions waited 1–2
+hours.
+
+Still open: this is demo.dataverse.org. Ingest suppression is
+version-dependent and federation means DataPipe does not choose the version,
+so a run against a real institutional installation is still worth doing
+before launch. `scripts/dataverse-spike.mjs` takes `DATAVERSE_SERVER`.
+
+The original analysis follows, kept because the concurrency measurements and
+the API corrections in it remain accurate — only the verdict changed.
+
+### Original assessment — GATE A FAILED (live, demo.dataverse.org, 2026-07-26)
 
 Run with `scripts/dataverse-spike.mjs` plus targeted follow-ups, against
 demo.dataverse.org using the real adapter.
