@@ -17,29 +17,30 @@
 // This test seeds exactly that scenario and asserts the queue doc carries the
 // provider fields -- expected RED today.
 //
-// Seam: scheduled-pending-recovery.ts exports only `scheduledPendingRecovery`
-// (an onSchedule-wrapped function); `recoverPendingUploads`/`promoteToQueue`
-// are private. Rather than going through the Functions-emulator's HTTP
-// manual-trigger URL (the "scheduledpendingrecovery-0" pattern established by
-// oauth-connect-scheduled-regression.test.js's case 11), this test uses a
-// more direct seam: firebase-functions v2's onSchedule() implementation
-// (node_modules/firebase-functions/lib/v2/providers/scheduler.js) stashes the
-// raw, unwrapped handler on the returned function as `.run` (`func.run =
-// handler`). Dynamically importing the COMPILED module (functions/lib/,
-// requires `npm run build` first -- same convention as
+// Seam: this test imports `recoverPendingUploads` from the COMPILED module
+// (functions/lib/, so `npm run build` must run first -- same convention as
 // oauth-connect-emulator.test.js's `await import("../../lib/crypto-utils.js")`)
-// and calling `scheduledPendingRecovery.run()` invokes recoverPendingUploads()
-// directly in THIS process.
+// and calls it directly in THIS process, rather than going through the
+// Functions-emulator's HTTP manual-trigger URL (the
+// "scheduledpendingrecovery-0" pattern in
+// oauth-connect-scheduled-regression.test.js's case 11).
 //
-// That matters because recoverPendingUploads() only recovers files older
-// than STALE_THRESHOLD_MS (15 minutes) -- a real pending-data file would need
-// to sit in the emulator for 15 real minutes before this suite could observe
-// it being recovered, which is impractical for CI. Because `.run()` executes
-// the real handler in-process (not over HTTP to the separate
-// Functions-emulator child process), this test can mock the global `Date.now`
-// that recoverPendingUploads() reads to compute its cutoff, shifting the
-// cutoff forward past the (really, just-created) file's real timeCreated --
+// Running in-process matters because recoverPendingUploads() only recovers
+// files older than STALE_THRESHOLD_MS (15 minutes) -- a real pending-data file
+// would otherwise need to sit in the emulator for 15 real minutes before this
+// suite could observe it being recovered. In-process, the test can mock the
+// global `Date.now` that recoverPendingUploads() reads to compute its cutoff,
+// shifting the cutoff past the (really, just-created) file's timeCreated
 // without touching STALE_THRESHOLD_MS or any other production code.
+//
+// It also passes a PREFIX scoping the sweep to this test's own experiment.
+// The sweep is global and deletes every pending file it promotes, and the
+// Date.now shift makes every file in the shared emulator bucket look stale, so
+// an unscoped run here consumed fixtures belonging to whatever suite was
+// running in parallel -- surfacing as "No such object: .../pending-data/..."
+// in some other, innocent suite about one run in three. Earlier this test used
+// `scheduledPendingRecovery.run({})` (firebase-functions stashes the unwrapped
+// handler on `.run`), which took no prefix and is what made it destructive.
 
 import { initializeApp, getApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
@@ -59,7 +60,7 @@ const STALE_THRESHOLD_MS = 15 * 60 * 1000;
 
 let db;
 let bucket;
-let scheduledPendingRecovery;
+let recoverPendingUploads;
 
 beforeAll(async () => {
   // A NAMED app for this test's own seeding/assertions -- deliberately not
@@ -76,7 +77,7 @@ beforeAll(async () => {
   db = getFirestore(app);
   bucket = getStorage(app).bucket();
 
-  ({ scheduledPendingRecovery } = await import("../../lib/scheduled-pending-recovery.js"));
+  ({ recoverPendingUploads } = await import("../../lib/scheduled-pending-recovery.js"));
 });
 
 async function seedPendingFile(experimentID, filename, data) {
@@ -110,7 +111,12 @@ describe("10. scheduled-pending-recovery carries provider fields through for a g
     const realNow = Date.now();
     const nowSpy = jest.spyOn(Date, "now").mockReturnValue(realNow + STALE_THRESHOLD_MS + 5 * 60 * 1000);
     try {
-      await scheduledPendingRecovery.run({});
+      // Scoped to THIS experiment's prefix. The sweep is global and deletes
+      // every pending file it promotes, and the Date.now shift above makes
+      // *every* file in the shared emulator bucket look stale -- so running
+      // it unscoped consumed whatever fixtures a parallel suite had just
+      // written. See recoverPendingUploads' comment on the prefix seam.
+      await recoverPendingUploads(`pending-data/${experimentID}/`);
     } finally {
       nowSpy.mockRestore();
     }

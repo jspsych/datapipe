@@ -23,18 +23,34 @@ beforeAll(async () => {
   db = getFirestore(app);
 });
 
+// Only the docs THIS suite created. A collection-wide wipe here used to
+// delete uploadQueue docs belonging to whatever suite was running in parallel
+// (scheduled-pending-recovery-emulator, metadata-derived-upload-emulator,
+// pending-recovery-provider-regression), which was one half of the
+// long-standing cross-suite flake. Every doc this suite touches is written
+// directly under a known id -- it never calls the production queueUpload --
+// so registering them here is complete.
+const createdQueueDocIds = [];
+
+function queueDoc(docId) {
+  createdQueueDocIds.push(docId);
+  return db.collection("uploadQueue").doc(docId);
+}
+
 afterEach(async () => {
-  // Clean up uploadQueue collection
-  const docs = await db.collection("uploadQueue").get();
+  if (createdQueueDocIds.length === 0) return;
   const batch = db.batch();
-  docs.forEach((doc) => batch.delete(doc.ref));
+  for (const docId of createdQueueDocIds) {
+    batch.delete(db.collection("uploadQueue").doc(docId));
+  }
   await batch.commit();
+  createdQueueDocIds.length = 0;
 });
 
 describe("queueUpload deduplication", () => {
   test("uses deterministic document ID from experimentID and filename", async () => {
     const docId = "exp123:data.csv".replace(/[/\\]/g, "_");
-    const docRef = db.collection("uploadQueue").doc(docId);
+    const docRef = queueDoc(docId);
 
     await docRef.set({
       experimentID: "exp123",
@@ -137,7 +153,7 @@ describe("handleRetryFailure backoff", () => {
 
 describe("queue entry lifecycle in Firestore", () => {
   test("pending entry can transition to processing", async () => {
-    const docRef = db.collection("uploadQueue").doc("lifecycle-test");
+    const docRef = queueDoc("lifecycle-test");
     await docRef.set({
       status: "pending",
       retryCount: 0,
@@ -160,7 +176,7 @@ describe("queue entry lifecycle in Firestore", () => {
   });
 
   test("processing entry cannot be claimed again", async () => {
-    const docRef = db.collection("uploadQueue").doc("double-claim-test");
+    const docRef = queueDoc("double-claim-test");
     await docRef.set({
       status: "processing",
       retryCount: 0,
@@ -181,7 +197,7 @@ describe("queue entry lifecycle in Firestore", () => {
   });
 
   test("failed entry with max retries reached stays failed", async () => {
-    const docRef = db.collection("uploadQueue").doc("max-retry-test");
+    const docRef = queueDoc("max-retry-test");
     await docRef.set({
       status: "pending",
       retryCount: 4,

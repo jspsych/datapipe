@@ -35,13 +35,24 @@ export const scheduledPendingRecovery = onSchedule(
   }
 );
 
-async function recoverPendingUploads() {
+/**
+ * `prefix` exists as a TEST SEAM and defaults to the production behavior of
+ * sweeping every pending file. This sweep is deliberately global and
+ * destructive — it promotes whatever it finds and then DELETES the pending
+ * file — so a test that runs it unscoped against the shared emulator bucket
+ * consumes fixtures belonging to whatever other suite happens to be running
+ * in parallel. That caused a long-lived, misleading flake: a different
+ * unrelated suite failed with "No such object: .../pending-data/..." roughly
+ * one run in three, always passing in isolation. Tests must therefore pass a
+ * prefix that scopes the sweep to their own experiment namespace.
+ */
+export async function recoverPendingUploads(prefix: string = PENDING_PREFIX) {
   const bucket = storage.bucket();
   const cutoffTime = new Date(Date.now() - STALE_THRESHOLD_MS);
 
-  // List files under pending-data/ prefix
+  // List files under the pending-data/ prefix (or a narrower, test-scoped one)
   const [files] = await bucket.getFiles({
-    prefix: PENDING_PREFIX,
+    prefix,
     maxResults: MAX_FILES_PER_RUN * 2, // fetch extra in case some are too recent
   });
 
