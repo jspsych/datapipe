@@ -127,4 +127,56 @@ describe("createProviderExperiment", () => {
       createProviderExperiment("gdrive", "My Experiment")
     ).rejects.toThrow("Forbidden");
   });
+
+  it("forwards researcherInput in the request body when provided", async () => {
+    auth.currentUser = mockUser();
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ experimentID: "exp-4" }),
+    });
+
+    const researcherInput = {
+      collectionAlias: "my-lab",
+      authorName: "Smith, Jane",
+      contactEmail: "jane@example.edu",
+      description: "A study about things",
+    };
+
+    const result = await createProviderExperiment(
+      "dataverse",
+      "My Experiment",
+      undefined,
+      researcherInput
+    );
+
+    const [, options] = global.fetch.mock.calls[0];
+    const body = JSON.parse(options.body);
+    expect(body.researcherInput).toEqual(researcherInput);
+    expect(body).toEqual({
+      provider: "dataverse",
+      title: "My Experiment",
+      uid: "user-123",
+      idToken: "id-token-abc",
+      researcherInput,
+    });
+    expect(result).toEqual({ experimentId: "exp-4" });
+  });
+
+  it("omits researcherInput from the request body when empty or undefined", async () => {
+    auth.currentUser = mockUser();
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ experimentID: "exp-5" }),
+    });
+
+    await createProviderExperiment("gdrive", "My Experiment", undefined, undefined);
+    let [, options] = global.fetch.mock.calls[0];
+    let body = JSON.parse(options.body);
+    expect(body.researcherInput).toBeUndefined();
+
+    await createProviderExperiment("gdrive", "My Experiment", undefined, {});
+    [, options] = global.fetch.mock.calls[1];
+    body = JSON.parse(options.body);
+    expect(body.researcherInput).toBeUndefined();
+  });
 });
