@@ -355,7 +355,69 @@ provider, it does not trigger a redesign.
   flow has more failure modes than a single PUT; verify behavior under
   concurrent submissions, including media-sized files.
 
-### Dataverse spike — partial findings (source-verified, NOT yet empirical)
+### Dataverse spike — RESULT: GATE A FAILED (live, demo.dataverse.org, 2026-07-26)
+
+Run with `scripts/dataverse-spike.mjs` plus targeted follow-ups, against
+demo.dataverse.org using the real adapter.
+
+**Gate A (concurrent-write locking): FAILED.** Exactly ONE concurrent write to
+a dataset succeeds; every other in-flight write is rejected. This is not a
+degradation curve — there is no safe concurrency above 1:
+
+| concurrent writes to one dataset (distinct content) | succeeded |
+|---|---|
+| 2 | 1 |
+| 3 | 1 |
+| 4 | 1 |
+| 6 | 1 |
+| 12 | 1 |
+| 30 | 2 |
+
+Sequential writes are flawless (8/8) at ~600 ms each, so a dataset absorbs
+~100 files/minute *if strictly serialized*. Rejections come back in ~250 ms as
+a generic **400 `Failed to add file to dataset.`** — NOT the 403 `dataset
+lock` the design anticipated. The speed and the failure at concurrency 2 both
+point at optimistic-locking on the dataset version, i.e. architectural rather
+than demo being underpowered.
+
+Against the stated criterion — "if the spike shows writes serialize through a
+lock at a rate that can't absorb a class section, that is disqualifying" —
+this fails: writes don't merely serialize, concurrent ones outright fail.
+
+Not data loss: the 400 maps to `UNAVAILABLE`, which the upload queue retries.
+But a 30-person section would push ~29 submissions into the retry queue to
+drain serially against a 1-minute backoff, making the queue the primary write
+path rather than the exception.
+
+**Also found: Dataverse rejects duplicate CONTENT, not just duplicate names.**
+Re-uploading a byte-identical file draws `This file has the same content as
+X that is in the dataset.` Under a *different* filename it is accepted with
+that text as a warning (200); under the same name it is a 400. DataPipe's
+filenames are unique per session, so this is survivable — but it is a real
+provider behavior nobody had documented, and it confounded the first spike run
+(the script reused one payload, so lock failures and dedup failures were
+indistinguishable). `scripts/dataverse-spike.mjs` now sends distinct content
+per burst file.
+
+**Gates B and C passed.** `tabIngest=false` was honored (CSV stored as
+`text/csv`, not ingested to `.tab`). Duplicate names are silently renamed
+(`dupe.json` → `dupe-1.json`) and the adapter reads the stored name back
+correctly. `updateFile`'s DELETE + re-add also works on a draft.
+
+**Corrections to the API contract, both live-verified:** dataset creation
+returns **201**, not the documented 200 (this threw on every real create until
+fixed); `/add` returns **200**, not the documented 201. The published guides
+are wrong in both directions.
+
+Options, in the order they should be considered: (1) take the design's
+pre-approved path and swap Dataverse for Box; (2) re-run against a production
+institutional installation before deciding — cheap, and the one thing that
+could overturn this, though the concurrency-2 failure suggests it will not;
+(3) keep Dataverse but serialize writes per dataset, which needs a distributed
+single-writer lock across Cloud Functions instances (Firestore-based), caps an
+experiment at ~100 submissions/minute, and is real architecture, not a tweak.
+
+### Earlier source-verified findings (superseded in part by the live run above)
 
 Recorded 2026-07-25 alongside the Dataverse adapter (backend only, not
 exposed). These come from reading Dataverse's Java source and its IQSS

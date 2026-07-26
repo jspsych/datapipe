@@ -297,7 +297,13 @@ export const dataverseProvider: StorageProvider = {
     // createDataContainer has no error union in the StorageProvider
     // interface (matches osf/gdrive) -- signal failure by throwing, same as
     // gdrive's folder-creation failures.
-    if (response.status !== 200) {
+    //
+    // Accept 200 OR 201 via isSuccessStatus. The guides say dataset creation
+    // returns 200, but demo.dataverse.org actually returns 201 Created --
+    // verified live, 2026-07-26. (The docs are wrong in BOTH directions here:
+    // they also claim /add returns 201 when it really returns 200.) Hardcoding
+    // 200 made every real dataset creation throw.
+    if (!isSuccessStatus(response.status)) {
       const mapped = await mapErrorResponse(response);
       throw new Error(`Dataverse dataset creation failed: ${mapped.providerStatus} ${mapped.providerMessage}`);
     }

@@ -78,19 +78,32 @@ async function main() {
   // dataset within a minute; if writes serialize behind a lock at a rate that
   // cannot absorb that, Dataverse is out.
   const payload = JSON.stringify([{ trial_type: "html-keyboard-response", rt: 421 }]);
+  // Every burst file gets DISTINCT content. Dataverse rejects files whose
+  // content checksum matches one already in the dataset, so reusing one
+  // payload confounds this gate: the failures look like lock contention when
+  // they are really duplicate-content rejections. Verified live 2026-07-26.
+  const burstPayload = (i) => JSON.stringify([{ trial_type: "html-keyboard-response", rt: 400 + i, session: `burst-${i}` }]);
   const started = Date.now();
   const writes = await Promise.all(
-    Array.from({ length: burst }, (_, i) =>
-      dataverseProvider
-        .writeSessionFile(auth, container, `burst-${String(i).padStart(3, "0")}.json`, payload, meta(payload, "application/json"))
+    Array.from({ length: burst }, (_, i) => {
+      const p = burstPayload(i);
+      return dataverseProvider
+        .writeSessionFile(auth, container, `burst-${String(i).padStart(3, "0")}.json`, p, meta(p, "application/json"))
         .then((r) => r)
-        .catch((e) => ({ success: false, error: "THREW", providerMessage: e.message }))
-    )
+        .catch((e) => ({ success: false, error: "THREW", providerMessage: e.message }));
+    })
   );
   const elapsed = ((Date.now() - started) / 1000).toFixed(1);
   const ok = writes.filter((w) => w.success);
   const bad = writes.filter((w) => !w.success);
-  const locked = bad.filter((w) => /dataset lock/i.test(w.providerMessage || ""));
+  // Concurrent adds are rejected with a generic 400 "Failed to add file to
+  // dataset.", NOT the 403 "dataset lock" the design doc anticipated -- so
+  // count both signatures.
+  const locked = bad.filter((w) => /dataset lock|failed to add file/i.test(w.providerMessage || ""));
+  const dupeContent = bad.filter((w) => /same content/i.test(w.providerMessage || ""));
+  if (dupeContent.length) {
+    console.log(`      NOTE: ${dupeContent.length} rejected as duplicate CONTENT -- these are not lock failures.`);
+  }
   const byError = bad.reduce((acc, w) => ({ ...acc, [w.error]: (acc[w.error] || 0) + 1 }), {});
 
   record(

@@ -600,6 +600,36 @@ describe("6. downloadFile", () => {
 });
 
 describe("7. createDataContainer", () => {
+  it("accepts a 201 Created, which is what a real Dataverse returns", async () => {
+    // Regression guard, found live against demo.dataverse.org on 2026-07-26:
+    // the guides say dataset creation returns 200, but the server returns 201.
+    // This method used to hardcode `status !== 200`, so EVERY real dataset
+    // creation threw. (The docs are wrong both ways -- they also claim /add
+    // returns 201 when it actually returns 200.)
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({
+        status: 201,
+        statusText: "Created",
+        jsonBody: { status: "OK", data: { id: 456, persistentId: "doi:10.5072/FK2/CREATED" } },
+      })
+    );
+
+    const result = await dataverseProvider.createDataContainer(auth, {
+      collectionAlias: "my-collection",
+      title: "My Study",
+      authorName: "Ada Lovelace",
+      contactEmail: "ada@example.edu",
+      description: "A study",
+    });
+
+    expect(result).toEqual({
+      provider: "dataverse",
+      datasetId: 456,
+      persistentId: "doi:10.5072/FK2/CREATED",
+      serverUrl: SERVER_URL,
+    });
+  });
+
   it("posts the citation metadata block and returns datasetId/persistentId/serverUrl", async () => {
     mockFetch.mockResolvedValueOnce(
       mockResponse({
