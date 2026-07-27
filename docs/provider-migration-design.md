@@ -31,8 +31,10 @@ already provider-agnostic and requiring no change. The OSF-specific surface:
   `resolve-token.ts`, `generate-oauth-state.ts`, plus a parallel static
   Personal-Access-Token path (`save-osf-token.ts`, `get-osf-token.ts`).
 - **File writes**: `put-file-osf.ts`, `update-file-osf.ts`, `subfolder.ts` — built
-  on OSF's Waterbutler API, and explicitly relying on OSF's `409 Conflict` response
-  as the sole collision-detection mechanism for per-session data files.
+  on OSF's Waterbutler API. (STALE as of 2026-07-26: 409 is no longer the sole
+  collision-detection mechanism — the Firestore collision cache in
+  `collision-cache.ts` is now the primary gate and 409 is a backstop, per the
+  dual-run plan in "Collision detection" below.)
 - **Metadata handling**: `metadata-block.ts`, `metadata-process.ts` — reconciles a
   mutable `dataset_description.json` file against a live provider-side folder
   listing on every update.
@@ -86,17 +88,33 @@ already provider-agnostic and requiring no change. The OSF-specific surface:
   around a curate-once-publish-once-mint-a-DOI workflow, structurally mismatched
   to DataPipe's hundreds-of-small-incremental-writes-over-months pattern. This
   turned out to be a category-wide limitation, not specific to any one vendor —
+  **though the category framing overstates the case for Zenodo specifically**
+  (verified 2026-07-26): Zenodo drafts DO accept incremental file writes over
+  the API with no documented time limit on how long a draft may stay
+  unpublished, and published records stay editable for 30 days plus DOI
+  versioning after that. The real blocker for Zenodo is its per-record cap of
+  **100 files / 50 GB** (200 GB by one-time exception), which a
+  semester-long study exceeds — a size limit, not a workflow mismatch. The
+  conclusion stands; the stated reason was wrong. —
   confirmed across every Dataverse-software installation (Harvard, Borealis,
   DataverseNL, DataverseNO, DANS all share the same open-source codebase, same
   static-token-only auth, same silent-rename-on-duplicate-filename behavior).
-  ICPSR has no automated API at all. Dryad supports incremental draft writes but
+  ICPSR has no automated DEPOSIT API (it does publish a read-only Metadata
+  Export API for searching/exporting study metadata — verified 2026-07-26, so
+  the earlier "no automated API at all" was wrong as stated; deposit itself is
+  web-form only). Dryad supports incremental draft writes but
   only via a shared service-account grant (no per-researcher OAuth consent) and
-  charges a $150/dataset publishing fee. Databrary is architecturally a gated,
+  charges a tiered publishing fee (verified 2026-07-26: $150 for ≤5 GB, $180 for ≤10 GB, $520 for ≤50 GB, up to $6.08/GB beyond; waivers are not approved above 10 GB) — the earlier flat "$150/dataset" understated it. Databrary is architecturally a gated,
   human-reviewed video library, not a general write target.
 - **Box, Amazon S3, Dropbox, Microsoft OneDrive/Graph** — all technically solid,
-  generic-storage options with no platform-fit ambiguity. Box has the strongest
-  native atomic-write guarantee of anything evaluated and is already common at
-  universities; S3 has the best region control and longest clean API history but
+  generic-storage options with no platform-fit ambiguity. Box offers a real
+  conditional-write guarantee (If-Match, 412 on mismatch) across a wide range of
+  operations and is already common at universities — though the earlier claim
+  that it was the *strongest of anything evaluated* does not survive checking:
+  S3 added ETag-based conditional writes (If-Match/If-None-Match on PutObject
+  and CompleteMultipartUpload) in November 2024, so the two are comparable and
+  Box's advantage is breadth of operation types, not strength (verified
+  2026-07-26); S3 has the best region control and longest clean API history but
   breaks OAuth-onboarding simplicity (self-provisioned IAM). These remain
   reasonable fallback options but were not selected as the initial three.
   **Box is the pre-approved substitute**: if a conditional provider fails its
@@ -245,21 +263,23 @@ users/{uid}: {
 }
 ```
 
-`crypto-utils.ts` (AES-256-GCM) and `generate-oauth-state.ts` (CSRF state
-handling) carry over unchanged — already provider-agnostic.
+`crypto-utils.ts` (AES-256-GCM — confirmed still accurate) carries over
+unchanged. `generate-oauth-state.ts` did NOT: it is now provider-aware (it
+takes an optional `provider` and returns an `authorizeUrl`), so the original
+"carry over unchanged" no longer holds for it.
 
 ### Per-provider adapter notes
 
 | | Google Drive | Figshare | Dataverse |
 |---|---|---|---|
 | Auth | OAuth2, `drive.file` scope | OAuth2, `authorization_code` + `refresh_token` | Static API token — same shape as today's OSF PAT fallback (`usingPersonalToken`) |
-| Auth longevity | Refresh tokens are revoked after ~6 months of disuse — paused studies need reconnect UX. App must reach **published** OAuth verification status: testing mode means 7-day refresh tokens and a 100-user cap | Long-lived; confirm rotation/expiry behavior in the spike | Tokens **expire one year after creation**, effectively fixed — no admin setting found that exposes a different lifetime (confirmed via `generateApiTokenForUser(au, INTERVAL.YEARS, 1)`; a search of `SettingsServiceBean`'s key enum found only `MinutesUntilConfirmEmailTokenExpires`, which is email confirmation, not API tokens). The Dataverse UI does not surface this expiry at all — only `GET /api/users/token` does, which DataPipe now reads at connect time and warns on again at experiment setup — needs expiry-warning UX, not just storage |
-| Container | **App-created "DataPipe" folder at Drive root.** Under `drive.file` the app can only touch files it created or the user explicitly picked — a researcher-picked parent would force a Google Picker frontend integration for little gain. Revisit only if researchers demand placement control | Article inside a Project (two levels only) | Dataset inside a Collection |
-| Subfolders | Native | **None** — filename-prefix fallback, surfaced in UI as a known limitation | Native via `directoryLabel` |
-| Media / size limits | Free quota is 15 GB **shared with Gmail/Photos** — quota exhaustion is an expected support scenario for audio/video studies, not an edge case | Per-file and total-quota caps on the free tier; upload is a multi-step multipart flow (initiate → parts → complete) with correspondingly more failure modes; no in-place update (delete + re-upload) | Per-installation size caps (federation → varies); CSV uploads are **"ingested"** into archival `.tab` format unless suppressed via `tabIngest`, which requires **Dataverse >= 5.11** (released 2022-06-13); older installations silently ignore it. The adapter's `setupWarnings` checks `/api/info/version` and warns at experiment setup |
+| Auth longevity | Refresh tokens are revoked after ~6 months of disuse — paused studies need reconnect UX. App must reach **published** OAuth verification status: testing mode means 7-day refresh tokens and a 100-user cap (both verified 2026-07-26; the 7-day rule exempts apps requesting only name/email/profile, which does not help us since we need `drive.file`). Note in our favour: `drive.file` is classified non-sensitive and needs only **basic** OAuth verification — the restricted-scope security assessment that `drive`/`drive.readonly` trigger does not apply | Long-lived; confirm rotation/expiry behavior in the spike | Tokens **expire one year after creation**, effectively fixed — no admin setting found that exposes a different lifetime (confirmed via `generateApiTokenForUser(au, INTERVAL.YEARS, 1)`; a search of `SettingsServiceBean`'s key enum found only `MinutesUntilConfirmEmailTokenExpires`, which is email confirmation, not API tokens). The Dataverse UI does not surface this expiry at all — only `GET /api/users/token` does, which DataPipe now reads at connect time and warns on again at experiment setup — needs expiry-warning UX, not just storage |
+| Container | **App-created "DataPipe" folder at Drive root.** Under `drive.file` the app can only touch files it created or the user explicitly picked — a researcher-picked parent would force a Google Picker frontend integration for little gain. Revisit only if researchers demand placement control | Article inside a Project (two levels — no recursive project nesting); Collections are a parallel top-level container that can also hold Articles via API | Dataset inside a Collection |
+| Subfolders | Native | Folder hierarchies ARE supported via the API, preserved up to 10 levels (verified 2026-07-26 — the earlier "None" was wrong). But the File object exposes only a flat `name` with no `directoryLabel`-equivalent, so the exact encoding is UNVERIFIED and a filename-prefix fallback may still be what we implement | Native via `directoryLabel` |
+| Media / size limits | Free quota is 15 GB **shared with Gmail/Photos** — quota exhaustion is an expected support scenario for audio/video studies, not an edge case. WATCH ITEM (unverified, secondary reporting only, 2026-07-26): new Google accounts may now start at 5 GB until a phone number is linked. Worth confirming against a primary source before launch, since it would make quota exhaustion more likely, not less | Free tier is **20 GB total / 20 GB per file**, plus hard caps of **500 files per item, 500 items, 50 versions per item** (all current documented limits, verified 2026-07-26). Upload is always a multi-step flow (initiate → parts → complete) with **no single-request path even for small files**, so each session file costs ~4 API calls; no in-place content update (delete + re-upload). Figshare documents **no automatic rate limiting** but asks clients to stay under **1 request/second** and reserves the right to throttle or block, with no documented 429 — see the burst risk below | Per-installation size caps (federation → varies); CSV uploads are **"ingested"** into archival `.tab` format unless suppressed via `tabIngest`, which requires **Dataverse >= 5.11** (released 2022-06-13); older installations silently ignore it. The adapter's `setupWarnings` checks `/api/info/version` and warns at experiment setup |
 | Federation | Single global service | Single global service | **Federated** — Harvard, Borealis, DataverseNL, etc. are different servers; `serverUrl` must be stored per researcher, and DataPipe integrates whatever software version each installation runs (version drift is a permanent fact of this adapter) |
 | DOI/publish | N/A | Publishing an Article snapshots it | Dataset publish bumps a major version — dataset should stay in **draft indefinitely**; publish (and DOI mint) becomes a manual researcher action at study completion, not something DataPipe triggers |
-| Gating spike | None (comfortable fit) — but OAuth app verification has **weeks of lead time**; start it at build step 0 | See "Gating spikes" below — duplicate-filename behavior, per-item **file-count cap** (historically ~500 files/item; a semester-long study can exceed it), multipart burst behavior | See "Gating spikes" below — **dataset locking under concurrent adds** (most likely disqualifier in the plan), tabular-ingest suppression, silent-rename response shape |
+| Gating spike | None (comfortable fit) — but OAuth app verification has **weeks of lead time**; start it at build step 0 | See "Gating spikes" below. Two of these are now DOCUMENTED rather than speculative (verified 2026-07-26): the **500-files-per-item cap** is a current stated limit, not a historical approximation; and Figshare's **1 request/second** guidance is in direct tension with requirement 6 (30–100 submissions/minute), since the mandatory multi-step upload makes each session file ~4 requests — a 30-student burst is ~120 requests/minute. Duplicate-filename behavior remains completely undocumented | See "Gating spikes" below — **dataset locking under concurrent adds** (most likely disqualifier in the plan), tabular-ingest suppression, silent-rename response shape |
 
 ### OAuth generalization
 
