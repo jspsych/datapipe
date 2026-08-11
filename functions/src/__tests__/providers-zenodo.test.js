@@ -489,6 +489,19 @@ describe("9. validateStaticToken", () => {
   });
 });
 
+// The 100-file cap is real today because compaction is not built. These
+// assertions are expected to be DELETED along with setupWarnings when it ships.
+describe("9b. setupWarnings", () => {
+  it("warns about the 100-file cap without making a request", async () => {
+    const warnings = await zenodoProvider.setupWarnings(auth);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/100 files/);
+    // Unconditional and offline: the cap is a property of Zenodo, not of an
+    // installation, so unlike dataverse.ts there is nothing to probe.
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+});
+
 describe("10. registry wiring", () => {
   it("declares the capability surface the framework reads", () => {
     expect(zenodoProvider.id).toBe("zenodo");

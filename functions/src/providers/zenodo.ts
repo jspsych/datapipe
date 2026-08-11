@@ -528,4 +528,28 @@ export const zenodoProvider: StorageProvider = {
     const content = await response.text();
     return { success: true, content };
   },
+
+  // A Zenodo record holds at most 100 files, and the compaction that is meant
+  // to keep a study under that cap (batch zips during collection, one merged
+  // archive at finalization -- see docs/provider-migration-design.md) is NOT
+  // built yet. Until it is, session 101 fails and stays failed: the queue maps
+  // Zenodo's refusal to QUOTA_EXCEEDED, which is slow-tier and needs human
+  // action to clear. No data is lost -- the submission stays in pending
+  // storage and QueuePanel surfaces the reason -- but the researcher cannot
+  // fix it, so they need to hear about the limit BEFORE they start collecting
+  // rather than after.
+  //
+  // Unconditional and offline, unlike dataverse.ts's version probe: the cap is
+  // a property of Zenodo itself, not of an installation, so there is nothing
+  // to interrogate and no failure mode to fail open from.
+  //
+  // DELETE THIS once compaction ships.
+  async setupWarnings(_auth: ResolvedAuth): Promise<string[]> {
+    return [
+      "Zenodo allows at most 100 files per deposition, and DataPipe does not yet " +
+        "combine sessions into archives. Plan for fewer than 100 submissions in this " +
+        "experiment: after that, further submissions will fail to upload and will have " +
+        "to be recovered by hand.",
+    ];
+  },
 };
