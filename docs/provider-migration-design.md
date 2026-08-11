@@ -83,19 +83,21 @@ already provider-agnostic and requiring no change. The OSF-specific surface:
   the service even though no explicit ToS clause forbids it, and there's no
   precedent either way for this exact usage pattern. Ruled out on those grounds
   rather than a technical one.
-- **Zenodo, Figshare (as archival), Harvard Dataverse, ICPSR, Dryad, Databrary,
-  DANS** — the entire "research-data-specific repository" category is built
-  around a curate-once-publish-once-mint-a-DOI workflow, structurally mismatched
-  to DataPipe's hundreds-of-small-incremental-writes-over-months pattern. This
-  turned out to be a category-wide limitation, not specific to any one vendor —
-  **though the category framing overstates the case for Zenodo specifically**
-  (verified 2026-07-26): Zenodo drafts DO accept incremental file writes over
-  the API with no documented time limit on how long a draft may stay
-  unpublished, and published records stay editable for 30 days plus DOI
-  versioning after that. The real blocker for Zenodo is its per-record cap of
-  **100 files / 50 GB** (200 GB by one-time exception), which a
-  semester-long study exceeds — a size limit, not a workflow mismatch. The
-  conclusion stands; the stated reason was wrong. —
+- **Zenodo — NO LONGER RULED OUT (2026-07-27). Adapter built; spike PASSED all
+  five gates live 2026-08-11; see "Zenodo adapter" below.** The original
+  dismissal put Zenodo in the curate-once-publish-once
+  category, which was wrong on the facts (verified 2026-07-26): Zenodo drafts DO
+  accept incremental file writes over the API with no documented time limit on
+  how long a draft may stay unpublished, and published records stay editable for
+  30 days plus DOI versioning after that. That left the per-record cap of
+  **100 files / 50 GB** (200 GB by one-time exception) as the only real blocker
+  — a size limit, not a workflow mismatch. That cap is now addressed by
+  end-of-study archive compaction rather than treated as disqualifying, so the
+  earlier conclusion is withdrawn along with its reasoning.
+- **Figshare (as archival), Harvard Dataverse, ICPSR, Dryad, Databrary,
+  DANS** — the "research-data-specific repository" category is largely built
+  around a curate-once-publish-once-mint-a-DOI workflow, mismatched
+  to DataPipe's hundreds-of-small-incremental-writes-over-months pattern —
   confirmed across every Dataverse-software installation (Harvard, Borealis,
   DataverseNL, DataverseNO, DANS all share the same open-source codebase, same
   static-token-only auth, same silent-rename-on-duplicate-filename behavior).
@@ -280,6 +282,116 @@ takes an optional `provider` and returns an `authorizeUrl`), so the original
 | Federation | Single global service | Single global service | **Federated** — Harvard, Borealis, DataverseNL, etc. are different servers; `serverUrl` must be stored per researcher, and DataPipe integrates whatever software version each installation runs (version drift is a permanent fact of this adapter) |
 | DOI/publish | N/A | Publishing an Article snapshots it | Dataset publish bumps a major version — dataset should stay in **draft indefinitely**; publish (and DOI mint) becomes a manual researcher action at study completion, not something DataPipe triggers |
 | Gating spike | None (comfortable fit) — but OAuth app verification has **weeks of lead time**; start it at build step 0 | See "Gating spikes" below. Two of these are now DOCUMENTED rather than speculative (verified 2026-07-26): the **500-files-per-item cap** is a current stated limit, not a historical approximation; and Figshare's **1 request/second** guidance is in direct tension with requirement 6 (30–100 submissions/minute), since the mandatory multi-step upload makes each session file ~4 requests — a 30-student burst is ~120 requests/minute. Duplicate-filename behavior remains completely undocumented | See "Gating spikes" below — **dataset locking under concurrent adds** (most likely disqualifier in the plan), tabular-ingest suppression, silent-rename response shape |
+
+### Zenodo adapter (added 2026-07-27)
+
+Implemented in `functions/src/providers/zenodo.ts`. Static-token auth, not
+federated (allowlisted to `zenodo.org` / `sandbox.zenodo.org` in the adapter —
+the researcher never types a server URL, and `lib/provider-config.js` supplies
+the fixed one that `connectstatictokenprovider` still requires).
+
+**API generation.** Zenodo now runs on InvenioRDM and both API generations are
+live — verified 2026-07-27: `GET /api/deposit/depositions` → 403 (exists,
+needs auth), `GET /api/records` → 200. The adapter targets the **legacy deposit
+API plus its bucket endpoint**, because (a) it is what Zenodo's own developer
+documentation describes, and (b) a bucket `PUT` is **one** request per session
+file where the InvenioRDM-native flow is three (init → content → commit).
+Against Zenodo's documented 100 requests/minute for authenticated users that is
+~100 vs ~33 sessions/minute of first-try throughput, and 100/minute is
+requirement 6. The risk accepted: the legacy API is a compatibility layer that
+could be retired, so every HTTP call goes through helpers rather than being
+inlined, keeping a future migration contained.
+
+**Rate limits** are 100 req/min and 5000 req/hour authenticated (60/2000
+guest) — comfortably above the burst profile, unlike Figshare's 1 req/sec.
+
+**`updateFile` is a single overwriting PUT.** It was written as delete-then-PUT
+while the overwrite semantics were undocumented; gate A settled it live and the
+delete is gone. Zenodo is therefore the only non-OSF provider whose metadata
+update is **atomic** — Dataverse and Figshare still carry the delete-then-write
+window.
+
+**The 100-file cap is handled by end-of-study compaction, not rollover.**
+Chosen because the goal is a clean *published* artifact, and record rollover
+would split one experiment across several depositions — exactly the structure
+being avoided. During collection, sessions are written as individual files
+(researchers can preview and spot-check a single session; a growing archive
+would make that require downloading everything). Compaction into batch zips
+happens in a background job only as needed to stay under the cap. At
+finalization a single merge produces one archive plus a loose
+`dataset_description.json`, and only then are the parts deleted — upload,
+verify the returned md5, *then* delete, never the reverse.
+
+Rejected alternative: rebuilding the archive on every submission (or every
+batch). It turns each write into a read-modify-write on one object with no
+provider-side arbitration — Zenodo offers no conditional write — so concurrent
+submissions silently lose data rather than being rejected the way Dataverse's
+lock rejects them. It also costs O(n²) transfer and rewrites already-collected
+data repeatedly, which for a tool that retains no copy means every rewrite is
+an unrecoverable-loss opportunity. Sealed archives are written once and never
+touched again.
+
+**Finalization needs no server-side zip code**: published records expose
+`links.archive` → `/api/records/{id}/files-archive`, and gate D confirmed the
+**draft** equivalent (`/api/records/{id}/draft/files-archive`) returns a
+`application/zip` on an unpublished deposition. Bulk download works throughout
+collection, not only after publication.
+
+### Zenodo spike — RESULT: PASS (live, sandbox.zenodo.org, 2026-08-11)
+
+`scripts/zenodo-spike.mjs`, driving the real compiled adapter. **All five gates
+pass.** Zenodo is the first provider to clear its spike outright — Dataverse
+needed its verdict revised to CONDITIONAL PASS after failing gate A.
+
+| Gate | Result |
+|---|---|
+| A. bucket PUT overwrites an existing key | **PASS** — replaced in place, one listing entry |
+| B. slashed keys | **PASS after redesign** — see below |
+| C. 12 concurrent writes to one deposition | **PASS** — 12/12 accepted, 12/12 listed, 1.25 s |
+| D. `files-archive` on an unpublished draft | **PASS** — 200 `application/zip` |
+| E. behavior at the 101st file | **PASS after fix** — 400, now mapped `QUOTA_EXCEEDED` |
+
+**Gate C is the headline.** This is the gate Dataverse failed: Dataverse accepts
+exactly one concurrent write per dataset and 400s the rest. Zenodo's bucket is
+object storage and took all 12 without complaint, so the fast-retry contention
+tier added for Dataverse (`ff5d805`) is not load-bearing here.
+
+**Gate B was answered "no", and the adapter changed rather than the verdict.**
+Zenodo's keyspace is **flat**; a slash cannot be stored by any route:
+
+- bucket PUT with literal slashes → **404** (addresses a bucket path that does not exist)
+- bucket PUT with the key `%2F`-encoded → **404** (the router decodes it back before matching)
+- legacy multipart POST with `name="data/raw/probe.json"` → **201, stored as `data_raw_probe.json`**
+
+That third case is the dangerous one and is the reason this endpoint was not
+chosen: a silent server-side rename, with a success status, against a collision
+cache that matches names **exactly** — precisely the failure mode of Dataverse's
+dropped `directoryLabel`. The adapter now flattens `[/\\]+` → `_` up front
+(`toZenodoKey`) so the name it reports is the name Zenodo holds, and
+`storedFilename` is still read back off the response rather than assumed.
+
+**Consequence: the Psych-DS directory layout cannot be represented in Zenodo
+file keys.** This is not hypothetical — `metadataActive` experiments upload to
+`data/raw/<name>` and `data/<base>_data.csv` (`metadata-derived-files.ts`), so
+every metadata-enabled Zenodo experiment hits this path. Live keys will read
+`data_raw_subject-1.json`. The real structure is preserved **inside the
+compaction archive**, where the paths are ours to choose and Psych-DS validity
+can be maintained. Open decision: whether flat live keys are acceptable given
+the archive carries the true structure (see Open questions).
+
+**Two adapter bugs were found only because the spike drives the real adapter**,
+not a hand-written request:
+
+1. `Content-Type: <real mimetype>` on the bucket PUT → hard **415**; the endpoint
+   accepts `application/octet-stream` and nothing else. Every write failed.
+2. `encodeKey` encoded path segments separately, preserving literal slashes → 404.
+
+Both were mapped to `UNAVAILABLE`, i.e. the queue would have retried a
+permanently broken request forever. Gate E surfaced a third of the same kind:
+the cap message is *"Uploading selected files will result in exceeding the max
+amount per record."* — `exceeding`, not `exceeds`, which the original pattern
+missed, so a full record read as a transient outage. All three are fixed and
+regression-tested (`providers-zenodo.test.js`, 45 tests).
 
 ### OAuth generalization
 
@@ -570,3 +682,13 @@ Google Drive provider is announced:
 - Do researchers need placement control for the Drive folder strongly enough
   to justify a Google Picker integration, or is the app-created root folder
   acceptable? (Default answer: root folder; revisit on demand.)
+- **Zenodo's flat keyspace vs. Psych-DS (raised 2026-08-11, needs a decision).**
+  Zenodo cannot store a slash in a file key, so a `metadataActive` experiment's
+  live deposition shows `data_raw_subject-1.json` rather than
+  `data/raw/subject-1.json`, and is not a valid Psych-DS component while
+  collection is in progress. Three options: (a) accept it, and let the
+  compaction archive carry the real Psych-DS tree — cheapest, and the archive is
+  the artifact researchers actually cite; (b) suppress the derived Psych-DS
+  files on Zenodo and generate them only into the archive; (c) treat Zenodo as
+  unsupported for `metadataActive` experiments. (a) is the working assumption
+  and what the code does today.
