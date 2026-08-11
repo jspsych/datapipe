@@ -2,12 +2,14 @@ import { registerProvider, getProvider } from "./registry.js";
 import { osfProvider } from "./osf.js";
 import { gdriveProvider } from "./gdrive.js";
 import { dataverseProvider } from "./dataverse.js";
+import { zenodoProvider } from "./zenodo.js";
 import { StorageProvider, StorageProviderId, ContainerRef, OAuthConfig } from "./types.js";
 import { ExperimentData } from "../interfaces.js";
 
 registerProvider(osfProvider);
 registerProvider(gdriveProvider);
 registerProvider(dataverseProvider);
+registerProvider(zenodoProvider);
 
 // OAuth config for the generic storage-GRANT flow
 // (docs/provider-migration-design.md, scratchpad/step4b-oauth-connect-spec.md).
@@ -54,4 +56,5 @@ export { registerProvider, getProvider, listProviders } from "./registry.js";
 export { osfProvider } from "./osf.js";
 export { gdriveProvider } from "./gdrive.js";
 export { dataverseProvider } from "./dataverse.js";
+export { zenodoProvider } from "./zenodo.js";
 export * from "./types.js";

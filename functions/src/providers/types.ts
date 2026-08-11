@@ -8,7 +8,7 @@
 // is erased at compile time and is safe.
 import type { UserData } from "../interfaces.js";
 
-export type StorageProviderId = "osf" | "gdrive" | "figshare" | "dataverse";
+export type StorageProviderId = "osf" | "gdrive" | "figshare" | "dataverse" | "zenodo";
 
 export type AuthMethod = "oauth2" | "static-token";
 
@@ -241,6 +241,11 @@ export interface ConnectedAccounts {
   gdrive?: OAuth2AccountConnection;
   figshare?: OAuth2AccountConnection;
   dataverse?: StaticTokenAccountConnection;
+  // Zenodo reuses the static-token shape, but its tokenExpiresAt is expected
+  // to stay ABSENT: Zenodo personal access tokens have no documented expiry
+  // and no endpoint reports one, so zenodo.ts implements no staticTokenExpiry
+  // and connect-provider.ts therefore omits the field.
+  zenodo?: StaticTokenAccountConnection;
 }
 
 // experiments/{id}.collisionCache (additive Firestore schema). The salt is a

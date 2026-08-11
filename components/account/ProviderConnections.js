@@ -68,7 +68,14 @@ export default function ProviderConnections() {
           uid: user.uid,
           idToken,
           token: apiToken.trim(),
-          serverUrl: serverUrl.trim(),
+          // connectstatictokenprovider ALWAYS requires a serverUrl, but not
+          // every static-token provider is federated. Dataverse is (the
+          // researcher types their institution's installation); Zenodo is not
+          // -- there is exactly one production host -- so its config supplies
+          // a fixed defaultServerUrl and renders no field at all.
+          serverUrl: STORAGE_PROVIDERS[providerId]?.needsServerUrl
+            ? serverUrl.trim()
+            : STORAGE_PROVIDERS[providerId]?.defaultServerUrl,
         }),
       });
 
