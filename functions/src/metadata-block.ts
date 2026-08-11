@@ -33,7 +33,21 @@ class ProviderUpdateError extends Error {
 // auth or quota problem isn't fixed by writing a new file, and self-healing
 // on RATE_LIMITED would double the write load exactly when the provider is
 // telling us to back off.
-const NON_HEALABLE_CODES: ProviderErrorCode[] = ["AUTH_EXPIRED", "RATE_LIMITED", "QUOTA_EXCEEDED"];
+//
+// CONTENTION belongs here for the same reason as RATE_LIMITED, and its
+// absence was a real hazard on Dataverse, which is both the provider that
+// emits it and the one whose updateFile is delete-then-re-add. A collision
+// there means the re-add lost a race against another participant's write, so
+// the immediate re-create the self-heal branch attempts is a THIRD write into
+// the same still-contended dataset — which loses the same race, throws, and
+// takes the submission down with it. Failing straight out leaves the stale
+// ref for the next submission to self-heal from, once the container is quiet.
+const NON_HEALABLE_CODES: ProviderErrorCode[] = [
+  "AUTH_EXPIRED",
+  "RATE_LIMITED",
+  "QUOTA_EXCEEDED",
+  "CONTENTION",
+];
 
 export default async function blockMetadata(
     exp_data: ExperimentData,
@@ -156,6 +170,25 @@ try {
             `Error updating metadata file: ${result.providerMessage}`,
             result.error
           );
+        }
+
+        // An update can hand back a DIFFERENT ref than it was given, and the
+        // stored one has to follow it. OSF and gdrive update in place and
+        // echo the ref back unchanged, but Dataverse's updateFile is DELETE +
+        // re-add and the re-added file gets a brand-new dataFile id — so
+        // discarding this result left Firestore pointing at an id that was
+        // deleted moments ago. Every later submission then tried to DELETE
+        // it, got a 404, and self-healed by creating another
+        // dataset_description.json, which Dataverse silently renames rather
+        // than rejecting: the dataset accumulated one orphaned
+        // dataset_description-N.json per submission while the canonical file
+        // was never updated again.
+        //
+        // Guarded on a defined id for the same reason createMetadataFile is:
+        // storing a ref with no usable id would persist something no future
+        // update can address.
+        if (result.fileRef.id && result.fileRef.id !== fileRef.id) {
+          t.set(metadata_doc_ref, { metadataFileRef: result.fileRef }, { merge: true });
         }
       }
 

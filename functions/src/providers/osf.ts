@@ -152,6 +152,22 @@ export const osfProvider: StorageProvider = {
     throw new Error("osfProvider.createDataContainer is not implemented");
   },
 
+  // Identity: OSF keeps the path as real nested folders, so distinct paths
+  // are distinct files and the collision cache must keep them distinct too --
+  // collapsing to the leaf (as gdrive does, because its listing collapses the
+  // same way) would falsely reject a second submission to a different
+  // subfolder.
+  //
+  // The known gap this leaves, unchanged from before: listFiles below reads
+  // only the component ROOT, so rehydrating a cold cache never sees files
+  // under data/raw/ or a researcher's subfolder and a duplicate can slip past
+  // the cache. OSF is the one provider where that is survivable -- it answers
+  // a duplicate write with 409, which api-data maps to NAME_CONFLICT and
+  // treats as the authoritative backstop.
+  storedNameFor(filename: string): string {
+    return filename;
+  },
+
   async writeSessionFile(
     auth: ResolvedAuth,
     container: ContainerRef,

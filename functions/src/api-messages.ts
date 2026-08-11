@@ -43,9 +43,16 @@ const MESSAGES = {
     error: "PROVIDER_NOT_CONNECTED",
     message: "The experiment owner has not connected an account for this experiment's storage provider",
   },
+  // Named no provider. Both static-token adapters emit this code (dataverse.ts
+  // and zenodo.ts), so hardcoding "Dataverse" told a Zenodo owner to go fix a
+  // token on a service they may not even use. The wording still carries what
+  // makes this code distinct from AUTH_EXPIRED -- a static token cannot be
+  // refreshed, so the researcher has to CREATE a new one and reconnect, not
+  // just re-authorize.
   PROVIDER_TOKEN_EXPIRED: {
     error: "PROVIDER_TOKEN_EXPIRED",
-    message: "The Dataverse API token for this experiment's owner has expired and must be reconnected",
+    message:
+      "The API token for this experiment's storage provider has expired. A new token must be created on that provider and reconnected to DataPipe",
   },
   INVALID_BASE64_DATA: {
     error: "INVALID_BASE64_DATA",

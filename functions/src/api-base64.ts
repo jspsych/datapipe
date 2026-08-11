@@ -8,7 +8,7 @@ import MESSAGES from "./api-messages.js";
 import resolveToken from "./resolve-token.js";
 import queueUpload from "./queue-upload.js";
 import { persistPending, cleanupPending } from "./persist-pending.js";
-import { getProviderForExperiment } from "./providers/index.js";
+import { getProviderForExperiment, claimNameFor } from "./providers/index.js";
 import { WriteResult, ResolvedAuth } from "./providers/types.js";
 import { claimFilename, confirmClaim, CollisionCacheUnavailableError } from "./collision-cache.js";
 import { ExperimentData, UserData } from './interfaces';
@@ -120,10 +120,17 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 
   // Collision detection: claim the filename in the Firestore cache
   // immediately before the provider write. The provider's own conflict
   // response (NAME_CONFLICT) stays wired up below as a dual-run backstop.
+  // Claimed on the name the PROVIDER will store this file under (see the
+  // matching comment in api-data.ts). base64 uploads are not laid out under
+  // data/raw/, so the requested path is `filename` itself -- but it still has
+  // to go through the adapter's storedNameFor, since Zenodo flattens slashes
+  // and Drive keeps only the leaf, and a claim in either of those namespaces
+  // has to match what listFiles reports when the cache rehydrates.
   const claimToken = randomUUID();
+  const claimName = claimNameFor(provider, filename);
   let claimResult: Awaited<ReturnType<typeof claimFilename>>;
   try {
-    claimResult = await claimFilename(experimentID, filename, claimToken, () =>
+    claimResult = await claimFilename(experimentID, claimName, claimToken, () =>
       provider.listFiles(auth, container)
     );
   } catch (e) {
@@ -219,7 +226,7 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 
       // Dual-run disagreement: the cache thought the name was free but OSF
       // says it's taken. OSF is still the backstop — record the
       // disagreement and confirm the claim (the name is now provably taken).
-      await confirmClaim(experimentID, filename, claimToken);
+      await confirmClaim(experimentID, claimName, claimToken);
       // Logs before response — see the matching comment in api-data.ts:
       // responding first races observers of the log against the write.
       await writeLog(experimentID, "logError", MESSAGES.OSF_FILE_EXISTS);
@@ -255,7 +262,7 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 
 
   // Successful write — confirm the claim (best-effort; a confirm failure
   // must not fail a request that already succeeded against the provider).
-  await confirmClaim(experimentID, filename, claimToken);
+  await confirmClaim(experimentID, claimName, claimToken);
 
   // Data successfully uploaded to OSF — clean up the pending copy.
   await cleanupPending(pendingPath);

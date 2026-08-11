@@ -33,6 +33,16 @@ export function getOAuthConfig(provider: string): OAuthConfig {
   return storageProvider.oauthConfig();
 }
 
+// The name the collision cache must hash for a file being written to
+// `filename` on this provider -- i.e. the name that provider's listFiles will
+// report for it once written (see StorageProvider.storedNameFor). Every
+// claimFilename/confirmClaim call site goes through this rather than hashing a
+// raw request filename, so claims made before a write and claims rehydrated
+// from a listing can never fall into different namespaces.
+export function claimNameFor(provider: StorageProvider, filename: string): string {
+  return provider.storedNameFor ? provider.storedNameFor(filename) : filename;
+}
+
 export function getProviderForExperiment(exp_data: ExperimentData): {
   provider: StorageProvider;
   container: ContainerRef;

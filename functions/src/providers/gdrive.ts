@@ -317,6 +317,18 @@ export const gdriveProvider: StorageProvider = {
     return { provider: "gdrive", folderId };
   },
 
+  // Drive stores a path prefix as real nested FOLDERS and the file itself
+  // under its bare leaf name, and listFiles below collects every file it finds
+  // under that leaf regardless of which folder it came from -- so the leaf is
+  // what the collision cache must hash. Two submissions whose paths differ
+  // only in their folder prefix therefore collide by design here; that is the
+  // pre-existing behavior listFiles was written for, and it is the safe
+  // direction, since Drive returns no NAME_CONFLICT for the cache to fall back
+  // on. See claimNameFor.
+  storedNameFor(filename: string): string {
+    return filename.split("/").pop() as string;
+  },
+
   async writeSessionFile(
     auth: ResolvedAuth,
     container: ContainerRef,

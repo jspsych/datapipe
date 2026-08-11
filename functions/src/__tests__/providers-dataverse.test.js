@@ -243,6 +243,127 @@ describe("2. writeSessionFile", () => {
     const body = callArgs(0).options.body.toString();
     expect(body).not.toContain("directoryLabel");
   });
+
+  // The filename arrives from the participant's POST body with no character
+  // validation. Interpolated raw, a quote closed the Content-Disposition
+  // parameter and a CRLF ended the header block, which was enough to forge a
+  // second jsonData part and pick the directoryLabel the file landed in.
+  it("escapes quotes and strips CRLF from the filename in Content-Disposition", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({
+        status: 200,
+        statusText: "OK",
+        jsonBody: { status: "OK", data: { files: [{ label: "evil.json", dataFile: { id: 9 } }] } },
+      })
+    );
+
+    const container = { provider: "dataverse", datasetId: 7, persistentId: "doi:10/abc", serverUrl: SERVER_URL };
+    // No "/" anywhere: writeSessionFile would split a slashed name into
+    // directoryLabel + label, and the point here is the leaf that actually
+    // reaches the Content-Disposition header.
+    const hostile =
+      'evil";\r\n\r\n--x\r\nContent-Disposition: form-data; name="jsonData"\r\n\r\n{"directoryLabel":"pwned"}\r\n.json';
+
+    await dataverseProvider.writeSessionFile(auth, container, hostile, "x", {
+      size: 1,
+      contentType: "application/json",
+    });
+
+    const body = callArgs(0).options.body.toString();
+    // Exactly one jsonData part survives -- the one this adapter built. The
+    // forged one is inert: its quotes are escaped, so it is header TEXT.
+    expect(body.match(/name="jsonData"/g)).toHaveLength(1);
+    expect(body).not.toContain('"directoryLabel":"pwned"');
+    // The quote is escaped rather than closing the parameter, and the CRLFs
+    // that would have ended the header block are gone.
+    expect(body).toContain('filename="evil\\";');
+    expect(body.split("Content-Type: application/json")).toHaveLength(2);
+  });
+
+  it("uses an unguessable per-request boundary that matches the Content-Type header", async () => {
+    const respond = () =>
+      mockResponse({
+        status: 200,
+        statusText: "OK",
+        jsonBody: { status: "OK", data: { files: [{ label: "a.json", dataFile: { id: 1 } }] } },
+      });
+    mockFetch.mockResolvedValueOnce(respond()).mockResolvedValueOnce(respond());
+
+    const container = { provider: "dataverse", datasetId: 7, persistentId: "doi:10/abc", serverUrl: SERVER_URL };
+    const meta = { size: 1, contentType: "application/json" };
+    await dataverseProvider.writeSessionFile(auth, container, "a.json", "x", meta);
+    await dataverseProvider.writeSessionFile(auth, container, "a.json", "x", meta);
+
+    const boundaryOf = (i) => {
+      const { options } = callArgs(i);
+      const boundary = header(options.headers, "Content-Type").replace(
+        /^multipart\/form-data; boundary=/,
+        ""
+      );
+      // The header's boundary is the one the body was actually built with.
+      expect(options.body.toString()).toContain(`--${boundary}\r\n`);
+      expect(options.body.toString().endsWith(`--${boundary}--`)).toBe(true);
+      return boundary;
+    };
+
+    // Unguessable: not a fixed constant a participant could embed in their
+    // own submission to close the file part early.
+    expect(boundaryOf(0)).not.toBe(boundaryOf(1));
+  });
+
+  // String(undefined) yields the truthy string "undefined", which sails
+  // through metadata-block.ts's `if (response.fileRef.id)` guard and gets
+  // persisted as a ref addressing /api/files/undefined.
+  it("omits fileRef.id rather than stringifying it when the response carries no dataFile id", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({
+        status: 200,
+        statusText: "OK",
+        jsonBody: { status: "OK", data: { files: [{ label: "data.json" }] } },
+      })
+    );
+
+    const container = { provider: "dataverse", datasetId: 7, persistentId: "doi:10/abc", serverUrl: SERVER_URL };
+    const result = await dataverseProvider.writeSessionFile(auth, container, "data.json", "x", {
+      size: 1,
+      contentType: "application/json",
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.fileRef).toEqual({ name: "data.json" });
+    expect(result.fileRef.id).toBeUndefined();
+  });
+
+  it("falls back to the requested name when the response carries no label", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 200, statusText: "OK", jsonBody: { status: "OK", data: {} } })
+    );
+
+    const container = { provider: "dataverse", datasetId: 7, persistentId: "doi:10/abc", serverUrl: SERVER_URL };
+    const result = await dataverseProvider.writeSessionFile(auth, container, "data/raw/x.json", "x", {
+      size: 1,
+      contentType: "application/json",
+    });
+
+    // The write succeeded; an unreadable body only costs us rename detection.
+    expect(result).toEqual({
+      success: true,
+      fileRef: { name: "x.json" },
+      storedFilename: "x.json",
+    });
+  });
+});
+
+// The collision cache hashes a name before the write and rehydrates a cold
+// cache from listFiles, so the two must share a namespace. Dataverse splits a
+// path into directoryLabel + label on write and listFiles re-joins them, so
+// the requested path round-trips and this is identity -- unlike Zenodo, which
+// flattens, and Drive, which keeps only the leaf.
+describe("2b. storedNameFor (collision-cache namespace)", () => {
+  it("is identity, matching what listFiles re-joins", () => {
+    expect(dataverseProvider.storedNameFor("data/raw/abc123.json")).toBe("data/raw/abc123.json");
+    expect(dataverseProvider.storedNameFor("flat.json")).toBe("flat.json");
+  });
 });
 
 describe("3. error mapping", () => {
@@ -802,6 +923,28 @@ describe("7. createDataContainer", () => {
         description: "A study about things.",
       })
     ).rejects.toThrow(/dataset creation failed/i);
+  });
+
+  // Casting the optionality away instead returned a ContainerRef with
+  // undefined fields; create-experiment.ts handed that to Firestore, which
+  // rejects undefined values, so the batch commit threw and the researcher
+  // got a generic 500 with an orphaned draft dataset already created.
+  it.each([
+    ["no id", { status: "OK", data: { persistentId: "doi:10/abc" } }],
+    ["no persistentId", { status: "OK", data: { id: 456 } }],
+    ["no data at all", { status: "OK" }],
+  ])("throws on a 2xx whose body has %s, rather than returning undefined fields", async (_label, jsonBody) => {
+    mockFetch.mockResolvedValueOnce(mockResponse({ status: 201, statusText: "Created", jsonBody }));
+
+    await expect(
+      dataverseProvider.createDataContainer(auth, {
+        collectionAlias: "my-collection",
+        title: "My Study",
+        authorName: "Ada Lovelace",
+        contactEmail: "ada@example.com",
+        description: "A study about things.",
+      })
+    ).rejects.toThrow(/no id or persistent id/i);
   });
 });
 

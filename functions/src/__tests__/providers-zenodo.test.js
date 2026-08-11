@@ -456,6 +456,40 @@ describe("7. listFiles", () => {
   });
 });
 
+// The collision cache hashes a name before the write and rehydrates a cold
+// cache from listFiles, so the two must share a namespace. Zenodo's keyspace
+// is flat: "data/raw/x.json" is stored, and listed, as "data_raw_x.json".
+// Claiming the un-flattened name meant no rehydrated claim ever matched --
+// and writeSessionFile is an OVERWRITING PUT with no NAME_CONFLICT backstop,
+// so the duplicate that slipped through destroyed the earlier session's data
+// silently.
+describe("7b. storedNameFor (collision-cache namespace)", () => {
+  it("flattens slashes exactly the way the stored key does", () => {
+    expect(zenodoProvider.storedNameFor("data/raw/abc123.json")).toBe("data_raw_abc123.json");
+    expect(zenodoProvider.storedNameFor("flat.json")).toBe("flat.json");
+  });
+
+  it("agrees with the key writeSessionFile PUTs to and reports back", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 201, jsonBody: { key: "data_raw_abc123.json", size: 1 } })
+    );
+
+    const result = await zenodoProvider.writeSessionFile(auth, container, "data/raw/abc123.json", "x", {
+      size: 1,
+      contentType: "application/json",
+    });
+
+    const claimName = zenodoProvider.storedNameFor("data/raw/abc123.json");
+    expect(result.storedFilename).toBe(claimName);
+    expect(callArgs(0).url).toBe(`${BUCKET_URL}/${encodeURIComponent(claimName)}`);
+  });
+
+  it("is idempotent, so a name read back from Zenodo maps to itself", () => {
+    const once = zenodoProvider.storedNameFor("data/raw/abc123.json");
+    expect(zenodoProvider.storedNameFor(once)).toBe(once);
+  });
+});
+
 describe("8. downloadFile", () => {
   it("GETs the key from the bucket and returns its text", async () => {
     mockFetch.mockResolvedValueOnce(mockResponse({ status: 200, textBody: '{"a":1}' }));

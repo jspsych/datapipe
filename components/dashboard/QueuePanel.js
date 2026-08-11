@@ -23,10 +23,9 @@ import { auth } from "../../lib/firebase";
 const PROVIDER_ERROR_COPY = {
   // Contention is routine and self-resolving: some providers (Dataverse)
   // accept only one write per container at a time, so simultaneous
-  // submissions collide. The retry lands within a couple of minutes, so this
-  // copy is deliberately reassuring rather than alarming.
+  // submissions collide.
   CONTENTION:
-    "Your storage provider was busy with another upload from this experiment. This is normal when several participants finish at once, and it is being retried automatically.",
+    "Your storage provider was busy with another upload from this experiment. This is normal when several participants finish at once.",
   RATE_LIMITED: "Your storage provider rate-limited the request.",
   AUTH_EXPIRED:
     "Authentication error. Your storage provider connection may need to be refreshed.",
@@ -37,17 +36,81 @@ const PROVIDER_ERROR_COPY = {
   UNAVAILABLE: "Your storage provider was temporarily unavailable.",
 };
 
-// Fallback for queue docs written before providerErrorCode was stored on them,
-// and for failures that never reached the provider at all (interrupted
-// uploads, collision-cache and metadata problems), which carry no taxonomy
-// code.
-function legacyFriendlyReason(reason) {
+// Overrides for the cases where one taxonomy code covers genuinely different
+// provider behavior and the generic wording above would send the researcher
+// looking in the wrong place. Keyed [code][storageProvider]; anything absent
+// falls back to the generic copy, which stays the default rather than the
+// exception. `storageProvider` is undefined on legacy OSF queue docs, which
+// simply misses here and falls back.
+//
+// Deliberately small. A per-provider string for every code would be six
+// entries times five adapters of copy to keep true, and most of it would just
+// restate the generic line -- the whole point of the taxonomy is that the
+// researcher's next action is usually the same whoever is storing the data.
+const PROVIDER_SPECIFIC_COPY = {
+  QUOTA_EXCEEDED: {
+    // Zenodo maps BOTH of its hard caps to QUOTA_EXCEEDED: the 50 GB
+    // per-file/per-record size limits, and the 100-files-per-record cap. The
+    // generic "out of space, or this file is larger than it allows" is
+    // actively wrong for the second one -- the record has room and the file is
+    // fine, it just cannot hold another entry -- and that is the EXPECTED
+    // failure at session 101, not an edge case, since the compaction that
+    // would keep a study under the cap is not built yet (see zenodo.ts's
+    // setupWarnings, which warns about this before collection starts).
+    zenodo:
+      "This Zenodo record has reached one of its limits: 100 files, or 50 GB. DataPipe does not yet combine sessions into archives, so further submissions will keep failing. Download these files and add them to the record yourself.",
+  },
+};
+
+// Copy for failures that carry NO taxonomy code, matched against the prose in
+// failureReason. Two populations land here: queue docs written before
+// providerErrorCode existed, and — the larger group — every failure that never
+// reached the provider at all, since only a provider WriteResult produces a
+// code. Those are written in six places across api-data.ts, api-base64.ts and
+// scheduled-upload-retry.ts; each distinct prefix they emit has an entry here.
+//
+// ORDER MATTERS. The interpolated `detail` on a cache or cached-data failure
+// can itself contain "fetch failed", so the specific prefixes must be tested
+// before the generic network match below, or a rehydration failure would be
+// reported as a connection problem.
+//
+// Matching on prose is the same fragility PROVIDER_ERROR_COPY was introduced
+// to escape, and it stays fragile: change a string on the writing side and the
+// copy here silently reverts to showing that raw string. The durable fix is a
+// structured stage field on the queue doc alongside providerErrorCode; this is
+// deliberately the cheaper version, and it is also the only thing that can
+// work for docs already in Firestore.
+const REASON_COPY = [
+  [
+    /Token resolution (failed|exception)/,
+    "DataPipe could not authenticate with your storage provider. Reconnect it from your account page, then upload this file manually.",
+  ],
+  [
+    /Collision cache rehydration failed/,
+    "DataPipe could not read the existing files in your storage provider, so it could not safely check whether this filename was already used.",
+  ],
+  [
+    /Collision cache rehydrating/,
+    "DataPipe was still checking this experiment's existing filenames when this submission arrived.",
+  ],
+  [
+    /(Owner user not found|Experiment not found)/,
+    "The experiment or account this upload belonged to no longer exists. Download the file now if you still need it.",
+  ],
+  [
+    // The saved copy is what the download button serves, so if it cannot be
+    // read the researcher must not be told to just download it.
+    /Failed to read cached data/,
+    "DataPipe could not read its own saved copy of this submission, so it cannot be uploaded or downloaded. Please report this.",
+  ],
+  [/(interrupted upload|memory limit)/, "Upload was interrupted by a server restart or memory limit."],
+  [/(Upload exception|fetch failed)/, "Could not connect to your storage provider."],
+];
+
+function reasonCopy(reason) {
   if (!reason) return null;
-  if (reason.includes("interrupted upload") || reason.includes("memory limit")) {
-    return "Upload was interrupted by a server restart or memory limit.";
-  }
-  if (reason.includes("Upload exception") || reason.includes("fetch failed")) {
-    return "Could not connect to your storage provider.";
+  for (const [pattern, copy] of REASON_COPY) {
+    if (pattern.test(reason)) return copy;
   }
   // Older queue docs say "OSF error <status>"; current writes say
   // "Provider error <status>". Both must keep mapping.
@@ -64,10 +127,25 @@ function legacyFriendlyReason(reason) {
   return reason;
 }
 
+// Reassurance that is only true while retries are still running. Appended to
+// the copy above for pending/processing entries and withheld once an entry has
+// exhausted its retries -- a failed row used to sit under a "Failed" badge
+// still telling the researcher the upload "is being retried automatically",
+// which reads as "no action needed" at the exact moment manual recovery is the
+// only thing that will save the file.
+const STILL_RETRYING_SUFFIX = {
+  CONTENTION: " It is being retried automatically.",
+};
+
 function friendlyReason(entry) {
-  const copy = PROVIDER_ERROR_COPY[entry?.providerErrorCode];
-  if (copy) return copy;
-  return legacyFriendlyReason(entry?.failureReason);
+  const code = entry?.providerErrorCode;
+  const copy =
+    PROVIDER_SPECIFIC_COPY[code]?.[entry?.storageProvider] ?? PROVIDER_ERROR_COPY[code];
+  if (copy) {
+    const stillRetrying = entry?.status === "pending" || entry?.status === "processing";
+    return stillRetrying ? `${copy}${STILL_RETRYING_SUFFIX[code] ?? ""}` : copy;
+  }
+  return reasonCopy(entry?.failureReason);
 }
 
 function statusBadge(status) {

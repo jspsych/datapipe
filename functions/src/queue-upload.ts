@@ -32,15 +32,25 @@ interface QueueUploadParams {
 
 const MAX_RETRIES = 5;
 
-// CONTENTION and RATE_LIMITED both mean "the provider is busy right now" and
-// clear in seconds, unlike AUTH_EXPIRED / QUOTA_EXCEEDED / UNAVAILABLE (or no
-// code at all), which need human action or an outage to end. Exported so
+// CONTENTION means "another write to this same container is in flight right
+// now" -- verified live against demo.dataverse.org to clear in seconds -- so
+// it is the one code worth retrying on a minutes-scale schedule. Exported so
 // scheduled-upload-retry.ts reads the exact same tier boundary rather than
 // keeping its own copy that could drift out of sync with this one.
-export const FAST_RETRY_CODES: ReadonlySet<string> = new Set(["CONTENTION", "RATE_LIMITED"]);
+//
+// RATE_LIMITED is deliberately NOT here, though it looks like it belongs. A
+// 429 is the provider telling us to back off for as long as ITS window lasts,
+// which for OSF and Drive is a scale of hours, not seconds. On the fast tier
+// its five attempts (60s base, 30-minute cap) are all spent inside ~31
+// minutes, every one of them re-hitting the endpoint that just rate-limited
+// us; the item is then marked permanently failed and cleanupOldEntries
+// deletes its Cloud Storage payload seven days later. The slow tier's ~31
+// hours is what a rate-limit window actually needs to outlast, so 429 stays
+// there -- exactly where it was before the fast tier existed.
+export const FAST_RETRY_CODES: ReadonlySet<string> = new Set(["CONTENTION"]);
 
-export function isFastRetry(code?: string): boolean {
-  return code !== undefined && FAST_RETRY_CODES.has(code);
+export function isFastRetry(code?: string | null): boolean {
+  return !!code && FAST_RETRY_CODES.has(code);
 }
 
 export default async function queueUpload(params: QueueUploadParams): Promise<string> {
@@ -50,7 +60,7 @@ export default async function queueUpload(params: QueueUploadParams): Promise<st
   const docRef = db.collection("uploadQueue").doc(docId);
 
   const now = Timestamp.now();
-  // Fast tier (CONTENTION/RATE_LIMITED): 60 seconds — the cadence of
+  // Fast tier (CONTENTION): 60 seconds — the cadence of
   // scheduled-upload-retry.ts is what makes this meaningful (see that file).
   // Everything else, including no providerErrorCode at all: 1 hour, exactly
   // as before this change.

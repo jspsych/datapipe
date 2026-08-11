@@ -385,6 +385,18 @@ export const zenodoProvider: StorageProvider = {
     return { provider: "zenodo", depositionId, bucketUrl, serverUrl };
   },
 
+  // Zenodo's keyspace is flat, so "data/raw/x.json" is stored -- and reported
+  // back by listFiles -- as "data_raw_x.json". The collision cache must hash
+  // that, not the requested path: it rehydrates a cold cache straight from
+  // listFiles, so a claim in any other namespace can never match a rehydrated
+  // one. That matters more here than on any other provider, because
+  // writeSessionFile below is an OVERWRITING PUT with no NAME_CONFLICT to fall
+  // back on -- a claim the cache fails to recognize destroys the earlier
+  // session's data silently. See toZenodoKey and claimNameFor.
+  storedNameFor(filename: string): string {
+    return toZenodoKey(filename);
+  },
+
   async writeSessionFile(
     auth: ResolvedAuth,
     container: ContainerRef,

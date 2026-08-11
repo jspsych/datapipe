@@ -1,4 +1,5 @@
 import fetch from "node-fetch";
+import { randomBytes } from "crypto";
 import { decrypt } from "../crypto-utils.js";
 import { UserData } from "../interfaces.js";
 import {
@@ -30,10 +31,28 @@ export interface DataverseContainerRef extends ContainerRef {
 // Paginate LIST DRAFT FILES in chunks of this size (see listFiles below).
 const LIST_PAGE_LIMIT = 1000;
 
-// A fixed boundary is fine here — the request body is built and sent in one
-// shot, never streamed/concatenated across requests, so there's no need for
-// per-call uniqueness. Mirrors gdrive.ts's MULTIPART_BOUNDARY convention.
-const MULTIPART_BOUNDARY = "datapipe-dataverse-multipart-boundary";
+// The boundary is generated per request rather than being a fixed constant.
+// Uniqueness per call is not the point — the body is built and sent in one
+// shot — but UNGUESSABILITY is: one of the two parts below is the
+// participant's raw submission, copied in verbatim, and a fixed boundary is a
+// string an attacker can simply include in their data to close the part early
+// and append parts of their own. A random boundary cannot be written into a
+// payload that was composed before it existed.
+function newMultipartBoundary(): string {
+  return `datapipe-dataverse-${randomBytes(16).toString("hex")}`;
+}
+
+// Quotes a value for a Content-Disposition parameter. The filename reaches
+// here straight from the participant's POST body with no character
+// validation, and interpolating it raw let a quote close the parameter and a
+// CRLF end the header block entirely — enough to forge a second `jsonData`
+// part and choose the directoryLabel the file lands in. CR/LF are dropped
+// outright (no escape for them exists inside a quoted-string) and backslashes
+// and quotes are escaped per RFC 2616's quoted-string rules.
+function quoteHeaderParam(value: string): string {
+  const sanitized = value.replace(/[\r\n]+/g, "").replace(/([\\"])/g, "\\$1");
+  return `"${sanitized}"`;
+}
 
 function authHeaders(auth: ResolvedAuth): Record<string, string> {
   return { "X-Dataverse-key": auth.token };
@@ -146,24 +165,33 @@ async function mapErrorResponse(response: {
 
 // Hand-built multipart/form-data body with exactly two parts, field names
 // "file" and "jsonData" -- mirrors gdrive.ts's buildMultipartBody convention.
+// Returns the boundary alongside the bytes because the caller has to put the
+// same one in the request's Content-Type header.
 function buildMultipartBody(
   jsonData: object,
   filename: string,
   data: string | Buffer,
   contentType: string
-): Buffer {
+): { body: Buffer; boundary: string } {
+  const boundary = newMultipartBoundary();
   const dataBuffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
   const preamble =
-    `--${MULTIPART_BOUNDARY}\r\n` +
-    `Content-Disposition: form-data; name="file"; filename="${filename}"\r\n` +
+    `--${boundary}\r\n` +
+    `Content-Disposition: form-data; name="file"; filename=${quoteHeaderParam(filename)}\r\n` +
     `Content-Type: ${contentType}\r\n\r\n`;
   const middle =
-    `\r\n--${MULTIPART_BOUNDARY}\r\n` +
+    `\r\n--${boundary}\r\n` +
     `Content-Disposition: form-data; name="jsonData"\r\n\r\n` +
     `${JSON.stringify(jsonData)}\r\n`;
-  const epilogue = `--${MULTIPART_BOUNDARY}--`;
+  const epilogue = `--${boundary}--`;
 
-  return Buffer.concat([Buffer.from(preamble), dataBuffer, Buffer.from(middle), Buffer.from(epilogue)]);
+  const body = Buffer.concat([
+    Buffer.from(preamble),
+    dataBuffer,
+    Buffer.from(middle),
+    Buffer.from(epilogue),
+  ]);
+  return { body, boundary };
 }
 
 // tabIngest (writeSessionFile's suppression of Dataverse's CSV->.tab
@@ -429,10 +457,35 @@ export const dataverseProvider: StorageProvider = {
     }
 
     const responseBody = (await response.json()) as { data?: { id?: number; persistentId?: string } };
-    const datasetId = responseBody.data?.id as number;
-    const persistentId = responseBody.data?.persistentId as string;
+    const datasetId = responseBody.data?.id;
+    const persistentId = responseBody.data?.persistentId;
+
+    // Both are load-bearing for every subsequent write, so a 2xx whose body
+    // doesn't carry them is a hard failure here rather than a confusing one
+    // later — same check, for the same reason, as zenodo.ts's. Casting the
+    // optionality away instead produced a ContainerRef with undefined fields,
+    // which create-experiment.ts then handed to Firestore; Firestore rejects
+    // undefined values, so the batch commit threw and the researcher got a
+    // generic 500 with an orphaned draft dataset already created on their
+    // installation and no hint that either had happened.
+    if (typeof datasetId !== "number" || !persistentId) {
+      throw new Error("Dataverse dataset creation returned no id or persistent id");
+    }
 
     return { provider: "dataverse", datasetId, persistentId, serverUrl };
+  },
+
+  // Identity, and deliberately explicit rather than omitted. Dataverse splits
+  // a path into directoryLabel + label on write and listFiles re-joins them
+  // (see below), so the requested path IS the name the listing reports and the
+  // collision cache can hash it unchanged. Stated here so the round-trip is
+  // asserted by the interface rather than inferred by a reader comparing two
+  // functions 100 lines apart -- and because getting it wrong is not
+  // self-correcting on this provider: Dataverse SILENTLY RENAMES a duplicate
+  // instead of returning NAME_CONFLICT, so a cache miss becomes a duplicate
+  // file, not an error.
+  storedNameFor(filename: string): string {
+    return filename;
   },
 
   async writeSessionFile(
@@ -464,13 +517,13 @@ export const dataverseProvider: StorageProvider = {
       jsonData.directoryLabel = directoryLabel;
     }
 
-    const body = buildMultipartBody(jsonData, uploadFilename, data, meta.contentType);
+    const { body, boundary } = buildMultipartBody(jsonData, uploadFilename, data, meta.contentType);
 
     const response = await fetch(`${serverUrl}/api/datasets/${dataverseContainer.datasetId}/add`, {
       method: "POST",
       headers: {
         ...authHeaders(auth),
-        "Content-Type": `multipart/form-data; boundary=${MULTIPART_BOUNDARY}`,
+        "Content-Type": `multipart/form-data; boundary=${boundary}`,
       },
       body,
     });
@@ -488,11 +541,27 @@ export const dataverseProvider: StorageProvider = {
     // response's `label`, never assumed to equal the requested name. This is
     // exactly the case WriteResult.storedFilename exists to detect. Dataverse
     // can never produce a NAME_CONFLICT, so there's no error path for it.
-    const storedFilename = uploaded?.label as string;
+    //
+    // Falling back to the requested name when the body carries no label
+    // matches osf.ts (`result.fileName ?? filename`): the write itself
+    // already succeeded, so an unreadable body must not turn it into a
+    // failure -- it only costs us the ability to notice a rename.
+    const storedFilename = uploaded?.label ?? uploadFilename;
+
+    // The id is OMITTED, not stringified, when the body doesn't carry one.
+    // `String(undefined)` produces the truthy string "undefined", which sails
+    // through metadata-block.ts's `if (response.fileRef.id)` guard -- the
+    // guard that exists specifically to keep an unusable ref out of
+    // Firestore -- and gets persisted as a metadataFileRef addressing
+    // /api/files/undefined, which every later update then fails against.
+    const fileId = uploaded?.dataFile?.id;
 
     return {
       success: true,
-      fileRef: { name: storedFilename, id: String(uploaded?.dataFile?.id) },
+      fileRef: {
+        name: storedFilename,
+        ...(fileId !== undefined ? { id: String(fileId) } : {}),
+      },
       storedFilename,
     };
   },
@@ -574,15 +643,19 @@ export const dataverseProvider: StorageProvider = {
         // -> directoryLabel "data/raw" + label "x.json"). Returning the bare
         // label would break two things: updateFile re-adds under
         // existingFileRef.name and would drop the file back to the dataset
-        // root, and the collision cache claims prefixed filenames, so
-        // rehydration would fail to match an existing file and let a
-        // duplicate through -- which Dataverse then silently renames rather
-        // than rejecting. Two files sharing a label in different directories
-        // would also collapse together here.
+        // root, and the collision cache hashes these names as-is (this
+        // adapter's storedNameFor is identity, which is what makes the
+        // round-trip hold), so rehydration would fail to match an existing
+        // file and let a duplicate through -- which Dataverse then silently
+        // renames rather than rejecting. Two files sharing a label in
+        // different directories would also collapse together here.
         const name = file.directoryLabel
           ? `${file.directoryLabel}/${file.label}`
           : (file.label as string);
-        results.push({ name, id: String(file.dataFile?.id) });
+        // Same reason as writeSessionFile above: omit a missing id rather
+        // than storing the truthy string "undefined".
+        const fileId = file.dataFile?.id;
+        results.push({ name, ...(fileId !== undefined ? { id: String(fileId) } : {}) });
       }
 
       offset += page.length;

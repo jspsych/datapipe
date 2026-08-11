@@ -667,3 +667,23 @@ describe("7. downloadFile", () => {
     expect(result).toEqual({ success: true, content: "osf file content" });
   });
 });
+
+// The collision cache hashes a name before the write and rehydrates a cold
+// cache from listFiles, so the two must share a namespace. Drive stores a
+// path prefix as real nested FOLDERS and the file under its bare leaf name,
+// and listFiles collects every file it finds under that leaf regardless of
+// which folder it came from -- so the leaf is what the cache must hash.
+describe("storedNameFor (collision-cache namespace)", () => {
+  it("keeps only the leaf, matching what listFiles reports", () => {
+    expect(gdriveProvider.storedNameFor("data/raw/abc123.json")).toBe("abc123.json");
+    expect(gdriveProvider.storedNameFor("flat.json")).toBe("flat.json");
+  });
+
+  // OSF is the opposite: it keeps the path as real nested folders AND answers
+  // a duplicate write with 409, so distinct paths stay distinct claims and
+  // collapsing them would falsely reject a second submission to a different
+  // subfolder.
+  it("is NOT what osf does -- osf keeps the whole path", () => {
+    expect(osfProvider.storedNameFor("data/raw/abc123.json")).toBe("data/raw/abc123.json");
+  });
+});

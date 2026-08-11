@@ -210,6 +210,24 @@ export interface StorageProvider {
   // rehydration and dashboard file counts.
   listFiles(auth: ResolvedAuth, container: ContainerRef): Promise<FileRef[]>;
 
+  // Pure, synchronous, deterministic: given the path writeSessionFile will be
+  // asked to write, returns the `name` this adapter's own listFiles reports
+  // for the resulting file. Omitting it means "identity".
+  //
+  // THIS IS THE COLLISION CACHE'S IDENTITY FUNCTION, and it exists because
+  // the two sides silently disagreed. The cache hashes a name at claim time
+  // and rehydrates a cold cache from listFiles, so the two MUST live in the
+  // same namespace -- but adapters legitimately transform the requested path:
+  // Zenodo flattens slashes into "_", Drive stores only the leaf under a
+  // nested folder. A claim made on the raw leaf name therefore never matched
+  // a rehydrated one, and the providers that cannot return NAME_CONFLICT
+  // (Zenodo's PUT overwrites in place, Dataverse silently renames) had no
+  // backstop to catch what slipped through.
+  //
+  // Any new adapter whose writeSessionFile does not store the requested path
+  // verbatim MUST implement this. See claimNameFor in providers/index.ts.
+  storedNameFor?(filename: string): string;
+
   // Fetches a file's contents as text. Used by metadata-block.ts to read
   // back an existing dataset_description.json. Never throws — failures come
   // back as a DownloadResult, same shape convention as WriteResult.

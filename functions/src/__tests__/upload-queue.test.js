@@ -26,9 +26,15 @@ process.env.FIREBASE_CONFIG = JSON.stringify({
 // suite never makes a provider HTTP call (its queue items fail at token
 // resolution, before any network use), so a bare stub is enough -- same
 // convention as providers-*.test.js.
+// Configurable rather than a bare stub: the "exercised through the real retry
+// worker" block below needs the worker's provider write to come back with a
+// specific mapped error code, which is the whole point of the tier it then
+// picks. Every other test in this suite makes no provider call at all.
+const mockFetch = jest.fn();
+
 jest.mock("node-fetch", () => ({
   __esModule: true,
-  default: jest.fn(),
+  default: (...args) => mockFetch(...args),
 }));
 
 const config = { projectId: "datapipe-test" };
@@ -38,6 +44,7 @@ jest.setTimeout(30000);
 let db;
 let app;
 let queueUpload;
+let isFastRetry;
 
 beforeAll(async () => {
   try {
@@ -54,7 +61,7 @@ beforeAll(async () => {
   // first), and its app.js does a bare, unnamed initializeApp() -- distinct
   // from this suite's own NAMED "upload-queue-test" app above, so the two
   // don't collide.
-  ({ default: queueUpload } = await import("../../lib/queue-upload.js"));
+  ({ default: queueUpload, isFastRetry } = await import("../../lib/queue-upload.js"));
 });
 
 // Only the docs THIS suite created. A collection-wide wipe here used to
@@ -195,12 +202,32 @@ describe("scheduled-upload-retry tiered backoff arithmetic", () => {
   const FAST_MAX_BACKOFF_MS = 30 * 60 * 1000; // 30 minutes
   const SLOW_MAX_BACKOFF_MS = 24 * 60 * 60 * 1000; // 24 hours, unchanged
 
-  test("fast tier (CONTENTION/RATE_LIMITED) produces ~2, 4, 8, 16, 30 minutes", () => {
+  test("fast tier (CONTENTION) produces ~2, 4, 8, 16, 30 minutes", () => {
     const expectedMinutes = [2, 4, 8, 16, 30];
     for (let retryCount = 1; retryCount <= 5; retryCount++) {
       const backoffMs = Math.min(Math.pow(2, retryCount) * 60 * 1000, FAST_MAX_BACKOFF_MS);
       expect(backoffMs).toBe(expectedMinutes[retryCount - 1] * 60 * 1000);
     }
+  });
+
+  // CONTENTION is the only member. RATE_LIMITED looks like it belongs but is
+  // deliberately excluded: five fast-tier attempts are spent inside ~31
+  // minutes, far short of a provider's rate-limit window, after which the
+  // item is marked permanently failed and its cached payload is deleted a
+  // week later. See FAST_RETRY_CODES in queue-upload.ts.
+  test("only CONTENTION is on the fast tier", () => {
+    expect(isFastRetry("CONTENTION")).toBe(true);
+    for (const code of ["RATE_LIMITED", "AUTH_EXPIRED", "QUOTA_EXCEEDED", "UNAVAILABLE", "NAME_CONFLICT"]) {
+      expect(isFastRetry(code)).toBe(false);
+    }
+  });
+
+  // handleRetryFailure clears providerErrorCode to null for a failure that
+  // never reached the provider, so null must read as slow-tier rather than
+  // throwing or being treated as a code.
+  test("a missing or cleared providerErrorCode is slow tier", () => {
+    expect(isFastRetry(undefined)).toBe(false);
+    expect(isFastRetry(null)).toBe(false);
   });
 
   test("slow tier (everything else) is unchanged: ~2, 4, 8, 16, 24 hours", () => {
@@ -211,12 +238,15 @@ describe("scheduled-upload-retry tiered backoff arithmetic", () => {
     }
   });
 
-  test("a Retry-After header is clamped to the fast tier's shorter cap, not the slow tier's", () => {
+  // A Retry-After is the provider stating how long it will keep refusing, so
+  // it is clamped to MAX_BACKOFF_MS and NEVER to the item's tier cap.
+  // Clamping a fast-tier item's `Retry-After: 3600` down to 30 minutes
+  // scheduled a retry the provider had already said would fail.
+  test("a Retry-After header is clamped to the absolute cap, not the item's tier cap", () => {
     const retryAfterSeconds = 3600; // 1 hour — larger than the fast cap, smaller than the slow cap
-    const fastBackoffMs = Math.min(retryAfterSeconds * 1000, FAST_MAX_BACKOFF_MS);
-    const slowBackoffMs = Math.min(retryAfterSeconds * 1000, SLOW_MAX_BACKOFF_MS);
-    expect(fastBackoffMs).toBe(FAST_MAX_BACKOFF_MS);
-    expect(slowBackoffMs).toBe(retryAfterSeconds * 1000);
+    const backoffMs = Math.min(retryAfterSeconds * 1000, SLOW_MAX_BACKOFF_MS);
+    expect(backoffMs).toBe(retryAfterSeconds * 1000);
+    expect(backoffMs).toBeGreaterThan(FAST_MAX_BACKOFF_MS);
   });
 });
 
@@ -273,6 +303,36 @@ describe("queueUpload tiers the first nextRetryAt by providerErrorCode", () => {
     const doc = await db.collection("uploadQueue").doc(docId).get();
     expect(doc.exists).toBe(true);
     expect(doc.data().providerErrorCode).toBeUndefined();
+
+    const deltaMs = doc.data().nextRetryAt.toMillis() - before;
+    expect(deltaMs).toBeGreaterThan(55 * 60 * 1000);
+    expect(deltaMs).toBeLessThanOrEqual(60 * 60 * 1000 + 5000);
+  });
+
+  // Regression guard: RATE_LIMITED was briefly fast-tiered, which cut the
+  // whole retry budget for an OSF/Drive 429 from ~31 hours to ~2.
+  test("a RATE_LIMITED providerErrorCode sets nextRetryAt ~1 hour out (slow tier)", async () => {
+    const experimentID = `queue-slow-tier-ratelimited-${randomUUID()}`;
+    const filename = `file-${randomUUID()}.json`;
+    const docId = `${experimentID}:${filename}`.replace(/[/\\]/g, "_");
+    queueDoc(docId);
+
+    const before = Date.now();
+    await queueUpload({
+      experimentID,
+      owner: "upload-queue-test-owner",
+      filename,
+      data: "[]",
+      dataType: "data",
+      osfFilesLink: "https://osf.io/files/",
+      errorCode: 429,
+      providerErrorCode: "RATE_LIMITED",
+      sessionIncremented: true,
+    });
+
+    const doc = await db.collection("uploadQueue").doc(docId).get();
+    expect(doc.exists).toBe(true);
+    expect(doc.data().providerErrorCode).toBe("RATE_LIMITED");
 
     const deltaMs = doc.data().nextRetryAt.toMillis() - before;
     expect(deltaMs).toBeGreaterThan(55 * 60 * 1000);
@@ -387,10 +447,14 @@ describe("queue entry lifecycle in Firestore", () => {
 // The tiered backoff that MATTERS lives inside scheduled-upload-retry.ts's
 // handleRetryFailure, which is not exported. The arithmetic blocks above
 // replicate its formula and so cannot catch a bug in the real function (a
-// mis-read field name, an inverted tier test). These drive the REAL worker
-// instead, via a queue item whose token resolution fails -- a dataverse
-// experiment whose owner has no dataverse connection -- which routes straight
-// to handleRetryFailure without any network call.
+// mis-read field name, an inverted tier test). These drive the REAL worker.
+//
+// The tier comes from the code of the attempt that JUST failed, not the one
+// the doc was queued with, so seedDueItem takes both: what is already stored,
+// and what this attempt will fail with. `attemptOutcome: "token-failure"`
+// gives the owner no dataverse connection, so resolveToken fails and the
+// worker never reaches the provider; otherwise the owner is connected and the
+// mocked fetch returns a response this adapter maps to the requested code.
 //
 // retryPendingUploads is scoped to this suite's own owner id. Unscoped it
 // sweeps and mutates every pending uploadQueue doc in the shared emulator,
@@ -398,19 +462,51 @@ describe("queue entry lifecycle in Firestore", () => {
 // worker; re-introducing it here would make other suites flaky again.
 describe("tiered backoff, exercised through the real retry worker", () => {
   let retryPendingUploads;
+  let bucket;
 
   beforeAll(async () => {
     ({ retryPendingUploads } = await import("../../lib/scheduled-upload-retry.js"));
+    const { getStorage } = await import("firebase-admin/storage");
+    bucket = getStorage(app).bucket("datapipe-test.appspot.com");
   });
 
-  async function seedDueItem(providerErrorCode) {
+  // Dataverse's one-write-per-dataset rejection: a generic 400 whose message
+  // mapDataverseError turns into CONTENTION (see providers-dataverse.test.js).
+  const DATAVERSE_CONTENTION = {
+    status: 400,
+    statusText: "Bad Request",
+    json: () => Promise.resolve({ status: "ERROR", message: "Failed to add file to dataset." }),
+  };
+  const DATAVERSE_UNAVAILABLE = {
+    status: 503,
+    statusText: "Service Unavailable",
+    json: () => Promise.resolve({ status: "ERROR", message: "Installation down for maintenance" }),
+  };
+
+  async function seedDueItem({ storedCode, attemptOutcome }) {
     const owner = `retry-tier-owner-${randomUUID()}`;
     const experimentID = `retry-tier-exp-${randomUUID()}`;
     const docId = `${experimentID}:data.json`.replace(/[/\\]/g, "_");
+    const storagePath = `upload-queue/${docId}`;
 
-    // Owner exists but has NO connectedAccounts.dataverse -> resolveToken
-    // returns PROVIDER_NOT_CONNECTED -> handleRetryFailure.
-    await db.collection("users").doc(owner).set({ email: `${owner}@example.test` });
+    await db.collection("users").doc(owner).set({
+      email: `${owner}@example.test`,
+      // Omitted for "token-failure": resolveToken then returns
+      // PROVIDER_NOT_CONNECTED and routes straight to handleRetryFailure with
+      // no provider code at all. decrypt() passes a non-"v1:" value through
+      // unchanged, so a plaintext token needs no encryption key here.
+      ...(attemptOutcome === "token-failure"
+        ? {}
+        : {
+            connectedAccounts: {
+              dataverse: {
+                authMethod: "static-token",
+                encryptedToken: "plaintext-token",
+                serverUrl: "https://example.test",
+              },
+            },
+          }),
+    });
     await db.collection("experiments").doc(experimentID).set({
       active: true,
       owner,
@@ -418,11 +514,17 @@ describe("tiered backoff, exercised through the real retry worker", () => {
       providerContainer: { provider: "dataverse", datasetId: 1, persistentId: "doi:x/y", serverUrl: "https://example.test" },
     });
 
+    // The worker downloads the cached payload before it attempts the write —
+    // without it the item short-circuits to "Failed to read cached data".
+    if (attemptOutcome !== "token-failure") {
+      await bucket.file(storagePath).save("[]", { contentType: "text/plain" });
+    }
+
     const doc = {
       experimentID,
       owner,
       filename: "data.json",
-      storagePath: `upload-queue/${docId}`,
+      storagePath,
       dataType: "data",
       status: "pending",
       errorCode: 400,
@@ -436,21 +538,31 @@ describe("tiered backoff, exercised through the real retry worker", () => {
       failureReason: null,
       deduplicationKey: `${experimentID}:data.json`,
       sessionIncremented: true,
+      // The worker dispatches off the QUEUE doc's provider fields, not the
+      // experiment's — omit these and it falls back to the legacy OSF shape.
+      storageProvider: "dataverse",
+      providerContainer: { provider: "dataverse", datasetId: 1, persistentId: "doi:x/y", serverUrl: "https://example.test" },
     };
-    if (providerErrorCode) doc.providerErrorCode = providerErrorCode;
+    if (storedCode) doc.providerErrorCode = storedCode;
 
     await queueDoc(docId).set(doc);
     return { owner, docId };
   }
 
-  it("CONTENTION reschedules in MINUTES, not hours", async () => {
-    const { owner, docId } = await seedDueItem("CONTENTION");
+  beforeEach(() => {
+    mockFetch.mockReset();
+  });
+
+  it("a CONTENTION provider failure reschedules in MINUTES, not hours", async () => {
+    mockFetch.mockResolvedValue(DATAVERSE_CONTENTION);
+    const { owner, docId } = await seedDueItem({ storedCode: "CONTENTION", attemptOutcome: "contention" });
 
     await retryPendingUploads(owner);
 
     const after = (await db.collection("uploadQueue").doc(docId).get()).data();
     expect(after.status).toBe("pending");
     expect(after.retryCount).toBe(1);
+    expect(after.providerErrorCode).toBe("CONTENTION");
 
     const delayMs = after.nextRetryAt.toMillis() - Date.now();
     // retryCount 1 on the fast tier => 2^1 * 60s = 2 minutes.
@@ -458,8 +570,82 @@ describe("tiered backoff, exercised through the real retry worker", () => {
     expect(delayMs).toBeLessThan(10 * 60 * 1000);
   });
 
+  // The finding this guards: an item queued on a one-off CONTENTION whose
+  // provider then went down stayed pinned to the fast tier for the rest of
+  // its life, burning all five attempts in ~31 minutes against an
+  // installation that was still hours from returning.
+  it("a later failure with a DIFFERENT code re-tiers the item and is stored", async () => {
+    mockFetch.mockResolvedValue(DATAVERSE_UNAVAILABLE);
+    const { owner, docId } = await seedDueItem({ storedCode: "CONTENTION", attemptOutcome: "unavailable" });
+
+    await retryPendingUploads(owner);
+
+    const after = (await db.collection("uploadQueue").doc(docId).get()).data();
+    // The stored code now describes the attempt that just failed...
+    expect(after.providerErrorCode).toBe("UNAVAILABLE");
+    // ...and the backoff followed it onto the slow tier: 2^1 * 1h.
+    const delayMs = after.nextRetryAt.toMillis() - Date.now();
+    expect(delayMs).toBeGreaterThan(60 * 60 * 1000);
+  });
+
+  // Nothing that fails BEFORE reaching the provider is "the container is busy
+  // for a few seconds", so it must not inherit the fast tier from whatever
+  // the item was originally queued with.
+  it("a failure that never reached the provider clears the code and drops to the slow tier", async () => {
+    const { owner, docId } = await seedDueItem({ storedCode: "CONTENTION", attemptOutcome: "token-failure" });
+
+    await retryPendingUploads(owner);
+
+    const after = (await db.collection("uploadQueue").doc(docId).get()).data();
+    expect(after.providerErrorCode).toBeNull();
+    const delayMs = after.nextRetryAt.toMillis() - Date.now();
+    expect(delayMs).toBeGreaterThan(60 * 60 * 1000);
+  });
+
+  // The three terminal paths that bypass handleRetryFailure entirely
+  // (missing owner, missing experiment, unreadable cached payload) have to
+  // clear the stored code themselves. The taxonomy code outranks
+  // failureReason in QueuePanel, so a leftover one keeps describing the
+  // original provider failure while the real, permanent problem is that the
+  // experiment or the payload is gone.
+  it("clears the stored code on a terminal path that never calls handleRetryFailure", async () => {
+    const owner = `retry-tier-owner-${randomUUID()}`;
+    const experimentID = `retry-tier-missing-exp-${randomUUID()}`;
+    const docId = `${experimentID}:data.json`.replace(/[/\\]/g, "_");
+
+    await db.collection("users").doc(owner).set({ email: `${owner}@example.test` });
+    // Deliberately no experiments/{experimentID} doc.
+
+    await queueDoc(docId).set({
+      experimentID,
+      owner,
+      filename: "data.json",
+      storagePath: `upload-queue/${docId}`,
+      dataType: "data",
+      status: "pending",
+      errorCode: 400,
+      providerErrorCode: "CONTENTION",
+      retryCount: 0,
+      maxRetries: 5,
+      createdAt: Timestamp.now(),
+      lastAttemptAt: null,
+      nextRetryAt: Timestamp.fromMillis(Date.now() - 1000),
+      completedAt: null,
+      failureReason: null,
+      deduplicationKey: `${experimentID}:data.json`,
+      sessionIncremented: true,
+    });
+
+    await retryPendingUploads(owner);
+
+    const after = (await db.collection("uploadQueue").doc(docId).get()).data();
+    expect(after.status).toBe("failed");
+    expect(after.failureReason).toBe("Experiment not found");
+    expect(after.providerErrorCode).toBeNull();
+  });
+
   it("a slow-tier code still reschedules in HOURS (regression)", async () => {
-    const { owner, docId } = await seedDueItem("UNAVAILABLE");
+    const { owner, docId } = await seedDueItem({ storedCode: "UNAVAILABLE", attemptOutcome: "token-failure" });
 
     await retryPendingUploads(owner);
 
@@ -470,7 +656,7 @@ describe("tiered backoff, exercised through the real retry worker", () => {
   });
 
   it("no providerErrorCode at all keeps the original hours-scale behavior", async () => {
-    const { owner, docId } = await seedDueItem(undefined);
+    const { owner, docId } = await seedDueItem({ storedCode: undefined, attemptOutcome: "token-failure" });
 
     await retryPendingUploads(owner);
 
