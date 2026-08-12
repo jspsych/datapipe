@@ -16,6 +16,7 @@ import { useState } from "react";
 import { useRouter } from "next/router";
 import NextLink from "next/link";
 import { ERROR, getError } from "../lib/utils";
+import AuthProviderButtons from "./auth/AuthProviderButtons";
 import SignInWithOSF from "./SignInWithOSF";
 
 export default function SignInForm({ routeAfterSignIn }) {
@@ -48,7 +49,10 @@ export default function SignInForm({ routeAfterSignIn }) {
         <VStack gap={6}>
           <Heading size="lg" textAlign="center">Sign In</Heading>
 
-          <SignInWithOSF />
+          <AuthProviderButtons
+            verb="Sign in"
+            onSignedIn={() => router.push(routeAfterSignIn)}
+          />
 
           <HStack w="full" alignItems="center">
             <Separator flex="1" />
@@ -91,6 +95,16 @@ export default function SignInForm({ routeAfterSignIn }) {
             >
               Sign In
             </Button>
+
+            {/* OSF sign-in stays available through the wind-down, and ONLY
+                here -- it is gone from the sign-up page, because no new
+                account should be created against a platform that is closing.
+                Researchers who signed up through OSF can still get in, which
+                is what lets them link one of the providers above from the
+                dashboard banner without losing their uid (and with it, their
+                experiments). Remove this in the same release that removes the
+                signup branch of functions/src/oauth2-callback.ts, not before. */}
+            <SignInWithOSF />
 
             <VStack gap={2} w="full">
               <Link asChild fontSize="sm" color="brandOrange.300">

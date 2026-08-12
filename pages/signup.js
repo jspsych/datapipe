@@ -1,9 +1,9 @@
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/router";
-import { auth, db } from "../lib/firebase";
+import { auth } from "../lib/firebase";
+import { ensureUserDocument } from "../lib/user-bootstrap";
 
 import {
   Card,
@@ -19,7 +19,7 @@ import {
   Box,
 } from "@chakra-ui/react";
 import { ERROR, getError } from "../lib/utils";
-import SignUpWithOSF from "../components/SignUpWithOSF";
+import AuthProviderButtons from "../components/auth/AuthProviderButtons";
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -63,18 +63,11 @@ export default function SignUpPage() {
       );
       const user = userCredential.user;
 
-      await setDoc(doc(db, "users", user.uid), {
-        email: user.email,
-        uid: user.uid,
-        osfToken: "",
-        osfTokenValid: false,
-        usingPersonalToken: false,
-        refreshToken: "",
-        refreshTokenExpires: 0,
-        authToken: "",
-        authTokenExpires: 0,
-        experiments: [],
-      });
+      // Same slim shape as a federated first sign-in. The OSF token fields
+      // this used to seed (osfToken/usingPersonalToken/refreshToken/...) are
+      // dead weight on a new account: OSF is closed to new experiments, so
+      // nothing will ever read them. Existing docs keep theirs untouched.
+      await ensureUserDocument(user);
 
       router.push("/admin");
     } catch (error) {
@@ -94,7 +87,10 @@ export default function SignUpPage() {
         <VStack gap={6}>
           <Heading size="lg" textAlign="center">Create Account</Heading>
 
-          <SignUpWithOSF />
+          <AuthProviderButtons
+            verb="Sign up"
+            onSignedIn={() => router.push("/admin")}
+          />
 
           <HStack w="full" alignItems="center">
             <Separator flex="1" />
