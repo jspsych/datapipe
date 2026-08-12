@@ -77,6 +77,10 @@
       {
         "source": "/api/providersetupwarnings",
         "function": "providersetupwarnings"
+      },
+      {
+        "source": "/api/deleteaccount",
+        "function": "deleteaccount"
       }
     ]
   },

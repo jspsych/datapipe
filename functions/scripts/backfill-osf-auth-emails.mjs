@@ -21,8 +21,8 @@
 // signup from colliding with one of these accounts in the meantime).
 //
 // Usage:
-//   node scripts/backfill-osf-auth-emails.mjs              # dry run, changes nothing
-//   node scripts/backfill-osf-auth-emails.mjs --apply      # actually writes
+//   node functions/scripts/backfill-osf-auth-emails.mjs              # dry run, changes nothing
+//   node functions/scripts/backfill-osf-auth-emails.mjs --apply      # actually writes
 //
 // Env:
 //   GOOGLE_APPLICATION_CREDENTIALS  service-account key with Firebase Admin access
