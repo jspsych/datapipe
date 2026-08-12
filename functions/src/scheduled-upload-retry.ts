@@ -1,46 +1,75 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { Timestamp } from "firebase-admin/firestore";
 import { db, storage } from "./app.js";
-import { getProvider } from "./providers/index.js";
-import { ContainerRef, StorageProviderId } from "./providers/types.js";
+import { getProvider, claimNameFor } from "./providers/index.js";
+import { ContainerRef, StorageProviderId, ResolvedAuth, ProviderErrorCode } from "./providers/types.js";
 import resolveToken from "./resolve-token.js";
 import { claimFilename, confirmClaim, CollisionCacheUnavailableError } from "./collision-cache.js";
 import { ExperimentData, UserData } from "./interfaces.js";
+import { isFastRetry } from "./queue-upload.js";
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-const MAX_BACKOFF_MS = 24 * 60 * 60 * 1000; // 24 hours
+const MAX_BACKOFF_MS = 24 * 60 * 60 * 1000; // 24 hours (slow tier cap, unchanged)
+// Fast tier (CONTENTION, see queue-upload.ts's isFastRetry): a much shorter
+// cap, since write contention clears in seconds rather than needing an outage
+// to end.
+const FAST_MAX_BACKOFF_MS = 30 * 60 * 1000; // 30 minutes
 
 /**
- * Scheduled function that runs every hour to retry failed OSF uploads.
- * Processes up to 10 pending items per run, applies exponential backoff,
- * and cleans up entries older than 7 days.
+ * Scheduled function that runs every 5 minutes to retry failed uploads.
+ * Processes up to 25 pending items per run, applies tiered exponential
+ * backoff, and cleans up entries older than 7 days.
+ *
+ * The 5-minute cadence (was hourly) is what makes the fast retry tier real:
+ * queueUpload can set a 60-second nextRetryAt for CONTENTION/RATE_LIMITED
+ * failures, but that's meaningless if this worker only wakes up once an
+ * hour. The query below already gates on `nextRetryAt <= now`, so slow-tier
+ * items are unaffected by the faster cadence — they simply aren't due yet
+ * most of the times this runs.
  */
-export const scheduledUploadRetry = onSchedule("0 * * * *", async () => {
+export const scheduledUploadRetry = onSchedule("*/5 * * * *", async () => {
   await retryPendingUploads();
   await cleanupOldEntries();
 });
 
-async function retryPendingUploads() {
+/**
+ * `ownerScope` is a TEST SEAM, defaulting to production behavior (every
+ * pending item). This worker sweeps the whole uploadQueue collection and
+ * mutates what it finds, so a test that runs it unscoped against the shared
+ * emulator processes whatever other suites have queued -- the same
+ * cross-suite hazard that recoverPendingUploads' `prefix` seam exists for
+ * (see ddef109). Filtering happens in memory rather than in the query so the
+ * production query shape, and therefore its Firestore index, is untouched.
+ */
+export async function retryPendingUploads(ownerScope?: string) {
   const now = Timestamp.now();
 
+  // 25 items processed serially at ~600ms per provider write is ~15s of
+  // work per run — safely inside the scheduled-function budget — and lifts
+  // the drain rate from 10/hour (old hourly cadence) to 25 * 12 runs/hour =
+  // 300/hour under the new 5-minute cadence.
   const pendingItems = await db
     .collection("uploadQueue")
     .where("status", "==", "pending")
     .where("nextRetryAt", "<=", now)
     .orderBy("nextRetryAt", "asc")
-    .limit(10)
+    .limit(25)
     .get();
 
-  if (pendingItems.empty) {
+  const dueDocs = ownerScope
+    ? pendingItems.docs.filter((d) => d.data().owner === ownerScope)
+    : pendingItems.docs;
+
+  if (dueDocs.length === 0) {
     console.log("No pending uploads to retry.");
     return;
   }
 
-  console.log(`Found ${pendingItems.size} pending upload(s) to retry.`);
+  console.log(`Found ${dueDocs.length} pending upload(s) to retry.`);
 
   // Group by owner to avoid hammering same user's rate limit
   const byOwner = new Map<string, FirebaseFirestore.QueryDocumentSnapshot[]>();
-  for (const doc of pendingItems.docs) {
+  for (const doc of dueDocs) {
     const owner = doc.data().owner;
     if (!byOwner.has(owner)) {
       byOwner.set(owner, []);
@@ -86,30 +115,38 @@ async function processQueueItem(queueDoc: FirebaseFirestore.QueryDocumentSnapsho
     return;
   }
 
+  // These three terminal paths bypass handleRetryFailure, so they clear
+  // providerErrorCode themselves. Without that, a doc queued on a provider
+  // error keeps that code forever and QueuePanel goes on describing the
+  // original provider failure — the taxonomy code outranks failureReason —
+  // while the real, and now permanent, problem is that the account, the
+  // experiment, or the cached payload is gone.
+  const CLEARED_CODE = { providerErrorCode: null };
+
   // Re-resolve the OSF token
   const userDoc = await db.doc(`users/${data.owner}`).get();
   if (!userDoc.exists) {
-    await docRef.update({ status: "failed", failureReason: "Owner user not found" });
+    await docRef.update({ status: "failed", failureReason: "Owner user not found", ...CLEARED_CODE });
     return;
   }
 
   const expDoc = await db.doc(`experiments/${data.experimentID}`).get();
   if (!expDoc.exists) {
-    await docRef.update({ status: "failed", failureReason: "Experiment not found" });
+    await docRef.update({ status: "failed", failureReason: "Experiment not found", ...CLEARED_CODE });
     return;
   }
 
   const userData = userDoc.data() as UserData;
   const expData = expDoc.data() as ExperimentData;
 
-  let token: string;
+  let auth: ResolvedAuth;
   try {
     const tokenResult = await resolveToken(userData, expData);
     if (!tokenResult.success) {
       await handleRetryFailure(docRef, data, `Token resolution failed: ${tokenResult.error}`);
       return;
     }
-    token = tokenResult.token;
+    auth = { token: tokenResult.token, serverUrl: tokenResult.serverUrl };
   } catch (e) {
     const detail = e instanceof Error ? e.message : "Unknown error";
     await handleRetryFailure(docRef, data, `Token resolution exception: ${detail}`);
@@ -131,7 +168,11 @@ async function processQueueItem(queueDoc: FirebaseFirestore.QueryDocumentSnapsho
     }
   } catch (e) {
     const detail = e instanceof Error ? e.message : "Unknown error";
-    await docRef.update({ status: "failed", failureReason: `Failed to read cached data: ${detail}` });
+    await docRef.update({
+      status: "failed",
+      failureReason: `Failed to read cached data: ${detail}`,
+      ...CLEARED_CODE,
+    });
     return;
   }
 
@@ -147,11 +188,18 @@ async function processQueueItem(queueDoc: FirebaseFirestore.QueryDocumentSnapsho
   // Collision cache: only entries queued after the cache existed carry a
   // claimToken. Entries queued before it skip the cache entirely — legacy
   // behavior, the provider's own conflict backstop still applies to them.
+  //
+  // data.filename is the UPLOAD path (what writeSessionFile is handed below),
+  // so the claim goes through the same adapter-supplied storedNameFor the
+  // request path uses. That is what makes re-entry work: the pending claim
+  // api-data left behind is under this exact hash, so claimFilename's
+  // same-ownerToken branch recognizes it instead of opening a second one.
+  const claimName = claimNameFor(provider, data.filename);
   if (data.claimToken) {
     let claimResult: Awaited<ReturnType<typeof claimFilename>>;
     try {
-      claimResult = await claimFilename(data.experimentID, data.filename, data.claimToken, () =>
-        provider.listFiles({ token }, container)
+      claimResult = await claimFilename(data.experimentID, claimName, data.claimToken, () =>
+        provider.listFiles(auth, container)
       );
     } catch (e) {
       if (e instanceof CollisionCacheUnavailableError) {
@@ -178,7 +226,7 @@ async function processQueueItem(queueDoc: FirebaseFirestore.QueryDocumentSnapsho
   // Attempt the upload
   try {
     const result = await provider.writeSessionFile(
-      { token },
+      auth,
       container,
       data.filename,
       fileData,
@@ -187,7 +235,7 @@ async function processQueueItem(queueDoc: FirebaseFirestore.QueryDocumentSnapsho
 
     if (result.success) {
       if (data.claimToken) {
-        await confirmClaim(data.experimentID, data.filename, data.claimToken);
+        await confirmClaim(data.experimentID, claimName, data.claimToken);
       }
       await markCompleted(docRef, data);
       console.log(`Successfully retried upload ${queueDoc.id} (${data.filename})`);
@@ -196,7 +244,7 @@ async function processQueueItem(queueDoc: FirebaseFirestore.QueryDocumentSnapsho
 
     if (result.error === "NAME_CONFLICT") {
       if (data.claimToken) {
-        await confirmClaim(data.experimentID, data.filename, data.claimToken);
+        await confirmClaim(data.experimentID, claimName, data.claimToken);
       }
       // File already exists — treat as success (original upload may have worked)
       await markCompleted(docRef, data);
@@ -204,7 +252,13 @@ async function processQueueItem(queueDoc: FirebaseFirestore.QueryDocumentSnapsho
       return;
     }
 
-    await handleRetryFailure(docRef, data, `Provider error ${result.providerStatus}: ${result.providerMessage}`, result.retryAfter);
+    await handleRetryFailure(
+      docRef,
+      data,
+      `Provider error ${result.providerStatus}: ${result.providerMessage}`,
+      result.retryAfter,
+      result.error
+    );
   } catch (e) {
     const detail = e instanceof Error ? e.message : "Unknown error";
     await handleRetryFailure(docRef, data, `Upload exception: ${detail}`);
@@ -230,9 +284,19 @@ async function handleRetryFailure(
   docRef: FirebaseFirestore.DocumentReference,
   data: FirebaseFirestore.DocumentData,
   reason: string,
-  retryAfterSeconds?: number | null
+  retryAfterSeconds?: number | null,
+  providerErrorCode?: ProviderErrorCode | null
 ) {
   const newRetryCount = (data.retryCount || 0) + 1;
+
+  // The code from THIS attempt, not the one the doc was queued with. Written
+  // back on every path below so both the tier chosen next time and the copy
+  // QueuePanel shows describe the failure that actually just happened. A
+  // failure that never reached the provider (token resolution, a network
+  // exception, cache rehydration) passes nothing and clears the field, which
+  // drops the item onto the slow tier — correct, since none of those clear in
+  // seconds — and lets QueuePanel fall back to reading failureReason.
+  const currentErrorCode = providerErrorCode ?? null;
 
   if (newRetryCount >= data.maxRetries) {
     console.error(`Upload ${docRef.id} permanently failed after ${newRetryCount} retries: ${reason}`);
@@ -240,14 +304,35 @@ async function handleRetryFailure(
       status: "failed",
       retryCount: newRetryCount,
       failureReason: reason,
+      providerErrorCode: currentErrorCode,
     });
     return;
   }
 
-  // Honor Retry-After header if provided, otherwise use exponential backoff
+  // Tier the backoff by the provider error code from the attempt that just
+  // failed. CONTENTION is "another write to this container is in flight" and
+  // resolves in seconds, unlike AUTH_EXPIRED / QUOTA_EXCEEDED / RATE_LIMITED /
+  // UNAVAILABLE (or no code at all), which need human action, a rate-limit
+  // window, or an outage to end — so the fast tier gets a minutes-scale
+  // base/cap (~2, 4, 8, 16, 30 minutes) instead of the hours-scale one (~2, 4,
+  // 8, 16, 24 hours, unchanged).
+  //
+  // Reading the CURRENT code rather than the stored one is load-bearing: an
+  // item queued on a one-off CONTENTION whose provider then went down for
+  // maintenance used to stay pinned to the fast tier for the rest of its life,
+  // burning all five attempts in ~31 minutes against an installation that was
+  // still hours from coming back.
+  const fastTier = isFastRetry(currentErrorCode);
+  const baseMs = fastTier ? 60 * 1000 : 60 * 60 * 1000;
+  const capMs = fastTier ? FAST_MAX_BACKOFF_MS : MAX_BACKOFF_MS;
+
+  // Honor Retry-After where the provider sent one. Clamped to MAX_BACKOFF_MS,
+  // never to the item's tier cap: the header is the provider stating how long
+  // it will keep refusing, so clamping it DOWN to the fast tier's 30 minutes
+  // would schedule a retry the provider already told us would fail.
   const backoffMs = retryAfterSeconds
     ? Math.min(retryAfterSeconds * 1000, MAX_BACKOFF_MS)
-    : Math.min(Math.pow(2, newRetryCount) * 60 * 60 * 1000, MAX_BACKOFF_MS);
+    : Math.min(Math.pow(2, newRetryCount) * baseMs, capMs);
   const nextRetryAt = Timestamp.fromMillis(Date.now() + backoffMs);
 
   console.log(`Upload ${docRef.id} retry ${newRetryCount} failed: ${reason}. Next retry at ${nextRetryAt.toDate().toISOString()}`);
@@ -256,6 +341,7 @@ async function handleRetryFailure(
     status: "pending",
     retryCount: newRetryCount,
     nextRetryAt,
+    providerErrorCode: currentErrorCode,
   });
 }
 

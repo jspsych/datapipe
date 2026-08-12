@@ -11,32 +11,35 @@ import {
 import { auth } from "../lib/firebase";
 import { sendPasswordResetEmail, confirmPasswordReset } from "firebase/auth";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/router";
 import { getError } from "../lib/utils";
 
 export default function ResetPassword() {
   const router = useRouter();
-  const [state, setState] = useState("forgot");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [token, setToken] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Only the transition this page drives itself: "send", after a reset email
+  // goes out. null means "whatever the URL says".
+  const [submittedState, setSubmittedState] = useState(null);
 
-  useEffect(() => {
-    if (router.query?.token) {
-      setState("token");
-      setToken(router?.query?.token);
-    }
-  }, [router, router.query]);
+  // Derived from the URL rather than copied into state by an effect. The old
+  // version rendered the "forgot password" form first and swapped to the
+  // token form once the effect ran, so a user arriving from a reset link saw
+  // the wrong form flash by -- and on Next's first client render, where
+  // router.query is still empty, it was the only form they saw until the
+  // query populated.
+  const token = typeof router.query?.token === "string" ? router.query.token : "";
+  const state = submittedState ?? (token ? "token" : "forgot");
 
   const resetPassword = async () => {
     setIsSubmitting(true);
     try {
       await sendPasswordResetEmail(auth, email);
       setIsSubmitting(false);
-      setState("send");
+      setSubmittedState("send");
     } catch (error) {
       setIsSubmitting(false);
       setError(getError(error.code));

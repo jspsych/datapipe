@@ -14,6 +14,7 @@ process.env.FIREBASE_CONFIG = JSON.stringify({
   storageBucket: "datapipe-test.appspot.com",
 });
 
+const { randomUUID } = require("crypto");
 const { getFirestore } = require("firebase-admin/firestore");
 const { getStorage } = require("firebase-admin/storage");
 const { promoteToQueue } = require("../../lib/scheduled-pending-recovery.js");
@@ -33,16 +34,27 @@ async function seedExperiment(experimentID, metadataActive) {
   });
 }
 
+// Only the docs THIS suite created. A collection-wide wipe here used to
+// delete uploadQueue docs belonging to whatever suite was running in
+// parallel (upload-queue.test.js, metadata-derived-upload-emulator,
+// pending-recovery-provider-regression), which is half of the long-standing
+// cross-suite flake -- the other half was the global pending-data sweep in
+// pending-recovery-provider-regression.
+const createdQueueDocIds = [];
+
 afterEach(async () => {
-  const docs = await db.collection("uploadQueue").get();
+  if (createdQueueDocIds.length === 0) return;
   const batch = db.batch();
-  docs.forEach((doc) => batch.delete(doc.ref));
+  for (const docId of createdQueueDocIds) {
+    batch.delete(db.collection("uploadQueue").doc(docId));
+  }
   await batch.commit();
+  createdQueueDocIds.length = 0;
 });
 
 describe("scheduled-pending-recovery layout awareness", () => {
   it("queues the raw-data path and matching dedup key when metadata is active", async () => {
-    const experimentID = "recovery-test-metadata-on";
+    const experimentID = `recovery-test-metadata-on-${randomUUID()}`;
     await seedExperiment(experimentID, true);
 
     const storagePath = await persistPending(
@@ -56,6 +68,7 @@ describe("scheduled-pending-recovery layout awareness", () => {
 
     const expectedDedupKey = `${experimentID}:data/raw/condition-A-data.json`;
     const docId = expectedDedupKey.replace(/[/\\]/g, "_");
+    createdQueueDocIds.push(docId);
     const doc = await db.collection("uploadQueue").doc(docId).get();
 
     expect(doc.exists).toBe(true);
@@ -64,7 +77,7 @@ describe("scheduled-pending-recovery layout awareness", () => {
   });
 
   it("queues the original filename and matching dedup key when metadata is off", async () => {
-    const experimentID = "recovery-test-metadata-off";
+    const experimentID = `recovery-test-metadata-off-${randomUUID()}`;
     await seedExperiment(experimentID, false);
 
     const storagePath = await persistPending(experimentID, "data.json", "[]");
@@ -74,6 +87,7 @@ describe("scheduled-pending-recovery layout awareness", () => {
 
     const expectedDedupKey = `${experimentID}:data.json`;
     const docId = expectedDedupKey.replace(/[/\\]/g, "_");
+    createdQueueDocIds.push(docId);
     const doc = await db.collection("uploadQueue").doc(docId).get();
 
     expect(doc.exists).toBe(true);

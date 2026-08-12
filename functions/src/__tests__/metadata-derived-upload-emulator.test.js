@@ -41,6 +41,10 @@ const db = getFirestore(app);
 
 const ROOT = "https://files.osf.io/v1/resources/abc/providers/osfstorage/";
 const TOKEN = "test-token";
+// uploadDerivedFiles now takes a ResolvedAuth ({ token, serverUrl? }) rather
+// than a bare token string, so that federated providers (Dataverse) can be
+// told which server to address. Wrapped here to match that signature.
+const AUTH = { token: TOKEN };
 
 const move = (name) => `https://files.osf.io/v1/folder/${name}/`;
 
@@ -97,7 +101,7 @@ describe("uploadDerivedFiles", () => {
       return fileOk();
     });
 
-    await uploadDerivedFiles(files, target, TOKEN);
+    await uploadDerivedFiles(files, target, AUTH);
 
     // Each of the two files under data/ now resolves its own copy of the
     // "data" folder independently -- one lookup per file, not one shared
@@ -122,7 +126,7 @@ describe("uploadDerivedFiles", () => {
     // file ends up queued for retry rather than lost.
     mockFetch.mockRejectedValue(new Error("network down"));
 
-    await expect(uploadDerivedFiles(files, target, TOKEN)).resolves.toBeUndefined();
+    await expect(uploadDerivedFiles(files, target, AUTH)).resolves.toBeUndefined();
 
     const docs = await db.collection("uploadQueue").where("experimentID", "==", experimentID).get();
     const queued = docs.docs.map((d) => d.data().filename).sort();

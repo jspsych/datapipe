@@ -1,6 +1,6 @@
 import { onRequest } from "firebase-functions/v2/https";
 import { db } from "./app.js";
-import { getOAuthConfig } from "./providers/oauth-config.js";
+import { getOAuthConfig } from "./providers/index.js";
 
 export const generateOAuthState = onRequest({ cors: true }, async (req, res) => {
   try {

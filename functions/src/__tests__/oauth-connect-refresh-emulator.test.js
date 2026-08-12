@@ -29,11 +29,19 @@
 import { initializeApp, getApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { randomUUID } from "crypto";
-import { refreshExpiringGdriveTokens } from "../../lib/scheduled-token-refresh.js";
+import { gdriveProvider } from "../../lib/providers/gdrive.js";
 import { decrypt } from "../../lib/crypto-utils.js";
 
 process.env.FIRESTORE_EMULATOR_HOST = "localhost:8080";
 jest.setTimeout(30000);
+
+// gdrive.ts pulls in "node-fetch", which is ESM-only with no CJS build. This
+// suite mocks global.fetch directly for the token endpoint (see
+// installDiscriminatingFetchMock below) and never exercises gdrive's HTTP
+// write paths, so a bare jest.fn() stub is all node-fetch needs here --
+// matches the same mock the other adapter suites already carry (see commit
+// 0664bd5).
+jest.mock("node-fetch", () => ({ __esModule: true, default: jest.fn() }));
 
 const config = { projectId: "datapipe-test" };
 
@@ -136,7 +144,7 @@ describe("10. refreshExpiringGdriveTokens", () => {
     });
 
     const before = Date.now();
-    await refreshExpiringGdriveTokens(WINDOW_MS);
+    await gdriveProvider.refreshExpiringTokens(WINDOW_MS);
     const after = Date.now();
 
     expect(callsForToken(ownRefreshToken)).toHaveLength(1);
@@ -161,7 +169,7 @@ describe("10. refreshExpiringGdriveTokens", () => {
       json: () => Promise.resolve({ access_token: "should-never-be-used", expires_in: 3600 }),
     });
 
-    await refreshExpiringGdriveTokens(WINDOW_MS);
+    await gdriveProvider.refreshExpiringTokens(WINDOW_MS);
 
     expect(callsForToken(ownRefreshToken)).toHaveLength(0);
     const persisted = await getUserData(uid);
@@ -182,7 +190,7 @@ describe("10. refreshExpiringGdriveTokens", () => {
       text: () => Promise.resolve("invalid_grant"),
     });
 
-    await expect(refreshExpiringGdriveTokens(WINDOW_MS)).resolves.not.toThrow();
+    await expect(gdriveProvider.refreshExpiringTokens(WINDOW_MS)).resolves.not.toThrow();
 
     expect(callsForToken(ownRefreshToken)).toHaveLength(1);
     const persisted = await getUserData(uid);

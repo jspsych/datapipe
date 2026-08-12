@@ -36,7 +36,53 @@ describe("STORAGE_PROVIDERS.gdrive", () => {
     expect(STORAGE_PROVIDERS.gdrive.id).toBe("gdrive");
   });
 
+  it("declares authMethod oauth2 so the connect UI runs the redirect flow", () => {
+    expect(STORAGE_PROVIDERS.gdrive.authMethod).toBe("oauth2");
+  });
+
   it("does NOT include osf in the provider map (osf keeps its bespoke legacy UI)", () => {
     expect(STORAGE_PROVIDERS.osf).toBeUndefined();
+  });
+});
+
+describe("STORAGE_PROVIDERS.dataverse", () => {
+  it("declares authMethod static-token and needs a server URL (it is federated)", () => {
+    expect(STORAGE_PROVIDERS.dataverse.authMethod).toBe("static-token");
+    expect(STORAGE_PROVIDERS.dataverse.needsServerUrl).toBe(true);
+  });
+
+  it("isConnected tracks connectedAccounts.dataverse", () => {
+    expect(
+      STORAGE_PROVIDERS.dataverse.isConnected({
+        connectedAccounts: { dataverse: true },
+      })
+    ).toBe(true);
+    expect(
+      STORAGE_PROVIDERS.dataverse.isConnected({ connectedAccounts: {} })
+    ).toBe(false);
+    expect(STORAGE_PROVIDERS.dataverse.isConnected(undefined)).toBe(false);
+  });
+
+  it("containerLink takes the host from the container, not a constant, and encodes the DOI", () => {
+    // Dataverse is federated, so the dataset lives on whichever installation
+    // the researcher connected -- the URL cannot be built from a fixed host.
+    // Persistent ids contain slashes, so the DOI must be encoded to survive
+    // as a query parameter.
+    const url = STORAGE_PROVIDERS.dataverse.containerLink({
+      providerContainer: {
+        serverUrl: "https://dataverse.harvard.edu",
+        persistentId: "doi:10.5072/FK2/J8SJZB",
+      },
+    });
+    expect(url).toBe(
+      "https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi%3A10.5072%2FFK2%2FJ8SJZB"
+    );
+  });
+
+  it("exposes a human-readable name and container label", () => {
+    expect(STORAGE_PROVIDERS.dataverse.name).toBe("Dataverse");
+    expect(STORAGE_PROVIDERS.dataverse.containerLabel).toBe("Dataverse Dataset");
+    expect(STORAGE_PROVIDERS.dataverse.containerLinkText).toBe("Open dataset");
+    expect(STORAGE_PROVIDERS.dataverse.id).toBe("dataverse");
   });
 });

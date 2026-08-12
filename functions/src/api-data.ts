@@ -12,8 +12,8 @@ import { uploadDerivedFiles, queueDerivedFiles } from "./metadata-derived-upload
 import resolveToken from "./resolve-token.js";
 import queueUpload from "./queue-upload.js";
 import { persistPending, cleanupPending } from "./persist-pending.js";
-import { getProviderForExperiment } from "./providers/index.js";
-import { WriteResult } from "./providers/types.js";
+import { getProviderForExperiment, claimNameFor } from "./providers/index.js";
+import { WriteResult, ResolvedAuth } from "./providers/types.js";
 import { claimFilename, confirmClaim, CollisionCacheUnavailableError } from "./collision-cache.js";
 import { ExperimentData, UserData, RequestBody } from './interfaces';
 
@@ -126,7 +126,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
     return;
   }
 
-  const token = tokenResult.token;
+  const auth: ResolvedAuth = { token: tokenResult.token, serverUrl: tokenResult.serverUrl };
 
   //METADATA BLOCK START
 
@@ -140,7 +140,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
     //Creates or references a document containing the metadata for the experiment in the metdata collection on Firestore.
     const metadata_doc_ref: DocumentReference<DocumentData> = db.collection("metadata").doc(experimentID);
 
-    const metadataResponse = await blockMetadata(exp_data, token, metadata_doc_ref, data, filename, metadataOptions);
+    const metadataResponse = await blockMetadata(exp_data, auth, metadata_doc_ref, data, filename, metadataOptions);
 
     if (metadataResponse.success === false) {
       // The pending-data copy is deliberately kept (not cleaned up) here: the
@@ -176,20 +176,33 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
   // Collision detection: claim the filename in the Firestore cache
   // immediately before the provider write. The provider's own conflict
   // response (NAME_CONFLICT) stays wired up below as a dual-run backstop.
-  // Claimed on the RAW leaf filename (unchanged by the Psych-DS layout), not
-  // uploadFilename, so dedup keys off what the participant actually submitted.
+  //
+  // Claimed on the name the PROVIDER will store this file under, derived from
+  // uploadFilename by that adapter's own storedNameFor. It used to be claimed
+  // on the raw leaf filename, which put claims in a different namespace from
+  // the listFiles results a cold cache rehydrates from -- so on a rehydrated
+  // cache no claim ever matched, and the providers with no NAME_CONFLICT to
+  // fall back on silently overwrote (Zenodo) or duplicated (Dataverse) a
+  // participant's data. It also disagreed with the retry worker, which claims
+  // on the queued upload path, so a queued retry never re-entered its own
+  // pending claim.
   const claimToken = randomUUID();
+  const claimName = claimNameFor(provider, uploadFilename);
   let claimResult: Awaited<ReturnType<typeof claimFilename>>;
   try {
-    claimResult = await claimFilename(experimentID, filename, claimToken, () =>
-      provider.listFiles({ token }, container)
+    claimResult = await claimFilename(experimentID, claimName, claimToken, () =>
+      provider.listFiles(auth, container)
     );
   } catch (e) {
     if (e instanceof CollisionCacheUnavailableError) {
       const detail = e.message;
       try {
         await queueUpload({
-          experimentID, owner: exp_data.owner, filename, data,
+          // uploadFilename, not the raw filename: the retry worker writes
+          // whatever it finds here, so queueing the raw leaf would drop a
+          // metadataActive submission at the container root instead of under
+          // data/raw/ (and claim it in the wrong namespace on the way).
+          experimentID, owner: exp_data.owner, filename: uploadFilename, data,
           dataType: "data", osfFilesLink: exp_data.osfFilesLink,
           storageProvider: exp_data.storageProvider, providerContainer: exp_data.providerContainer,
           errorCode: 0, sessionIncremented: true,
@@ -222,7 +235,9 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
     // lease; queue this upload and let the retry land after it expires.
     try {
       await queueUpload({
-        experimentID, owner: exp_data.owner, filename, data,
+        // uploadFilename for the same reason as the rehydration-failure path
+        // above -- the retry worker writes exactly what is queued here.
+        experimentID, owner: exp_data.owner, filename: uploadFilename, data,
         dataType: "data", osfFilesLink: exp_data.osfFilesLink,
         storageProvider: exp_data.storageProvider, providerContainer: exp_data.providerContainer,
         errorCode: 0, sessionIncremented: true,
@@ -244,7 +259,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
   let result: WriteResult;
   try {
     result = await provider.writeSessionFile(
-      { token },
+      auth,
       container,
       uploadFilename,
       data,
@@ -282,7 +297,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
       // Dual-run disagreement: the cache thought the name was free but OSF
       // says it's taken. OSF is still the backstop — record the
       // disagreement and confirm the claim (the name is now provably taken).
-      await confirmClaim(experimentID, filename, claimToken);
+      await confirmClaim(experimentID, claimName, claimToken);
       // Logs are written BEFORE the response here (unlike other branches):
       // the disagreement entry is the dual-run's whole audit trail, and
       // responding first races observers of the log against the write.
@@ -302,14 +317,15 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
         experimentID, owner: exp_data.owner, filename: uploadFilename, data,
         dataType: "data", osfFilesLink: exp_data.osfFilesLink,
         storageProvider: exp_data.storageProvider, providerContainer: exp_data.providerContainer,
-        errorCode: result.providerStatus || 0, sessionIncremented: true,
+        errorCode: result.providerStatus || 0, providerErrorCode: result.error, sessionIncremented: true,
         failureReason: `Provider error ${result.providerStatus}: ${result.providerMessage}`,
         claimToken,
       });
       await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
       await cleanupPending(pendingPath); // queue-upload has its own copy
-      // OSF is failing, so queue the derived files alongside the raw data.
-      await queueDerivedFiles(derivedFiles, derivedTarget, `Queued alongside data file: OSF error ${result.providerStatus}`);
+      // OSF is failing, so queue the derived files alongside the raw data —
+      // same provider error code, since it's the same provider write path.
+      await queueDerivedFiles(derivedFiles, derivedTarget, `Queued alongside data file: OSF error ${result.providerStatus}`, result.error);
       res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
       await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.providerStatus, osfStatusText: result.providerMessage});
       return;
@@ -322,7 +338,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
 
   // Successful write — confirm the claim (best-effort; a confirm failure
   // must not fail a request that already succeeded against the provider).
-  await confirmClaim(experimentID, filename, claimToken);
+  await confirmClaim(experimentID, claimName, claimToken);
 
   await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
 
@@ -332,7 +348,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
   // The raw data file is safely in OSF; upload the files derived from it
   // (main data CSV, sidecar CSVs, .psychds-ignore — best-effort: failures are
   // queued for retry and logged, never failing the submission).
-  await uploadDerivedFiles(derivedFiles, derivedTarget, token);
+  await uploadDerivedFiles(derivedFiles, derivedTarget, auth);
 
   res.status(201).json({...MESSAGES.SUCCESS, metadataMessage});
 });

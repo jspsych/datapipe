@@ -1,6 +1,6 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { db, storage } from "./app.js";
-import { StorageProviderId, ContainerRef } from "./providers/types.js";
+import { StorageProviderId, ContainerRef, ProviderErrorCode } from "./providers/types.js";
 
 interface QueueUploadParams {
   experimentID: string;
@@ -20,9 +20,38 @@ interface QueueUploadParams {
   // since Firestore rejects undefined field values).
   storageProvider?: StorageProviderId;
   providerContainer?: ContainerRef;
+  // Taxonomy code from the provider WriteResult that caused this call, when
+  // one is available (i.e. this is a provider write failure, not a
+  // collision-cache/metadata failure). Drives which retry tier the first
+  // nextRetryAt below — and every subsequent backoff computed by
+  // scheduled-upload-retry.ts's handleRetryFailure — falls into. Omitted from
+  // the Firestore write below when undefined, same convention as
+  // osfFilesLink/storageProvider/providerContainer.
+  providerErrorCode?: ProviderErrorCode;
 }
 
 const MAX_RETRIES = 5;
+
+// CONTENTION means "another write to this same container is in flight right
+// now" -- verified live against demo.dataverse.org to clear in seconds -- so
+// it is the one code worth retrying on a minutes-scale schedule. Exported so
+// scheduled-upload-retry.ts reads the exact same tier boundary rather than
+// keeping its own copy that could drift out of sync with this one.
+//
+// RATE_LIMITED is deliberately NOT here, though it looks like it belongs. A
+// 429 is the provider telling us to back off for as long as ITS window lasts,
+// which for OSF and Drive is a scale of hours, not seconds. On the fast tier
+// its five attempts (60s base, 30-minute cap) are all spent inside ~31
+// minutes, every one of them re-hitting the endpoint that just rate-limited
+// us; the item is then marked permanently failed and cleanupOldEntries
+// deletes its Cloud Storage payload seven days later. The slow tier's ~31
+// hours is what a rate-limit window actually needs to outlast, so 429 stays
+// there -- exactly where it was before the fast tier existed.
+export const FAST_RETRY_CODES: ReadonlySet<string> = new Set(["CONTENTION"]);
+
+export function isFastRetry(code?: string | null): boolean {
+  return !!code && FAST_RETRY_CODES.has(code);
+}
 
 export default async function queueUpload(params: QueueUploadParams): Promise<string> {
   const deduplicationKey = `${params.experimentID}:${params.filename}`;
@@ -31,7 +60,12 @@ export default async function queueUpload(params: QueueUploadParams): Promise<st
   const docRef = db.collection("uploadQueue").doc(docId);
 
   const now = Timestamp.now();
-  const nextRetryAt = Timestamp.fromMillis(now.toMillis() + 60 * 60 * 1000); // 1 hour
+  // Fast tier (CONTENTION): 60 seconds — the cadence of
+  // scheduled-upload-retry.ts is what makes this meaningful (see that file).
+  // Everything else, including no providerErrorCode at all: 1 hour, exactly
+  // as before this change.
+  const firstRetryDelayMs = isFastRetry(params.providerErrorCode) ? 60 * 1000 : 60 * 60 * 1000;
+  const nextRetryAt = Timestamp.fromMillis(now.toMillis() + firstRetryDelayMs);
 
   // If the doc already exists: a "processing" entry is actively being
   // uploaded, so leave it alone (retry worker owns the storage payload right
@@ -106,6 +140,9 @@ export default async function queueUpload(params: QueueUploadParams): Promise<st
   }
   if (params.providerContainer !== undefined) {
     queueDocData.providerContainer = params.providerContainer;
+  }
+  if (params.providerErrorCode !== undefined) {
+    queueDocData.providerErrorCode = params.providerErrorCode;
   }
 
   await docRef.set(queueDocData);

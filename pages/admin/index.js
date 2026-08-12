@@ -2,7 +2,7 @@ import AuthCheck from "../../components/AuthCheck";
 import { collection, query, where, doc, deleteDoc } from "firebase/firestore";
 import { db, auth } from "../../lib/firebase";
 import { useCollectionData, useDocumentData } from "react-firebase-hooks/firestore";
-import { useRef, useState, useEffect } from "react";
+import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import {
   Heading,
@@ -34,16 +34,47 @@ export default function AdminPage({}) {
   );
 }
 
+// localStorage is external mutable state that does not exist during SSR, so
+// it cannot be read in the render body or in a useState initializer. It used
+// to be read in an effect that then called setState, which meant the banner's
+// dismissed flag was wrong for one render: it defaulted to `true`, so a
+// researcher who had NOT dismissed it got no banner until the effect ran and
+// re-rendered.
+//
+// useSyncExternalStore reads the value during render on the client and falls
+// back to getServerSnapshot on the server, with no intermediate wrong state.
+// The listener set makes the banner disappear the instant it is dismissed --
+// a plain read would not re-render, since writing to localStorage is invisible
+// to React.
+const DISMISS_KEY = "datapipe-oauth-banner-dismissed";
+const dismissListeners = new Set();
+
+function subscribeToDismissal(onStoreChange) {
+  dismissListeners.add(onStoreChange);
+  return () => dismissListeners.delete(onStoreChange);
+}
+
+function dismissBanner() {
+  localStorage.setItem(DISMISS_KEY, "true");
+  for (const listener of dismissListeners) listener();
+}
+
+// Booleans compare by value, so returning a fresh one each call is safe here;
+// useSyncExternalStore only loops on a getSnapshot that returns a new OBJECT
+// identity every time.
+const getDismissed = () => localStorage.getItem(DISMISS_KEY) === "true";
+// Server-rendered markup omits the banner. Rendering it and then pulling it
+// away from someone who had already dismissed it is the worse of the two.
+const getDismissedOnServer = () => true;
+
 function OAuthBanner() {
   const user = auth.currentUser;
   const [userData] = useDocumentData(doc(db, "users", user.uid));
-  const [dismissed, setDismissed] = useState(true);
-
-  useEffect(() => {
-    setDismissed(
-      localStorage.getItem("datapipe-oauth-banner-dismissed") === "true"
-    );
-  }, []);
+  const dismissed = useSyncExternalStore(
+    subscribeToDismissal,
+    getDismissed,
+    getDismissedOnServer
+  );
 
   const hasOAuthConnection = userData?.refreshToken && userData?.authToken;
 
@@ -52,8 +83,7 @@ function OAuthBanner() {
   }
 
   const handleDismiss = () => {
-    localStorage.setItem("datapipe-oauth-banner-dismissed", "true");
-    setDismissed(true);
+    dismissBanner();
   };
 
   return (

@@ -1,4 +1,4 @@
-import { useState, useContext, useEffect } from "react";
+import { useState, useContext } from "react";
 import { UserContext } from "../../lib/context";
 
 import {
@@ -20,25 +20,16 @@ export default function ChangePassword() {
   const [open, setOpen] = useState(false);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [passwordMatch, setPasswordMatch] = useState(true);
-  const [passwordLengthSatisfied, setPasswordLengthSatisfied] = useState(true);
   const [submitStatus, setSubmitStatus] = useState(null); // "success" | "failure" | null
 
-  useEffect(() => {
-    if (password !== confirmPassword) {
-      setPasswordMatch(false);
-    } else {
-      setPasswordMatch(true);
-    }
-  }, [password, confirmPassword]);
-
-  useEffect(() => {
-    if (password.length < 12) {
-      setPasswordLengthSatisfied(false);
-    } else {
-      setPasswordLengthSatisfied(true);
-    }
-  }, [password]);
+  // Derived during render, not mirrored into state by an effect. Both are pure
+  // functions of the two fields above, so storing them separately only created
+  // a window -- the render between a keystroke and the effect that followed it
+  // -- where the validation message on screen disagreed with the input beside
+  // it. On first open that window was visible: passwordLengthSatisfied was
+  // initialised true, so an empty field rendered as valid until the effect ran.
+  const passwordMatch = password === confirmPassword;
+  const passwordLengthSatisfied = password.length >= 12;
 
   return (
     <HStack justifyContent="space-between" w="100%" flexWrap="wrap" gap={3}>

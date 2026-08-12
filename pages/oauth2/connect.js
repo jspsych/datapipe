@@ -30,6 +30,7 @@ function connectReducer(state, action) {
 function useProviderConnectCallback() {
   const { user } = useContext(UserContext);
   const router = useRouter();
+  const { push } = router;
   const [state, dispatch] = useReducer(connectReducer, initialState);
   const processingRef = useRef(false);
 
@@ -93,7 +94,7 @@ function useProviderConnectCallback() {
         localStorage.removeItem("latestCSRFToken");
         localStorage.removeItem("providerConnectFlow");
 
-        router.push("/admin/account");
+        push("/admin/account");
       } catch (err) {
         console.error("Provider connect callback error:", err);
         dispatch({ type: "ERROR", error: err.message });
@@ -102,7 +103,14 @@ function useProviderConnectCallback() {
     };
 
     processCallback();
-  }, [urlCode, urlState, urlError, user?.uid]);
+    // `push`, NOT the whole `router`. The effect reads nothing else off it --
+    // the query parameters are destructured into urlCode/urlState/urlError
+    // above and listed here individually -- and depending on the router object
+    // means depending on an identity nothing guarantees is stable. Where it is
+    // not, this effect re-runs on every render, and since it dispatches, every
+    // run schedules the next one: an unbounded loop that performs the OAuth
+    // token exchange over and over.
+  }, [urlCode, urlState, urlError, user?.uid, push]);
 
   return state;
 }

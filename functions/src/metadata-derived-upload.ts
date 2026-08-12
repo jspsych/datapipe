@@ -1,5 +1,5 @@
 import { getProvider } from "./providers/index.js";
-import { StorageProviderId, ContainerRef } from "./providers/types.js";
+import { StorageProviderId, ContainerRef, ResolvedAuth, ProviderErrorCode } from "./providers/types.js";
 import queueUpload from "./queue-upload.js";
 import writeLog from "./write-log.js";
 import MESSAGES from "./api-messages.js";
@@ -48,14 +48,14 @@ function contentTypeFor(filename: string): string {
 export async function uploadDerivedFiles(
   files: DerivedFile[],
   target: DerivedUploadTarget,
-  token: string,
+  auth: ResolvedAuth,
 ): Promise<void> {
   const { provider, container } = resolveProviderAndContainer(target);
 
   await Promise.allSettled(files.map(async (file) => {
     try {
       const result = await provider.writeSessionFile(
-        { token },
+        auth,
         container,
         file.filename,
         file.content,
@@ -63,7 +63,7 @@ export async function uploadDerivedFiles(
       );
       if (result.success) return;
       if (result.error === "NAME_CONFLICT") return;
-      await queueDerivedFiles([file], target, `Derived file provider error ${result.providerStatus}: ${result.providerMessage}`);
+      await queueDerivedFiles([file], target, `Derived file provider error ${result.providerStatus}: ${result.providerMessage}`, result.error);
     } catch (e) {
       const detail = e instanceof Error ? e.message : "Unknown error";
       await queueDerivedFiles([file], target, `Derived file upload exception: ${detail}`);
@@ -76,11 +76,17 @@ export async function uploadDerivedFiles(
  * when the raw data file itself just failed to reach the provider (it was
  * queued, so the provider is known to be unavailable). sessionIncremented is
  * true because only the raw data file accounts for the session count.
+ * providerErrorCode is optional — only present when this is being called
+ * after an actual provider WriteResult failure (either the derived file's own
+ * attempt in uploadDerivedFiles, or the raw data file's failure in
+ * api-data.ts); absent for the exception-path callers that never got a
+ * WriteResult at all, which correctly fall back to the slow retry tier.
  */
 export async function queueDerivedFiles(
   files: DerivedFile[],
   target: DerivedUploadTarget,
   failureReason: string,
+  providerErrorCode?: ProviderErrorCode,
 ): Promise<void> {
   for (const file of files) {
     try {
@@ -94,6 +100,7 @@ export async function queueDerivedFiles(
         storageProvider: target.storageProvider,
         providerContainer: target.providerContainer,
         errorCode: 0,
+        providerErrorCode,
         sessionIncremented: true,
         failureReason,
       });

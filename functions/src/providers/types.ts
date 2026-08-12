@@ -2,18 +2,33 @@
 // Nothing imports these types yet except the registry; adapters arrive in
 // later build steps, starting with the OSF refactor.
 
-export type StorageProviderId = "osf" | "gdrive" | "figshare" | "dataverse";
+// interfaces.ts imports StorageProviderId/ContainerRef/FileRef/
+// CollisionCacheState/ConnectedAccounts FROM this module, so a value import
+// of UserData here would create a runtime circular dependency. `import type`
+// is erased at compile time and is safe.
+import type { UserData } from "../interfaces.js";
+
+export type StorageProviderId = "osf" | "gdrive" | "figshare" | "dataverse" | "zenodo";
 
 export type AuthMethod = "oauth2" | "static-token";
 
 // Generic error taxonomy that every adapter maps its provider's errors into.
 // QUOTA_EXCEEDED covers both storage-full and file-too-large.
+// CONTENTION: the provider rejected a write because another write to the
+// same container was already in flight. Transient and clears in seconds --
+// unlike the other codes here, this is never an outage or something a human
+// needs to act on -- so the upload queue retries it on a fast tier instead of
+// the outage-scale exponential backoff the other codes get. Motivating case:
+// Dataverse allows exactly one concurrent write per dataset and rejects every
+// other in-flight write with a generic 400 (verified live against
+// demo.dataverse.org, 2026-07-26 -- see mapDataverseError in dataverse.ts).
 export type ProviderErrorCode =
   | "RATE_LIMITED"
   | "AUTH_EXPIRED"
   | "NAME_CONFLICT"
   | "QUOTA_EXCEEDED"
-  | "UNAVAILABLE";
+  | "UNAVAILABLE"
+  | "CONTENTION";
 
 // A resolved, decrypted credential handed to adapter calls. serverUrl is only
 // present for federated providers (Dataverse).
@@ -21,6 +36,14 @@ export interface ResolvedAuth {
   token: string;
   serverUrl?: string;
 }
+
+// Result of resolving a user's stored credential into a usable token. The
+// success variant carries an optional serverUrl for future federated
+// providers (Dataverse) and is structurally assignable to ResolvedAuth above,
+// so callers can pass it straight into adapter write-path calls.
+export type TokenResult =
+  | { success: true; token: string; serverUrl?: string }
+  | { success: false; error: string; detail: string };
 
 // Opaque, provider-shaped reference to the container an experiment writes
 // into (OSF component, Drive folder, Figshare article, Dataverse dataset).
@@ -80,12 +103,31 @@ export interface ProviderCapabilities {
   quotaNote: string | null;
 }
 
-export interface OAuthEndpointConfig {
+export interface OAuthConfig {
   authorizeUrl: string;
   tokenUrl: string;
   clientId: string;
   clientSecret: string;
+  redirectUri: string;
   scope: string;
+  extraAuthParams: Record<string, string>;
+}
+
+// Describes one researcher-supplied value createDataContainer needs beyond
+// the experiment title (which create-experiment always injects itself).
+// This is the SERVER-side source of truth: create-experiment validates a
+// createDataContainer request generically against a provider's
+// containerInput list, so it never needs to name a specific provider or know
+// its researcherInput shape, and adding a new provider never requires
+// editing that endpoint.
+export interface ContainerInputField {
+  name: string;
+  label: string;
+  required: boolean;
+  placeholder?: string;
+  // "hidden" means the client supplies this through a bespoke UI (gdrive's
+  // Google Picker) rather than a rendered text field.
+  inputType?: "text" | "textarea" | "hidden";
 }
 
 export interface StorageProvider {
@@ -93,11 +135,51 @@ export interface StorageProvider {
   authMethod: AuthMethod;
   capabilities: ProviderCapabilities;
 
-  // oauth2 providers only
-  oauth?: OAuthEndpointConfig;
+  // The researcher-supplied fields this provider's createDataContainer needs
+  // beyond the experiment title. See ContainerInputField above -- this is
+  // the SERVER-side source of truth create-experiment validates against.
+  containerInput: ContainerInputField[];
+
+  // Optional because only providers on the generic OAuth2 storage-GRANT flow
+  // have one. OSF deliberately does not -- its OAuth is a separate legacy
+  // IDENTITY flow (oauth2-callback.ts) with its own env vars -- and that
+  // absence is precisely what makes getOAuthConfig reject "osf" without
+  // special-casing it.
+  oauthConfig?(): OAuthConfig;
+
+  // Decrypts the user's stored credential, checks expiry, and refreshes +
+  // persists as needed. Failures come back as a TokenResult rather than
+  // throwing.
+  resolveToken(userData: UserData, owner: string): Promise<TokenResult>;
+
+  // Optional: opt-in proactive refresh, run by the weekly scheduled pass
+  // (scheduled-token-refresh.ts) ahead of expiry. A provider that omits this
+  // is simply skipped by that pass. `windowMs` is optional and EACH PROVIDER
+  // SUPPLIES ITS OWN DEFAULT -- the two existing windows are not
+  // interchangeable and must never be unified: OSF's is 2 weeks, checked
+  // against its REFRESH-token expiry (`refreshTokenExpires`), while gdrive's
+  // is 10 minutes, checked against its ACCESS-token expiry
+  // (`tokenExpiresAt`).
+  refreshExpiringTokens?(windowMs?: number): Promise<void>;
 
   // static-token providers only
   validateStaticToken?(auth: ResolvedAuth): Promise<boolean>;
+
+  // static-token providers only. Returns the credential's absolute expiry as
+  // epoch milliseconds, or null when the provider does not report one or it
+  // cannot be determined. Never throws -- callers treat null as "unknown"
+  // and must not fail on it.
+  staticTokenExpiry?(auth: ResolvedAuth): Promise<number | null>;
+
+  // Optional, non-blocking, researcher-facing advisories checked when an
+  // experiment is being set up against this provider (see
+  // provider-setup-warnings.ts). Returns human-readable strings for the UI
+  // to display; an empty array means nothing to report. Never throws -- a
+  // provider that cannot determine its answer returns [] rather than
+  // failing setup. Motivating case: Dataverse's tabIngest suppression param
+  // (writeSessionFile) is silently ignored by installations older than
+  // 5.11, so dataverse.ts's implementation warns when it detects one.
+  setupWarnings?(auth: ResolvedAuth): Promise<string[]>;
 
   // One-time setup at experiment creation. researcherInput is provider-shaped
   // (e.g. parent project for Figshare, collection + serverUrl for Dataverse).
@@ -127,6 +209,24 @@ export interface StorageProvider {
   // Full listing (adapters paginate internally). Used for collision-cache
   // rehydration and dashboard file counts.
   listFiles(auth: ResolvedAuth, container: ContainerRef): Promise<FileRef[]>;
+
+  // Pure, synchronous, deterministic: given the path writeSessionFile will be
+  // asked to write, returns the `name` this adapter's own listFiles reports
+  // for the resulting file. Omitting it means "identity".
+  //
+  // THIS IS THE COLLISION CACHE'S IDENTITY FUNCTION, and it exists because
+  // the two sides silently disagreed. The cache hashes a name at claim time
+  // and rehydrates a cold cache from listFiles, so the two MUST live in the
+  // same namespace -- but adapters legitimately transform the requested path:
+  // Zenodo flattens slashes into "_", Drive stores only the leaf under a
+  // nested folder. A claim made on the raw leaf name therefore never matched
+  // a rehydrated one, and the providers that cannot return NAME_CONFLICT
+  // (Zenodo's PUT overwrites in place, Dataverse silently renames) had no
+  // backstop to catch what slipped through.
+  //
+  // Any new adapter whose writeSessionFile does not store the requested path
+  // verbatim MUST implement this. See claimNameFor in providers/index.ts.
+  storedNameFor?(filename: string): string;
 
   // Fetches a file's contents as text. Used by metadata-block.ts to read
   // back an existing dataset_description.json. Never throws — failures come
@@ -159,6 +259,11 @@ export interface ConnectedAccounts {
   gdrive?: OAuth2AccountConnection;
   figshare?: OAuth2AccountConnection;
   dataverse?: StaticTokenAccountConnection;
+  // Zenodo reuses the static-token shape, but its tokenExpiresAt is expected
+  // to stay ABSENT: Zenodo personal access tokens have no documented expiry
+  // and no endpoint reports one, so zenodo.ts implements no staticTokenExpiry
+  // and connect-provider.ts therefore omits the field.
+  zenodo?: StaticTokenAccountConnection;
 }
 
 // experiments/{id}.collisionCache (additive Firestore schema). The salt is a

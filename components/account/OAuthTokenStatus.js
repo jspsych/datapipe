@@ -1,4 +1,4 @@
-import { useContext } from "react";
+import { useContext, useState } from "react";
 import { UserContext } from "../../lib/context";
 import { useDocumentData } from "react-firebase-hooks/firestore";
 import { doc } from "firebase/firestore";
@@ -17,6 +17,18 @@ import { CircleCheck, TriangleAlert } from "lucide-react";
 export default function OAuthTokenStatus() {
   const { user } = useContext(UserContext);
 
+  // Read once, at mount, instead of calling Date.now() in the render body.
+  // The clock is external mutable state: reading it during render makes this
+  // component impure, so two renders with identical props could disagree, and
+  // in a concurrent render React is free to discard and retry the work. A
+  // fixed instant makes the comparison below stable and reproducible.
+  //
+  // The trade-off, accepted deliberately: a page left open across the exact
+  // moment the refresh token expires keeps showing "Connected" until something
+  // re-mounts it. That is a coarse, day-scale badge -- a ticking clock to
+  // catch the boundary would be more machinery than the signal is worth.
+  const [mountedAt] = useState(() => Date.now());
+
   const [data, loading, error] = useDocumentData(
     user?.uid ? doc(db, "users", user.uid) : null
   );
@@ -34,7 +46,8 @@ export default function OAuthTokenStatus() {
     );
   }
 
-  const isRefreshTokenExpired = data.refreshTokenExpires && Date.now() > data.refreshTokenExpires;
+  const isRefreshTokenExpired =
+    data.refreshTokenExpires && mountedAt > data.refreshTokenExpires;
 
 
   const getStatusIcon = () => {

@@ -1,3 +1,14 @@
+/**
+ * @jest-environment node
+ */
+
+// Runs in the node environment, not the project-default jsdom: osfProvider
+// now resolves tokens too (osf.ts -> refresh-token.ts -> app.js ->
+// firebase-admin/auth -> jwks-rsa -> jose). Under jsdom, jose resolves to its
+// ESM-only browser build and Jest's CJS transform can't parse it; the node
+// environment picks jose's CJS build. Mirrors resolve-token-gdrive.test.js,
+// which has always carried this docblock for the same reason.
+
 // osfProvider delegates its writes to put-file-osf.js / update-file-osf.js,
 // which both import their own `fetch` from the "node-fetch" package rather
 // than using the global fetch. Mocking global.fetch (the pattern used by

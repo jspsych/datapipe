@@ -11,11 +11,62 @@ import { onRequest } from "firebase-functions/v2/https";
 import { FieldValue } from "firebase-admin/firestore";
 import { db, auth } from "./app.js";
 import { encrypt } from "./crypto-utils.js";
-import { getOAuthConfig } from "./providers/oauth-config.js";
+import { getOAuthConfig, getProvider } from "./providers/index.js";
+import { StorageProviderId } from "./providers/types.js";
 
 export type AuthCheckResult =
   | { ok: true }
   | { ok: false; status: number; error: string };
+
+// Rejects request bodies that could turn our authenticated Dataverse client
+// into a server-side request forgery (SSRF) primitive: serverUrl is fully
+// researcher-supplied, and downloadFile echoes the response body straight
+// back to the caller. Left unconstrained, that is a read-with-credentials
+// proxy against Google Cloud's metadata service
+// (169.254.169.254 / metadata.google.internal) and anything else reachable
+// on the private network. This is DEFENSE IN DEPTH, NOT a complete SSRF
+// defense -- a public DNS name can still resolve to an internal address
+// after this check passes (DNS rebinding) -- so it only closes the cheap,
+// obvious cases: non-https schemes, embedded credentials, non-default ports,
+// loopback/internal-looking hostnames, and literal IP addresses. Researchers
+// only ever connect to named institutional installations
+// (dataverse.harvard.edu, demo.dataverse.org), never to a bare IP, so
+// rejecting every IPv4/IPv6 literal outright costs nothing real and closes
+// the whole class rather than trying to enumerate private ranges.
+export function isAllowedServerUrl(raw: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return false;
+  }
+
+  if (url.protocol !== "https:") return false;
+  if (url.username || url.password) return false;
+  // Default-port URLs are normalized to "" by the URL parser, so this also
+  // accepts an explicit ":443".
+  if (url.port !== "" && url.port !== "443") return false;
+
+  // Strip a single trailing dot before any comparison. "…internal." is the
+  // explicit-root FQDN form and DNS resolves it identically to "…internal",
+  // but it matches neither an equality check nor an endsWith(".internal")
+  // one -- so without this, https://metadata.google.internal./ walks straight
+  // through every rule below.
+  const hostname = url.hostname.endsWith(".") ? url.hostname.slice(0, -1) : url.hostname;
+  if (hostname === "localhost") return false;
+  if (hostname.endsWith(".localhost")) return false;
+  if (hostname.endsWith(".internal")) return false;
+  if (hostname === "metadata.google.internal") return false;
+  if (hostname.startsWith("[")) return false; // IPv6 literal
+  // Reject every IPv4-shaped literal outright, including the
+  // octal/decimal-shorthand forms (0177.0.0.1, 2130706433) that a naive
+  // dotted-quad check would miss -- rather than trying to enumerate private
+  // ranges.
+  if (/^\d+(\.\d+)*$/.test(hostname)) return false;
+  if (!hostname.includes(".")) return false; // rejects bare single-label internal names
+
+  return true;
+}
 
 export async function verifyOwnership(uid: string, idToken: string | undefined): Promise<AuthCheckResult> {
   if (!idToken) {
@@ -154,6 +205,118 @@ export const connectProvider = onRequest({ cors: true }, async (req, res) => {
   }
 });
 
+// Separate endpoint from connectProvider rather than a branch inside it: the
+// two flows share almost nothing. OAuth needs code+state+CSRF-state
+// validation against a third-party redirect; static-token needs a pasted
+// token+serverUrl with no redirect at all, so no CSRF state applies here.
+// Mixing them would tangle the validation of both.
+export const connectStaticTokenProvider = onRequest({ cors: true }, async (req, res) => {
+  try {
+    if (req.method !== 'POST') {
+      res.status(405).json({ error: 'Method not allowed' });
+      return;
+    }
+
+    const { provider, uid, idToken, token, serverUrl } = req.body || {};
+
+    if (!provider || !uid || !token) {
+      res.status(400).json({ error: 'Missing required parameters' });
+      return;
+    }
+
+    let storageProvider;
+    try {
+      storageProvider = getProvider(provider as StorageProviderId);
+    } catch {
+      res.status(400).json({ error: 'Unknown provider' });
+      return;
+    }
+    // Opaque "Unknown provider" for every rejection here -- registered but
+    // wrong auth method looks identical to the caller as genuinely unknown,
+    // same convention as getOAuthConfig's callers.
+    if (storageProvider.authMethod !== 'static-token' || !storageProvider.validateStaticToken) {
+      res.status(400).json({ error: 'Unknown provider' });
+      return;
+    }
+
+    if (typeof serverUrl !== 'string' || !isAllowedServerUrl(serverUrl)) {
+      res.status(400).json({ error: 'Invalid server URL' });
+      return;
+    }
+    // Normalize to scheme+host only (no path/query/fragment/trailing slash)
+    // so the adapter's `${serverUrl}/api/...` string concatenation can never
+    // produce a double slash or inherit a stray path.
+    const normalizedServerUrl = new URL(serverUrl).origin;
+
+    // Verify that the caller owns the uid they claim. No signup path here.
+    const authCheck = await verifyOwnership(uid, idToken);
+    if (!authCheck.ok) {
+      res.status(authCheck.status).json({ error: authCheck.error });
+      return;
+    }
+
+    let isValid: boolean;
+    try {
+      isValid = await storageProvider.validateStaticToken({ token, serverUrl: normalizedServerUrl });
+    } catch (e) {
+      // A network error against an unreachable/misconfigured installation is
+      // "not valid", not a server-side failure.
+      console.error('Static token validation error:', e instanceof Error ? e.message : 'Unknown error');
+      isValid = false;
+    }
+    if (!isValid) {
+      res.status(400).json({ error: 'Invalid API token' });
+      return;
+    }
+
+    // Best-effort: if the provider can report its credential's expiry (only
+    // Dataverse does today), fetch it now and persist it so resolveToken's
+    // PROVIDER_TOKEN_EXPIRED branch -- previously dead, since nothing ever
+    // set tokenExpiresAt -- actually has data to act on. A failure or an
+    // unknown (null) expiry here MUST NOT fail the connect: the token was
+    // already validated above, and "we don't know when this expires" is not
+    // an error, just the same omitted-field state the endpoint always had.
+    let tokenExpiresAt: number | null = null;
+    if (storageProvider.staticTokenExpiry) {
+      try {
+        tokenExpiresAt = await storageProvider.staticTokenExpiry({ token, serverUrl: normalizedServerUrl });
+      } catch (e) {
+        console.error(
+          'Static token expiry check error:',
+          e instanceof Error ? e.message : 'Unknown error'
+        );
+        tokenExpiresAt = null;
+      }
+    }
+
+    // Same dot-path persist convention as connectProvider: set()+mergeFields
+    // creates users/{uid} if absent and leaves sibling provider connections
+    // untouched. tokenExpiresAt is included only when it resolved to a
+    // number -- Firestore rejects undefined, and resolveToken already treats
+    // a missing tokenExpiresAt as "no known expiry", so omitting it entirely
+    // when unknown is correct, not a gap.
+    const fieldPath = `connectedAccounts.${provider}`;
+    await db.doc(`users/${uid}`).set(
+      {
+        connectedAccounts: {
+          [provider]: {
+            authMethod: 'static-token',
+            encryptedToken: encrypt(token),
+            serverUrl: normalizedServerUrl,
+            ...(tokenExpiresAt !== null ? { tokenExpiresAt } : {}),
+          },
+        },
+      },
+      { mergeFields: [fieldPath] }
+    );
+
+    res.status(200).json({ success: true, provider });
+  } catch (error) {
+    console.error('Error connecting static-token provider:', error instanceof Error ? error.message : 'Unknown error');
+    res.status(500).json({ error: 'Failed to connect provider' });
+  }
+});
+
 export const disconnectProvider = onRequest({ cors: true }, async (req, res) => {
   try {
     if (req.method !== 'POST') {
@@ -168,9 +331,18 @@ export const disconnectProvider = onRequest({ cors: true }, async (req, res) => 
       return;
     }
 
+    // Accept any REGISTERED provider except osf: osf's identity flow
+    // (oauth2-callback.ts) is a separate legacy path not managed here.
+    // Everything else -- oauth2 (gdrive) or static-token (dataverse) -- can
+    // be disconnected the same way, since disconnect is just deleting the
+    // stored connection, regardless of how it was established.
+    let storageProvider;
     try {
-      getOAuthConfig(provider);
+      storageProvider = getProvider(provider as StorageProviderId);
     } catch {
+      storageProvider = undefined;
+    }
+    if (!storageProvider || storageProvider.id === 'osf') {
       res.status(400).json({ error: 'Unknown provider' });
       return;
     }

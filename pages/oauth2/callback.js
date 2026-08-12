@@ -25,6 +25,7 @@ function callbackReducer(state, action) {
 function useOAuthCallback() {
   const { user } = useContext(UserContext);
   const router = useRouter();
+  const { push } = router;
   const searchParams = useSearchParams();
   const [state, dispatch] = useReducer(callbackReducer, initialState);
   const processingRef = useRef(false);
@@ -114,11 +115,11 @@ function useOAuthCallback() {
             localStorage.removeItem('osfEntryUserId');
             localStorage.removeItem('osfEntryComponentId');
             const entryQuery = entryParams.toString();
-            router.push('/osf-entry' + (entryQuery ? '?' + entryQuery : ''));
+            push('/osf-entry' + (entryQuery ? '?' + entryQuery : ''));
           } else {
             localStorage.removeItem('osfAuthFlow');
             const redirectPath = json.customToken ? '/admin' : (process.env.NEXT_PUBLIC_OAUTH_FINAL || '/admin');
-            router.push(redirectPath);
+            push(redirectPath);
           }
         } else {
           throw new Error('OAuth authentication failed');
@@ -131,7 +132,25 @@ function useOAuthCallback() {
     };
 
     processCallback();
-  }, [searchParams, user?.uid, router]);
+    // `user?.uid` and `push`, deliberately narrower than what this effect
+    // closes over, so the disable below is a decision rather than an
+    // oversight.
+    //
+    // The rule wants `user` and `router` in full. Both have identities nothing
+    // guarantees is stable -- useAuthState hands back a fresh User object on
+    // every token refresh, and useRouter is free to return a new object per
+    // render -- while this effect performs a one-time OAuth code exchange and
+    // dispatches on completion. Listing either means every render re-runs the
+    // exchange and schedules the next render: an unbounded loop. (The sibling
+    // flow in connect.js hangs its test suite outright when `router` is
+    // listed, which is how this was caught.)
+    //
+    // The narrow deps are also the semantically right ones: the effect must
+    // re-run when WHICH user is signed in changes, which is what `uid`
+    // expresses. Later identity churn on the same account is not a reason to
+    // redo an OAuth exchange.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, user?.uid, push]);
 
   return state;
 }

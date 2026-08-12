@@ -1,5 +1,5 @@
 import NextLink from "next/link";
-import { useContext } from "react";
+import { useContext, useSyncExternalStore } from "react";
 import { UserContext } from "../lib/context";
 import {
   Box,
@@ -17,15 +17,34 @@ import { Menu } from "@chakra-ui/react";
 import { auth } from "../lib/firebase";
 
 import { Rubik } from "next/font/google";
-import { useState, useEffect } from "react";
 
 const rubik = Rubik({ subsets: ["latin"] });
 
+// `user` comes from an auth listener, so it is null in the server-rendered
+// HTML and may be populated by the time the client hydrates -- rendering it
+// straight away is a hydration mismatch. The fix is to render the server's
+// answer on the hydration pass and the client's answer after, which is what
+// useSyncExternalStore's third argument (getServerSnapshot) is for. This
+// replaces a setState-in-effect "mounted" flag that did the same thing by
+// scheduling an extra render.
+//
+// The store never changes, so subscribe is a no-op returning a no-op
+// unsubscribe; the false -> true transition comes from React switching off
+// getServerSnapshot once hydration completes.
+const subscribeToNothing = () => () => {};
+
+function useHydrated() {
+  return useSyncExternalStore(
+    subscribeToNothing,
+    () => true,
+    () => false
+  );
+}
+
 export default function Navbar() {
   const { user } = useContext(UserContext);
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  const showUser = mounted ? user : null;
+  const hydrated = useHydrated();
+  const showUser = hydrated ? user : null;
 
   return (
     <Box as="nav" flexShrink={0}>
