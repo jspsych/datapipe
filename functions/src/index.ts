@@ -15,6 +15,7 @@ import { connectProvider, connectStaticTokenProvider, disconnectProvider } from 
 import { saveOsfToken } from "./save-osf-token.js";
 import { getOsfToken } from "./get-osf-token.js";
 import { onUserDeleted } from "./on-user-deleted.js";
+import { deleteAccount } from "./delete-account.js";
 import { createExperiment } from "./create-experiment.js";
 import { getProviderAccessToken } from "./get-provider-access-token.js";
 import { providerSetupWarnings } from "./provider-setup-warnings.js";
@@ -41,6 +42,7 @@ export {
   saveOsfToken as saveosftoken,
   getOsfToken as getosftoken,
   onUserDeleted as onuserdeleted,
+  deleteAccount as deleteaccount,
   createExperiment as createexperiment,
   getProviderAccessToken as getprovideraccesstoken,
   providerSetupWarnings as providersetupwarnings
