@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import AuthCheck from "../../components/AuthCheck";
 import { useRouter } from "next/router";
 import { useDocumentData, useCollectionData } from "react-firebase-hooks/firestore";
@@ -53,19 +53,36 @@ function ExperimentPageDashboard({ experiment_id }) {
   const uploadError = logs?.logError;
   const errorLog = logs?.errors;
 
-  // Track resolved state: show success notice when queue goes from non-empty to empty
+  // Track resolved state: show the success notice when the queue goes from
+  // non-empty to empty.
+  //
+  // The comparison happens DURING RENDER -- React's documented way to adjust
+  // state in response to a changed value -- rather than in an effect that
+  // called setState, which forced a second render pass for every change in
+  // queue length. React re-runs this component immediately on the setState
+  // below, before touching the DOM, so no intermediate state is ever painted.
+  //
+  // This also fixes a latent bug in the effect version: it returned the timer
+  // cleanup BEFORE recording the new count, so prevQueueCount kept its stale
+  // non-zero value after a transition fired.
   const [showResolved, setShowResolved] = useState(false);
-  const prevQueueCount = useRef(0);
+  const [prevQueueCount, setPrevQueueCount] = useState(queueEntries.length);
 
-  useEffect(() => {
-    const currentCount = queueEntries.length;
-    if (prevQueueCount.current > 0 && currentCount === 0) {
+  if (prevQueueCount !== queueEntries.length) {
+    setPrevQueueCount(queueEntries.length);
+    if (prevQueueCount > 0 && queueEntries.length === 0) {
       setShowResolved(true);
-      const timer = setTimeout(() => setShowResolved(false), 8000);
-      return () => clearTimeout(timer);
     }
-    prevQueueCount.current = currentCount;
-  }, [queueEntries.length]);
+  }
+
+  // Auto-hide, keyed off the flag rather than off the queue length, so the
+  // 8-second window starts when the notice appears and is cancelled if it is
+  // dismissed early by another transition.
+  useEffect(() => {
+    if (!showResolved) return undefined;
+    const timer = setTimeout(() => setShowResolved(false), 8000);
+    return () => clearTimeout(timer);
+  }, [showResolved]);
 
   return (
     <>
