@@ -46,15 +46,20 @@ export default function SignInWithOSF() {
       )}
 
       <Button
-        colorPalette="blue"
+        variant="outline"
         loading={isLoading}
         loadingText="Redirecting to OSF..."
         onClick={handleOSFSignin}
         width="full"
-        size="lg"
+        size="sm"
       >
-        <OsfIcon /> Sign In with OSF
+        <OsfIcon /> Sign in with OSF
       </Button>
+
+      <Text fontSize="xs" color="gray.400" textAlign="center">
+        OSF sign-in is being retired. Sign in once more, then add another
+        provider from your dashboard to keep your account and experiments.
+      </Text>
     </VStack>
   );
 }

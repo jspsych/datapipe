@@ -2,6 +2,8 @@ import { Stack, HStack, Text, Link } from "@chakra-ui/react";
 
 import { ExternalLink } from "lucide-react";
 import { STORAGE_PROVIDERS } from "../../lib/provider-config";
+import { isLegacyOsfExperiment } from "../../lib/osf-sunset";
+import OsfSunsetNotice from "../OsfSunsetNotice";
 
 export default function ExperimentInfo({ data }) {
   const provider = STORAGE_PROVIDERS[data.storageProvider];
@@ -11,6 +13,7 @@ export default function ExperimentInfo({ data }) {
       w="100%"
       gap={2}
     >
+      {isLegacyOsfExperiment(data) && <OsfSunsetNotice scope="experiment" />}
       <HStack justify="space-between" flexWrap="wrap" gap={1}>
         <Text color="gray.400" fontSize="sm">Experiment ID</Text>
         <Text fontSize="sm">{data.id}</Text>
