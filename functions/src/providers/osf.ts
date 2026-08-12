@@ -55,9 +55,12 @@ export const osfProvider: StorageProvider = {
     quotaNote: null,
   },
 
-  // OSF creation stays entirely browser-driven (see lib/experiment-creation.js)
-  // and its createDataContainer below throws "not implemented" -- there is no
-  // researcher input for create-experiment to collect or validate.
+  // Empty because OSF is closed to NEW experiments -- create-experiment.ts
+  // rejects it outright and firestore.rules refuses the document -- so
+  // createDataContainer below is unreachable and throws "not implemented".
+  // Nothing collects or validates researcher input for OSF any more. The rest
+  // of this adapter is very much alive: it serves every experiment that was
+  // already collecting when OSF was closed off.
   containerInput: [],
 
   async resolveToken(user_data: UserData, owner: string): Promise<TokenResult> {

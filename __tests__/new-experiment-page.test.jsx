@@ -19,25 +19,12 @@ jest.mock("../lib/context", () => ({
   }),
 }));
 
-// lib/experiment-creation.js (imported transitively by pages/admin/new.js)
-// pulls in `nanoid`, which ships ESM-only and isn't transformed by Jest by
-// default (`Cannot use import statement outside a module`). Mock it out
-// rather than touching jest.config.js's transformIgnorePatterns.
-jest.mock("nanoid", () => ({
-  customAlphabet: () => () => "mocked-id",
-}));
-
-// firebase/firestore's `doc` (and friends used transitively by
-// lib/experiment-creation.js) must not touch a real Firestore instance.
+// firebase/firestore's `doc` must not touch a real Firestore instance. The
+// batch-write mocks that used to sit here (writeBatch/arrayUnion/setDoc) went
+// with the client-side OSF creation path -- experiment documents are now
+// written server-side by /api/createexperiment for every provider.
 jest.mock("firebase/firestore", () => ({
   doc: jest.fn(() => ({})),
-  writeBatch: jest.fn(() => ({
-    set: jest.fn(),
-    update: jest.fn(),
-    commit: jest.fn(() => Promise.resolve()),
-  })),
-  arrayUnion: jest.fn((v) => v),
-  setDoc: jest.fn(() => Promise.resolve()),
 }));
 
 // The page navigates via the `Router` singleton default export (see
@@ -79,8 +66,12 @@ beforeEach(() => {
   global.fetch = jest.fn();
 });
 
-describe("NewExperimentPage — OSF path (pinned regression)", () => {
-  it("2. default render shows the OSF form exactly as today", () => {
+// This block used to pin the OSF form as a regression guard. OSF is shutting
+// down its projects feature, so the guarantee is now the opposite one: OSF
+// must be unreachable from this page entirely. The assertions are inverted
+// rather than deleted so a reintroduction gets caught.
+describe("NewExperimentPage — OSF is closed to new experiments", () => {
+  it("2. offers no OSF option and no OSF form, even for a researcher with a live OSF connection", () => {
     useDocumentData.mockReturnValue([
       { refreshToken: "osf-refresh-token", usingPersonalToken: false },
       false,
@@ -89,12 +80,29 @@ describe("NewExperimentPage — OSF path (pinned regression)", () => {
 
     renderPage();
 
-    expect(screen.getByText("Existing OSF Project")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^OSF$/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("Existing OSF Project")).not.toBeInTheDocument();
     expect(
-      screen.getByText("New OSF Data Component Name")
-    ).toBeInTheDocument();
-    expect(screen.getByText("Storage Location")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Create" })).toBeInTheDocument();
+      screen.queryByText("New OSF Data Component Name")
+    ).not.toBeInTheDocument();
+    // The region picker was OSF-specific (its four options were OSF storage
+    // regions), so it goes with the form.
+    expect(screen.queryByText("Storage Location")).not.toBeInTheDocument();
+  });
+
+  it("2b. defaults to the first registered storage provider instead of OSF", () => {
+    useDocumentData.mockReturnValue([
+      { connectedAccounts: { gdrive: true } },
+      false,
+      undefined,
+    ]);
+
+    renderPage();
+
+    // gdrive is connected, so a gdrive default renders the create form. If
+    // the page still defaulted to OSF this would show a connect CTA instead.
+    expect(screen.getByLabelText(/^Title$/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Create$/i })).toBeInTheDocument();
   });
 });
 
