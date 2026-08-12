@@ -6,7 +6,6 @@ import {
   VStack
 } from "@chakra-ui/react";
 import { OsfIcon } from "./OsfIcon";
-import { outlineOnDark } from "../lib/theme";
 
 export default function SignInWithOSF() {
   const [isLoading, setIsLoading] = useState(false);
@@ -47,7 +46,7 @@ export default function SignInWithOSF() {
       )}
 
       <Button
-        {...outlineOnDark}
+        variant="outline"
         loading={isLoading}
         loadingText="Redirecting to OSF..."
         onClick={handleOSFSignin}
