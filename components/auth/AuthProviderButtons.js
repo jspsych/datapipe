@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button, Alert, Text, VStack } from "@chakra-ui/react";
 import { linkWithPopup, signInWithPopup } from "firebase/auth";
 import { auth } from "../../lib/firebase";
+import { outlineOnDark } from "../../lib/theme";
 import { AUTH_PROVIDER_LIST } from "../../lib/auth-providers";
 import { AUTH_PROVIDER_ICONS } from "../AuthProviderIcons";
 import {
@@ -74,7 +75,7 @@ export default function AuthProviderButtons({
         return (
           <Button
             key={entry.id}
-            variant="outline"
+            {...outlineOnDark}
             width="full"
             size="lg"
             loading={pendingId === entry.id}

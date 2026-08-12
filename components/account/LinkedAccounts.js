@@ -11,6 +11,7 @@ import {
   linkedProviderIds,
 } from "../../lib/auth-providers";
 import { AUTH_PROVIDER_ICONS } from "../AuthProviderIcons";
+import { outlineOnDark } from "../../lib/theme";
 import {
   isCancelledAuthError,
   messageForAuthError,
@@ -121,7 +122,7 @@ export default function LinkedAccounts() {
 
             {linked ? (
               <Button
-                variant="outline"
+                {...outlineOnDark}
                 size="sm"
                 disabled={last}
                 loading={pendingId === entry.id}
