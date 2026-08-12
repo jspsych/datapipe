@@ -53,7 +53,7 @@ export default function AuthProviderButtons({
       }
     } catch (err) {
       if (!isCancelledAuthError(err?.code)) {
-        setError(messageForAuthError(err?.code, entry.name));
+        setError(messageForAuthError(err?.code, entry.name, mode));
       }
     } finally {
       setPendingId(null);

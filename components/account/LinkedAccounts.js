@@ -52,7 +52,7 @@ export default function LinkedAccounts() {
       });
     } catch (err) {
       if (!isCancelledAuthError(err?.code)) {
-        setError(messageForAuthError(err?.code, entry.name));
+        setError(messageForAuthError(err?.code, entry.name, "link"));
       }
     } finally {
       setPendingId(null);
@@ -66,7 +66,7 @@ export default function LinkedAccounts() {
       const updated = await unlink(auth.currentUser, entry.providerId);
       setAfterAction({ uid: updated.uid, ids: linkedProviderIds(updated) });
     } catch (err) {
-      setError(messageForAuthError(err?.code, entry.name));
+      setError(messageForAuthError(err?.code, entry.name, "unlink"));
     } finally {
       setPendingId(null);
     }
