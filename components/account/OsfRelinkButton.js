@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Button } from "@chakra-ui/react";
 import { OsfIcon } from "../OsfIcon";
-import { outlineOnDark } from "../../lib/theme";
 
 // Re-runs the OSF authorization to restore WRITE access for an experiment
 // that is still collecting. This is the storage grant, not sign-in: it takes
@@ -47,7 +46,7 @@ export default function OsfRelinkButton({ children, ...buttonProps }) {
 
   return (
     <Button
-      {...outlineOnDark}
+      variant="outline"
       size="md"
       loading={isLoading}
       onClick={handleClick}
