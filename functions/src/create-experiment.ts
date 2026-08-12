@@ -1,20 +1,22 @@
-// Server-side experiment creation for non-OSF storage providers
+// Server-side experiment creation
 // (scratchpad/step7a-create-endpoint-spec.md, docs/provider-migration-design.md).
 //
-// OSF experiment creation stays entirely browser-driven (see
-// lib/experiment-creation.js) -- the browser calls the OSF API directly and
-// batch-writes Firestore with a Firebase client SDK, which is fine because
-// the OSF token flow already lives client-side. New providers (starting with
-// gdrive) need a server-side path instead: createDataContainer is
-// server-only (it needs the decrypted, possibly-refreshed provider token
-// that only resolve-token.ts can produce), and the resulting container ref
+// This is now the ONLY way an experiment gets created. It used to be one of
+// two: OSF experiments were built in the browser (which was viable only
+// because the OSF token flow lived client-side), and everything else came
+// through here. OSF is shutting down its projects feature, so that path is
+// gone along with the option to create an OSF experiment at all -- see the
+// provider check below, backed by firestore.rules.
+//
+// A server-side path is what the design wanted regardless:
+// createDataContainer needs the decrypted, possibly-refreshed provider token
+// that only resolve-token.ts can produce, and the resulting container ref
 // must be folded into the experiment doc atomically with its creation.
 //
-// This endpoint intentionally mirrors createExperimentDocument in
-// lib/experiment-creation.js field-for-field (including the
-// requiredFields: ["trial_type"] default, which the client hardcodes rather
-// than parameterizes) so that gdrive- and OSF-created experiment docs stay
-// uniform for every other consumer (api-data.ts, the dashboard, etc.).
+// The field defaults below (including requiredFields: ["trial_type"]) are the
+// ones the removed client-side path also wrote, so documents created before
+// and after the change stay uniform for every other consumer (api-data.ts,
+// the dashboard, etc.).
 
 import { onRequest } from "firebase-functions/v2/https";
 import { FieldValue } from "firebase-admin/firestore";
@@ -27,10 +29,9 @@ import { ContainerRef, StorageProviderId, ResolvedAuth } from "./providers/types
 import { ExperimentData, UserData } from "./interfaces.js";
 import MESSAGES from "./api-messages.js";
 
-// Same alphabet/length as lib/experiment-creation.js's
-// customAlphabet("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", 12)
-// -- experiment ids must stay uniform whether created client-side (OSF) or
-// server-side (gdrive and later providers).
+// Same alphabet/length the removed client-side OSF path used, so experiment
+// ids stay uniform across everything created before and after that path was
+// retired.
 const generateExperimentId = customAlphabet(
   "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
   12
@@ -97,8 +98,12 @@ export const createExperiment = onRequest({ cors: true }, async (req, res) => {
       return;
     }
 
-    // OSF creation stays browser-driven; only registered NON-osf providers
-    // may be created through this endpoint.
+    // OSF is closed to new experiments -- it is shutting down its projects
+    // feature. The osfProvider adapter stays registered (in-flight
+    // experiments still write through it) and its createDataContainer throws
+    // "not implemented", but this rejects the request up front rather than
+    // relying on that. firestore.rules enforces the same thing on the
+    // document itself.
     if (provider === "osf" || !listProviders().includes(provider as StorageProviderId)) {
       res.status(400).json({ error: "Unsupported provider" });
       return;

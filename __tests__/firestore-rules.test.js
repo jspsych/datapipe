@@ -172,12 +172,18 @@ describe('/experiments — provider-migration generalization (step 7a)', () => {
     };
   }
 
-  describe('1. legacy OSF experiment create (regression guard)', () => {
-    it('succeeds with all OSF fields present -- expected to PASS today and after generalization', async () => {
-      const docId = 'exp-7a-legacy-create-1';
+  // NOTE: this block previously asserted that a legacy OSF-shaped CREATE
+  // succeeds. OSF is shutting down its projects feature, so that guarantee is
+  // now inverted -- creating an experiment against OSF must be impossible.
+  // The rule, not the UI, is what enforces it: OSF experiments were created
+  // browser-side with the client SDK, so removing the option from
+  // pages/admin/new.js only hid it.
+  describe('1. OSF is closed to new experiments', () => {
+    it('DENIES a create carrying the legacy OSF field trio and no storageProvider', async () => {
+      const docId = 'exp-osf-create-legacy-shape';
       const user123 = testEnv.authenticatedContext('user123');
 
-      await assertSucceeds(setDoc(doc(user123.firestore(), `experiments/${docId}`), baseFields({
+      await assertFails(setDoc(doc(user123.firestore(), `experiments/${docId}`), baseFields({
         id: docId,
         owner: 'user123',
         osfRepo: 'abc12',
@@ -186,17 +192,62 @@ describe('/experiments — provider-migration generalization (step 7a)', () => {
       })));
     });
 
-    it('fails when osfFilesLink is missing and no storageProvider is present -- pinned contract', async () => {
-      const docId = 'exp-7a-legacy-create-2';
+    it('DENIES a create with an explicit storageProvider of osf', async () => {
+      const docId = 'exp-osf-create-explicit';
       const user123 = testEnv.authenticatedContext('user123');
 
       await assertFails(setDoc(doc(user123.firestore(), `experiments/${docId}`), baseFields({
         id: docId,
         owner: 'user123',
-        osfRepo: 'abc12',
-        osfComponent: 'def34',
-        // osfFilesLink deliberately omitted; no storageProvider either.
+        storageProvider: 'osf',
+        providerContainer: { provider: 'osf', filesLink: 'https://files.osf.io/v1/x/' },
       })));
+    });
+
+    it('DENIES a create with NO storageProvider at all -- absent used to mean OSF', async () => {
+      // getProviderForExperiment in functions/src/providers/index.ts treats a
+      // missing storageProvider as OSF, so leaving that branch creatable
+      // would be a second, quieter way onto OSF.
+      const docId = 'exp-osf-create-absent';
+      const user123 = testEnv.authenticatedContext('user123');
+
+      await assertFails(setDoc(doc(user123.firestore(), `experiments/${docId}`), baseFields({
+        id: docId,
+        owner: 'user123',
+      })));
+    });
+
+    it('ALLOWS a create against a non-OSF provider', async () => {
+      const docId = 'exp-gdrive-create';
+      const user123 = testEnv.authenticatedContext('user123');
+
+      await assertSucceeds(setDoc(doc(user123.firestore(), `experiments/${docId}`), baseFields({
+        id: docId,
+        owner: 'user123',
+        storageProvider: 'gdrive',
+        providerContainer: { provider: 'gdrive', folderId: 'folder-abc' },
+      })));
+    });
+
+    it('still ALLOWS the owner to update an EXISTING legacy OSF experiment', async () => {
+      // This is the whole point of closing creates rather than deleting the
+      // OSF path: studies already collecting must keep working through the
+      // wind-down, which means their documents stay editable.
+      const docId = 'exp-osf-update-existing';
+      await seedDB({
+        [`experiments/${docId}`]: baseFields({
+          id: docId,
+          owner: 'user123',
+          osfRepo: 'abc12',
+          osfComponent: 'def34',
+          osfFilesLink: 'https://files.osf.io/v1/resources/abc12/providers/osfstorage/',
+        }),
+      });
+
+      const user123 = testEnv.authenticatedContext('user123');
+      await assertSucceeds(
+        updateDoc(doc(user123.firestore(), `experiments/${docId}`), { active: true })
+      );
     });
   });
 
@@ -259,11 +310,51 @@ describe('/experiments — provider-migration generalization (step 7a)', () => {
     it('rejects account-creation writes that include connectedAccounts -- clients can never write it', async () => {
       const user123 = testEnv.authenticatedContext('user123');
 
+      // uid/email/experiments are all present, so connectedAccounts is the
+      // ONLY reason this is denied.
       await assertFails(setDoc(doc(user123.firestore(), 'users/user123'), {
+        uid: 'user123',
         email: 'john@doe.com',
         experiments: ['exp1'],
-        osfToken: '',
         connectedAccounts: { gdrive: { authMethod: 'oauth2' } },
+      }));
+    });
+  });
+
+  describe('5. slim account creation (federated sign-in)', () => {
+    // Federated sign-in (Google/ORCID/GitHub) goes through neither the old
+    // signup form nor the OSF callback, so ensureUserDocument in
+    // lib/user-bootstrap.js writes just { uid, email, experiments }. The rule
+    // used to require osfToken == '' unconditionally, which rejected exactly
+    // this shape because the field is absent rather than empty.
+    it('ALLOWS the slim { uid, email, experiments } shape with no OSF fields', async () => {
+      const user123 = testEnv.authenticatedContext('user123');
+
+      await assertSucceeds(setDoc(doc(user123.firestore(), 'users/user123'), {
+        uid: 'user123',
+        email: 'researcher@example.edu',
+        experiments: [],
+      }));
+    });
+
+    it('ALLOWS an empty email -- ORCID users often have no address to record', async () => {
+      const user789 = testEnv.authenticatedContext('user789');
+
+      await assertSucceeds(setDoc(doc(user789.firestore(), 'users/user789'), {
+        uid: 'user789',
+        email: '',
+        experiments: [],
+      }));
+    });
+
+    it('still DENIES a non-empty osfToken when the field IS present', async () => {
+      const user123 = testEnv.authenticatedContext('user123');
+
+      await assertFails(setDoc(doc(user123.firestore(), 'users/user123'), {
+        uid: 'user123',
+        email: 'researcher@example.edu',
+        experiments: [],
+        osfToken: 'a-real-looking-token',
       }));
     });
   });

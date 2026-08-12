@@ -13,6 +13,7 @@ import {
   Box
 } from "@chakra-ui/react";
 import { CircleCheck, TriangleAlert } from "lucide-react";
+import OsfRelinkButton from "./OsfRelinkButton";
 
 export default function OAuthTokenStatus() {
   const { user } = useContext(UserContext);
@@ -100,9 +101,20 @@ export default function OAuthTokenStatus() {
         <Alert.Root status="error" size="sm">
           <Alert.Indicator />
           <Box>
-            <Alert.Title>Re-authentication Required</Alert.Title>
+            <Alert.Title>Re-authorization Required</Alert.Title>
             <Alert.Description>
-              Your OSF authorization has expired. Please sign out and sign back in with OSF to restore access.
+              <VStack align="start" gap={3} mt={1}>
+                <Text fontSize="sm">
+                  DataPipe&apos;s permission to write to your OSF account has
+                  expired, so any experiment still sending data to OSF has
+                  stopped. Re-authorize to restore it.
+                </Text>
+                {/* Deliberately a re-authorization, not "sign out and sign
+                    back in with OSF" as this used to say: that advice depends
+                    on OSF sign-in, which is being removed, and would strand
+                    an in-flight study the day it goes. */}
+                <OsfRelinkButton>Re-authorize OSF</OsfRelinkButton>
+              </VStack>
             </Alert.Description>
           </Box>
         </Alert.Root>

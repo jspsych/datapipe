@@ -1,8 +1,8 @@
 import AuthCheck from "../../components/AuthCheck";
 import { collection, query, where, doc, deleteDoc } from "firebase/firestore";
 import { db, auth } from "../../lib/firebase";
-import { useCollectionData, useDocumentData } from "react-firebase-hooks/firestore";
-import { useState, useSyncExternalStore } from "react";
+import { useCollectionData } from "react-firebase-hooks/firestore";
+import { useState } from "react";
 import Link from "next/link";
 import {
   Heading,
@@ -17,107 +17,30 @@ import {
   Stack,
   Center,
   Card,
-  CloseButton,
   Link as ChakraLink,
   Tooltip,
 } from "@chakra-ui/react";
 import { Trash2, Pencil } from "lucide-react";
+import AddSignInMethodBanner from "../../components/account/AddSignInMethodBanner";
+import OsfSunsetNotice from "../../components/OsfSunsetNotice";
+import { isLegacyOsfExperiment } from "../../lib/osf-sunset";
 
 export default function AdminPage({}) {
   return (
     <AuthCheck>
       <VStack gap={8} w="100%" maxW="960px" px={4}>
-        <OAuthBanner />
+        <AddSignInMethodBanner />
         <ExperimentList />
       </VStack>
     </AuthCheck>
   );
 }
 
-// localStorage is external mutable state that does not exist during SSR, so
-// it cannot be read in the render body or in a useState initializer. It used
-// to be read in an effect that then called setState, which meant the banner's
-// dismissed flag was wrong for one render: it defaulted to `true`, so a
-// researcher who had NOT dismissed it got no banner until the effect ran and
-// re-rendered.
-//
-// useSyncExternalStore reads the value during render on the client and falls
-// back to getServerSnapshot on the server, with no intermediate wrong state.
-// The listener set makes the banner disappear the instant it is dismissed --
-// a plain read would not re-render, since writing to localStorage is invisible
-// to React.
-const DISMISS_KEY = "datapipe-oauth-banner-dismissed";
-const dismissListeners = new Set();
-
-function subscribeToDismissal(onStoreChange) {
-  dismissListeners.add(onStoreChange);
-  return () => dismissListeners.delete(onStoreChange);
-}
-
-function dismissBanner() {
-  localStorage.setItem(DISMISS_KEY, "true");
-  for (const listener of dismissListeners) listener();
-}
-
-// Booleans compare by value, so returning a fresh one each call is safe here;
-// useSyncExternalStore only loops on a getSnapshot that returns a new OBJECT
-// identity every time.
-const getDismissed = () => localStorage.getItem(DISMISS_KEY) === "true";
-// Server-rendered markup omits the banner. Rendering it and then pulling it
-// away from someone who had already dismissed it is the worse of the two.
-const getDismissedOnServer = () => true;
-
-function OAuthBanner() {
-  const user = auth.currentUser;
-  const [userData] = useDocumentData(doc(db, "users", user.uid));
-  const dismissed = useSyncExternalStore(
-    subscribeToDismissal,
-    getDismissed,
-    getDismissedOnServer
-  );
-
-  const hasOAuthConnection = userData?.refreshToken && userData?.authToken;
-
-  if (dismissed || !userData || hasOAuthConnection) {
-    return null;
-  }
-
-  const handleDismiss = () => {
-    dismissBanner();
-  };
-
-  return (
-    <Box
-      w="100%"
-      bg="brandTeal.900"
-      border="1px solid"
-      borderColor="brandTeal.600"
-      borderRadius="md"
-      px={4}
-      py={3}
-      position="relative"
-    >
-      <CloseButton
-        size="sm"
-        position="absolute"
-        right={2}
-        top={2}
-        onClick={handleDismiss}
-      />
-      <Text pr={8}>
-        <strong>Simplify your setup:</strong> You can now link your OSF account
-        directly to DataPipe for automatic token management. Switch to one-click
-        authentication in your{" "}
-        <Link href="/admin/account">
-          <Button variant="plain" colorPalette="brandTeal" fontSize="md" p={0} h="auto" minW={0}>
-            Account Settings
-          </Button>
-        </Link>
-        .
-      </Text>
-    </Box>
-  );
-}
+// The dismissible banner that used to live here urged researchers to switch
+// from an OSF personal access token to OSF one-click auth. Both sides of that
+// choice are now legacy, so promoting either would be pushing people further
+// onto the platform they need to leave. AddSignInMethodBanner above replaces
+// it with the migration that actually matters.
 
 function ExperimentList() {
   const user = auth.currentUser;
@@ -152,9 +75,9 @@ function ExperimentList() {
                   No experiments yet
                 </Heading>
                 <Text color="gray.400" fontSize="sm" maxW="sm">
-                  Experiments connect your online study to an OSF project so
-                  that data files are sent directly to OSF as participants
-                  complete your task.
+                  Experiments connect your online study to a storage provider
+                  you control, so that data files are sent straight to your own
+                  account as participants complete your task.
                 </Text>
 
                 <Link href="/admin/new">
@@ -181,6 +104,8 @@ function ExperimentList() {
     );
   }
 
+  const hasLegacyOsfExperiment = querySnapshot.some(isLegacyOsfExperiment);
+
   return (
     <VStack gap={8} w="100%">
       <Stack
@@ -200,6 +125,8 @@ function ExperimentList() {
           </Button>
         </Link>
       </Stack>
+
+      {hasLegacyOsfExperiment && <OsfSunsetNotice scope="dashboard" />}
 
       <VStack w="100%" gap={3}>
         {querySnapshot.map((exp) => (
@@ -321,8 +248,8 @@ function DeleteAlertDialog({ exp }) {
             <Dialog.Body>
               <Text>Are you sure? This action is final.</Text>
               <Text>
-                Deleting the experiment will not delete any data that is already
-                on the OSF.
+                Deleting the experiment will not delete any data already
+                written to your storage provider.
               </Text>
             </Dialog.Body>
 

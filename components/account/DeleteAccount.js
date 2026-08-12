@@ -65,8 +65,8 @@ export default function DeleteAccount({ setDeleting }) {
                 deletion.
               </Text>
               <Text>
-                Deleting your DataPipe account will not affect any data on the
-                OSF.
+                Deleting your DataPipe account will not affect any data already
+                written to your storage provider.
               </Text>
             </Dialog.Body>
 

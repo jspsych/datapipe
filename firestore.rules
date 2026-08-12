@@ -2,9 +2,16 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /users/{userId} {
+      // New accounts (federated or email/password) write only the slim
+      // { uid, email, experiments } shape -- see ensureUserDocument in
+      // lib/user-bootstrap.js. The OSF-era keys stay on the whitelist so
+      // existing documents remain writable, but they are no longer required:
+      // the osfToken == '' assertion below only applies when the field is
+      // actually present, because a new account never has one.
       function isAccountCreation() {
         return request.resource.data.keys().hasOnly(['email', 'experiments', 'osfToken', 'osfTokenValid', 'uid', 'usingPersonalToken', 'refreshToken', 'refreshTokenExpires', 'authToken', 'authTokenExpires', 'osfUserId', 'displayName', 'authMethod', 'createdAt'])
-          && request.resource.data.osfToken == '';
+          && request.resource.data.keys().hasAll(['uid', 'email', 'experiments'])
+          && (!('osfToken' in request.resource.data) || request.resource.data.osfToken == '');
       }
       function isTokenMethodUpdate() {
         return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usingPersonalToken']);
@@ -20,16 +27,34 @@ service cloud.firestore {
       function baseFields() {
         return request.resource.data.keys().hasAll(['active', 'activeBase64', 'activeConditionAssignment', 'id', 'owner', 'title', 'sessions', 'nConditions', 'currentCondition', 'useValidation', 'allowJSON', 'allowCSV', 'requiredFields', 'maxSessions', 'limitSessions'])
       }
+      // UPDATE shape: legacy-tolerant. An experiment created before the
+      // provider-migration schema carries the OSF triple and no
+      // storageProvider, and must stay editable through the OSF wind-down.
       function verifyFields() {
         return baseFields() &&
           (('storageProvider' in request.resource.data)
             ? request.resource.data.keys().hasAll(['storageProvider', 'providerContainer'])
             : request.resource.data.keys().hasAll(['osfRepo', 'osfComponent', 'osfFilesLink']));
       }
+      // CREATE shape: strictly non-OSF. OSF is shutting down its projects
+      // feature, so no new experiment may be pointed at it.
+      //
+      // This rule -- not the UI -- is the gate that matters. OSF experiment
+      // creation was browser-driven: lib/experiment-creation.js wrote this
+      // document with the client SDK, so removing the option from
+      // pages/admin/new.js only hides it. Requiring storageProvider on create
+      // also closes the legacy no-provider branch above, which meant OSF by
+      // default (see getProviderForExperiment in
+      // functions/src/providers/index.ts).
+      function isCreatableProvider() {
+        return ('storageProvider' in request.resource.data) &&
+          request.resource.data.storageProvider != 'osf' &&
+          request.resource.data.keys().hasAll(['storageProvider', 'providerContainer']);
+      }
       allow read: if(request.auth.uid != null) &&
         resource.data.owner == request.auth.uid;
       allow create: if(request.auth.uid != null) &&
-       verifyFields() &&
+       baseFields() && isCreatableProvider() &&
         request.resource.data.owner == request.auth.uid;
       allow update: if(request.auth.uid == resource.data.owner) &&
        verifyFields() &&

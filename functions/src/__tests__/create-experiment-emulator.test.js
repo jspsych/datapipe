@@ -253,13 +253,14 @@ describe("5. createExperiment happy path (gdrive)", () => {
     expect(expDoc.exists).toBe(true);
     const expData = expDoc.data();
 
-    // Exact default-field parity with createExperimentDocument in
-    // lib/experiment-creation.js (verified by reading that file): title,
+    // Exact default-field parity with the retired client-side OSF creation
+    // path, so documents written before and after it was removed agree: title,
     // active:false, activeBase64:false, activeConditionAssignment:false,
     // sessions:0, id, owner, nConditions:1, currentCondition:0,
     // useValidation:true, allowJSON:true, allowCSV:true,
     // requiredFields:["trial_type"] (NOT [] -- the client hardcodes
-    // ["trial_type"], it is not a parameterized default), limitSessions:false,
+    // ["trial_type"], it was hardcoded there, not a parameterized default),
+    // limitSessions:false,
     // maxSessions:1 -- PLUS storageProvider/providerContainer instead of
     // osfRepo/osfComponent/osfFilesLink.
     expect(expData).toEqual({

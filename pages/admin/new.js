@@ -6,7 +6,7 @@ import { UserContext } from "../../lib/context";
 import { useDocumentData } from "react-firebase-hooks/firestore";
 import Link from "next/link";
 import Router from "next/router";
-import { createExperiment, createProviderExperiment } from "../../lib/experiment-creation";
+import { createProviderExperiment } from "../../lib/experiment-creation";
 import { pickDriveFolder } from "../../lib/google-picker";
 import { STORAGE_PROVIDERS } from "../../lib/provider-config";
 import {
@@ -18,13 +18,17 @@ import {
   Input,
   Textarea,
   Spinner,
-  Group,
-  InputAddon,
   VStack,
   Text,
-  NativeSelect,
   Alert,
 } from "@chakra-ui/react";
+
+// OSF is deliberately absent from this form. It is shutting down its projects
+// feature, so no new experiment may be created against it -- a rule enforced
+// in firestore.rules (the experiments `allow create` requires a
+// storageProvider that is not 'osf'), not merely by the options offered here.
+// Existing OSF experiments keep collecting; see lib/osf-sunset.js.
+const DEFAULT_PROVIDER = Object.keys(STORAGE_PROVIDERS)[0];
 
 export default function NewExperimentPage({}) {
   return (
@@ -36,17 +40,8 @@ export default function NewExperimentPage({}) {
 
 function NewExperimentForm() {
   const { user } = useContext(UserContext);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [osfError, setOsfError] = useState(false);
-  const [titleError, setTitleError] = useState(false);
-  const [dataComponentError, setDataComponentError] = useState(false);
 
-  const [title, setTitle] = useState("");
-  const [osfRepo, setOsfRepo] = useState("");
-  const [osfComponentName, setOsfComponentName] = useState("");
-  const [region, setRegion] = useState("us");
-
-  const [provider, setProvider] = useState("osf");
+  const [provider, setProvider] = useState(DEFAULT_PROVIDER);
   const [providerTitle, setProviderTitle] = useState("");
   const [providerTitleError, setProviderTitleError] = useState(false);
   const [providerSubmitting, setProviderSubmitting] = useState(false);
@@ -66,9 +61,8 @@ function NewExperimentForm() {
   // provider never carries over and is momentarily shown against another.
   const [providerWarnings, setProviderWarnings] = useState([]);
 
-  const [data, loading, error] = useDocumentData(doc(db, "users", user.uid));
+  const [data, loading] = useDocumentData(doc(db, "users", user.uid));
 
-  const isValid = data && (data.usingPersonalToken ? data.osfTokenValid : data.refreshToken !== "");
   const providerConnected = STORAGE_PROVIDERS[provider]?.isConnected(data);
 
   const handleProviderChange = (newProvider) => {
@@ -87,14 +81,13 @@ function NewExperimentForm() {
   };
 
   // Fetch setup warnings for the selected provider: on every provider
-  // change, and on initial mount when a non-osf, already-connected provider
-  // is preselected. Never fires for osf (it has no StorageProvider adapter,
-  // hence no setupWarnings) and never fires while the provider is not yet
-  // connected (there is no resolvable token to check against). A failed
-  // fetch is silent (console only) -- this is advisory only and must never
-  // block or error the form.
+  // change, and on initial mount when an already-connected provider is
+  // preselected. Never fires while the provider is not yet connected (there
+  // is no resolvable token to check against). A failed fetch is silent
+  // (console only) -- this is advisory only and must never block or error
+  // the form.
   useEffect(() => {
-    if (provider === "osf" || !providerConnected) {
+    if (!providerConnected) {
       setProviderWarnings([]);
       return;
     }
@@ -133,45 +126,6 @@ function NewExperimentForm() {
   const handleContainerValueChange = (name, value) => {
     setContainerValues((prev) => ({ ...prev, [name]: value }));
     setContainerFieldErrors((prev) => ({ ...prev, [name]: false }));
-  };
-
-  const handleSubmit = async () => {
-    setIsSubmitting(true);
-    setOsfError(false);
-
-    if (title.length === 0) {
-      setTitleError(true);
-      setIsSubmitting(false);
-      return;
-    }
-
-    if (osfComponentName.length === 0) {
-      setDataComponentError(true);
-      setIsSubmitting(false);
-      return;
-    }
-
-    try {
-      const result = await createExperiment({
-        title,
-        osfRepo,
-        osfComponentName,
-        region,
-        uid: auth.currentUser.uid,
-        nConditions: 1,
-        useValidation: true,
-        allowJSON: true,
-        allowCSV: true,
-        useSessionLimit: false,
-        maxSessions: 1,
-      });
-
-      Router.push(`/admin/${result.experimentId}`);
-    } catch (err) {
-      console.error(err);
-      setIsSubmitting(false);
-      setOsfError(true);
-    }
   };
 
   const handleProviderSubmit = async () => {
@@ -290,20 +244,6 @@ function NewExperimentForm() {
           <Field.Root>
             <Field.Label>Where should data be stored?</Field.Label>
             <HStack gap={6} mt={2} role="radiogroup" aria-label="Where should data be stored?">
-              {/* OSF is deliberately hardcoded here and absent from
-                  STORAGE_PROVIDERS -- it keeps its bespoke legacy UI (identity
-                  OAuth flow, existing form below) rather than becoming a
-                  generic provider option. */}
-              <HStack as="label" gap={2} cursor="pointer">
-                <input
-                  type="radio"
-                  name="storage-provider"
-                  value="osf"
-                  checked={provider === "osf"}
-                  onChange={() => handleProviderChange("osf")}
-                />
-                <Text>OSF</Text>
-              </HStack>
               {Object.values(STORAGE_PROVIDERS).map((p) => (
                 <HStack as="label" gap={2} cursor="pointer" key={p.id}>
                   <input
@@ -319,98 +259,7 @@ function NewExperimentForm() {
             </HStack>
           </Field.Root>
 
-          {provider === "osf" && isValid && (
-            <>
-              <Field.Root invalid={titleError}>
-                <Field.Label>Title</Field.Label>
-                <Input
-                  type="text"
-                  value={title}
-                  onChange={(e) => {
-                    setTitle(e.target.value);
-                    setTitleError(false);
-                  }}
-                />
-                <Field.ErrorText color="red.400">
-                  This field is required
-                </Field.ErrorText>
-              </Field.Root>
-              <Field.Root invalid={osfError}>
-                <Field.Label>Existing OSF Project</Field.Label>
-                <Group attached>
-                  <InputAddon bgColor={"greyBackground"}>
-                    {`https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/`}
-                  </InputAddon>
-                  <Input
-                    type="text"
-                    value={osfRepo}
-                    onChange={(e) => setOsfRepo(e.target.value)}
-                  />
-                </Group>
-                <Field.ErrorText color="red.400">
-                  Cannot connect to this OSF component
-                </Field.ErrorText>
-              </Field.Root>
-              <Field.Root invalid={dataComponentError}>
-                <Field.Label>New OSF Data Component Name</Field.Label>
-                <Input
-                  type="text"
-                  value={osfComponentName}
-                  onChange={(e) => {
-                    setOsfComponentName(e.target.value);
-                    setDataComponentError(false);
-                  }}
-                />
-                <Field.ErrorText color="red.400">
-                  This field is required
-                </Field.ErrorText>
-                <Field.HelperText color="gray">
-                  DataPipe will create a new component with this name in the OSF
-                  project and store all data in it.
-                </Field.HelperText>
-              </Field.Root>
-              <Field.Root>
-                <Field.Label>Storage Location</Field.Label>
-                <NativeSelect.Root>
-                  <NativeSelect.Field
-                    value={region}
-                    onChange={(e) => setRegion(e.target.value)}
-                  >
-                    <option value="us">United States</option>
-                    <option value="de-1">Germany - Frankfurt</option>
-                    <option value="au-1">Australia - Sydney</option>
-                    <option value="ca-1">Canada - Montreal</option>
-                  </NativeSelect.Field>
-                </NativeSelect.Root>
-                <Field.HelperText color="gray">
-                  Choose the region where the data will be stored.
-                </Field.HelperText>
-              </Field.Root>
-              <Button
-                onClick={handleSubmit}
-                loading={isSubmitting}
-                colorPalette={"brandTeal"}
-              >
-                Create
-              </Button>
-            </>
-          )}
-
-          {provider === "osf" && !isValid && (
-            <VStack gap={3}>
-              <Text color="gray.400" textAlign="center">
-                DataPipe sends experiment data directly to your OSF project.
-                Connect your OSF account to get started.
-              </Text>
-              <Link href="/admin/account">
-                <Button variant={"solid"} colorPalette={"brandTeal"} size={"lg"}>
-                  Connect OSF Account
-                </Button>
-              </Link>
-            </VStack>
-          )}
-
-          {provider !== "osf" && !providerConnected && (
+          {!providerConnected && (
             <VStack gap={3}>
               <Text color="gray.400" textAlign="center">
                 DataPipe sends experiment data directly to your{" "}
@@ -425,7 +274,7 @@ function NewExperimentForm() {
             </VStack>
           )}
 
-          {provider !== "osf" && providerConnected && (
+          {providerConnected && (
             <>
               {providerError && (
                 <Text color="red.400" fontSize="sm">
