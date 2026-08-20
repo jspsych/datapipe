@@ -18,10 +18,28 @@ files into ONE archive carrying the full Psych-DS tree, leaving
    but they break Psych-DS compatibility, so they are a last resort reachable
    only above a provider's hard per-file limit (Zenodo: 50 GB). They must never
    be triggered by our own memory ceiling — see Phase 2.
-3. **`.psychds-ignore` goes INSIDE the final archive** and its loose copy is
-   deleted. Nothing regenerates it once submissions stop.
-   `dataset_description.json` stays loose so the record still shows a
-   descriptor.
+3. **The record ends as exactly ONE file: the merged archive.** Both Psych-DS
+   control files go inside it — `.psychds-ignore` and
+   `dataset_description.json` — and nothing is left loose.
+
+   Corrected twice, which is worth recording. The original rule kept the
+   descriptor loose "so the record still shows a descriptor", which left the
+   archive with none at all: the zip was not a valid Psych-DS dataset (the spec
+   requires the descriptor at the dataset root) and the record was not one
+   either (its data is sealed in a zip). Half the spec met by unzipping and
+   half by not. The first fix wrote it in BOTH places, which was valid but
+   duplicated a file to serve a need that does not survive checking — Zenodo
+   has a built-in zip previewer that lists archive contents on the record page
+   without downloading, so putting the descriptor inside hides nothing, and a
+   second copy is a second thing that can be wrong. Nothing reads the loose
+   copy either: `metadata-block.ts` owns the `metadataFileRef` pointing at it,
+   and that only runs during a submission, which a finalized experiment
+   rejects.
+
+   Compaction still keeps both files strictly out of its batches during
+   collection (`NEVER_ARCHIVE`), where they are live and rewritten per
+   submission. This rule applies only at finalization, which is terminal.
+
 4. **Publishing / minting a DOI is out of scope.** Irreversible, and the
    researcher's call.
 
