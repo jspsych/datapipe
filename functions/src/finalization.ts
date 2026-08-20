@@ -54,27 +54,24 @@ import {
 // there is never more than one merged archive to name.
 const FINAL_ARCHIVE_NAME = "datapipe-final.zip";
 
-// dataset_description.json goes INSIDE the merged archive AND stays loose on
-// the record. Both, deliberately.
+// THE RECORD ENDS AS EXACTLY ONE FILE: the merged archive. Everything goes
+// inside it, dataset_description.json included, and nothing is left loose.
 //
-// Inside, because Psych-DS requires it at the dataset root. The merged archive
-// IS the dataset -- it is the only place the data/raw/... tree exists, since
-// Zenodo cannot store a slash in a key. An archive without the descriptor is
-// not a valid Psych-DS dataset, and neither is the record around it, whose
-// data is sealed in a zip. Leaving it only on the outside produced an artifact
-// that validated in neither view: half the spec met by unzipping and half by
-// not.
+// Psych-DS requires the descriptor at the dataset root, and the archive IS the
+// dataset -- it is the only place the data/raw/... tree exists, since Zenodo
+// cannot store a slash in a key. An earlier version left the descriptor loose
+// so the record would show something human-readable, which produced an
+// artifact valid in neither view: a zip that was not a Psych-DS dataset
+// (no descriptor) inside a record that was not one either (data sealed in a
+// zip). A brief second version wrote it in BOTH places, which was correct but
+// duplicated a file for a reason that does not survive checking -- Zenodo has
+// a built-in zip previewer that lists archive contents on the record page
+// without downloading, so nothing is hidden by putting the descriptor inside.
 //
-// Loose, because the record should still show a human-readable descriptor
-// without anyone downloading an archive, and because metadata-block.ts holds a
-// metadataFileRef to that object.
-//
-// Duplicating it is safe here specifically because finalization is TERMINAL:
-// the experiment stops accepting submissions, so nothing can update one copy
-// and leave the other stale. That would not be safe during collection, which
-// is why compaction still keeps it strictly out of its batches
-// (NEVER_ARCHIVE in compaction.ts).
-const KEEP_LOOSE_AFTER_MERGE = new Set(["dataset_description.json"]);
+// Nothing reads the loose copy afterwards either: metadata-block.ts owns the
+// metadataFileRef pointing at it, and that only runs during a submission,
+// which a finalized experiment rejects.
+const DESCRIPTOR = "dataset_description.json";
 
 export interface FinalizationResult {
   // Carried on every result the same way CompactionResult carries it, so log
@@ -259,12 +256,14 @@ async function runFinalization(experimentID: string): Promise<Omit<FinalizationR
       };
     }
 
-    // Everything goes into the archive; only some of it is then removed from
-    // the record. See KEEP_LOOSE_AFTER_MERGE.
+    // Every file is both archived and removed -- see DESCRIPTOR above.
     const members = files;
-    const removable = files.filter((file) => !KEEP_LOOSE_AFTER_MERGE.has(file.name));
+    const removable = files;
 
-    if (removable.length === 0) {
+    // "Nothing collected" is judged on DATA, not on file count: an experiment
+    // that only ever got its descriptor has no dataset to build, and wrapping
+    // a lone descriptor in an archive would be noise.
+    if (files.filter((file) => file.name !== DESCRIPTOR).length === 0) {
       // Nothing was ever collected beyond the descriptor -- finalizing is
       // still the correct terminal state (the study is over either way), just
       // with no archive to build.
@@ -306,9 +305,9 @@ async function runFinalization(experimentID: string): Promise<Omit<FinalizationR
       return { status: "archive-too-large", detail };
     }
 
-    // Hashes cover only what is actually leaving the listing. The descriptor
-    // stays loose, so a cold cache still rehydrates its claim normally and it
-    // needs no sealing.
+    // Everything leaves the listing, so everything needs sealing -- a cold
+    // cache rehydrates from that listing and would otherwise forget every
+    // filename the study ever used.
     const memberHashes = removable.map((file) => claimDocId(salt, file.name));
     const runRef = finalizationRunRef(experimentID);
 

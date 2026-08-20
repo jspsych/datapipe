@@ -384,10 +384,10 @@ describe("F1. the full merge", () => {
     expect(result.status).toBe("finalized");
     expect(result.archiveName).toBe("datapipe-final.zip");
     // archived counts top-level provider files consumed by the merge: the 2
-    // batch archives + 2 loose sessions + .psychds-ignore = 5. Each batch
-    // then explodes into its own members once unpacked, which is what the
-    // archive's entry count below checks.
-    expect(result.archived).toBe(5);
+    // batch archives + 2 loose sessions + .psychds-ignore + the descriptor
+    // = 6. Each batch then explodes into its own members once unpacked, which
+    // is what the archive's entry count below checks.
+    expect(result.archived).toBe(6);
 
     const entries = readZipEntries(finalArchiveBytes());
     // 3 (batch1) + 2 (batch2) + 2 loose + .psychds-ignore + the descriptor
@@ -406,22 +406,25 @@ describe("F1. the full merge", () => {
     expect(entries.has("dataset_description.json")).toBe(true);
   });
 
-  it("leaves dataset_description.json loose and moves .psychds-ignore inside the archive", async () => {
+  it("moves both Psych-DS control files inside the archive", async () => {
     const { experimentID } = await seedFinalizableExperiment();
     await finalizeExperiment(experimentID);
 
-    expect(mock.has("dataset_description.json")).toBe(true);
-    // Nothing regenerates it once finalized, so the loose copy is gone.
+    // Neither is left loose. Nothing regenerates them once finalized, and the
+    // archive is the dataset -- both belong at its root, not beside it.
+    expect(mock.has("dataset_description.json")).toBe(false);
     expect(mock.has(PSYCHDS_IGNORE_FILE)).toBe(false);
+
     const entries = readZipEntries(finalArchiveBytes());
     expect(entries.get(".psychds-ignore").toString("utf8")).toBe(PSYCHDS_IGNORE_CONTENT);
+    expect(entries.has("dataset_description.json")).toBe(true);
   });
 
-  it("deletes every merged member, leaving only the archive and the descriptor", async () => {
+  it("deletes every merged member, leaving the archive as the record's only file", async () => {
     const { experimentID } = await seedFinalizableExperiment();
     await finalizeExperiment(experimentID);
 
-    expect(mock.keys().sort()).toEqual(["dataset_description.json", "datapipe-final.zip"].sort());
+    expect(mock.keys()).toEqual(["datapipe-final.zip"]);
   });
 
   it("keeps names flat for an experiment that never wrote a slashed path", async () => {
@@ -520,8 +523,9 @@ describe("F4. resuming an interrupted pass", () => {
   async function computeMergedArchive({ experimentID, names, batch1, batch2, looseContents, looseNames }) {
     // Reproduce exactly what runFinalization's merge would produce: batch
     // members re-emitted at their recorded paths, loose files at their
-    // reconstructed paths, .psychds-ignore included, dataset_description.json
-    // excluded.
+    // reconstructed paths, and BOTH Psych-DS control files included --
+    // .psychds-ignore and dataset_description.json. The archive is the
+    // dataset, so its root carries the descriptor.
     const entries = [];
     for (const [name, content] of batch1.contents) {
       const paths = archivePathsFor(zenodoProvider, true, [name]);
@@ -536,8 +540,13 @@ describe("F4. resuming an interrupted pass", () => {
       entries.push({ path: loosePaths.get(name), content: looseContents.get(name) });
     }
     entries.push({ path: ".psychds-ignore", content: Buffer.from(PSYCHDS_IGNORE_CONTENT) });
+    entries.push({
+      path: "dataset_description.json",
+      content: mock.get("dataset_description.json"),
+    });
 
-    const members = names.filter((n) => n !== "dataset_description.json");
+    // Every provider file is a member now; nothing is held back.
+    const members = names;
     return { ...(await buildArchive(entries)), members };
   }
 
@@ -632,7 +641,7 @@ describe("F4. resuming an interrupted pass", () => {
     // Nothing was deleted before the crash, so the safe move is to throw the
     // record away and finalize normally.
     expect(result.status).toBe("finalized");
-    expect(result.archived).toBe(5);
+    expect(result.archived).toBe(6);
     expect(mock.has("datapipe-final.zip")).toBe(true);
   });
 });
@@ -646,7 +655,7 @@ describe("F5. finalization is permanent", () => {
     const second = await finalizeExperiment(experimentID);
     expect(second.status).toBe("already-finalized");
     // Nothing else moved -- the archive from the first pass is untouched.
-    expect(mock.keys().sort()).toEqual(["dataset_description.json", "datapipe-final.zip"].sort());
+    expect(mock.keys()).toEqual(["datapipe-final.zip"]);
   });
 
   it("refuses a new /api/data submission once finalized", async () => {
@@ -1051,7 +1060,6 @@ describe("F11. the merged archive is a valid Psych-DS dataset on its own", () =>
   // That produced an artifact valid in neither view: the zip was not a
   // Psych-DS dataset (the spec requires the descriptor at the dataset root)
   // and neither was the record around it, whose data is sealed inside a zip.
-  // Half the spec met by unzipping and half by not.
 
   it("contains dataset_description.json at the archive root", async () => {
     const { experimentID } = await seedFinalizableExperiment();
@@ -1061,32 +1069,33 @@ describe("F11. the merged archive is a valid Psych-DS dataset on its own", () =>
 
     const entries = readZipEntries(finalArchiveBytes());
     expect([...entries.keys()]).toContain("dataset_description.json");
-    // And it is the real descriptor, not an empty placeholder.
     expect(JSON.parse(entries.get("dataset_description.json").toString("utf8"))).toBeTruthy();
   });
 
-  it("also leaves a copy loose on the record", async () => {
-    // Both, not either. A visitor should see a descriptor without downloading
-    // an archive, and metadata-block.ts holds a metadataFileRef to that
-    // object.
+  it("leaves the record as exactly one file", async () => {
+    // No loose copy. Zenodo's zip previewer lists archive contents on the
+    // record page without downloading, so putting the descriptor inside hides
+    // nothing -- and a second copy is a second thing that can be wrong.
     const { experimentID } = await seedFinalizableExperiment();
     await finalizeExperiment(experimentID);
 
-    expect(mock.has("dataset_description.json")).toBe(true);
-    expect(mock.keys().sort()).toEqual(["dataset_description.json", "datapipe-final.zip"].sort());
+    expect(mock.keys()).toEqual(["datapipe-final.zip"]);
   });
 
-  it("the two copies are identical, since nothing can update either afterwards", async () => {
-    // Duplication is only safe because finalization is terminal. If the
-    // experiment could still accept submissions, metadata-block.ts would
-    // update the loose copy and the archived one would silently go stale.
+  it("seals every archived filename, including the descriptor's", async () => {
+    // Everything leaves the provider listing now, so a cold cache would
+    // otherwise rehydrate from a listing containing only the archive and
+    // forget every filename the study ever used.
     const { experimentID } = await seedFinalizableExperiment();
-    const before = mock.get("dataset_description.json").toString("utf8");
-
     await finalizeExperiment(experimentID);
 
-    const entries = readZipEntries(finalArchiveBytes());
-    expect(entries.get("dataset_description.json").toString("utf8")).toBe(before);
-    expect(mock.get("dataset_description.json").toString("utf8")).toBe(before);
+    const claim = await db
+      .collection("experiments")
+      .doc(experimentID)
+      .collection("filenameClaims")
+      .doc(claimDocId(SALT, "dataset_description.json"))
+      .get();
+    expect(claim.exists).toBe(true);
+    expect(claim.data().sealed).toBe(true);
   });
 });
