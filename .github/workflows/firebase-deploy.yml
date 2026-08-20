@@ -20,6 +20,9 @@ env:
   NEXT_PUBLIC_GENERATE_STATE: "https://pipe.jspsych.org/api/generateoauthstate"
   NEXT_PUBLIC_BASE_URL: "https://pipe.jspsych.org"
   NEXT_PUBLIC_OSF_ENV: ""
+  # Empty = the real zenodo.org. Set explicitly rather than relying on the
+  # default, so production never inherits a sandbox value by accident.
+  NEXT_PUBLIC_ZENODO_ENV: ""
 
 jobs:
   build:
