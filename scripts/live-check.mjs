@@ -247,6 +247,32 @@ async function main() {
     );
   }
 
+  // ---- 5c. does every session still have its derived Psych-DS table? ----
+  // A submission the write gate diverts is queued and written back later by
+  // the retry worker -- which only writes what is IN the queue and never
+  // re-runs the metadata pipeline. Queueing the raw file alone therefore
+  // leaves that session with no data/<base>_data.csv, permanently. No
+  // submitted data is lost (the raw file is the source of truth) but the
+  // dataset is a Psych-DS dataset with holes in it, and nothing errors.
+  //
+  // Observed live 2026-08-20 before the fix: 44 loose raw sessions against 10
+  // derived CSVs. Emulator coverage for this needs the deployed function to
+  // reach a provider mock through the metadata block, which is exactly the
+  // wiring this script exists to avoid -- so the assertion lives here.
+  if (ZTOKEN && DEPOSITION) {
+    const files = await listDeposition();
+    const raw = files.filter((n) => n.startsWith("data_raw_"));
+    const csv = files.filter((n) => n.startsWith("data_") && !n.startsWith("data_raw_"));
+    record(
+      "5c. derived tables kept pace with raw sessions",
+      raw.length === csv.length ? "PASS" : "FAIL",
+      `${raw.length} loose raw session(s), ${csv.length} loose derived CSV(s)` +
+        (raw.length === csv.length
+          ? ""
+          : "  <-- sessions without a derived table; a diverted submission did not queue its Psych-DS files")
+    );
+  }
+
   // ---- 6. finalize ------------------------------------------------------
   if (ID_TOKEN) {
     const res = await fetch(`${BASE}/api/finalize`, {
