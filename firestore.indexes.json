@@ -4,26 +4,68 @@
       "collectionGroup": "users",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "usingPersonalToken", "order": "ASCENDING" },
-        { "fieldPath": "refreshTokenExpires", "order": "ASCENDING" }
+        {
+          "fieldPath": "usingPersonalToken",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "refreshTokenExpires",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "uploadQueue",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "experimentID", "order": "ASCENDING" },
-        { "fieldPath": "owner", "order": "ASCENDING" },
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
+        {
+          "fieldPath": "experimentID",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "owner",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "uploadQueue",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "nextRetryAt", "order": "ASCENDING" }
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "nextRetryAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "uploadQueue",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "experimentID",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "providerErrorCode",
+          "order": "ASCENDING"
+        }
       ]
     }
   ],

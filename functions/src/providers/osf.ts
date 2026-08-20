@@ -52,6 +52,7 @@ export const osfProvider: StorageProvider = {
     nativeSubfolders: true,
     supportsRegion: true,
     maxFileSizeBytes: null,
+    maxFileCount: null,
     quotaNote: null,
   },
 

@@ -197,6 +197,9 @@ export const gdriveProvider: StorageProvider = {
     nativeSubfolders: true,
     supportsRegion: false,
     maxFileSizeBytes: null,
+    // Drive's per-folder limit (500k) is far beyond any experiment, and the
+    // real constraint is bytes, not files -- see quotaNote.
+    maxFileCount: null,
     quotaNote: "Free Google accounts share 15 GB across Drive, Gmail, and Photos",
   },
 

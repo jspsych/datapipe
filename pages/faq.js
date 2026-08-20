@@ -105,6 +105,31 @@ export default function FAQ() {
             the automatic retries do not succeed.
           </Text>
         </FAQItem>
+        <FAQItem
+          value="item-2c"
+          question="Can I add or remove files myself while data collection is running?"
+        >
+          <Text mb={2}>
+            Please don&apos;t. While an experiment is active, treat its storage
+            location as belonging to DataPipe: let DataPipe write to it, and
+            download from it as much as you like, but avoid uploading, renaming,
+            or deleting files there yourself until collection is finished.
+          </Text>
+          <Text mb={2}>
+            DataPipe keeps its own record of which filenames it has already used,
+            so that a participant who submits twice cannot overwrite existing
+            data. Files that appear without DataPipe writing them are missing
+            from that record. Depending on the storage provider, the next
+            submission that happens to use the same name may then be silently
+            renamed or may overwrite what you added.
+          </Text>
+          <Text>
+            On providers with a limit on how many files one project can hold —
+            Zenodo allows 100 — DataPipe combines older sessions into archives to
+            stay under it. Files added by hand count toward that limit, and can
+            fill the project faster than DataPipe expects.
+          </Text>
+        </FAQItem>
         <FAQItem value="item-3" question="How much does it cost?">
           <Text>DataPipe is free to use.</Text>
         </FAQItem>

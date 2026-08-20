@@ -358,4 +358,125 @@ describe('/experiments — provider-migration generalization (step 7a)', () => {
       }));
     });
   });
+
+  // Phase 4 of docs/finalization-spec.md. Finalization is permanent (decision
+  // 1) -- finalized/finalizedAt/finalization are written ONLY by admin-SDK
+  // code (functions/src/api-finalize.ts, functions/src/finalization.ts),
+  // which bypasses these rules entirely, so the whole point of this section
+  // is that the CLIENT SDK path (what these rules actually govern) can never
+  // touch them, in either direction: a researcher could otherwise clear
+  // `finalized` to keep submitting after finalization deleted the loose
+  // files, or set it early to fake a finalized state before the merge ever
+  // ran.
+  describe('6. finalization fields are locked against client writes', () => {
+    function finalizedFields(overrides = {}) {
+      return baseFields({
+        id: overrides.id,
+        owner: overrides.owner,
+        storageProvider: 'zenodo',
+        providerContainer: { provider: 'zenodo', depositionId: 1 },
+        ...overrides,
+      });
+    }
+
+    it('DENIES a client update that clears finalized on an already-finalized experiment', async () => {
+      const docId = 'exp-finalize-clear';
+      await seedDB({
+        [`experiments/${docId}`]: {
+          ...finalizedFields({ id: docId, owner: 'user123' }),
+          finalized: true,
+          finalization: { status: 'finalized' },
+        },
+      });
+
+      const user123 = testEnv.authenticatedContext('user123');
+      await assertFails(
+        updateDoc(doc(user123.firestore(), `experiments/${docId}`), { finalized: false })
+      );
+    });
+
+    it('DENIES a client update that sets finalized to true on a non-finalized experiment', async () => {
+      const docId = 'exp-finalize-forge';
+      await seedDB({
+        [`experiments/${docId}`]: finalizedFields({ id: docId, owner: 'user123' }),
+      });
+
+      const user123 = testEnv.authenticatedContext('user123');
+      await assertFails(
+        updateDoc(doc(user123.firestore(), `experiments/${docId}`), { finalized: true })
+      );
+    });
+
+    it('DENIES a client update that writes finalizedAt', async () => {
+      const docId = 'exp-finalize-timestamp';
+      await seedDB({
+        [`experiments/${docId}`]: finalizedFields({ id: docId, owner: 'user123' }),
+      });
+
+      const user123 = testEnv.authenticatedContext('user123');
+      await assertFails(
+        updateDoc(doc(user123.firestore(), `experiments/${docId}`), {
+          finalizedAt: new Date(),
+        })
+      );
+    });
+
+    it('DENIES a client update that writes the finalization progress map', async () => {
+      const docId = 'exp-finalize-progress';
+      await seedDB({
+        [`experiments/${docId}`]: finalizedFields({ id: docId, owner: 'user123' }),
+      });
+
+      const user123 = testEnv.authenticatedContext('user123');
+      await assertFails(
+        updateDoc(doc(user123.firestore(), `experiments/${docId}`), {
+          finalization: { status: 'finalized' },
+        })
+      );
+    });
+
+    it('DENIES a create that arrives already carrying finalized: true', async () => {
+      const docId = 'exp-finalize-create-forge';
+      const user123 = testEnv.authenticatedContext('user123');
+
+      await assertFails(
+        setDoc(doc(user123.firestore(), `experiments/${docId}`), {
+          ...finalizedFields({ id: docId, owner: 'user123' }),
+          finalized: true,
+        })
+      );
+    });
+
+    it('ALLOWS an ordinary field update on a finalized experiment, leaving finalized untouched', async () => {
+      // The owner must still be able to edit ordinary settings (e.g. flip
+      // `active` off) after finalization -- only finalized/finalizedAt/
+      // finalization are locked, not the whole document.
+      const docId = 'exp-finalize-ordinary-edit';
+      await seedDB({
+        [`experiments/${docId}`]: {
+          ...finalizedFields({ id: docId, owner: 'user123' }),
+          finalized: true,
+          finalization: { status: 'finalized' },
+          active: true,
+        },
+      });
+
+      const user123 = testEnv.authenticatedContext('user123');
+      await assertSucceeds(
+        updateDoc(doc(user123.firestore(), `experiments/${docId}`), { active: false })
+      );
+    });
+
+    it('ALLOWS ordinary edits on a non-finalized experiment (regression guard)', async () => {
+      const docId = 'exp-finalize-not-touched';
+      await seedDB({
+        [`experiments/${docId}`]: finalizedFields({ id: docId, owner: 'user123' }),
+      });
+
+      const user123 = testEnv.authenticatedContext('user123');
+      await assertSucceeds(
+        updateDoc(doc(user123.firestore(), `experiments/${docId}`), { maxSessions: 50 })
+      );
+    });
+  });
 });

@@ -13,6 +13,7 @@ import ExperimentInfo from "../../components/dashboard/ExperimentInfo";
 import ExperimentActive from "../../components/dashboard/ExperimentActive";
 import ExperimentValidation from "../../components/dashboard/ExperimentValidation";
 import MetadataControl from "../../components/dashboard/MetadataControl";
+import FinalizeControl from "../../components/dashboard/FinalizeControl";
 import CodeHints from "../../components/dashboard/CodeHints";
 import ErrorPanel from "../../components/dashboard/ErrorPanel";
 import QueuePanel, { UploadsResolvedNotice } from "../../components/dashboard/QueuePanel";
@@ -168,6 +169,12 @@ function ExperimentPageDashboard({ experiment_id }) {
                 </Popover.Root>
               </HStack>
               <MetadataControl data={data} />
+
+              <Separator my={5} borderColor="whiteAlpha.200" />
+              <Text fontSize="xs" fontWeight="semibold" textTransform="uppercase" letterSpacing="wide" color="gray.500" mb={3}>
+                Finalize
+              </Text>
+              <FinalizeControl data={data} experimentId={experiment_id} />
             </VStack>
 
             <VStack flex="1" minW="300px" align="stretch">

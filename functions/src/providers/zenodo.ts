@@ -1,4 +1,4 @@
-import fetch from "node-fetch";
+import fetch, { RequestInit } from "node-fetch";
 import { decrypt } from "../crypto-utils.js";
 import { UserData } from "../interfaces.js";
 import {
@@ -9,6 +9,7 @@ import {
   FileMeta,
   WriteResult,
   DownloadResult,
+  DeleteResult,
   ProviderErrorCode,
   TokenResult,
 } from "./types.js";
@@ -73,11 +74,44 @@ export function isAllowedZenodoServer(serverUrl: string): boolean {
 // capabilities are never a correctness gate (see types.ts).
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024 * 1024;
 
+// Files per record. Unlike MAX_FILE_SIZE_BYTES this is enforced hard by Zenodo
+// and is a correctness gate, not a UI hint -- see capabilities.maxFileCount.
+const MAX_FILE_COUNT = 100;
+
 function authHeaders(auth: ResolvedAuth): Record<string, string> {
   // Header rather than Zenodo's supported ?access_token= query parameter, so
   // the credential never lands in a URL that could reach a log or an error
   // message.
   return { Authorization: `Bearer ${auth.token}` };
+}
+
+// TEST-ONLY TRANSPORT SEAM. Returns a replacement origin for every Zenodo
+// call, or undefined in any real deployment.
+//
+// Why this has to exist at all: ALLOWED_HOSTS above rejects every address a
+// same-machine mock server can bind to, so without a seam there is no way to
+// exercise the emulator-hosted apidata function against a fake Zenodo -- the
+// identical wall connect-static-token-emulator.test.js documents for
+// Dataverse's connect path. gdrive has GDRIVE_API_BASE for the same reason;
+// this is that pattern, tightened.
+//
+// It is gated on FUNCTIONS_EMULATOR, which the Firebase emulator sets to
+// "true" and a DEPLOYED function never sets -- so in production this reads an
+// unset variable and returns undefined no matter what ZENODO_API_BASE holds.
+// The gate is what makes it safe to redirect writes from an env var at all.
+//
+// It REPLACES the resolved serverUrl rather than extending the allowlist,
+// deliberately: under the emulator, no test can then reach real zenodo.org by
+// seeding a realistic-looking container. That failure mode is not
+// hypothetical -- docs/provider-migration-design.md records the OSF refresh
+// path making live calls to accounts.osf.io from a test for exactly this
+// reason (no override, so the real host stayed reachable).
+function emulatorServerOverride(): string | undefined {
+  if (process.env.FUNCTIONS_EMULATOR !== "true") {
+    return undefined;
+  }
+  const override = process.env.ZENODO_API_BASE;
+  return override ? override.replace(/\/+$/, "") : undefined;
 }
 
 // serverUrl can come from the container (a deposition knows which installation
@@ -86,6 +120,11 @@ function authHeaders(auth: ResolvedAuth): Record<string, string> {
 // calls made before a container exists (createDataContainer,
 // validateStaticToken) only have auth.
 function resolveServerUrl(auth: ResolvedAuth, container?: ContainerRef): string {
+  const override = emulatorServerOverride();
+  if (override) {
+    return override;
+  }
+
   const fromContainer = (container as ZenodoContainerRef | undefined)?.serverUrl;
   const serverUrl = fromContainer ?? auth.serverUrl;
   if (!serverUrl) {
@@ -148,6 +187,37 @@ function resolveBucketUrl(container: ZenodoContainerRef, serverUrl: string): str
 // that pass an already-stored name (updateFile, downloadFile) are unaffected.
 function toZenodoKey(name: string): string {
   return name.replace(/[/\\]+/g, "_");
+}
+
+// toZenodoKey's counterpart for compaction archives (StorageProvider.
+// archivePathFor). Rebuilds the Psych-DS path a flattened key came from, so
+// the zip carries `data/raw/subject-1.json` even though the record can only
+// ever show `data_raw_subject-1.json`.
+//
+// toZenodoKey is many-to-one, so this is NOT its inverse in general -- it is
+// exact only over the four path shapes DataPipe writes, which is the entire
+// set it is ever asked about:
+//
+//   data_raw_subject-1.json    -> data/raw/subject-1.json
+//   data_subject-1_data.csv    -> data/subject-1_data.csv
+//   dataset_description.json   -> unchanged ("data" is not followed by "_")
+//   .psychds-ignore            -> unchanged
+//
+// The leaf is safe to hand back untouched because metadata-derived-files.ts
+// flattens researcher-supplied subfolders with "-" BEFORE the path is built,
+// so a leaf reaching Zenodo never contains a slash and there is no second
+// separator left to guess at. The one remaining ambiguity -- a researcher
+// naming their own file `data_x.json` in an experiment that writes no slashed
+// paths at all -- is removed by the caller, not here: compaction only applies
+// this to metadataActive experiments (see archivePathsFor in compaction.ts).
+export function fromZenodoKey(key: string): string {
+  if (key.startsWith("data_raw_")) {
+    return `data/raw/${key.slice("data_raw_".length)}`;
+  }
+  if (key.startsWith("data_")) {
+    return `data/${key.slice("data_".length)}`;
+  }
+  return key;
 }
 
 function encodeKey(key: string): string {
@@ -256,6 +326,11 @@ interface BucketPutResponse {
   version_id?: string;
 }
 
+// node-fetch's own RequestInit type has no `duplex` field (it predates the
+// option), but its runtime happily accepts and ignores it -- see
+// writeStreamedFile for why this must still be sent on every call.
+type RequestInitWithDuplex = RequestInit & { duplex?: "half" };
+
 interface DepositionFileResponse {
   id?: string;
   filename?: string;
@@ -273,6 +348,11 @@ export const zenodoProvider: StorageProvider = {
     nativeSubfolders: false,
     supportsRegion: false,
     maxFileSizeBytes: MAX_FILE_SIZE_BYTES,
+    // The only non-null maxFileCount in the codebase, and the reason
+    // compaction.ts exists. Verified live rather than read off the docs: the
+    // 101st file comes back 400 with "Uploading selected files will result in
+    // exceeding the max amount per record." (spike gate E, 2026-08-11).
+    maxFileCount: MAX_FILE_COUNT,
     quotaNote:
       "Zenodo allows up to 100 files and 50 GB per record. DataPipe compacts completed sessions into archives to stay under the file limit.",
   },
@@ -455,7 +535,80 @@ export const zenodoProvider: StorageProvider = {
       // interchangeable. metadata-block.ts also requires a defined id before
       // it will persist a metadataFileRef, so leaving this unset would make it
       // re-discover the metadata file by listing on every single submission.
-      fileRef: { name: storedFilename, id: storedFilename },
+      // checksum ("md5:<hex>") is what lets compaction.ts prove an uploaded
+      // archive landed intact before it deletes the sessions that went into
+      // it. Absent on a response that omits it, which callers must tolerate.
+      fileRef: {
+        name: storedFilename,
+        id: storedFilename,
+        size: responseBody.size,
+        checksum: responseBody.checksum,
+      },
+      storedFilename,
+    };
+  },
+
+  // writeSessionFile's streaming sibling (StorageProvider.writeStreamedFile).
+  // Same bucket PUT, same octet-stream requirement, same defensive read of
+  // key/checksum -- the only difference is the body and an explicit `size`,
+  // because a stream has no `.length` to read a Content-Length from the way
+  // writeSessionFile does off its Buffer.
+  //
+  // `duplex: "half"` is required here and is NOT optional hardening: Node's
+  // built-in fetch (undici) throws "duplex option is required when sending a
+  // body" for any stream body, verified live against a real local server
+  // rather than assumed. node-fetch's own implementation (what this file
+  // normally talks to) tolerates the option fine either way, so sending it
+  // unconditionally is safe. This matters here specifically because the
+  // in-process emulator suites alias node-fetch to Node's native fetch to
+  // exercise real HTTP calls (see compaction-emulator.test.js) -- so a build
+  // that worked only against node-fetch would pass its own unit tests and
+  // then hang or throw the moment it ran there.
+  async writeStreamedFile(
+    auth: ResolvedAuth,
+    container: ContainerRef,
+    filename: string,
+    body: NodeJS.ReadableStream,
+    size: number,
+    _meta: FileMeta
+  ): Promise<WriteResult> {
+    const zenodoContainer = container as ZenodoContainerRef;
+    const serverUrl = resolveServerUrl(auth, zenodoContainer);
+    const bucket = resolveBucketUrl(zenodoContainer, serverUrl);
+
+    const response = await fetch(`${bucket}/${encodeKey(filename)}`, {
+      method: "PUT",
+      headers: {
+        ...authHeaders(auth),
+        // MUST be application/octet-stream, same hard 415 as writeSessionFile
+        // -- see that method's comment for the live evidence.
+        "Content-Type": "application/octet-stream",
+        "Content-Length": String(size),
+      },
+      body,
+      duplex: "half",
+    } as RequestInitWithDuplex);
+
+    if (!isSuccessStatus(response.status)) {
+      const mapped = await mapErrorResponse(response);
+      return { success: false, ...mapped };
+    }
+
+    const responseBody = (await response.json()) as BucketPutResponse;
+
+    // Same defensive read as writeSessionFile: never assume the provider kept
+    // the requested name. See that method's comment for why the fallback is
+    // the flattened key rather than the raw `filename`.
+    const storedFilename = responseBody.key ?? toZenodoKey(filename);
+
+    return {
+      success: true,
+      fileRef: {
+        name: storedFilename,
+        id: storedFilename,
+        size: responseBody.size,
+        checksum: responseBody.checksum,
+      },
       storedFilename,
     };
   },
@@ -507,10 +660,17 @@ export const zenodoProvider: StorageProvider = {
     // neither rather than emitting a FileRef with an undefined name -- the
     // collision cache matches on exact names, so a bad entry there would let a
     // duplicate through.
-    return (body || [])
-      .map((file) => file.filename ?? file.key)
-      .filter((name): name is string => typeof name === "string" && name.length > 0)
-      .map((name) => ({ name, id: name }));
+    // size/checksum are passed through for compaction.ts, which uses them to
+    // bound an archive's memory footprint and to skip re-reading files it has
+    // already sealed. Both are optional on FileRef and genuinely absent on
+    // some responses, so nothing may depend on them being set.
+    return (body || []).flatMap((file): FileRef[] => {
+      const name = file.filename ?? file.key;
+      if (typeof name !== "string" || name.length === 0) {
+        return [];
+      }
+      return [{ name, id: name, size: file.filesize, checksum: file.checksum }];
+    });
   },
 
   async downloadFile(
@@ -541,27 +701,93 @@ export const zenodoProvider: StorageProvider = {
     return { success: true, content };
   },
 
-  // A Zenodo record holds at most 100 files, and the compaction that is meant
-  // to keep a study under that cap (batch zips during collection, one merged
-  // archive at finalization -- see docs/provider-migration-design.md) is NOT
-  // built yet. Until it is, session 101 fails and stays failed: the queue maps
-  // Zenodo's refusal to QUOTA_EXCEEDED, which is slow-tier and needs human
-  // action to clear. No data is lost -- the submission stays in pending
-  // storage and QueuePanel surfaces the reason -- but the researcher cannot
-  // fix it, so they need to hear about the limit BEFORE they start collecting
-  // rather than after.
-  //
-  // Unconditional and offline, unlike dataverse.ts's version probe: the cap is
-  // a property of Zenodo itself, not of an installation, so there is nothing
-  // to interrogate and no failure mode to fail open from.
-  //
-  // DELETE THIS once compaction ships.
-  async setupWarnings(_auth: ResolvedAuth): Promise<string[]> {
-    return [
-      "Zenodo allows at most 100 files per deposition, and DataPipe does not yet " +
-        "combine sessions into archives. Plan for fewer than 100 submissions in this " +
-        "experiment: after that, further submissions will fail to upload and will have " +
-        "to be recovered by hand.",
-    ];
+  // downloadFile without the UTF-8 decode. Compaction re-uploads exactly what
+  // it reads and archives /api/base64 submissions (images, audio, video), so
+  // decoding to a string first would replace every invalid sequence with
+  // U+FFFD and corrupt the archive -- silently, since the subsequent write
+  // still succeeds. See StorageProvider.downloadFileBytes.
+  async downloadFileBytes(
+    auth: ResolvedAuth,
+    container: ContainerRef,
+    fileRef: FileRef
+  ) {
+    const zenodoContainer = container as ZenodoContainerRef;
+    const serverUrl = resolveServerUrl(auth, zenodoContainer);
+    const bucket = resolveBucketUrl(zenodoContainer, serverUrl);
+
+    const response = await fetch(`${bucket}/${encodeKey(fileRef.name)}`, {
+      method: "GET",
+      headers: authHeaders(auth),
+    });
+
+    if (!isSuccessStatus(response.status)) {
+      const mapped = await mapErrorResponse(response);
+      return {
+        success: false as const,
+        error: mapped.error,
+        providerStatus: mapped.providerStatus,
+        providerMessage: mapped.providerMessage,
+      };
+    }
+
+    return { success: true as const, content: Buffer.from(await response.arrayBuffer()) };
   },
+
+  // Bucket DELETE by key, addressing the object the same way writeSessionFile
+  // and downloadFile do.
+  //
+  // A 404 is reported as SUCCESS, deliberately. The only caller is compaction,
+  // which deletes the originals after verifying their archive uploaded, and
+  // resumes a partially-completed pass by re-deleting whatever is left; a
+  // missing key means a previous pass already removed it, which is precisely
+  // the state the caller is trying to reach. Treating it as an error would
+  // wedge an experiment that got interrupted mid-delete.
+  async deleteFile(
+    auth: ResolvedAuth,
+    container: ContainerRef,
+    fileRef: FileRef
+  ): Promise<DeleteResult> {
+    const zenodoContainer = container as ZenodoContainerRef;
+    const serverUrl = resolveServerUrl(auth, zenodoContainer);
+    const bucket = resolveBucketUrl(zenodoContainer, serverUrl);
+
+    const response = await fetch(`${bucket}/${encodeKey(fileRef.name)}`, {
+      method: "DELETE",
+      headers: authHeaders(auth),
+    });
+
+    if (response.status === 404 || isSuccessStatus(response.status)) {
+      return { success: true };
+    }
+
+    const mapped = await mapErrorResponse(response);
+    return {
+      success: false,
+      error: mapped.error,
+      providerStatus: mapped.providerStatus,
+      providerMessage: mapped.providerMessage,
+    };
+  },
+
+  // Rebuilds the Psych-DS path a flattened key came from, so compaction
+  // archives carry the directory structure Zenodo's keyspace cannot hold. See
+  // fromZenodoKey above for why this is exact over DataPipe's own paths and
+  // why the caller gates it on metadataActive.
+  archivePathFor(storedName: string): string {
+    return fromZenodoKey(storedName);
+  },
+
+  // setupWarnings is deliberately NOT implemented, and its absence is the
+  // point. It previously carried a standing warning that a Zenodo experiment
+  // must stay under 100 submissions because DataPipe could not combine
+  // sessions into archives; compaction.ts is that missing piece, so the
+  // warning would now be false. A setup-time warning is for something the
+  // researcher must act on before collecting, and there is nothing left to act
+  // on here.
+  //
+  // The cap is relieved, not removed: each sealed batch is itself a file, so a
+  // record still tops out at roughly MAX_FILE_COUNT batches' worth of sessions
+  // (thousands, at the default batch size). Finalization -- one merged archive
+  // replacing every batch -- is what removes the ceiling entirely and is not
+  // built yet. Nothing needs to warn about a limit that far out.
 };
