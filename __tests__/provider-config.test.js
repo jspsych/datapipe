@@ -86,3 +86,67 @@ describe("STORAGE_PROVIDERS.dataverse", () => {
     expect(STORAGE_PROVIDERS.dataverse.id).toBe("dataverse");
   });
 });
+
+describe("zenodo: which Zenodo a deployment points at", () => {
+  // NEXT_PUBLIC_ZENODO_ENV is read at module scope, so each case has to
+  // re-import with the value already set. jest.resetModules + a dynamic
+  // require is the only way to exercise more than one deployment shape.
+  function loadWith(zenodoEnv) {
+    let mod;
+    jest.isolateModules(() => {
+      const prior = process.env.NEXT_PUBLIC_ZENODO_ENV;
+      if (zenodoEnv === undefined) {
+        delete process.env.NEXT_PUBLIC_ZENODO_ENV;
+      } else {
+        process.env.NEXT_PUBLIC_ZENODO_ENV = zenodoEnv;
+      }
+      mod = require("../lib/provider-config").STORAGE_PROVIDERS;
+      if (prior === undefined) {
+        delete process.env.NEXT_PUBLIC_ZENODO_ENV;
+      } else {
+        process.env.NEXT_PUBLIC_ZENODO_ENV = prior;
+      }
+    });
+    return mod;
+  }
+
+  it("points production at the real zenodo.org", () => {
+    expect(loadWith("").zenodo.defaultServerUrl).toBe("https://zenodo.org");
+  });
+
+  it("points the test deployment at the sandbox", () => {
+    // The whole reason this setting exists: without it the test site creates
+    // real depositions on the live service using the researcher's real
+    // account.
+    expect(loadWith("sandbox.").zenodo.defaultServerUrl).toBe(
+      "https://sandbox.zenodo.org"
+    );
+  });
+
+  it("falls back to production when the variable is absent entirely", () => {
+    // An unset variable must never resolve to something like
+    // "https://undefinedzenodo.org", and defaulting to sandbox would be worse
+    // -- a misconfigured production deploy would silently write nowhere real.
+    expect(loadWith(undefined).zenodo.defaultServerUrl).toBe("https://zenodo.org");
+  });
+
+  it("containerLink follows the container's host, not the current deployment", () => {
+    // Same rule as dataverse above. An experiment created before a deployment
+    // was switched still lives where it was created, so its link has to follow
+    // the data rather than today's configuration.
+    const url = loadWith("sandbox.").zenodo.containerLink({
+      providerContainer: {
+        serverUrl: "https://zenodo.org",
+        depositionId: 5551212,
+      },
+    });
+    expect(url).toBe("https://zenodo.org/deposit/5551212");
+  });
+
+  it("containerLink falls back to the deployment host for a container with no serverUrl", () => {
+    const url = loadWith("sandbox.").zenodo.containerLink({
+      providerContainer: { depositionId: 42 },
+    });
+    expect(url).toBe("https://sandbox.zenodo.org/deposit/42");
+  });
+});

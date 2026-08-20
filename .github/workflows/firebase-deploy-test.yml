@@ -20,6 +20,9 @@ env:
   NEXT_PUBLIC_GENERATE_STATE: "https://datapipe-test.web.app/api/generateoauthstate"
   NEXT_PUBLIC_BASE_URL: "https://datapipe-test.web.app"
   NEXT_PUBLIC_OSF_ENV: ""
+  # sandbox.zenodo.org. Without this the TEST site creates real
+  # depositions on the live Zenodo using the researcher's real account.
+  NEXT_PUBLIC_ZENODO_ENV: "sandbox."
   # Google Picker (folder selection for gdrive experiments). The API key is
   # restricted to the Picker API + our domains, so it is safe in the browser
   # bundle -- not a secret. The project number is public.
