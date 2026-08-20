@@ -761,6 +761,52 @@ export const zenodoProvider: StorageProvider = {
     }
 
     const mapped = await mapErrorResponse(response);
+
+    // ZENODO RETURNS 500 FOR A DELETE THAT ACTUALLY SUCCEEDED -- and this is a
+    // SERVICE BUG, not a contract. Stated plainly because the distinction
+    // decides what to do about it.
+    //
+    // Observed live (sandbox, spike gate F, 2026-08-20): the object is gone
+    // from the deposition afterwards, but the response is "500 INTERNAL SERVER
+    // ERROR / The server encountered an internal error". Zenodo documents 204
+    // for its deposition-files delete and does not document the bucket delete
+    // this method uses at ALL, so there is no documented status to conform to.
+    // Matching reports: zenodo/zenodo#2502 ("very inconsistent behaviour when
+    // deleting/uploading files") and #2506 (bucket API behaviour changed).
+    //
+    // Because it is a bug rather than a contract, it may be intermittent and
+    // it may be fixed without notice. That rules out special-casing 500, in
+    // either direction: hardcoding "500 means success here" would mask a real
+    // outage, and trusting the status means believing a delete failed when it
+    // did not. Verifying is the only option that is correct in all three
+    // worlds -- broken, fixed, or intermittent. When Zenodo does return 204,
+    // the check below never runs.
+    //
+    // The alternative would be switching to the DOCUMENTED endpoint,
+    // /api/deposit/depositions/{id}/files/{file_id}. Not done here because it
+    // needs the deposition-file UUID, and listFiles deliberately reports the
+    // KEY as the id (every other operation addresses objects by key). Worth
+    // revisiting if the bucket delete proves unreliable in other ways.
+    //
+    // Trusting the status is not an option. Compaction deletes a whole batch
+    // after verifying its archive, so it would report every single file as
+    // undeleted; worse, the saturation path deletes .psychds-ignore to free a
+    // slot for the archive and ABORTS if that reports failure -- so a full
+    // record would refuse to compact while having actually freed the slot.
+    //
+    // Treating 500 as success is not an option either: that would mask a
+    // genuine outage. So ask the provider what is actually there. This costs
+    // one extra listing, and only on a path that is already failing.
+    try {
+      const remaining = await zenodoProvider.listFiles(auth, container);
+      if (!remaining.some((file) => file.name === toZenodoKey(fileRef.name))) {
+        return { success: true };
+      }
+    } catch {
+      // Listing failed too -- genuinely cannot tell, so report the original
+      // error rather than guessing in either direction.
+    }
+
     return {
       success: false,
       error: mapped.error,

@@ -17,7 +17,17 @@
 //
 // Leaves the deposition UNPUBLISHED and never calls the publish action, so
 // nothing here mints a DOI. With cleanup on, the draft is deleted at the end.
+//
+// Gates A-E were the original migration gating questions. F-I cover the three
+// adapter methods compaction and finalization added (deleteFile,
+// writeStreamedFile, downloadFileBytes) plus the checksum-format assumption
+// that crash-resume rests on -- none of which had ever run against a real
+// Zenodo.
+//
+// ORDER MATTERS: gate E fills the record to its 100-file cap, so it runs LAST.
+// Anything that needs room to write must come before it.
 
+import { Readable } from "node:stream";
 import { zenodoProvider } from "../functions/lib/providers/zenodo.js";
 
 const token = process.env.ZENODO_TOKEN;
@@ -182,6 +192,146 @@ async function main() {
     );
   }
 
+  // ---- Gate F: does deleteFile actually delete, and what does a repeat say? -
+  // Compaction deletes the loose originals once their archive is verified, and
+  // it RESUMES an interrupted pass by re-deleting whatever is still there. The
+  // adapter therefore reports a 404 as SUCCESS on purpose. If Zenodo answers a
+  // delete-of-a-missing-key with something else, that resume path stops being
+  // idempotent and a half-finished pass wedges.
+  {
+    const body = payload("gate-f");
+    await zenodoProvider.writeSessionFile(auth, container, "gate-f.json", body, meta(body));
+    const before = (await zenodoProvider.listFiles(auth, container)).some((f) => f.name === "gate-f.json");
+
+    const del = await zenodoProvider.deleteFile(auth, container, { name: "gate-f.json" });
+    const after = (await zenodoProvider.listFiles(auth, container)).some((f) => f.name === "gate-f.json");
+
+    // Raw call, because the adapter deliberately hides this status. The point
+    // of the gate is to learn what Zenodo really returns, not what we map it to.
+    const rawRepeat = await fetch(`${container.bucketUrl}/gate-f.json`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const mappedRepeat = await zenodoProvider.deleteFile(auth, container, { name: "gate-f.json" });
+
+    const ok = before && del.success && !after && mappedRepeat.success;
+    record(
+      "F. deleteFile",
+      ok ? "PASS" : "FAIL",
+      `present-before=${before} delete.success=${del.success}` +
+        (del.success ? "" : ` (${del.providerStatus} "${del.providerMessage}" -> ${del.error})`) +
+        ` gone-after=${!after}; ` +
+        `repeat delete raw status=${rawRepeat.status} -> adapter reports success=${mappedRepeat.success}` +
+        (mappedRepeat.success ? "" : "  <-- resume path is NOT idempotent")
+    );
+  }
+
+  // ---- Gate G: can the bucket PUT take a STREAMED body? ------------------
+  // The least-proven path in the whole feature, and finalization depends on it
+  // entirely: the merged archive is streamed so its size is bounded by Zenodo's
+  // 50 GB per-file limit rather than by function memory. Verified so far only
+  // against a local Express mock.
+  //
+  // Three separate questions, and a partial answer is still a failure:
+  //   1. does undici accept the stream at all (duplex: "half")
+  //   2. do the stored bytes match what we sent
+  //   3. does the response still carry the checksum -- compaction refuses to
+  //      delete originals without one, so no checksum means no finalization
+  {
+    const CHUNK = 64 * 1024;
+    const streamed = Buffer.alloc(2 * 1024 * 1024);
+    for (let i = 0; i < streamed.length; i++) streamed[i] = (i * 31 + 7) & 0xff;
+
+    async function* chunks() {
+      for (let off = 0; off < streamed.length; off += CHUNK) {
+        yield streamed.subarray(off, Math.min(off + CHUNK, streamed.length));
+      }
+    }
+
+    let verdict = "FAIL";
+    let detail;
+    try {
+      const w = await zenodoProvider.writeStreamedFile(
+        auth,
+        container,
+        "gate-g.bin",
+        Readable.from(chunks()),
+        streamed.length,
+        { size: streamed.length, contentType: "application/zip" }
+      );
+      if (!w.success) {
+        detail = `stream upload REFUSED: ${w.providerStatus} "${w.providerMessage}" -> ${w.error}`;
+      } else {
+        const back = await zenodoProvider.downloadFileBytes(auth, container, { name: "gate-g.bin" });
+        const identical = back.success && Buffer.compare(back.content, streamed) === 0;
+        const hasChecksum = !!w.fileRef.checksum;
+        verdict = identical && hasChecksum ? "PASS" : "FAIL";
+        detail =
+          `uploaded ${streamed.length} bytes in ${CHUNK}-byte chunks; ` +
+          `bytes-identical=${identical} checksum=${w.fileRef.checksum ?? "ABSENT"}` +
+          (hasChecksum ? "" : "  <-- no checksum means compaction can never authorize a delete");
+      }
+    } catch (e) {
+      detail = `stream upload THREW: ${e instanceof Error ? e.message : e}`;
+    }
+    record("G. writeStreamedFile", verdict, detail);
+  }
+
+  // ---- Gate H: are binary bytes preserved on the way back? ---------------
+  // downloadFileBytes exists precisely because downloadFile decodes as UTF-8,
+  // which replaces every invalid sequence with U+FFFD. Compaction reads members
+  // back to build an archive and then deletes the originals, so a lossy read
+  // is silent, permanent corruption. This gate demonstrates the difference
+  // rather than asserting it, so the reason the method exists stays visible.
+  {
+    const raw = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe, 0x00, 0x01, 0x80, 0xc0, 0xfd]);
+    await zenodoProvider.writeSessionFile(auth, container, "gate-h.bin", raw, {
+      size: raw.length,
+      contentType: "application/octet-stream",
+    });
+
+    const bytes = await zenodoProvider.downloadFileBytes(auth, container, { name: "gate-h.bin" });
+    const text = await zenodoProvider.downloadFile(auth, container, { name: "gate-h.bin" });
+
+    const exact = bytes.success && Buffer.compare(bytes.content, raw) === 0;
+    const textLossy = !text.success || Buffer.compare(Buffer.from(text.content, "utf8"), raw) !== 0;
+
+    record(
+      "H. downloadFileBytes",
+      exact ? "PASS" : "FAIL",
+      `bytes-identical=${exact}; downloadFile (text) lossy-as-expected=${textLossy}` +
+        (exact ? "" : "  <-- binary round trip is corrupting data")
+    );
+  }
+
+  // ---- Gate I: is the listing checksum the same shape as the PUT's? ------
+  // The quietest failure in the feature. A bucket PUT reports "md5:<hex>".
+  // Compaction's crash-resume re-reads the checksum from the LISTING endpoint
+  // and compares it to the md5 it recorded before uploading. If the two
+  // endpoints disagree on format, that comparison never matches, so every
+  // interrupted pass silently discards its archive and rebuilds from scratch
+  // instead of resuming -- no error, no failed write, nothing in the logs.
+  {
+    const body = payload("gate-i");
+    const w = await zenodoProvider.writeSessionFile(auth, container, "gate-i.json", body, meta(body));
+    const listed = (await zenodoProvider.listFiles(auth, container)).find((f) => f.name === "gate-i.json");
+
+    const putSum = w.success ? w.fileRef.checksum : undefined;
+    const listSum = listed?.checksum;
+    // Mirrors checksumMatches in compaction.ts, reimplemented rather than
+    // imported so this script stays free of firebase-admin.
+    const norm = (v) => (v ?? "").trim().toLowerCase().replace(/^md5:/, "");
+    const comparable = !!putSum && !!listSum && norm(putSum) === norm(listSum);
+
+    record(
+      "I. checksum format",
+      comparable ? "PASS" : "FAIL",
+      `PUT reports "${putSum ?? "ABSENT"}", listing reports "${listSum ?? "ABSENT"}"; ` +
+        `comparable after normalisation=${comparable}` +
+        (comparable ? "" : "  <-- crash-resume will never match and will always rebuild")
+    );
+  }
+
   // ---- Gate E (opt-in): what happens at the 101st file? -----------------
   // Confirms the cap is real and that the adapter maps the refusal to
   // QUOTA_EXCEEDED rather than a generic UNAVAILABLE -- the queue treats
@@ -207,6 +357,7 @@ async function main() {
   } else {
     console.log("\n[SKIP] E. 100-file cap (set ZENODO_CAP_TEST=1 to run)");
   }
+
 
   // ---- cleanup ----------------------------------------------------------
   if (cleanup) {
