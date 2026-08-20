@@ -136,12 +136,24 @@ async function main() {
   // when the data has no nested columns, so this is ~39 submissions -- but it
   // polls rather than assuming, because sidecar count depends on the data.
   const archived = [];
+  const queued = [];
   let submitted = 1;
   let sawArchive = null;
   for (let i = 2; i <= MAX_SUBMISSIONS; i++) {
     const name = `live-${stamp}-${i}.json`;
     const r = await submit(name, sample(i));
     submitted++;
+    if (r.status === 202) {
+      // NOT a failure. A compaction pass holds a lease that diverts live
+      // submissions into the durable queue, precisely so the file count cannot
+      // move while the pass decides what to archive. The participant is
+      // unaffected -- the payload is in Cloud Storage before this returns.
+      // What matters is that it later LANDS, which is checked after the run.
+      queued.push(name);
+      process.stdout.write("q");
+      await sleep(250);
+      continue;
+    }
     if (r.status !== 201) {
       record("3. load", "FAIL", `submission ${i} returned HTTP ${r.status} ${JSON.stringify(r.body).slice(0, 120)}`);
       break;
@@ -209,6 +221,30 @@ async function main() {
           (dup.status === 201 ? "  <-- ACCEPTED. Sealed claims are not working; this is data loss." : "")
       );
     }
+  }
+
+  // ---- 5b. did everything the gate diverted actually land? --------------
+  // Uses no credentials: resubmitting a filename that was successfully stored
+  // must be REJECTED as a duplicate. A 201 here would mean the queued payload
+  // never made it and the name is free again -- silent data loss.
+  if (queued.length > 0) {
+    console.log(`\n  ${queued.length} submission(s) were diverted to the queue; waiting for the retry worker...`);
+    // The retry worker runs on a 5-minute cadence and these sit on the
+    // 60-second fast tier, so this is a wait, not a poll-forever.
+    await sleep(6 * 60 * 1000);
+    const lost = [];
+    for (const name of queued) {
+      const again = await submit(name, sample(0));
+      if (again.status !== 400) lost.push(`${name} -> HTTP ${again.status}`);
+      await sleep(250);
+    }
+    record(
+      "5b. diverted submissions landed",
+      lost.length === 0 ? "PASS" : "FAIL",
+      lost.length === 0
+        ? `all ${queued.length} queued submission(s) are now stored (resubmission rejected as duplicate)`
+        : `NOT stored: ${lost.join("; ")}  <-- queued data was lost`
+    );
   }
 
   // ---- 6. finalize ------------------------------------------------------
