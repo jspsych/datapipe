@@ -390,15 +390,20 @@ describe("F1. the full merge", () => {
     expect(result.archived).toBe(5);
 
     const entries = readZipEntries(finalArchiveBytes());
-    // 3 (batch1) + 2 (batch2) + 2 loose + .psychds-ignore = 8 exploded entries.
-    expect(entries.size).toBe(8);
+    // 3 (batch1) + 2 (batch2) + 2 loose + .psychds-ignore + the descriptor
+    // = 9 exploded entries. Note `archived` above is 5 and this is 9: the
+    // first counts top-level provider files REMOVED, the second counts what
+    // ends up inside the archive -- and the descriptor is in the archive
+    // without being removed.
+    expect(entries.size).toBe(9);
     for (let i = 1; i <= 7; i += 1) {
       expect(entries.has(`data/raw/subject-${i}.json`)).toBe(true);
     }
     expect(entries.has(".psychds-ignore")).toBe(true);
-    // The record's descriptor is excluded from the merge and never appears
-    // inside the archive.
-    expect(entries.has("dataset_description.json")).toBe(false);
+    // The descriptor IS inside the archive: Psych-DS requires it at the
+    // dataset root, and the archive is the dataset (it is the only place the
+    // data/raw/... tree exists). See F11.
+    expect(entries.has("dataset_description.json")).toBe(true);
   });
 
   it("leaves dataset_description.json loose and moves .psychds-ignore inside the archive", async () => {
@@ -1035,5 +1040,53 @@ describe("F10. archive-too-large", () => {
     const expData = (await db.collection("experiments").doc(experimentID).get()).data();
     expect(expData.finalized).not.toBe(true);
     expect(expData.compaction?.compactingUntil).toBeUndefined();
+  });
+});
+
+describe("F11. the merged archive is a valid Psych-DS dataset on its own", () => {
+  // Caught by inspecting a real finalized deposition. The archive contained
+  // the whole data/raw/... tree but NO dataset_description.json, because
+  // finalization excluded it to leave a descriptor visible on the record.
+  //
+  // That produced an artifact valid in neither view: the zip was not a
+  // Psych-DS dataset (the spec requires the descriptor at the dataset root)
+  // and neither was the record around it, whose data is sealed inside a zip.
+  // Half the spec met by unzipping and half by not.
+
+  it("contains dataset_description.json at the archive root", async () => {
+    const { experimentID } = await seedFinalizableExperiment();
+
+    const result = await finalizeExperiment(experimentID);
+    expect(result.status).toBe("finalized");
+
+    const entries = readZipEntries(finalArchiveBytes());
+    expect([...entries.keys()]).toContain("dataset_description.json");
+    // And it is the real descriptor, not an empty placeholder.
+    expect(JSON.parse(entries.get("dataset_description.json").toString("utf8"))).toBeTruthy();
+  });
+
+  it("also leaves a copy loose on the record", async () => {
+    // Both, not either. A visitor should see a descriptor without downloading
+    // an archive, and metadata-block.ts holds a metadataFileRef to that
+    // object.
+    const { experimentID } = await seedFinalizableExperiment();
+    await finalizeExperiment(experimentID);
+
+    expect(mock.has("dataset_description.json")).toBe(true);
+    expect(mock.keys().sort()).toEqual(["dataset_description.json", "datapipe-final.zip"].sort());
+  });
+
+  it("the two copies are identical, since nothing can update either afterwards", async () => {
+    // Duplication is only safe because finalization is terminal. If the
+    // experiment could still accept submissions, metadata-block.ts would
+    // update the loose copy and the archived one would silently go stale.
+    const { experimentID } = await seedFinalizableExperiment();
+    const before = mock.get("dataset_description.json").toString("utf8");
+
+    await finalizeExperiment(experimentID);
+
+    const entries = readZipEntries(finalArchiveBytes());
+    expect(entries.get("dataset_description.json").toString("utf8")).toBe(before);
+    expect(mock.get("dataset_description.json").toString("utf8")).toBe(before);
   });
 });

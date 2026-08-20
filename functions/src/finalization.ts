@@ -54,13 +54,27 @@ import {
 // there is never more than one merged archive to name.
 const FINAL_ARCHIVE_NAME = "datapipe-final.zip";
 
-// The only file finalization ever leaves loose. Same reason compaction never
-// sweeps it into a batch (see NEVER_ARCHIVE in compaction.ts): it is the
-// record's live Psych-DS descriptor, and metadata-block.ts holds a
-// metadataFileRef to it that a buried copy would break. Everything else --
-// every batch archive, every loose session file, and .psychds-ignore -- is a
-// member of the merge.
-const EXCLUDE_FROM_MERGE = new Set(["dataset_description.json"]);
+// dataset_description.json goes INSIDE the merged archive AND stays loose on
+// the record. Both, deliberately.
+//
+// Inside, because Psych-DS requires it at the dataset root. The merged archive
+// IS the dataset -- it is the only place the data/raw/... tree exists, since
+// Zenodo cannot store a slash in a key. An archive without the descriptor is
+// not a valid Psych-DS dataset, and neither is the record around it, whose
+// data is sealed in a zip. Leaving it only on the outside produced an artifact
+// that validated in neither view: half the spec met by unzipping and half by
+// not.
+//
+// Loose, because the record should still show a human-readable descriptor
+// without anyone downloading an archive, and because metadata-block.ts holds a
+// metadataFileRef to that object.
+//
+// Duplicating it is safe here specifically because finalization is TERMINAL:
+// the experiment stops accepting submissions, so nothing can update one copy
+// and leave the other stale. That would not be safe during collection, which
+// is why compaction still keeps it strictly out of its batches
+// (NEVER_ARCHIVE in compaction.ts).
+const KEEP_LOOSE_AFTER_MERGE = new Set(["dataset_description.json"]);
 
 export interface FinalizationResult {
   // Carried on every result the same way CompactionResult carries it, so log
@@ -245,9 +259,12 @@ async function runFinalization(experimentID: string): Promise<Omit<FinalizationR
       };
     }
 
-    const members = files.filter((file) => !EXCLUDE_FROM_MERGE.has(file.name));
+    // Everything goes into the archive; only some of it is then removed from
+    // the record. See KEEP_LOOSE_AFTER_MERGE.
+    const members = files;
+    const removable = files.filter((file) => !KEEP_LOOSE_AFTER_MERGE.has(file.name));
 
-    if (members.length === 0) {
+    if (removable.length === 0) {
       // Nothing was ever collected beyond the descriptor -- finalizing is
       // still the correct terminal state (the study is over either way), just
       // with no archive to build.
@@ -289,7 +306,10 @@ async function runFinalization(experimentID: string): Promise<Omit<FinalizationR
       return { status: "archive-too-large", detail };
     }
 
-    const memberHashes = members.map((file) => claimDocId(salt, file.name));
+    // Hashes cover only what is actually leaving the listing. The descriptor
+    // stays loose, so a cold cache still rehydrates its claim normally and it
+    // needs no sealing.
+    const memberHashes = removable.map((file) => claimDocId(salt, file.name));
     const runRef = finalizationRunRef(experimentID);
 
     // Recorded BEFORE the provider upload -- this is the crash-safety hinge.
@@ -303,7 +323,7 @@ async function runFinalization(experimentID: string): Promise<Omit<FinalizationR
       status: "uploading",
       memberHashes,
       expectedMd5: build.md5,
-      fileCount: members.length,
+      fileCount: removable.length,
       createdAt: Timestamp.now(),
     });
 
@@ -317,12 +337,12 @@ async function runFinalization(experimentID: string): Promise<Omit<FinalizationR
 
     // Everything in the merge is now inside a verified archive on the
     // provider, so the originals can go.
-    await sealAndDeleteMembers(experimentID, provider, auth, container, runRef, memberHashes, members);
+    await sealAndDeleteMembers(experimentID, provider, auth, container, runRef, memberHashes, removable);
     await deleteStorageObject(storagePath);
 
     await markFinalized(experimentID, sessionsSeen);
 
-    return { status: "finalized", archived: members.length, archiveName: FINAL_ARCHIVE_NAME };
+    return { status: "finalized", archived: removable.length, archiveName: FINAL_ARCHIVE_NAME };
   } catch (e) {
     const detail = e instanceof Error ? e.message : String(e);
     await releaseLease(experimentID, sessionsSeen, { "compaction.lastError": detail }).catch(() => undefined);

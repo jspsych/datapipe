@@ -20,8 +20,18 @@ files into ONE archive carrying the full Psych-DS tree, leaving
    be triggered by our own memory ceiling — see Phase 2.
 3. **`.psychds-ignore` goes INSIDE the final archive** and its loose copy is
    deleted. Nothing regenerates it once submissions stop.
-   `dataset_description.json` stays loose so the record still shows a
-   descriptor.
+   **`dataset_description.json` goes inside the archive AND stays loose.**
+   Corrected 2026-08-20 after inspecting a real finalized deposition: the
+   original "stays loose only" rule left the archive with no descriptor at all,
+   so the zip was not a valid Psych-DS dataset (the spec requires it at the
+   dataset root) and neither was the record around it, whose data is sealed in
+   a zip — half the spec met by unzipping and half by not. It is inside because
+   the archive IS the dataset, the only place the `data/raw/...` tree exists;
+   it is also loose so the record shows a human-readable descriptor and
+   metadata-block.ts's `metadataFileRef` still resolves. Duplicating it is safe
+   only because finalization is terminal — nothing can update one copy and
+   leave the other stale, which is why compaction still keeps it strictly out
+   of its batches during collection.
 4. **Publishing / minting a DOI is out of scope.** Irreversible, and the
    researcher's call.
 
