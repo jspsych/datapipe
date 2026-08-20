@@ -203,6 +203,14 @@ runs as part of `firebase emulators:exec`, so this is testable locally.
   compaction/finalization queries. The Firestore emulator does not enforce
   composite indexes, so the suite passes without them and only a deploy proves
   the query shapes match.
+
+  Note the CI deploy (`.github/workflows/firebase-deploy-test.yml`) runs
+  `firebase deploy --only firestore,functions,hosting`, so indexes and rules DO
+  go out — but `deploy` only SUBMITS index definitions and the builds run
+  asynchronously for minutes afterwards, with the new functions already live.
+  Any query needing a still-building index fails with FAILED_PRECONDITION in
+  that window. `releaseHeldUploads` is wrapped for exactly this reason; check
+  new index-dependent queries against the same hazard before adding them.
 - **The Cloud Tasks queue.** `firebase deploy` provisions a queue for an
   `onTaskDispatched` function, but that has not been exercised here. Confirm
   `finalizetask`'s queue exists and that `apiFinalize` can enqueue to it in the

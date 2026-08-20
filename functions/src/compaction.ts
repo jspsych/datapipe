@@ -429,7 +429,29 @@ export async function compactExperiment(experimentID: string): Promise<Compactio
   // nothing to do, or failed, has still released its lease, so anything held
   // for it should stop waiting.
   if (result.status !== "leased-elsewhere") {
-    await releaseHeldUploads(experimentID);
+    // Best-effort, and deliberately NOT allowed to fail the caller. This is an
+    // accelerator: the entries it releases are already on the 60-second fast
+    // tier (CONTENTION) or will be retried anyway (QUOTA_EXCEEDED), so losing
+    // it costs a slightly slower drain and nothing else.
+    //
+    // The motivating case is a deploy. This query needs a composite index, and
+    // `firebase deploy` only SUBMITS index definitions -- builds run
+    // asynchronously for minutes afterwards while the new functions are
+    // already live. An unguarded throw here would propagate out of
+    // compactExperiment, fail the Firestore trigger that called it, and get
+    // retried for up to seven days -- on every experiment-document update for
+    // every capped-provider experiment near the watermark, for the whole build
+    // window. The compaction itself has already completed and committed by
+    // this point, so there is nothing to roll back and nothing to gain from
+    // failing loudly.
+    try {
+      await releaseHeldUploads(experimentID);
+    } catch (e) {
+      console.error(
+        `compaction: could not release held uploads for ${experimentID} (they will drain on their own): `,
+        e instanceof Error ? e.message : e
+      );
+    }
   }
 
   return result;
