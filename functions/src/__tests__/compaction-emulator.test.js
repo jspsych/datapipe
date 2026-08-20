@@ -1107,3 +1107,74 @@ describe("C10. the write gate", () => {
     await db.collection("uploadQueue").doc(queueDocId).delete();
   });
 });
+
+describe("C11. a no-work check must not hold the lease", () => {
+  // Regression for a live failure (2026-08-20). compactExperiment is called
+  // from a Firestore trigger on EVERY submission, and it used to acquire the
+  // lease before deciding whether there was anything to do -- holding it
+  // across a token resolve and a provider listing. Because the lease is what
+  // makes compaction-gate.ts divert submissions into the upload queue, live
+  // participants started getting 202-queued with "Compaction in progress"
+  // while the record sat at ~22 of 100 files and nothing was being compacted.
+  //
+  // Emulator tests missed it because they call compactExperiment sequentially,
+  // so nothing ever races a no-op check.
+
+  it("leaves no lease behind when there is nothing to compact", async () => {
+    const { experimentID } = await seedExperiment({ sessionCount: 20 });
+
+    const result = await compactExperiment(experimentID);
+    expect(result.status).toBe("below-watermark");
+
+    const after = (await db.collection("experiments").doc(experimentID).get()).data();
+    expect(after.compaction.compactingUntil).toBeUndefined();
+    // It still records what it saw, so the trigger's cheap pre-filter converges.
+    expect(after.compaction.lastFileCount).toBe(22);
+    expect(after.compaction.sessionsAtLastCheck).toBe(20);
+  });
+
+  it("does not close the write gate while merely checking", async () => {
+    // The property that actually matters to a participant: a submission
+    // arriving during a no-work check must still be written, not queued.
+    const { experimentID } = await seedExperiment({ sessionCount: 20 });
+    const expRef = db.collection("experiments").doc(experimentID);
+
+    const gateClosedDuringCheck = [];
+    // Poll the gate while the check runs. isCompactionInFlight reads exactly
+    // this field, so sampling it is sampling what api-data.ts would decide.
+    const poller = setInterval(async () => {
+      const snap = await expRef.get();
+      const until = snap.data()?.compaction?.compactingUntil;
+      if (until && until.toMillis() > Date.now()) gateClosedDuringCheck.push(true);
+    }, 15);
+
+    await compactExperiment(experimentID);
+    clearInterval(poller);
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(gateClosedDuringCheck).toHaveLength(0);
+  });
+
+  it("still takes the lease when there IS work", async () => {
+    // The guard must not have been achieved by never leasing at all -- a real
+    // pass has to close the gate, or submissions would land mid-compaction.
+    const { experimentID } = await seedExperiment();
+    const expRef = db.collection("experiments").doc(experimentID);
+
+    let sawLease = false;
+    const poller = setInterval(async () => {
+      const snap = await expRef.get();
+      const until = snap.data()?.compaction?.compactingUntil;
+      if (until && until.toMillis() > Date.now()) sawLease = true;
+    }, 15);
+
+    const result = await compactExperiment(experimentID);
+    clearInterval(poller);
+
+    expect(result.status).toBe("compacted");
+    expect(sawLease).toBe(true);
+    // ...and released afterwards.
+    const after = (await expRef.get()).data();
+    expect(after.compaction.compactingUntil).toBeUndefined();
+  });
+});

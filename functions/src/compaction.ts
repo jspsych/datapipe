@@ -379,6 +379,25 @@ export async function acquireLease(experimentID: string): Promise<boolean> {
 }
 
 /**
+ * Records that an experiment was examined, without touching the lease.
+ *
+ * Deliberately not releaseLease with an empty patch: that clears
+ * compactingUntil, which on the no-work path would cancel a lease this call
+ * never owned.
+ */
+async function noteCheck(
+  experimentID: string,
+  sessionsSeen: number,
+  fileCount: number
+): Promise<void> {
+  await experimentRef(experimentID).update({
+    "compaction.lastCheckedAt": Timestamp.now(),
+    "compaction.sessionsAtLastCheck": sessionsSeen,
+    "compaction.lastFileCount": fileCount,
+  });
+}
+
+/**
  * Ends a pass, recording what it observed.
  *
  * `sessionsSeen` is what makes the scheduled worker's change trigger work: it
@@ -538,24 +557,57 @@ async function runCompaction(experimentID: string): Promise<Omit<CompactionResul
     return { status: "nothing-to-archive", detail: "experiment has no collision-cache salt" };
   }
 
+  // SURVEY FIRST, AND WITHOUT THE LEASE.
+  //
+  // The lease is not a "I am looking at this experiment" marker -- it is what
+  // makes compaction-gate.ts divert live submissions into the upload queue.
+  // Holding it to decide whether there is any work therefore charges every
+  // participant for a question whose answer is almost always "no".
+  //
+  // That is not theoretical: this function is called from a Firestore trigger
+  // on EVERY submission, and it used to take the lease before resolving a
+  // token and listing the provider's files. Live run 2026-08-20, an
+  // experiment sitting at ~22 of 100 files: submissions started coming back
+  // 202-queued with failureReason "Compaction in progress" while nothing was
+  // being compacted at all. No data was lost -- that is what the queue is for
+  // -- but participants were being told to wait on a no-op.
+  //
+  // So everything up to the decision is read-only and lease-free. The lease is
+  // taken only once there is genuinely something to do.
+  const userSnap = await db.collection("users").doc(expData.owner).get();
+  if (!userSnap.exists) {
+    return { status: "failed", detail: "owner record missing" };
+  }
+  const tokenResult = await resolveToken(userSnap.data() as UserData, expData);
+  if (!tokenResult.success) {
+    return { status: "failed", detail: `token resolution failed: ${tokenResult.error}` };
+  }
+  const auth: ResolvedAuth = { token: tokenResult.token, serverUrl: tokenResult.serverUrl };
+  const container = expData.providerContainer as ContainerRef;
+
+  const survey = await provider.listFiles(auth, container);
+
+  // An interrupted pass has to be finished even below the watermark, and
+  // finishing it mutates state -- so that path always needs the lease.
+  const interrupted = !(
+    await batchesCollection(experimentID).where("status", "==", "uploading").limit(1).get()
+  ).empty;
+
+  if (!interrupted && survey.length < Math.floor(cap * WATERMARK_RATIO)) {
+    // Recorded WITHOUT releaseLease: that helper clears compactingUntil, and
+    // calling it here would stomp a lease belonging to somebody else's pass.
+    await noteCheck(experimentID, sessionsSeen, survey.length);
+    return { status: "below-watermark", fileCountBefore: survey.length };
+  }
+
   if (!(await acquireLease(experimentID))) {
     return { status: "leased-elsewhere" };
   }
 
   try {
-    const userSnap = await db.collection("users").doc(expData.owner).get();
-    if (!userSnap.exists) {
-      await releaseLease(experimentID, sessionsSeen);
-      return { status: "failed", detail: "owner record missing" };
-    }
-    const tokenResult = await resolveToken(userSnap.data() as UserData, expData);
-    if (!tokenResult.success) {
-      await releaseLease(experimentID, sessionsSeen, { "compaction.lastError": tokenResult.error });
-      return { status: "failed", detail: `token resolution failed: ${tokenResult.error}` };
-    }
-    const auth: ResolvedAuth = { token: tokenResult.token, serverUrl: tokenResult.serverUrl };
-    const container = expData.providerContainer as ContainerRef;
-
+    // Re-listed under the lease. The survey above was taken without one, so
+    // submissions could have landed in between; every decision from here on
+    // has to be made against state that can no longer move.
     const files = await provider.listFiles(auth, container);
 
     // Resume before anything else: an interrupted pass left an archive that
