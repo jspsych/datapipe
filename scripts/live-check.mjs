@@ -15,7 +15,8 @@
 //   DEPOSITION_ID   (optional) required with ZENODO_TOKEN
 //   ZENODO_SERVER   (default https://sandbox.zenodo.org)
 //   ID_TOKEN        (optional) Firebase ID token -- enables the finalize phase
-//   MAX_SUBMISSIONS (default 60) safety stop
+//   REQUIRED_FIELDS (default trial_type) must match the experiment's setting
+//   MAX_SUBMISSIONS (default 100) safety stop
 //
 // Without ZENODO_TOKEN this still proves the load path, duplicate rejection
 // after archiving, and post-finalization rejection -- all observable from the
@@ -30,7 +31,7 @@ const ZTOKEN = process.env.ZENODO_TOKEN;
 const DEPOSITION = process.env.DEPOSITION_ID;
 const ZSERVER = process.env.ZENODO_SERVER || "https://sandbox.zenodo.org";
 const ID_TOKEN = process.env.ID_TOKEN;
-const MAX_SUBMISSIONS = Number(process.env.MAX_SUBMISSIONS || 60);
+const MAX_SUBMISSIONS = Number(process.env.MAX_SUBMISSIONS || 100);
 
 if (!EXP) {
   console.error("EXPERIMENT_ID is required. See the header of this file.");
@@ -44,6 +45,19 @@ const record = (step, verdict, detail) => {
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const stamp = Date.now().toString(36);
+
+// Rows must satisfy the experiment's requiredFields when useValidation is on,
+// or /api/data rejects the submission before the provider is ever touched --
+// which would look like a write-path failure rather than a fixture problem.
+// Comma-separated, matching the experiment's own setting.
+const REQUIRED = (process.env.REQUIRED_FIELDS || "trial_type")
+  .split(",").map((f) => f.trim()).filter(Boolean);
+const row = (i) => {
+  const r = { trial_index: i, rt: 400 + i };
+  for (const f of REQUIRED) r[f] = r[f] ?? `probe-${f}`;
+  return r;
+};
+const sample = (i) => JSON.stringify([row(i)]);
 
 async function submit(filename, data) {
   const res = await fetch(`${BASE}/api/data`, {
@@ -94,7 +108,7 @@ async function main() {
   // signal is noise. Also the first evidence the compaction trigger fires --
   // it runs on the experiment document update this causes.
   const before = await listDeposition();
-  const first = await submit(`live-${stamp}-1.json`, JSON.stringify([{ trial: 1, rt: 401 }]));
+  const first = await submit(`live-${stamp}-1.json`, sample(1));
   record(
     "1. single submission",
     first.status === 201 ? "PASS" : "FAIL",
@@ -126,7 +140,7 @@ async function main() {
   let sawArchive = null;
   for (let i = 2; i <= MAX_SUBMISSIONS; i++) {
     const name = `live-${stamp}-${i}.json`;
-    const r = await submit(name, JSON.stringify([{ trial: 1, rt: 400 + i }]));
+    const r = await submit(name, sample(i));
     submitted++;
     if (r.status !== 201) {
       record("3. load", "FAIL", `submission ${i} returned HTTP ${r.status} ${JSON.stringify(r.body).slice(0, 120)}`);
@@ -187,7 +201,7 @@ async function main() {
     const loose = sawArchive.files;
     const gone = archived.find((n) => !loose.includes(n));
     if (gone) {
-      const dup = await submit(gone, JSON.stringify([{ trial: 1 }]));
+      const dup = await submit(gone, sample(0));
       record(
         "5. duplicate rejected after archiving",
         dup.status === 400 ? "PASS" : "FAIL",
@@ -213,7 +227,7 @@ async function main() {
 
     if (res.status === 202) {
       await sleep(60000);
-      const post = await submit(`live-${stamp}-after-final.json`, JSON.stringify([{ trial: 1 }]));
+      const post = await submit(`live-${stamp}-after-final.json`, sample(0));
       record(
         "7. finalized experiment rejects submissions",
         post.status === 400 ? "PASS" : "FAIL",
