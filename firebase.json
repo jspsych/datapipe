@@ -81,6 +81,10 @@
       {
         "source": "/api/deleteaccount",
         "function": "deleteaccount"
+      },
+      {
+        "source": "/api/finalize",
+        "function": "apifinalize"
       }
     ]
   },

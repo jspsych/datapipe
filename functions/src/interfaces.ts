@@ -27,6 +27,75 @@ export interface ExperimentData {
     providerContainer?: ContainerRef;
     metadataFileRef?: FileRef | null;
     collisionCache?: CollisionCacheState;
+    compaction?: CompactionState;
+    // Set once, permanently, by finalization.ts (docs/finalization-spec.md).
+    // Checked by api-data.ts / api-base64.ts to reject submissions after the
+    // fact -- a session landing after this point would sit outside the merged
+    // archive and quietly make the record non-Psych-DS again. There is no
+    // un-finalize: firestore.rules (Phase 4) is what stops a client from
+    // clearing this through the client SDK; the admin-only write path here is
+    // the only place it is ever set.
+    finalized?: boolean;
+    finalizedAt?: FirebaseFirestore.Timestamp;
+    // Progress surface for the split apiFinalize/finalizeTask pair
+    // (functions/src/api-finalize.ts, Phase 4 of docs/finalization-spec.md).
+    // Written by admin-SDK code only -- firestore.rules blocks a client write
+    // to this field the same way it blocks `finalized` itself, for the same
+    // reason: a researcher forging "finalized" progress here would be
+    // indistinguishable, to the dashboard poller, from a real pass.
+    finalization?: FinalizationState;
+  }
+
+  // experiments/{id}.finalization. `status` starts at "queued" the moment
+  // apiFinalize enqueues the Cloud Task and ends at one of
+  // FinalizationResult's status values (finalization.ts) once finalizeTask's
+  // call to finalizeExperiment returns -- "queued" and "running" are the only
+  // two values that do not also appear on FinalizationResult. Kept as a
+  // sibling map to `compaction` above (same experiment doc, same
+  // Timestamp-and-detail shape) rather than folded into it: compaction is a
+  // recurring background pass with no client-visible "in progress" state to
+  // poll, while finalization is a one-shot, user-triggered action whose whole
+  // point is that the dashboard has something to poll.
+  export interface FinalizationState {
+    status:
+      | "queued"
+      | "running"
+      | "finalized"
+      | "already-finalized"
+      | "not-eligible"
+      | "leased-elsewhere"
+      | "nothing-to-archive"
+      | "queued-uploads-pending"
+      | "archive-too-large"
+      | "failed";
+    startedAt?: FirebaseFirestore.Timestamp;
+    finishedAt?: FirebaseFirestore.Timestamp;
+    // Human-readable detail carried over from FinalizationResult.detail (or,
+    // for a status this module produces itself -- "failed" from an uncaught
+    // exception -- an equivalent message). Absent on "queued"/"running" and on
+    // the plain "finalized" success case, which needs no further explanation.
+    detail?: string;
+  }
+
+  // experiments/{id}.compaction (additive; absent until the first pass looks
+  // at this experiment). Per-batch membership lives in the compactionBatches
+  // subcollection rather than here — see functions/src/compaction.ts.
+  export interface CompactionState {
+    // Held for the duration of a pass so two never overlap; cleared on
+    // completion. Same lease shape as CollisionCacheState.rehydratingUntil.
+    compactingUntil?: FirebaseFirestore.Timestamp;
+    // Set on every pass, including one that found nothing to do.
+    lastCheckedAt?: FirebaseFirestore.Timestamp;
+    // The experiment's `sessions` value when that pass began. This is the
+    // scheduled worker's change trigger: it re-examines an experiment when
+    // this no longer matches the live count, instead of polling on a timer.
+    sessionsAtLastCheck?: number;
+    // How many files the provider held at the end of the last pass.
+    // Diagnostic only — nothing branches on it.
+    lastFileCount?: number;
+    // Set only when files were actually archived.
+    lastRunAt?: FirebaseFirestore.Timestamp;
+    lastError?: string;
   }
 
   export interface UserData {

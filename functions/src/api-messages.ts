@@ -11,6 +11,10 @@ const MESSAGES = {
     error: "BASE64DATA_COLLECTION_NOT_ACTIVE",
     message: "Base64 data collection is not active for this experiment",
   },
+  EXPERIMENT_FINALIZED: {
+    error: "EXPERIMENT_FINALIZED",
+    message: "This experiment has been finalized and no longer accepts submissions",
+  },
   CONDITION_ASSIGNMENT_NOT_ACTIVE: {
     error: "CONDITION_ASSIGNMENT_NOT_ACTIVE",
     message: "Condition assignment is not active for this experiment",

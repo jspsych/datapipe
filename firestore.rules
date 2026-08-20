@@ -27,11 +27,34 @@ service cloud.firestore {
       function baseFields() {
         return request.resource.data.keys().hasAll(['active', 'activeBase64', 'activeConditionAssignment', 'id', 'owner', 'title', 'sessions', 'nConditions', 'currentCondition', 'useValidation', 'allowJSON', 'allowCSV', 'requiredFields', 'maxSessions', 'limitSessions'])
       }
+      // Finalization is PERMANENT (docs/finalization-spec.md, decision 1):
+      // finalized/finalizedAt/finalization are written only by admin-SDK code
+      // (api-finalize.ts / finalization.ts), which never goes through these
+      // rules at all. This is what stops the CLIENT SDK path from doing it
+      // instead -- diff().affectedKeys() flags a key the instant a write
+      // would add, change, OR remove it, so this blocks every direction at
+      // once: clearing `finalized` back to false to keep submitting after the
+      // loose files are gone, and setting it early to forge a finalized state
+      // that was never actually merged.
+      //
+      // `compaction` and `collisionCache` are listed for a different but
+      // equally concrete reason: both are server-managed maps holding
+      // Timestamps that server code calls .toMillis() on directly, and
+      // compaction.compactingUntil is read on the participant SUBMISSION path
+      // (compaction-gate.ts). A client writing a non-Timestamp there would
+      // have broken every submission to that experiment. The gate is now
+      // defensive about that too, but the field has no business being
+      // client-writable in the first place. Verified no client code writes
+      // either map.
+      function serverManagedFieldsUntouched() {
+        return !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['finalized', 'finalizedAt', 'finalization', 'compaction', 'collisionCache']);
+      }
       // UPDATE shape: legacy-tolerant. An experiment created before the
       // provider-migration schema carries the OSF triple and no
       // storageProvider, and must stay editable through the OSF wind-down.
       function verifyFields() {
-        return baseFields() &&
+        return baseFields() && serverManagedFieldsUntouched() &&
           (('storageProvider' in request.resource.data)
             ? request.resource.data.keys().hasAll(['storageProvider', 'providerContainer'])
             : request.resource.data.keys().hasAll(['osfRepo', 'osfComponent', 'osfFilesLink']));
@@ -46,10 +69,15 @@ service cloud.firestore {
       // also closes the legacy no-provider branch above, which meant OSF by
       // default (see getProviderForExperiment in
       // functions/src/providers/index.ts).
+      // No new experiment is ever born finalized -- a create that already
+      // carries finalized/finalizedAt/finalization is exactly as forged as an
+      // update that adds them (see serverManagedFieldsUntouched() above), just
+      // with no prior document for diff() to compare against.
       function isCreatableProvider() {
         return ('storageProvider' in request.resource.data) &&
           request.resource.data.storageProvider != 'osf' &&
-          request.resource.data.keys().hasAll(['storageProvider', 'providerContainer']);
+          request.resource.data.keys().hasAll(['storageProvider', 'providerContainer']) &&
+          !request.resource.data.keys().hasAny(['finalized', 'finalizedAt', 'finalization']);
       }
       allow read: if(request.auth.uid != null) &&
         resource.data.owner == request.auth.uid;

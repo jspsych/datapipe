@@ -11,6 +11,7 @@ import { persistPending, cleanupPending } from "./persist-pending.js";
 import { getProviderForExperiment, claimNameFor } from "./providers/index.js";
 import { WriteResult, ResolvedAuth } from "./providers/types.js";
 import { claimFilename, confirmClaim, CollisionCacheUnavailableError } from "./collision-cache.js";
+import { isCompactionInFlight, COMPACTION_HOLD_REASON } from "./compaction-gate.js";
 import { ExperimentData, UserData } from './interfaces';
 
 export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 1 }, async (req, res) => {
@@ -37,6 +38,15 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 
   if (!exp_data) {
     res.status(400).json(MESSAGES.EXPERIMENT_DATA_NOT_FOUND);
     await writeLog(experimentID, "logError", MESSAGES.EXPERIMENT_DATA_NOT_FOUND);
+    return;
+  }
+
+  // Finalization is permanent (docs/finalization-spec.md) -- see the matching
+  // comment in api-data.ts for why this is checked ahead of, and independent
+  // from, the ordinary activeBase64 flag.
+  if (exp_data.finalized) {
+    res.status(400).json(MESSAGES.EXPERIMENT_FINALIZED);
+    await writeLog(experimentID, "logError", MESSAGES.EXPERIMENT_FINALIZED);
     return;
   }
 
@@ -187,6 +197,35 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 
       return;
     }
   }
+  // A compaction pass is rearranging this container right now. Holding this
+  // submission back is what guarantees the pass has room for the archive it is
+  // about to upload -- see compaction-gate.ts. The queue is the same durable
+  // buffer that absorbs provider outages, and compaction releases these
+  // entries as soon as its pass ends.
+  if (isCompactionInFlight(exp_data)) {
+    try {
+      await queueUpload({
+        experimentID, owner: exp_data.owner, filename, data,
+        dataType: "base64", osfFilesLink: exp_data.osfFilesLink,
+        storageProvider: exp_data.storageProvider, providerContainer: exp_data.providerContainer,
+        // false, matching every other queue branch here: a base64 upload is a
+        // supplementary media file, not a session.
+        errorCode: 0, sessionIncremented: false,
+        failureReason: COMPACTION_HOLD_REASON,
+        // CONTENTION is precisely this case as types.ts defines it, and puts
+        // the entry on the 60-second fast tier.
+        providerErrorCode: "CONTENTION",
+        claimToken,
+      });
+      await cleanupPending(pendingPath); // queue-upload has its own copy
+      res.status(202).json(MESSAGES.OSF_UPLOAD_QUEUED);
+      return;
+    } catch {
+      res.status(500).json(MESSAGES.OSF_UPLOAD_EXCEPTION);
+      return;
+    }
+  }
+
 
   let result: WriteResult;
   try {

@@ -58,6 +58,17 @@ export interface FileRef {
   id?: string;
   path?: string;
   rev?: string;
+  // Both optional and both best-effort: a provider that does not report them
+  // on a given call leaves them undefined, and no caller may treat their
+  // absence as an error. Compaction (compaction.ts) uses `size` to bound how
+  // many files it pulls into one archive, and `checksum` to verify an uploaded
+  // archive landed intact BEFORE it deletes the originals -- so an adapter
+  // that omits `checksum` from its write result disables that verification and
+  // must not be given a non-null maxFileCount. Format is the provider's own
+  // (Zenodo reports "md5:<hex>"); compare like-for-like, never across
+  // providers.
+  size?: number;
+  checksum?: string;
 }
 
 export interface FileMeta {
@@ -94,12 +105,31 @@ export type DownloadResult =
       providerMessage: string | null;
     };
 
+export type DeleteResult =
+  | { success: true }
+  | {
+      success: false;
+      error: ProviderErrorCode;
+      providerStatus: number | null;
+      providerMessage: string | null;
+    };
+
 // Descriptive (UI hints, subfolder fallback, size-cap warnings) — never a
 // correctness gate. Collision detection lives in Firestore, not here.
+//
+// maxFileCount is the ONE EXCEPTION and is deliberately not descriptive: it is
+// what makes an experiment eligible for compaction (compaction.ts), so a
+// non-null value here is a contract that this adapter also implements
+// deleteFile, downloadFileBytes, and (where its keyspace is flat)
+// archivePathFor. Zenodo's hard 100-files-per-record limit is the motivating
+// case and the only non-null value today. null means "no known cap": either
+// the provider has none (OSF, Drive) or it is per-installation and unreadable
+// (Dataverse), and both mean the same thing here — never compact.
 export interface ProviderCapabilities {
   nativeSubfolders: boolean;
   supportsRegion: boolean;
   maxFileSizeBytes: number | null;
+  maxFileCount: number | null;
   quotaNote: string | null;
 }
 
@@ -227,6 +257,72 @@ export interface StorageProvider {
   // Any new adapter whose writeSessionFile does not store the requested path
   // verbatim MUST implement this. See claimNameFor in providers/index.ts.
   storedNameFor?(filename: string): string;
+
+  // storedNameFor's counterpart, used ONLY to lay out a compaction archive:
+  // given a name as this adapter's listFiles reports it, return the path the
+  // file should occupy inside the zip. Omitting it means "identity", which is
+  // correct for every provider with real folders.
+  //
+  // This is not a general inverse and cannot be one -- storedNameFor is
+  // many-to-one (Zenodo maps every run of slashes to a single "_"). It is
+  // exact only over the paths DATAPIPE ITSELF writes, which is all it is ever
+  // asked about: metadata-derived-files.ts flattens researcher subfolders with
+  // "-" BEFORE building a path, so a leaf never contains a slash and the only
+  // shapes that reach a provider are `data/raw/<leaf>`, `data/<stem>_data.csv`,
+  // `dataset_description.json`, and `.psychds-ignore`. Callers pass
+  // metadataActive so the reconstruction is skipped entirely for experiments
+  // that never produce a slashed path — see archivePathsFor in compaction.ts.
+  archivePathFor?(storedName: string): string;
+
+  // Removes a file. Required for any provider with a non-null maxFileCount,
+  // since compaction cannot relieve a cap without it; optional otherwise, and
+  // absent on providers DataPipe never deletes from. Never throws — failures
+  // come back as a DeleteResult, same convention as WriteResult.
+  //
+  // Callers must treat this as best-effort and idempotent: a file that is
+  // already gone is a success, not an error, because the only caller retries
+  // after partial failure.
+  deleteFile?(
+    auth: ResolvedAuth,
+    container: ContainerRef,
+    fileRef: FileRef
+  ): Promise<DeleteResult>;
+
+  // downloadFile's binary-safe sibling, returning raw bytes instead of text.
+  // Required for any provider with a non-null maxFileCount.
+  //
+  // Both exist because neither is right for both callers. metadata-block.ts
+  // wants a decoded JSON string, while compaction re-uploads what it reads
+  // byte-for-byte and includes files submitted through /api/base64 — images,
+  // audio, video. Routing those through downloadFile's response.text() would
+  // decode them as UTF-8 and replace every invalid sequence with U+FFFD,
+  // silently corrupting the archive DataPipe is about to delete the originals
+  // in favor of. Nothing would surface it: the write succeeds and the bytes
+  // are simply wrong.
+  downloadFileBytes?(
+    auth: ResolvedAuth,
+    container: ContainerRef,
+    fileRef: FileRef
+  ): Promise<{ success: true; content: Buffer } | { success: false; error: ProviderErrorCode; providerStatus: number | null; providerMessage: string | null }>;
+
+  // Uploads from a readable stream, for payloads too large to hold in memory.
+  // Required for any provider with a non-null maxFileCount.
+  //
+  // Exists because writeSessionFile takes a Buffer, which caps the largest
+  // file an adapter can move at function memory -- fine for a single session,
+  // but a finalization archive merges an entire study into ONE file (Psych-DS
+  // requires it) and has no such ceiling by design. `size` is required and
+  // must be the exact byte length of `body`, not an estimate: Zenodo's bucket
+  // PUT needs a real Content-Length header up front, since the request is
+  // streamed and there is no buffered body to measure afterward.
+  writeStreamedFile?(
+    auth: ResolvedAuth,
+    container: ContainerRef,
+    filename: string,
+    body: NodeJS.ReadableStream,
+    size: number,
+    meta: FileMeta
+  ): Promise<WriteResult>;
 
   // Fetches a file's contents as text. Used by metadata-block.ts to read
   // back an existing dataset_description.json. Never throws — failures come

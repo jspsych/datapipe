@@ -279,6 +279,12 @@ export const dataverseProvider: StorageProvider = {
     // no API that surfaces it, so this stays null (descriptive only; never a
     // correctness gate -- see types.ts).
     maxFileSizeBytes: null,
+    // Null for the same reason as maxFileSizeBytes, but with a sharper
+    // consequence: a non-null value here would enrol Dataverse in compaction
+    // (see types.ts), and this adapter implements neither deleteFile nor
+    // downloadFileBytes. Any installation that does impose a file cap needs
+    // those two methods first.
+    maxFileCount: null,
     quotaNote: "File size and storage limits are set by the researcher's hosting Dataverse installation",
   },
 

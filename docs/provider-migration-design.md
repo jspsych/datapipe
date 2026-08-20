@@ -337,6 +337,137 @@ touched again.
 `application/zip` on an unpublished deposition. Bulk download works throughout
 collection, not only after publication.
 
+### Compaction — BUILT (incremental only, 2026-08-13)
+
+`functions/src/compaction.ts` + `compaction-triggers.ts`. Incremental batch
+sealing ships; **finalization (the single end-of-study merge) does not** and is
+the next build. Decided at build time: finalization will **re-merge** sealed
+batch zips into one archive rather than leaving them alongside a final zip, so
+batch archives are written with the full Psych-DS tree inside them and are
+re-mergeable by construction.
+
+Generalized rather than special-cased. `ProviderCapabilities.maxFileCount` is
+what enrols a provider, and it is the one capability that is **not** merely
+descriptive — a non-null value is a contract that the adapter also implements
+`deleteFile`, `downloadFileBytes` and (on a flat keyspace) `archivePathFor`.
+Zenodo's 100 is the only non-null value; Dataverse stays null because its cap
+is per-installation and unreadable, and it implements neither method.
+
+**Discovery is entirely event-driven — there is no cron.** DataPipe is the only
+writer to these containers, so it already knows the moment one has grown and
+never has to ask on a timer. Two Firestore triggers (`compaction-triggers.ts`):
+
+- `onDocumentUpdated("experiments/{id}")` fires when `sessions` increments,
+  which `api-data.ts` already does on every submission path — so this needed no
+  new write anywhere, and notably avoided threading a provider file counter
+  through the raw write, every derived-file write, the metadata write and the
+  retry worker. The before/after snapshots arrive in the event payload, so
+  "capped provider? did `sessions` move? is a lease already held? could it
+  plausibly be near the watermark?" all cost zero reads, and a submission to a
+  non-capped provider returns immediately. Comparing `sessions` is also what
+  stops a pass from re-triggering itself, since compaction writes only
+  `compaction.*`.
+- `onDocumentWritten("uploadQueue/{id}")` covers the two cases `sessions`
+  cannot see: an entry with `providerErrorCode: "QUOTA_EXCEEDED"` (the provider
+  itself reporting the record is full) and an entry reaching `completed` (the
+  retry worker landing a file for a submission that incremented `sessions` when
+  it originally failed).
+
+Three earlier designs were tried and discarded: a 6-hour poll, then a
+proximity-aware poll bolted on to patch the hole the first one left, then a
+change-triggered poll. All shared the same defect — a burst can fill a record
+inside a minute, and any interval reacts after the fact. Firestore triggers are
+at-least-once with retries for up to 7 days, and duplicate delivery is harmless
+because compaction takes a lease.
+
+A researcher uploading to the provider by hand produces no event. That is
+**documented as unsupported** (see the FAQ) rather than engineered around: it
+also desynchronizes the collision cache, so a background sweep would not make it
+safe, only later-detected. It is not silent either — the next submission that
+finds the record full writes a `QUOTA_EXCEEDED` queue entry, which is the second
+trigger above.
+
+After a successful pass, `compactExperiment` moves the `nextRetryAt` of that
+experiment's quota-blocked queue entries to now, so they drain on the retry
+worker's next tick instead of waiting out slow-tier backoff for a condition
+that has just been fixed.
+
+**Ordering is the safety property**: upload → verify the reported md5 → seal
+claims → delete originals. A batch's membership is written to
+`experiments/{id}/compactionBatches/{index}` *before* the archive is uploaded,
+so a pass interrupted anywhere resumes rather than sealing the same sessions
+into a second zip. That record stores **hashes, not filenames**, preserving the
+collision cache's "the raw filename is never stored anywhere" property; the
+resume path recovers names by hashing the current listing and matching.
+
+**Archived claims lose their TTL.** A confirmed claim normally expires after 90
+days, which is safe only because a cold cache rehydrates from the provider's
+listing. An archived file is not in that listing, so its claim is rewritten
+with `expiresAt` deleted (Firestore TTL skips documents without the field).
+Without this, compaction would quietly re-open filenames collected months
+earlier — the failure is invisible at compaction time and only surfaces as a
+duplicate session much later.
+
+**`downloadFileBytes` had to be added** alongside `downloadFile`. The latter
+returns `response.text()`, which is right for `metadata-block.ts` reading back
+JSON and catastrophic here: `/api/base64` submissions are images, audio and
+video, and UTF-8 decoding replaces every invalid sequence with U+FFFD. The
+archive would be corrupt, the subsequent write would succeed, and the originals
+would then be deleted.
+
+**A write gate, not just recovery, is what keeps a record from filling.**
+DataPipe is the only writer to these containers, so while a pass holds the
+compaction lease, `api-data.ts`, `api-base64.ts` and the retry worker divert
+submissions into the upload queue instead of writing to the provider
+(`compaction-gate.ts`). The file count therefore cannot grow during a pass,
+which is what guarantees room for the archive it is about to upload. Gating
+costs nothing: every one of those callers already loads the experiment
+document for its own reasons, so the lease field is in hand. Held entries are
+recorded with `providerErrorCode: "CONTENTION"` — precisely this case as
+`types.ts` defines it — which puts them on the 60-second fast tier, and
+compaction releases them explicitly the moment its pass ends.
+
+The participant is unaffected: the queue writes its payload to Cloud Storage
+first and returns 202, the same durable buffer that already absorbs provider
+outages. Holding the data in function memory instead was considered and
+rejected — a Cloud Functions instance can be torn down at any moment, so RAM is
+the one place it would exist with no durable copy.
+
+**Saturation is still possible, and still recovers without a human.** The gate
+has a residual race: callers test the document they already loaded, so a pass
+starting between that read and the provider write is not seen, and a burst can
+reach the cap in the gap between a trigger firing and its pass taking the
+lease. The fallback is that one slot can always be borrowed — `.psychds-ignore`
+holds a fixed constant shared with the Psych-DS tooling, so deleting it to make
+room loses nothing and restoring it is a PUT of a literal, needing no resume
+state because the next submission would rewrite it anyway.
+
+An earlier version of that fallback *staged the archive over one of its own
+batch members*, reasoning that the member's bytes were already inside the
+archive being written. A test caught that this is wrong: if the staged upload
+then fails verification, that session's only copy is gone from the provider and
+survives solely in function memory. A plain (non-metadataActive) experiment has
+no reproducible file, so it gets no fallback and returns `status: "saturated"`,
+asking for one file to be removed by hand — an honest trade, since it writes one
+file per submission and has far more headroom to begin with.
+
+For the same burst reason, `KEEP_LOOSE` is 5 (not 20) and `MAX_BATCH_FILES` is
+95 (not 60). Every file held back after a pass is headroom given up.
+
+**Finalization — the end-of-study merge — is specified in
+`docs/finalization-spec.md` and is now BUILT (2026-08-20), not yet deployed.** Locked there: finalization is
+permanent (a finalized experiment stops accepting submissions), and the merged
+result must be ONE archive — multiple archives are allowed only above a
+provider's hard per-file limit, because a split breaks the Psych-DS
+compatibility the archive exists to provide. That constraint is what rules out
+the obvious memory guard and forces a streamed build instead.
+
+Residual ceiling: each sealed batch is itself a file, so a record still tops
+out around `maxFileCount` batches (thousands of sessions at the 60-file default
+batch). Finalization removes it. Zenodo's `setupWarnings` — the stopgap telling
+researchers to stay under 100 submissions — is deleted, since there is no
+longer anything for a researcher to act on at setup.
+
 ### Zenodo spike — RESULT: PASS (live, sandbox.zenodo.org, 2026-08-11)
 
 `scripts/zenodo-spike.mjs`, driving the real compiled adapter. **All five gates
@@ -682,13 +813,20 @@ Google Drive provider is announced:
 - Do researchers need placement control for the Drive folder strongly enough
   to justify a Google Picker integration, or is the app-created root folder
   acceptable? (Default answer: root folder; revisit on demand.)
-- **Zenodo's flat keyspace vs. Psych-DS (raised 2026-08-11, needs a decision).**
-  Zenodo cannot store a slash in a file key, so a `metadataActive` experiment's
-  live deposition shows `data_raw_subject-1.json` rather than
-  `data/raw/subject-1.json`, and is not a valid Psych-DS component while
-  collection is in progress. Three options: (a) accept it, and let the
-  compaction archive carry the real Psych-DS tree — cheapest, and the archive is
-  the artifact researchers actually cite; (b) suppress the derived Psych-DS
-  files on Zenodo and generate them only into the archive; (c) treat Zenodo as
-  unsupported for `metadataActive` experiments. (a) is the working assumption
-  and what the code does today.
+- ~~**Zenodo's flat keyspace vs. Psych-DS**~~ **RESOLVED as (a), 2026-08-13.**
+  Live keys stay flat and the compaction archive carries the real Psych-DS
+  tree. What made (a) safe rather than merely cheapest is that the
+  reconstruction turned out to be **exact, not heuristic**:
+  `metadata-derived-files.ts` flattens researcher subfolders with `-` *before*
+  building a path, so a leaf reaching a provider never contains a slash, and
+  the only shapes DataPipe writes are `data/raw/<leaf>`,
+  `data/<stem>_data.csv`, `dataset_description.json` and `.psychds-ignore`.
+  `zenodo.ts`'s `fromZenodoKey` inverts exactly those. It is applied only to
+  `metadataActive` experiments — the gate that removes the one residual
+  ambiguity, a researcher's own `data_x.json` in an experiment that writes no
+  slashed paths at all.
+- **Not yet verified in production: the three new composite indexes** added to
+  `firestore.indexes.json` for compaction (two on `uploadQueue`,
+  one on `experiments`). The Firestore emulator does not enforce composite
+  indexes, so the test suite passes without them and only a deploy can confirm
+  the query shapes match.

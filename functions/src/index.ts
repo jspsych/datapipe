@@ -9,6 +9,7 @@ import { checkEmailConflict } from "./check-email-conflict.js";
 import { scheduledTokenRefresh } from "./scheduled-token-refresh.js";
 import { scheduledUploadRetry } from "./scheduled-upload-retry.js";
 import { scheduledPendingRecovery } from "./scheduled-pending-recovery.js";
+import { onExperimentGrew, onUploadQueueChanged } from "./compaction-triggers.js";
 import { apiQueueStatus } from "./api-queue-status.js";
 import { generateOAuthState } from "./generate-oauth-state.js";
 import { connectProvider, connectStaticTokenProvider, disconnectProvider } from "./connect-provider.js";
@@ -19,6 +20,7 @@ import { deleteAccount } from "./delete-account.js";
 import { createExperiment } from "./create-experiment.js";
 import { getProviderAccessToken } from "./get-provider-access-token.js";
 import { providerSetupWarnings } from "./provider-setup-warnings.js";
+import { apiFinalize, finalizeTask } from "./api-finalize.js";
 
 setGlobalOptions({
   maxInstances: 20
@@ -34,6 +36,8 @@ export {
   scheduledTokenRefresh as scheduledtokenrefresh,
   scheduledUploadRetry as scheduleduploadretry,
   scheduledPendingRecovery as scheduledpendingrecovery,
+  onExperimentGrew as onexperimentgrew,
+  onUploadQueueChanged as onuploadqueuechanged,
   apiQueueStatus as apiqueuestatus,
   generateOAuthState as generateoauthstate,
   connectProvider as connectprovider,
@@ -45,5 +49,7 @@ export {
   deleteAccount as deleteaccount,
   createExperiment as createexperiment,
   getProviderAccessToken as getprovideraccesstoken,
-  providerSetupWarnings as providersetupwarnings
+  providerSetupWarnings as providersetupwarnings,
+  apiFinalize as apifinalize,
+  finalizeTask as finalizetask
 };

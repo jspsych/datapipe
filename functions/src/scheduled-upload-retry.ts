@@ -7,6 +7,7 @@ import resolveToken from "./resolve-token.js";
 import { claimFilename, confirmClaim, CollisionCacheUnavailableError } from "./collision-cache.js";
 import { ExperimentData, UserData } from "./interfaces.js";
 import { isFastRetry } from "./queue-upload.js";
+import { isCompactionInFlight, COMPACTION_HOLD_REASON } from "./compaction-gate.js";
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_BACKOFF_MS = 24 * 60 * 60 * 1000; // 24 hours (slow tier cap, unchanged)
@@ -139,6 +140,37 @@ async function processQueueItem(queueDoc: FirebaseFirestore.QueryDocumentSnapsho
   const userData = userDoc.data() as UserData;
   const expData = expDoc.data() as ExperimentData;
 
+  // Finalization is permanent (docs/finalization-spec.md): once
+  // finalizeExperiment has run, every remaining provider file has been merged
+  // into one archive and the originals deleted, and the experiment stops
+  // accepting new submissions (api-data.ts / api-base64.ts). finalizeExperiment
+  // itself refuses to run while anything is still queued (finalization.ts's
+  // "queued-uploads-pending" check), so the only way this entry can still be
+  // pending AND find `finalized` true here is the one race that check cannot
+  // see -- this entry got queued (or was already queued and still waiting out
+  // this experiment's compaction/finalization lease -- see isCompactionInFlight
+  // above) in the gap between that check running and finalization actually
+  // completing. Either way, writing it now would drop a loose file into a
+  // container finalization already emptied and sealed.
+  //
+  // Marked failed rather than retried, deliberately: finalized never
+  // un-finalizes, so retrying would spend this entry's five attempts against a
+  // condition that can never clear. The data itself is NOT lost --
+  // api-queue-status.ts lets the researcher download any queued payload
+  // straight from the dashboard -- so the failureReason says that plainly,
+  // which is what makes this recoverable by a human instead of mysterious.
+  if (expData.finalized) {
+    await docRef.update({
+      status: "failed",
+      failureReason:
+        "This experiment was finalized while the upload was queued. The data was not lost -- " +
+        "download it from the queue panel on the dashboard -- but it cannot be added to a record " +
+        "that has already been sealed.",
+      ...CLEARED_CODE,
+    });
+    return;
+  }
+
   let auth: ResolvedAuth;
   try {
     const tokenResult = await resolveToken(userData, expData);
@@ -221,6 +253,20 @@ async function processQueueItem(queueDoc: FirebaseFirestore.QueryDocumentSnapsho
       await handleRetryFailure(docRef, data, "Collision cache rehydrating");
       return;
     }
+  }
+
+  // The retry worker is a writer too, so it observes the compaction gate for
+  // the same reason api-data.ts does: a backlog draining into a container
+  // mid-pass would grow the file count the pass is counting on staying still.
+  // Rescheduling rather than failing -- this is not an error, and it must not
+  // consume one of the entry's five attempts.
+  if (isCompactionInFlight(expData)) {
+    await docRef.update({
+      status: "pending",
+      nextRetryAt: Timestamp.fromMillis(Date.now() + 60 * 1000),
+      failureReason: COMPACTION_HOLD_REASON,
+    });
+    return;
   }
 
   // Attempt the upload

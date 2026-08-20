@@ -220,7 +220,11 @@ describe("4. writeSessionFile", () => {
 
     expect(result).toEqual({
       success: true,
-      fileRef: { name: "session-1.json", id: "session-1.json" },
+      // size/checksum are passed through for compaction.ts, which will not
+      // delete a batch's originals unless the checksum the provider reports
+      // for the uploaded archive matches the one it computed locally. An
+      // adapter that dropped them here would make every archive unverifiable.
+      fileRef: { name: "session-1.json", id: "session-1.json", size: 12, checksum: "md5:abc" },
       storedFilename: "session-1.json",
     });
 
@@ -523,15 +527,216 @@ describe("9. validateStaticToken", () => {
   });
 });
 
-// The 100-file cap is real today because compaction is not built. These
-// assertions are expected to be DELETED along with setupWarnings when it ships.
-describe("9b. setupWarnings", () => {
-  it("warns about the 100-file cap without making a request", async () => {
-    const warnings = await zenodoProvider.setupWarnings(auth);
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toMatch(/100 files/);
-    // Unconditional and offline: the cap is a property of Zenodo, not of an
-    // installation, so unlike dataverse.ts there is nothing to probe.
+// 9b was a setupWarnings block warning researchers to keep Zenodo experiments
+// under 100 submissions because DataPipe could not combine sessions into
+// archives. It said it should be deleted along with setupWarnings once
+// compaction shipped, and compaction.ts is that. What replaces it is the
+// assertion below that the provider still declares its cap, since that is now
+// what enrols it in compaction rather than what warns researchers away.
+describe("9b. compaction eligibility", () => {
+  it("declares the cap and the methods compaction needs to act on it", () => {
+    // capabilities.maxFileCount is documented in types.ts as a contract that
+    // these three exist. Declaring the cap without them would fail a pass
+    // partway through -- possibly after uploading an archive it then cannot
+    // clean up behind.
+    expect(zenodoProvider.capabilities.maxFileCount).toBe(100);
+    expect(typeof zenodoProvider.deleteFile).toBe("function");
+    expect(typeof zenodoProvider.downloadFileBytes).toBe("function");
+    expect(typeof zenodoProvider.archivePathFor).toBe("function");
+  });
+
+  it("no longer warns at setup, because there is nothing to act on", () => {
+    expect(zenodoProvider.setupWarnings).toBeUndefined();
+  });
+});
+
+describe("9c. deleteFile", () => {
+  it("DELETEs the object by key", async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse({ status: 204 }));
+
+    const result = await zenodoProvider.deleteFile(auth, container, { name: "data_raw_s-1.json" });
+
+    expect(result).toEqual({ success: true });
+    const { url, options } = callArgs(0);
+    expect(url).toBe(`${BUCKET_URL}/data_raw_s-1.json`);
+    expect(options.method).toBe("DELETE");
+  });
+
+  it("treats an already-missing object as success", async () => {
+    // Compaction resumes an interrupted pass by re-deleting whatever is left,
+    // so a 404 means "already in the state we wanted". Reporting it as a
+    // failure would wedge an experiment that got interrupted mid-delete.
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 404, jsonBody: { message: "Object does not exist." } })
+    );
+    expect(await zenodoProvider.deleteFile(auth, container, { name: "gone.json" })).toEqual({
+      success: true,
+    });
+  });
+
+  it("maps a real failure into the shared taxonomy", async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse({ status: 401, jsonBody: { message: "Bad token" } }));
+    const result = await zenodoProvider.deleteFile(auth, container, { name: "s.json" });
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("AUTH_EXPIRED");
+  });
+});
+
+describe("9d. downloadFileBytes", () => {
+  it("returns raw bytes rather than decoded text", async () => {
+    // The reason this exists alongside downloadFile: /api/base64 submissions
+    // are images and audio, and reading them through response.text() would
+    // replace every invalid UTF-8 sequence with U+FFFD -- silently corrupting
+    // the archive that is about to replace the originals.
+    const media = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe, 0x00, 0x80]);
+    mockFetch.mockResolvedValueOnce({
+      status: 200,
+      headers: { get: () => null },
+      arrayBuffer: async () => media.buffer.slice(media.byteOffset, media.byteOffset + media.length),
+    });
+
+    const result = await zenodoProvider.downloadFileBytes(auth, container, { name: "m.png" });
+
+    expect(result.success).toBe(true);
+    expect(Buffer.isBuffer(result.content)).toBe(true);
+    expect(result.content.equals(media)).toBe(true);
+  });
+
+  it("reports failures as a result rather than throwing", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 404, jsonBody: { message: "Object does not exist." } })
+    );
+    const result = await zenodoProvider.downloadFileBytes(auth, container, { name: "gone.json" });
+    expect(result.success).toBe(false);
+    expect(result.providerStatus).toBe(404);
+  });
+});
+
+// Finalization streams a merged archive straight from Cloud Storage instead
+// of buffering it, because writeSessionFile's Buffer signature caps the
+// largest file an adapter can move at function memory -- fine for one
+// session, wrong for a study's entire archive (docs/finalization-spec.md).
+// Same contract as writeSessionFile otherwise: same bucket PUT, same
+// error mapping, same defensive read of key/checksum off the response.
+describe("9e. writeStreamedFile", () => {
+  // Reads a Node Readable to completion, the same way a real HTTP client
+  // consumes a request body -- proves the bytes fetch was handed are the
+  // bytes that would actually go over the wire, not just a stream reference.
+  function drain(stream) {
+    return new Promise((resolve, reject) => {
+      const chunks = [];
+      stream.on("data", (c) => chunks.push(c));
+      stream.on("end", () => resolve(Buffer.concat(chunks)));
+      stream.on("error", reject);
+    });
+  }
+
+  function streamOf(content) {
+    const { Readable } = require("stream");
+    return Readable.from([Buffer.from(content)]);
+  }
+
+  it("PUTs the stream to the bucket URL with an explicit Content-Length and octet-stream type", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 200, jsonBody: { key: "final.zip", size: 9, checksum: "md5:abc" } })
+    );
+
+    const payload = "streamed!";
+    const result = await zenodoProvider.writeStreamedFile(
+      auth,
+      container,
+      "final.zip",
+      streamOf(payload),
+      Buffer.byteLength(payload),
+      { size: Buffer.byteLength(payload), contentType: "application/zip" }
+    );
+
+    const { url, options } = callArgs(0);
+    expect(url).toBe(`${BUCKET_URL}/final.zip`);
+    expect(options.method).toBe("PUT");
+    // Same hard requirement as writeSessionFile: a real mimetype here is a
+    // 415. `meta.contentType` deliberately says application/zip, so this
+    // guards against that leaking through for the streamed path too.
+    expect(header(options.headers, "Content-Type")).toBe("application/octet-stream");
+    expect(header(options.headers, "Content-Length")).toBe(String(Buffer.byteLength(payload)));
+
+    const bodyBytes = await drain(options.body);
+    expect(bodyBytes.toString()).toBe(payload);
+
+    expect(result).toEqual({
+      success: true,
+      fileRef: { name: "final.zip", id: "final.zip", size: 9, checksum: "md5:abc" },
+      storedFilename: "final.zip",
+    });
+  });
+
+  // Node's built-in fetch (undici) -- what the emulator suites alias
+  // node-fetch to for real HTTP calls -- throws "duplex option is required
+  // when sending a body" for any stream body. Verified live against a real
+  // local server (not assumed): node-fetch's own implementation tolerates the
+  // option fine, but only undici enforces it, so it must always be sent for
+  // the streamed path to work under both.
+  it("sends duplex: half so a stream body works under Node's native fetch too", async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse({ status: 200, jsonBody: { key: "final.zip" } }));
+    await zenodoProvider.writeStreamedFile(auth, container, "final.zip", streamOf("x"), 1, meta);
+    expect(callArgs(0).options.duplex).toBe("half");
+  });
+
+  it("flattens path separators into the key, same as writeSessionFile", async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse({ status: 200, jsonBody: { key: "data_raw_x.zip" } }));
+    await zenodoProvider.writeStreamedFile(auth, container, "data/raw/x.zip", streamOf("x"), 1, meta);
+    expect(callArgs(0).url).toBe(`${BUCKET_URL}/data_raw_x.zip`);
+  });
+
+  it("reports a server-renamed key rather than the requested name", async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse({ status: 200, jsonBody: { key: "renamed.zip" } }));
+    const result = await zenodoProvider.writeStreamedFile(auth, container, "asked.zip", streamOf("x"), 1, meta);
+    expect(result.storedFilename).toBe("renamed.zip");
+  });
+
+  it("falls back to the flattened requested name when the response has no key", async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse({ status: 201, jsonBody: {} }));
+    const result = await zenodoProvider.writeStreamedFile(
+      auth,
+      container,
+      "data/raw/x.zip",
+      streamOf("x"),
+      1,
+      meta
+    );
+    expect(result.storedFilename).toBe("data_raw_x.zip");
+  });
+
+  // Same taxonomy as writeSessionFile -- the retry queue and compaction's
+  // callers must not need to special-case the streamed path.
+  it("maps failures through the same error taxonomy as writeSessionFile", async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse({ status: 413, jsonBody: { message: "Too large" } }));
+    const result = await zenodoProvider.writeStreamedFile(auth, container, "final.zip", streamOf("x"), 1, meta);
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("QUOTA_EXCEEDED");
+    expect(result.providerStatus).toBe(413);
+  });
+
+  it("survives a non-JSON error body", async () => {
+    mockFetch.mockResolvedValueOnce({
+      status: 502,
+      statusText: "Bad Gateway",
+      json: () => Promise.reject(new Error("not json")),
+      headers: { get: () => null },
+    });
+    const result = await zenodoProvider.writeStreamedFile(auth, container, "final.zip", streamOf("x"), 1, meta);
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("UNAVAILABLE");
+    expect(result.providerMessage).toBe("Bad Gateway");
+  });
+
+  it("rejects a tampered bucketUrl the same way writeSessionFile does", async () => {
+    const tampered = { ...container, bucketUrl: "https://evil.test/api/files/abc-123" };
+    const result = await zenodoProvider
+      .writeStreamedFile(auth, tampered, "final.zip", streamOf("x"), 1, meta)
+      .catch((e) => e);
+    expect(result).toBeInstanceOf(Error);
+    expect(result.message).toMatch(/bucketurl origin does not match/i);
     expect(mockFetch).not.toHaveBeenCalled();
   });
 });

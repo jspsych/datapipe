@@ -15,6 +15,7 @@ import { persistPending, cleanupPending } from "./persist-pending.js";
 import { getProviderForExperiment, claimNameFor } from "./providers/index.js";
 import { WriteResult, ResolvedAuth } from "./providers/types.js";
 import { claimFilename, confirmClaim, CollisionCacheUnavailableError } from "./collision-cache.js";
+import { isCompactionInFlight, COMPACTION_HOLD_REASON } from "./compaction-gate.js";
 import { ExperimentData, UserData, RequestBody } from './interfaces';
 
 export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 }, async (req, res) => {
@@ -42,6 +43,19 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
   if (!exp_data) {
     res.status(400).json(MESSAGES.EXPERIMENT_DATA_NOT_FOUND);
     await writeLog(experimentID, "logError", MESSAGES.EXPERIMENT_DATA_NOT_FOUND);
+    return;
+  }
+
+  // Finalization is permanent (docs/finalization-spec.md): once an experiment
+  // is finalized, every remaining file has been merged into one archive and
+  // the originals deleted. A session accepted after that would sit outside
+  // the archive and quietly make the record non-Psych-DS again, so this is
+  // checked ahead of (and independent from) the ordinary `active` flag --
+  // finalizing does not require a researcher to also turn data collection
+  // off, and this message is the one that should surface either way.
+  if (exp_data.finalized) {
+    res.status(400).json(MESSAGES.EXPERIMENT_FINALIZED);
+    await writeLog(experimentID, "logError", MESSAGES.EXPERIMENT_FINALIZED);
     return;
   }
 
@@ -252,6 +266,36 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
     } catch {
       res.status(500).json({...MESSAGES.OSF_UPLOAD_EXCEPTION, metadataMessage});
       await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail: "Collision cache rehydrating"});
+      return;
+    }
+  }
+
+  // A compaction pass is rearranging this container right now. DataPipe is its
+  // only writer, so holding this submission back is what guarantees the pass
+  // has room for the archive it is about to upload -- see compaction-gate.ts.
+  // The queue is the same durable buffer that absorbs provider outages, and
+  // compaction releases these entries as soon as its pass ends.
+  if (isCompactionInFlight(exp_data)) {
+    try {
+      await queueUpload({
+        experimentID, owner: exp_data.owner, filename: uploadFilename, data,
+        dataType: "data", osfFilesLink: exp_data.osfFilesLink,
+        storageProvider: exp_data.storageProvider, providerContainer: exp_data.providerContainer,
+        errorCode: 0, sessionIncremented: true,
+        failureReason: COMPACTION_HOLD_REASON,
+        // CONTENTION is exactly this situation as types.ts defines it --
+        // "another write to this same container is already in flight" -- and it
+        // puts the entry on the 60-second fast tier, so it drains promptly even
+        // if the explicit release is missed.
+        providerErrorCode: "CONTENTION",
+        claimToken,
+      });
+      await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
+      await cleanupPending(pendingPath); // queue-upload has its own copy
+      res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
+      return;
+    } catch {
+      res.status(500).json({...MESSAGES.OSF_UPLOAD_EXCEPTION, metadataMessage});
       return;
     }
   }
