@@ -218,7 +218,9 @@ async function main() {
     record(
       "F. deleteFile",
       ok ? "PASS" : "FAIL",
-      `present-before=${before} delete.success=${del.success} gone-after=${!after}; ` +
+      `present-before=${before} delete.success=${del.success}` +
+        (del.success ? "" : ` (${del.providerStatus} "${del.providerMessage}" -> ${del.error})`) +
+        ` gone-after=${!after}; ` +
         `repeat delete raw status=${rawRepeat.status} -> adapter reports success=${mappedRepeat.success}` +
         (mappedRepeat.success ? "" : "  <-- resume path is NOT idempotent")
     );
