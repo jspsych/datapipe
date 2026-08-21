@@ -17,6 +17,7 @@
 //   ID_TOKEN        (optional) Firebase ID token -- enables the finalize phase
 //   REQUIRED_FIELDS (default trial_type) must match the experiment's setting
 //   MAX_SUBMISSIONS (default 100) safety stop
+//   SUBMIT_DELAY_MS (default 250) pacing between submissions
 //
 // Without ZENODO_TOKEN this still proves the load path, duplicate rejection
 // after archiving, and post-finalization rejection -- all observable from the
@@ -32,6 +33,7 @@ const DEPOSITION = process.env.DEPOSITION_ID;
 const ZSERVER = process.env.ZENODO_SERVER || "https://sandbox.zenodo.org";
 const ID_TOKEN = process.env.ID_TOKEN;
 const MAX_SUBMISSIONS = Number(process.env.MAX_SUBMISSIONS || 100);
+const SUBMIT_DELAY_MS = Number(process.env.SUBMIT_DELAY_MS || 250);
 
 if (!EXP) {
   console.error("EXPERIMENT_ID is required. See the header of this file.");
@@ -151,7 +153,11 @@ async function main() {
       // What matters is that it later LANDS, which is checked after the run.
       queued.push(name);
       process.stdout.write("q");
-      await sleep(250);
+      // Back off hard rather than keep firing. A 202 means a compaction pass
+      // holds the lease, and every submission sent during it just piles up in
+      // the queue to be drained later at 25 per five-minute worker tick --
+      // which makes the run long and tells us nothing new after the first one.
+      await sleep(5000);
       continue;
     }
     if (r.status !== 201) {
@@ -160,7 +166,7 @@ async function main() {
     }
     archived.push(name);
     process.stdout.write(".");
-    await sleep(250);
+    await sleep(SUBMIT_DELAY_MS);
 
     if (i % 5 === 0) {
       const files = await listDeposition();
@@ -255,19 +261,27 @@ async function main() {
   // submitted data is lost (the raw file is the source of truth) but the
   // dataset is a Psych-DS dataset with holes in it, and nothing errors.
   //
-  // Observed live 2026-08-20 before the fix: 44 loose raw sessions against 10
-  // derived CSVs. Emulator coverage for this needs the deployed function to
-  // reach a provider mock through the metadata block, which is exactly the
-  // wiring this script exists to avoid -- so the assertion lives here.
-  if (ZTOKEN && DEPOSITION) {
-    const files = await listDeposition();
-    const raw = files.filter((n) => n.startsWith("data_raw_"));
-    const csv = files.filter((n) => n.startsWith("data_") && !n.startsWith("data_raw_"));
+  // COUNT ACROSS THE WHOLE DATASET, not just the loose files. Compaction
+  // archives a prefix of the provider's listing, which cuts through raw/CSV
+  // pairs -- so the loose set is legitimately lopsided and comparing it alone
+  // reports a failure that is not one. (It did exactly that on first use:
+  // 12 loose raw against 13 loose CSVs, while the totals were 50 and 50.)
+  if (ZTOKEN && DEPOSITION && BUCKET) {
+    const loose = await listDeposition();
+    let raw = loose.filter((n) => n.startsWith("data_raw_")).length;
+    let csv = loose.filter((n) => n.startsWith("data_") && !n.startsWith("data_raw_")).length;
+
+    for (const name of loose.filter((n) => n.endsWith(".zip"))) {
+      const inZip = [...readArchive(await fetchArchive(name)).keys()];
+      raw += inZip.filter((n) => n.startsWith("data/raw/")).length;
+      csv += inZip.filter((n) => n.startsWith("data/") && n.endsWith(".csv")).length;
+    }
+
     record(
       "5c. derived tables kept pace with raw sessions",
-      raw.length === csv.length ? "PASS" : "FAIL",
-      `${raw.length} loose raw session(s), ${csv.length} loose derived CSV(s)` +
-        (raw.length === csv.length
+      raw === csv ? "PASS" : "FAIL",
+      `${raw} raw session(s), ${csv} derived CSV(s) across the whole dataset` +
+        (raw === csv
           ? ""
           : "  <-- sessions without a derived table; a diverted submission did not queue its Psych-DS files")
     );
