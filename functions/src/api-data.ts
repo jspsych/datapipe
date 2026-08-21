@@ -260,6 +260,11 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
       });
       await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
       await cleanupPending(pendingPath); // queue-upload has its own copy
+      // Same reasoning as the compaction-gate branch below: without this the
+      // session's derived tables are never generated at all. Pre-dates the
+      // gate and is far rarer (a rehydration lease lasts 60 seconds), but it
+      // is the identical hole.
+      await queueDerivedFiles(derivedFiles, derivedTarget, "Collision cache rehydrating");
       res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
       await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail: "Collision cache rehydrating"});
       return;
@@ -292,6 +297,15 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
       });
       await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
       await cleanupPending(pendingPath); // queue-upload has its own copy
+      // The derived Psych-DS tables have to be queued too. The retry worker
+      // only writes back what is in the queue -- it never re-runs the metadata
+      // pipeline -- so queueing the raw file alone means this session's
+      // data/<base>_data.csv is never produced at all. The raw file is the
+      // source of truth and no submitted data is lost either way, but the
+      // dataset ends up missing derived tables for every session the gate
+      // diverted, which is a Psych-DS dataset with holes in it. Observed live:
+      // 44 loose raw sessions against 10 derived CSVs.
+      await queueDerivedFiles(derivedFiles, derivedTarget, COMPACTION_HOLD_REASON, "CONTENTION");
       res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
       return;
     } catch {
