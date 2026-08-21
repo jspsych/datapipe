@@ -366,6 +366,85 @@ describe("3. error mapping", () => {
     });
   });
 
+  it("maps 403 rateLimitExceeded to RATE_LIMITED", async () => {
+    // mapDriveError's RATE_LIMITED branch lists three reason strings
+    // (userRateLimitExceeded, rateLimitExceeded, dailyLimitExceeded). Only
+    // the first was covered above -- this and the next test close the gap so
+    // a future edit that narrows or reorders that list gets caught.
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({
+        status: 403,
+        statusText: "Forbidden",
+        jsonBody: { errors: [{ reason: "rateLimitExceeded", message: "slow down" }] },
+      })
+    );
+
+    const result = await gdriveProvider.writeSessionFile(
+      auth,
+      { provider: "gdrive", folderId: "folder-abc" },
+      "file.json",
+      "data",
+      { size: 4, contentType: "application/json" }
+    );
+
+    expect(result).toEqual({
+      success: false,
+      error: "RATE_LIMITED",
+      providerStatus: 403,
+      providerMessage: "Forbidden",
+      retryAfter: null,
+    });
+  });
+
+  it("maps 403 dailyLimitExceeded to RATE_LIMITED", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({
+        status: 403,
+        statusText: "Forbidden",
+        jsonBody: { errors: [{ reason: "dailyLimitExceeded", message: "daily cap" }] },
+      })
+    );
+
+    const result = await gdriveProvider.writeSessionFile(
+      auth,
+      { provider: "gdrive", folderId: "folder-abc" },
+      "file.json",
+      "data",
+      { size: 4, contentType: "application/json" }
+    );
+
+    expect(result.error).toBe("RATE_LIMITED");
+  });
+
+  it("defaults to AUTH_EXPIRED on a 403 whose body isn't valid JSON (safe fallback, not a crash)", async () => {
+    // mapErrorResponse only parses the body on a 403 (to read the reason),
+    // and swallows a JSON-parse failure into `body = undefined` -- exercised
+    // here directly rather than assumed, since a throw escaping instead would
+    // turn a routine provider error into an unhandled rejection.
+    mockFetch.mockResolvedValueOnce({
+      status: 403,
+      statusText: "Forbidden",
+      headers: { get: () => null },
+      json: () => Promise.reject(new Error("not json")),
+    });
+
+    const result = await gdriveProvider.writeSessionFile(
+      auth,
+      { provider: "gdrive", folderId: "folder-abc" },
+      "file.json",
+      "data",
+      { size: 4, contentType: "application/json" }
+    );
+
+    expect(result).toEqual({
+      success: false,
+      error: "AUTH_EXPIRED",
+      providerStatus: 403,
+      providerMessage: "Forbidden",
+      retryAfter: null,
+    });
+  });
+
   it("maps 429 to RATE_LIMITED and passes through Retry-After", async () => {
     mockFetch.mockResolvedValueOnce(
       mockResponse({ status: 429, statusText: "Too Many Requests", retryAfter: "15" })
@@ -505,6 +584,45 @@ describe("4. listFiles pagination", () => {
       gdriveProvider.listFiles(auth, { provider: "gdrive", folderId: "folder-err" })
     ).rejects.toThrow(/listing failed/i);
   });
+
+  it("throws (never returns the partial list already collected) when a SUBFOLDER listing fails mid-recursion", async () => {
+    // The single-request-failure case above only proves the top-level listing
+    // is never swallowed. This is the case the "never a partial list" comment
+    // in listFiles is actually guarding: the top level succeeds and yields
+    // real files PLUS a subfolder to recurse into, and only the second
+    // request (that subfolder) fails. If that failure were swallowed instead
+    // of thrown, callers would get a partial list containing everything
+    // found before the failure, which is exactly the silently-incomplete
+    // rehydration the design note warns about.
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({
+        status: 200,
+        statusText: "OK",
+        jsonBody: {
+          files: [
+            { id: "top-1", name: "top.csv", mimeType: "text/csv" },
+            { id: "folder1", name: "subdir", mimeType: "application/vnd.google-apps.folder" },
+          ],
+        },
+      })
+    );
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({
+        status: 500,
+        statusText: "Internal Server Error",
+        jsonBody: undefined,
+      })
+    );
+
+    await expect(
+      gdriveProvider.listFiles(auth, { provider: "gdrive", folderId: "folder-partial" })
+    ).rejects.toThrow(/listing failed/i);
+
+    // Both requests were actually made (top level succeeded, subfolder is
+    // what failed) -- confirms the throw is coming from the recursion step,
+    // not a coincidental early exit.
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("5. updateFile", () => {
@@ -572,9 +690,20 @@ describe("6. createDataContainer", () => {
       mockResponse({ status: 200, statusText: "OK", jsonBody: { id: "child-id-A", name: "My Experiment" } })
     );
 
+    // The Psych-DS chain is now created up front (find+create for "data",
+    // then find+create for "raw") so the write path never races to make it.
+    mockFetch.mockResolvedValueOnce(mockResponse({ status: 200, statusText: "OK", jsonBody: { files: [] } }));
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 200, statusText: "OK", jsonBody: { id: "data-folder-id", name: "data" } })
+    );
+    mockFetch.mockResolvedValueOnce(mockResponse({ status: 200, statusText: "OK", jsonBody: { files: [] } }));
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 200, statusText: "OK", jsonBody: { id: "raw-folder-id", name: "raw" } })
+    );
+
     const result = await gdriveProvider.createDataContainer(auth, { name: "My Experiment" });
 
-    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch).toHaveBeenCalledTimes(6);
 
     const findUrl = new URL(callArgs(0).url);
     expect(findUrl.searchParams.get("q")).toContain("name='DataPipe'");
@@ -600,9 +729,20 @@ describe("6. createDataContainer", () => {
       mockResponse({ status: 200, statusText: "OK", jsonBody: { id: "child-id-B", name: "My Experiment 2" } })
     );
 
+    // The Psych-DS chain is now created up front (find+create for "data",
+    // then find+create for "raw") so the write path never races to make it.
+    mockFetch.mockResolvedValueOnce(mockResponse({ status: 200, statusText: "OK", jsonBody: { files: [] } }));
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 200, statusText: "OK", jsonBody: { id: "data-folder-id", name: "data" } })
+    );
+    mockFetch.mockResolvedValueOnce(mockResponse({ status: 200, statusText: "OK", jsonBody: { files: [] } }));
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 200, statusText: "OK", jsonBody: { id: "raw-folder-id", name: "raw" } })
+    );
+
     const result = await gdriveProvider.createDataContainer(auth, { name: "My Experiment 2" });
 
-    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(mockFetch).toHaveBeenCalledTimes(7);
 
     expect(JSON.parse(callArgs(1).options.body)).toEqual({
       name: "DataPipe",
@@ -616,6 +756,55 @@ describe("6. createDataContainer", () => {
     });
 
     expect(result).toEqual({ provider: "gdrive", folderId: "child-id-B" });
+  });
+
+  it("skips the DataPipe-root lookup entirely when researcherInput carries a parentId (Picker-supplied folder)", async () => {
+    // The other two tests above only exercise the no-parentId fallback path.
+    // A researcher-chosen parent (via the Google Picker) is meant to bypass
+    // the shared "DataPipe" root convention entirely -- this is the one
+    // request shape where that matters and it was untested.
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 200, statusText: "OK", jsonBody: { id: "child-id-C", name: "My Experiment 3" } })
+    );
+    // Then the Psych-DS chain, same as the other two paths.
+    mockFetch.mockResolvedValueOnce(mockResponse({ status: 200, statusText: "OK", jsonBody: { files: [] } }));
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 200, statusText: "OK", jsonBody: { id: "data-folder-id", name: "data" } })
+    );
+    mockFetch.mockResolvedValueOnce(mockResponse({ status: 200, statusText: "OK", jsonBody: { files: [] } }));
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 200, statusText: "OK", jsonBody: { id: "raw-folder-id", name: "raw" } })
+    );
+
+    const result = await gdriveProvider.createDataContainer(auth, {
+      name: "My Experiment 3",
+      parentId: "picker-chosen-folder-id",
+    });
+
+    // One call for the experiment folder -- no root find, no root create --
+    // then four for the Psych-DS chain.
+    expect(mockFetch).toHaveBeenCalledTimes(5);
+    expect(JSON.parse(callArgs(0).options.body)).toEqual({
+      name: "My Experiment 3",
+      mimeType: "application/vnd.google-apps.folder",
+      parents: ["picker-chosen-folder-id"],
+    });
+
+    expect(result).toEqual({ provider: "gdrive", folderId: "child-id-C" });
+  });
+
+  it("propagates a rejection (does not swallow it) when the DataPipe-root lookup fails", async () => {
+    // createDataContainer has no try/catch of its own around findFolder --
+    // unlike writeSessionFile's segment walk (see "8. nested folder-creation
+    // failure" below), a failure here is expected to surface as a thrown
+    // Error, not get remapped into a WriteResult-shaped value (this method
+    // returns a bare ContainerRef, not a WriteResult, so there is nowhere to
+    // put an error code even if it wanted to).
+    mockFetch.mockResolvedValueOnce(mockResponse({ status: 401, statusText: "Unauthorized", jsonBody: undefined }));
+
+    await expect(
+      gdriveProvider.createDataContainer(auth, { name: "Doomed Experiment" })
+    ).rejects.toThrow(/folder lookup failed/i);
   });
 });
 
@@ -668,11 +857,190 @@ describe("7. downloadFile", () => {
   });
 });
 
+// Found while auditing this suite against providers-dataverse.test.js's
+// coverage, not requested directly -- documents CURRENT (not obviously
+// desired) behavior, the same way dataverse-emulator.test.js's D10 does.
+//
+// writeSessionFile wraps its whole segment-by-segment folder walk (the loop
+// that finds-or-creates "data", then "raw", etc.) in one try/catch that maps
+// ANY failure -- regardless of what actually went wrong -- to a generic
+// { error: "UNAVAILABLE", providerStatus: null }. That collapses a real 401
+// mid-walk (an expired/revoked Drive token, discovered while looking up the
+// "data" folder rather than during the final upload) into the SAME
+// UNAVAILABLE code a genuine outage would produce, instead of the
+// AUTH_EXPIRED that mapDriveError would assign a 401 hit directly against the
+// upload endpoint (see "3. error mapping" above).
+//
+// This is user-facing, not just a logging nicety: components/dashboard/
+// QueuePanel.js shows researchers a distinct "your storage provider
+// connection may need to be refreshed" message for AUTH_EXPIRED, versus a
+// generic "temporarily unavailable" message for UNAVAILABLE. A researcher
+// with an expired token submitting to a Psych-DS nested path (data/raw/...,
+// i.e. any metadataActive experiment) would see the wrong guidance -- while
+// the SAME expired token, on a flat (non-nested) filename, correctly reaches
+// mapDriveError and gets AUTH_EXPIRED. Reported rather than fixed per this
+// task's brief; see the audit notes for detail.
+describe("8. a failure inside the nested folder walk keeps its real error code", () => {
+  // Regression. findFolder/createFolder compute a MappedDriveError and used to
+  // stringify it into a plain Error, so any failure part-way through a nested
+  // path collapsed to a generic UNAVAILABLE with providerStatus null.
+  //
+  // That is user-facing rather than cosmetic: QueuePanel.js prints "your
+  // storage provider connection may need to be refreshed" for AUTH_EXPIRED and
+  // "temporarily unavailable" for UNAVAILABLE, so a researcher whose Drive
+  // token had expired was told to wait out an outage that would never end.
+  //
+  // It only misfired on NESTED paths -- every metadataActive experiment, since
+  // those write to data/raw/... -- while the same expired token on a flat
+  // filename classified correctly. That asymmetry is why it survived: the
+  // obvious test case passes.
+
+  it("a 401 while resolving an intermediate folder is AUTH_EXPIRED", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 401, statusText: "Unauthorized", jsonBody: undefined })
+    );
+
+    const result = await gdriveProvider.writeSessionFile(
+      auth,
+      { provider: "gdrive", folderId: "folder-abc" },
+      "data/raw/file.json",
+      "data",
+      { size: 4, contentType: "application/json" }
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("AUTH_EXPIRED");
+    // The status survives too -- it was being flattened to null.
+    expect(result.providerStatus).toBe(401);
+  });
+
+  it("classifies a nested-path failure the same as the identical flat-path one", async () => {
+    // The invariant that matters: which code comes back must not depend on
+    // whether the filename happened to contain a slash.
+    const call = async (filename) => {
+      mockFetch.mockClear();
+      mockFetch.mockResolvedValueOnce(mockResponse({ status: 401, statusText: "Unauthorized" }));
+      return gdriveProvider.writeSessionFile(
+        auth,
+        { provider: "gdrive", folderId: "folder-abc" },
+        filename,
+        "data",
+        { size: 4, contentType: "application/json" }
+      );
+    };
+
+    expect((await call("data/raw/file.json")).error).toBe((await call("file.json")).error);
+  });
+
+  it("still falls back to UNAVAILABLE for a non-provider throw", async () => {
+    // The fallback must remain for genuine network errors and bugs -- the fix
+    // narrows it to those, rather than removing it.
+    mockFetch.mockRejectedValueOnce(new Error("socket hang up"));
+
+    const result = await gdriveProvider.writeSessionFile(
+      auth,
+      { provider: "gdrive", folderId: "folder-abc" },
+      "data/raw/file.json",
+      "data",
+      { size: 4, contentType: "application/json" }
+    );
+
+    expect(result).toEqual({
+      success: false,
+      error: "UNAVAILABLE",
+      providerStatus: null,
+      providerMessage: expect.stringContaining("socket hang up"),
+      retryAfter: null,
+    });
+  });
+});
+
 // The collision cache hashes a name before the write and rehydrates a cold
 // cache from listFiles, so the two must share a namespace. Drive stores a
 // path prefix as real nested FOLDERS and the file under its bare leaf name,
 // and listFiles collects every file it finds under that leaf regardless of
 // which folder it came from -- so the leaf is what the cache must hash.
+describe("9. the findOrCreateFolder race (spike gate H)", () => {
+  // Confirmed live, not theorised: 8 concurrent writes to one brand-new nested
+  // path produced 8 sibling folders with the same name (gate H, 2026-08-21).
+  // findOrCreateFolder is find-then-create and Drive has no create-if-absent.
+  //
+  // It fires under exactly the designed-for load -- requirement 6 is 30-100
+  // students inside a minute, and on a fresh metadataActive experiment those
+  // are all first-time writes to data/raw/. No data is lost (listFiles
+  // recurses and collects by leaf) but the researcher's Drive tree ends up
+  // duplicated, which is not a valid Psych-DS layout.
+
+  it("pre-creates the data/raw chain so the write path never has to", async () => {
+    // The actual fix: make the folders at container-creation time, when there
+    // is exactly one caller and therefore no race.
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 200, statusText: "OK", jsonBody: { id: "exp-folder", name: "E" } })
+    );
+    mockFetch.mockResolvedValueOnce(mockResponse({ status: 200, statusText: "OK", jsonBody: { files: [] } }));
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 200, statusText: "OK", jsonBody: { id: "data-id", name: "data" } })
+    );
+    mockFetch.mockResolvedValueOnce(mockResponse({ status: 200, statusText: "OK", jsonBody: { files: [] } }));
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 200, statusText: "OK", jsonBody: { id: "raw-id", name: "raw" } })
+    );
+
+    await gdriveProvider.createDataContainer(auth, { name: "E", parentId: "p" });
+
+    const created = mockFetch.mock.calls
+      .filter(([, opts]) => opts.method === "POST")
+      .map(([, opts]) => JSON.parse(opts.body));
+    expect(created).toEqual([
+      { name: "E", mimeType: "application/vnd.google-apps.folder", parents: ["p"] },
+      { name: "data", mimeType: "application/vnd.google-apps.folder", parents: ["exp-folder"] },
+      { name: "raw", mimeType: "application/vnd.google-apps.folder", parents: ["data-id"] },
+    ]);
+  });
+
+  it("does not fail experiment creation if the chain cannot be pre-made", async () => {
+    // Best-effort: the write path can still create them on demand, so a
+    // failure here must not cost the researcher their experiment.
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 200, statusText: "OK", jsonBody: { id: "exp-folder-2", name: "E2" } })
+    );
+    mockFetch.mockResolvedValueOnce(mockResponse({ status: 500, statusText: "Server Error" }));
+
+    const result = await gdriveProvider.createDataContainer(auth, { name: "E2", parentId: "p" });
+    expect(result).toEqual({ provider: "gdrive", folderId: "exp-folder-2" });
+  });
+
+  it("converges on one folder when duplicates already exist", async () => {
+    // The backstop, for experiments created before the fix above. Drive does
+    // not document an ordering for a name query, so returning files[0] let two
+    // concurrent writers pick DIFFERENT folders and keep fragmenting the tree.
+    // Sorting makes every caller agree.
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({
+        status: 200,
+        statusText: "OK",
+        jsonBody: { files: [{ id: "zzz-late" }, { id: "aaa-first" }, { id: "mmm-mid" }] },
+      })
+    );
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 200, statusText: "OK", jsonBody: { id: "file-id", name: "x.json" } })
+    );
+
+    await gdriveProvider.writeSessionFile(
+      auth,
+      { provider: "gdrive", folderId: "root-folder" },
+      "data/x.json",
+      "{}",
+      { size: 2, contentType: "application/json" }
+    );
+
+    // The upload names the deterministic winner, not whichever Drive listed
+    // first.
+    const upload = mockFetch.mock.calls.at(-1)[1].body;
+    expect(String(upload)).toContain("aaa-first");
+  });
+});
+
 describe("storedNameFor (collision-cache namespace)", () => {
   it("keeps only the leaf, matching what listFiles reports", () => {
     expect(gdriveProvider.storedNameFor("data/raw/abc123.json")).toBe("abc123.json");

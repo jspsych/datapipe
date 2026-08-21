@@ -59,6 +59,27 @@ interface MappedDriveError {
   retryAfter: number | null;
 }
 
+// Raised by the folder helpers so a failure part-way through a nested path
+// keeps its CLASSIFICATION, not just its text.
+//
+// findFolder/createFolder both compute a MappedDriveError and then used to
+// stringify it into a plain Error, so writeSessionFile's segment walk could
+// only report a generic UNAVAILABLE. That is user-facing: QueuePanel.js shows
+// "your storage provider connection may need to be refreshed" for
+// AUTH_EXPIRED and "temporarily unavailable" for UNAVAILABLE, so a researcher
+// with an expired Drive token was told to wait for an outage that would never
+// clear. It only misfired on NESTED paths -- i.e. every metadataActive
+// experiment, which writes to data/raw/... -- while the same expired token on
+// a flat filename classified correctly, which is why it went unnoticed.
+class DriveFolderError extends Error {
+  readonly mapped: MappedDriveError;
+  constructor(message: string, mapped: MappedDriveError) {
+    super(message);
+    this.name = "DriveFolderError";
+    this.mapped = mapped;
+  }
+}
+
 // Shared error-mapping helper — every write/update/list/download call routes
 // its non-2xx response through this. Drive never yields a duplicate-name
 // conflict (NAME_CONFLICT): Drive allows multiple files with the same name
@@ -139,12 +160,26 @@ async function findFolder(
 
   if (!isSuccessStatus(response.status)) {
     const mapped = await mapErrorResponse(response);
-    throw new Error(`Google Drive folder lookup failed: ${mapped.providerStatus} ${mapped.providerMessage}`);
+    throw new DriveFolderError(
+      `Google Drive folder lookup failed: ${mapped.providerStatus} ${mapped.providerMessage}`,
+      mapped
+    );
   }
 
   const body = (await response.json()) as { files?: { id: string }[] };
   const files = body.files || [];
-  return files.length > 0 ? files[0].id : null;
+  if (files.length === 0) {
+    return null;
+  }
+
+  // Lowest id wins, deterministically, rather than "whatever Drive listed
+  // first". Drive allows duplicate folder names and does not document an
+  // ordering here, so with duplicates present two concurrent writers could
+  // otherwise pick DIFFERENT folders and keep fragmenting the tree. Sorting
+  // makes every caller converge on one, which is what stops a race from
+  // compounding once it has happened. Preventing it in the first place is
+  // createDataContainer's job (see the eager folder creation there).
+  return files.map((file) => file.id).sort()[0];
 }
 
 async function createFolder(auth: ResolvedAuth, name: string, parentId: string): Promise<string> {
@@ -159,7 +194,10 @@ async function createFolder(auth: ResolvedAuth, name: string, parentId: string):
 
   if (!isSuccessStatus(response.status)) {
     const mapped = await mapErrorResponse(response);
-    throw new Error(`Google Drive folder creation failed: ${mapped.providerStatus} ${mapped.providerMessage}`);
+    throw new DriveFolderError(
+      `Google Drive folder creation failed: ${mapped.providerStatus} ${mapped.providerMessage}`,
+      mapped
+    );
   }
 
   const body = (await response.json()) as { id: string };
@@ -317,6 +355,34 @@ export const gdriveProvider: StorageProvider = {
     // names, so there's nothing to find-or-create here.
     const folderId = await createFolder(auth, name, targetParentId);
 
+    // Create the Psych-DS folder chain NOW, so the write path only ever finds
+    // it. findOrCreateFolder is find-then-create with no atomicity, and Drive
+    // offers no create-if-absent, so a burst of first-time submissions to a
+    // brand-new nested path races and produces sibling folders with the same
+    // name. Confirmed live rather than theorised: 8 concurrent writes to one
+    // new path produced 8 folders (spike gate H, 2026-08-21).
+    //
+    // That is exactly the designed-for load -- requirement 6 is 30-100
+    // students inside a minute, and on a fresh metadataActive experiment those
+    // are all first-time writes to data/raw/. No data is lost (listFiles
+    // recurses and collects by leaf name) but the researcher's Drive folder
+    // ends up with the tree duplicated, which is not a valid Psych-DS layout.
+    //
+    // Created unconditionally rather than only for metadataActive experiments:
+    // metadata can be switched on at any time, long after the container
+    // exists, and two empty folders cost far less than the race they remove.
+    // Best-effort -- a failure here must not fail experiment creation, since
+    // the write path can still create them itself.
+    try {
+      const dataId = await findOrCreateFolder(auth, "data", folderId);
+      await findOrCreateFolder(auth, "raw", dataId);
+    } catch (e) {
+      console.warn(
+        `gdrive: could not pre-create the data/raw folders for ${folderId}; the write path will create them on demand:`,
+        e instanceof Error ? e.message : e
+      );
+    }
+
     return { provider: "gdrive", folderId };
   },
 
@@ -354,6 +420,12 @@ export const gdriveProvider: StorageProvider = {
         parentId = await findOrCreateFolder(auth, segment, parentId);
       }
     } catch (e) {
+      // A provider failure keeps whatever mapErrorResponse decided; only a
+      // genuinely non-provider throw (a network error, a bug) falls back to
+      // UNAVAILABLE. See DriveFolderError.
+      if (e instanceof DriveFolderError) {
+        return { success: false, ...e.mapped };
+      }
       return {
         success: false,
         error: "UNAVAILABLE",
