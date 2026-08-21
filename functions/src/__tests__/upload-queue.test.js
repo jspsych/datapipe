@@ -45,6 +45,7 @@ let db;
 let app;
 let queueUpload;
 let isFastRetry;
+let isProbeRetry;
 
 beforeAll(async () => {
   try {
@@ -61,7 +62,7 @@ beforeAll(async () => {
   // first), and its app.js does a bare, unnamed initializeApp() -- distinct
   // from this suite's own NAMED "upload-queue-test" app above, so the two
   // don't collide.
-  ({ default: queueUpload, isFastRetry } = await import("../../lib/queue-upload.js"));
+  ({ default: queueUpload, isFastRetry, isProbeRetry } = await import("../../lib/queue-upload.js"));
 });
 
 // Only the docs THIS suite created. A collection-wide wipe here used to
@@ -228,6 +229,37 @@ describe("scheduled-upload-retry tiered backoff arithmetic", () => {
   test("a missing or cleared providerErrorCode is slow tier", () => {
     expect(isFastRetry(undefined)).toBe(false);
     expect(isFastRetry(null)).toBe(false);
+    expect(isProbeRetry(undefined)).toBe(false);
+    expect(isProbeRetry(null)).toBe(false);
+  });
+
+  // The probe tier is NOT the fast tier: it buys one early look, not a
+  // minutes-scale schedule. AUTH_EXPIRED must therefore be a probe code and
+  // NOT a fast code -- if it ever became both, five attempts would burn
+  // inside ~31 minutes against what is usually a genuinely revoked token.
+  test("probe codes take one early look but are not on the fast tier", () => {
+    for (const code of ["AUTH_EXPIRED", "UNAVAILABLE"]) {
+      expect(isProbeRetry(code)).toBe(true);
+      expect(isFastRetry(code)).toBe(false);
+    }
+  });
+
+  // RATE_LIMITED is excluded because the provider has stated how long it will
+  // keep refusing; QUOTA_EXCEEDED because nothing clears it within a minute.
+  test("RATE_LIMITED and QUOTA_EXCEEDED never probe", () => {
+    for (const code of ["RATE_LIMITED", "QUOTA_EXCEEDED", "NAME_CONFLICT", "CONTENTION"]) {
+      expect(isProbeRetry(code)).toBe(false);
+    }
+  });
+
+  // What makes the probe free rather than additive: once it fails, the worker
+  // reads AUTH_EXPIRED as slow tier and resumes the ordinary chain, so the
+  // item still gets five attempts across ~30 hours instead of ~31. Mirrors the
+  // production formula, same convention as the rest of this block.
+  test("a failed probe reverts to the hours-scale chain, not a second minute", () => {
+    const baseMs = isFastRetry("AUTH_EXPIRED") ? 60 * 1000 : 60 * 60 * 1000;
+    const afterProbe = Math.min(Math.pow(2, 1) * baseMs, SLOW_MAX_BACKOFF_MS);
+    expect(afterProbe).toBe(2 * 60 * 60 * 1000);
   });
 
   test("slow tier (everything else) is unchanged: ~2, 4, 8, 16, 24 hours", () => {
@@ -309,6 +341,39 @@ describe("queueUpload tiers the first nextRetryAt by providerErrorCode", () => {
     expect(deltaMs).toBeLessThanOrEqual(60 * 60 * 1000 + 5000);
   });
 
+  // The gate-N case: a Zenodo 403 caused by a concurrent refresh rotating the
+  // access token away is indistinguishable from a revoked one in the response,
+  // but heals itself in seconds. An hour is the wrong first look.
+  test("an AUTH_EXPIRED providerErrorCode sets nextRetryAt ~60 seconds out (probe)", async () => {
+    const experimentID = `queue-probe-auth-${randomUUID()}`;
+    const filename = `file-${randomUUID()}.json`;
+    const docId = `${experimentID}:${filename}`.replace(/[/\\]/g, "_");
+    queueDoc(docId);
+
+    const before = Date.now();
+    await queueUpload({
+      experimentID,
+      owner: "upload-queue-test-owner",
+      filename,
+      data: "[]",
+      dataType: "data",
+      osfFilesLink: "https://osf.io/files/",
+      errorCode: 403,
+      providerErrorCode: "AUTH_EXPIRED",
+      sessionIncremented: true,
+    });
+    const after = Date.now();
+
+    const doc = await db.collection("uploadQueue").doc(docId).get();
+    expect(doc.exists).toBe(true);
+    expect(doc.data().providerErrorCode).toBe("AUTH_EXPIRED");
+
+    const deltaMs = doc.data().nextRetryAt.toMillis() - before;
+    expect(deltaMs).toBeGreaterThanOrEqual(59 * 1000);
+    // Comfortably short of the hour it would be without the probe tier.
+    expect(deltaMs).toBeLessThan(after - before + 5 * 60 * 1000);
+  });
+
   // Regression guard: RATE_LIMITED was briefly fast-tiered, which cut the
   // whole retry budget for an OSF/Drive 429 from ~31 hours to ~2.
   test("a RATE_LIMITED providerErrorCode sets nextRetryAt ~1 hour out (slow tier)", async () => {
@@ -339,8 +404,11 @@ describe("queueUpload tiers the first nextRetryAt by providerErrorCode", () => {
     expect(deltaMs).toBeLessThanOrEqual(60 * 60 * 1000 + 5000);
   });
 
-  test("an UNAVAILABLE providerErrorCode also sets nextRetryAt ~1 hour out (slow tier)", async () => {
-    const experimentID = `queue-slow-tier-unavailable-${randomUUID()}`;
+  // Was a slow-tier assertion until UNAVAILABLE joined PROBE_RETRY_CODES. A
+  // 5xx is usually a blip that clears in seconds, and the cost of being wrong
+  // is a single extra request before the same hours-scale chain resumes.
+  test("an UNAVAILABLE providerErrorCode sets nextRetryAt ~60 seconds out (probe)", async () => {
+    const experimentID = `queue-probe-unavailable-${randomUUID()}`;
     const filename = `file-${randomUUID()}.json`;
     const docId = `${experimentID}:${filename}`.replace(/[/\\]/g, "_");
     queueDoc(docId);
@@ -357,14 +425,15 @@ describe("queueUpload tiers the first nextRetryAt by providerErrorCode", () => {
       providerErrorCode: "UNAVAILABLE",
       sessionIncremented: true,
     });
+    const after = Date.now();
 
     const doc = await db.collection("uploadQueue").doc(docId).get();
     expect(doc.exists).toBe(true);
     expect(doc.data().providerErrorCode).toBe("UNAVAILABLE");
 
     const deltaMs = doc.data().nextRetryAt.toMillis() - before;
-    expect(deltaMs).toBeGreaterThan(55 * 60 * 1000);
-    expect(deltaMs).toBeLessThanOrEqual(60 * 60 * 1000 + 5000);
+    expect(deltaMs).toBeGreaterThanOrEqual(59 * 1000);
+    expect(deltaMs).toBeLessThan(after - before + 5 * 60 * 1000);
   });
 });
 
