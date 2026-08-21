@@ -483,7 +483,7 @@ describe("D5. contention is classified as transient and retried on the fast tier
 });
 
 describe("D6. duplicate CONTENT is not mistaken for contention", () => {
-  it("the same-content 400 queues on the slow tier, not the 60-second one", async () => {
+  it("the same-content 400 queues as UNAVAILABLE, never as CONTENTION", async () => {
     const experimentID = `dataverse-e2e-6-${randomUUID()}`;
     const filename = `d6-${randomUUID()}.json`;
     await createDataverseExperiment(experimentID);
@@ -499,8 +499,28 @@ describe("D6. duplicate CONTENT is not mistaken for contention", () => {
 
     const docId = `${experimentID}:${filename}`.replace(/[/\\]/g, "_");
     const queueData = (await db.collection("uploadQueue").doc(docId).get()).data();
+    // The point of this test, and unchanged: NOT CONTENTION. Misclassifying it
+    // would put a permanently-failing upload on the fast tier, spending all
+    // five attempts inside ~31 minutes on bytes Dataverse will reject
+    // identically every time.
     expect(queueData.providerErrorCode).toBe("UNAVAILABLE");
-    expect(queueData.nextRetryAt.toMillis()).toBeGreaterThan(queuedAt + 30 * 60 * 1000);
+
+    // This assertion used to require >30 minutes. UNAVAILABLE joined
+    // PROBE_RETRY_CODES on 2026-08-21, so the first look is now ~60 seconds
+    // (really the next */5 tick) before the ordinary hours-scale chain
+    // resumes.
+    //
+    // THIS CASE IS THE COST OF THAT DECISION, AND IT IS DELIBERATE. A
+    // same-content 400 is deterministic -- the probe cannot possibly succeed,
+    // so it is one wasted request, every time, for this specific Dataverse
+    // rejection. It is accepted because UNAVAILABLE overwhelmingly means a
+    // transient 5xx or network fault that clears in seconds, and because the
+    // probe DISPLACES the 1-hour first attempt rather than adding to the
+    // chain: the retry budget and the ~30-hour total window are unchanged, so
+    // the worst case is one extra request, not a shortened lifetime.
+    const deltaMs = queueData.nextRetryAt.toMillis() - queuedAt;
+    expect(deltaMs).toBeGreaterThanOrEqual(59 * 1000);
+    expect(deltaMs).toBeLessThan(10 * 60 * 1000);
   });
 });
 

@@ -284,11 +284,19 @@ beforeAll(async () => {
   await db.collection("users").doc(OWNER_ID).set({
     connectedAccounts: {
       zenodo: {
-        authMethod: "static-token",
+        authMethod: "oauth2",
+        // Zenodo moved from a pasted personal access token to OAuth2 on
+        // 2026-08-21. tokenExpiresAt has to sit comfortably in the future or
+        // resolveToken would try to refresh -- these suites exercise the write
+        // path against the mock, not the OAuth path, which
+        // providers-zenodo-oauth.test.js covers against the emulator.
+        // serverUrl is deliberately absent: it is deployment config now, and
+        // in any case ZENODO_API_BASE overrides it for every call here.
         // Plaintext: no "v1:" prefix, so decrypt() passes it through. Same
         // convention as gdrive-emulator.test.js.
         encryptedToken: "compaction-token",
-        serverUrl: ZENODO_SERVER_URL,
+        encryptedRefreshToken: "compaction-refresh",
+        tokenExpiresAt: Date.now() + 24 * 60 * 60 * 1000,
       },
     },
   });

@@ -21,6 +21,14 @@ const DEPOSITION_ID = 987654;
 
 beforeEach(() => {
   mockFetch.mockClear();
+  // zenodoOAuthHost() reads this at CALL time, so it has to be set per test
+  // rather than at import. Pinned to the sandbox so it agrees with SERVER_URL
+  // below and a stray real-host URL in an assertion stands out.
+  process.env.ZENODO_ENV = "sandbox.";
+});
+
+afterAll(() => {
+  delete process.env.ZENODO_ENV;
 });
 
 function mockResponse({ status, statusText, jsonBody, textBody, headers }) {
@@ -56,21 +64,29 @@ const container = {
 const meta = { size: 12, contentType: "application/json" };
 
 describe("1. resolveToken", () => {
-  it("returns the decrypted token and serverUrl for a connected account", async () => {
-    const userData = {
+  // decrypt() falls back to plaintext for values without the "v1:" prefix, so
+  // plain strings round-trip without needing TOKEN_ENCRYPTION_KEY here. The
+  // refresh path -- which encrypts and persists -- is exercised against the
+  // Firestore emulator in providers-zenodo-oauth.test.js instead.
+  function connected(overrides) {
+    return {
       connectedAccounts: {
         zenodo: {
-          authMethod: "static-token",
-          // decrypt() falls back to plaintext for values without the "v1:"
-          // prefix, so a plain string round-trips without needing
-          // TOKEN_ENCRYPTION_KEY set up for this test.
+          authMethod: "oauth2",
           encryptedToken: "plain-token",
-          serverUrl: SERVER_URL,
+          encryptedRefreshToken: "plain-refresh",
+          tokenExpiresAt: Date.now() + 60 * 60 * 1000,
+          ...overrides,
         },
       },
     };
-    const result = await zenodoProvider.resolveToken(userData, "owner-uid");
+  }
+
+  it("returns the stored token while it is still comfortably fresh", async () => {
+    const result = await zenodoProvider.resolveToken(connected(), "owner-uid");
     expect(result).toEqual({ success: true, token: "plain-token", serverUrl: SERVER_URL });
+    // No refresh request: a live token must not cost a round trip.
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it("fails with PROVIDER_NOT_CONNECTED when there is no zenodo account", async () => {
@@ -79,27 +95,47 @@ describe("1. resolveToken", () => {
     expect(result.error).toBe("PROVIDER_NOT_CONNECTED");
   });
 
-  // Zenodo tokens have no documented expiry so tokenExpiresAt is normally
-  // absent -- but if one is ever stored it must still be honored rather than
-  // ignored.
-  it("honors a stored tokenExpiresAt in the past", async () => {
-    const userData = {
-      connectedAccounts: {
-        zenodo: {
-          authMethod: "static-token",
-          encryptedToken: "plain-token",
-          serverUrl: SERVER_URL,
-          tokenExpiresAt: Date.now() - 1000,
-        },
-      },
-    };
-    const result = await zenodoProvider.resolveToken(userData, "owner-uid");
-    expect(result.success).toBe(false);
-    expect(result.error).toBe("PROVIDER_TOKEN_EXPIRED");
+  // The host is now deployment configuration, not per-connection data. An
+  // OAuth client_id is registered against ONE installation, so a serverUrl
+  // left on a stored connection -- by a migration, a hand edit, or an old
+  // static-token document -- must never be able to point a live client at the
+  // other Zenodo.
+  it("ignores any serverUrl left on the stored connection", async () => {
+    const result = await zenodoProvider.resolveToken(
+      connected({ serverUrl: "https://zenodo.org" }),
+      "owner-uid"
+    );
+    expect(result.success).toBe(true);
+    expect(result.serverUrl).toBe(SERVER_URL);
   });
 
-  it("does not implement staticTokenExpiry (Zenodo reports no expiry)", () => {
+  it("defaults to production zenodo.org when ZENODO_ENV is unset", async () => {
+    delete process.env.ZENODO_ENV;
+    const result = await zenodoProvider.resolveToken(connected(), "owner-uid");
+    // Never "https://undefinedzenodo.org", and never the sandbox: a
+    // misconfigured production deploy must fail loudly against the real host
+    // rather than quietly writing test data nobody looks at.
+    expect(result.serverUrl).toBe("https://zenodo.org");
+  });
+
+  it("no longer implements the static-token hooks", () => {
+    // connect-provider.ts's connectStaticTokenProvider rejects any provider
+    // missing validateStaticToken, which is what stops a researcher pasting a
+    // personal access token into a flow that now expects OAuth.
+    expect(zenodoProvider.validateStaticToken).toBeUndefined();
     expect(zenodoProvider.staticTokenExpiry).toBeUndefined();
+  });
+
+  // Zenodo access tokens last an hour, short enough that one checked as valid
+  // at the top of a request can die during a slow upload -- a compaction pass
+  // moves up to MAX_BATCH_BYTES in a single call.
+  it("treats a token expiring within the margin as already stale", async () => {
+    const userData = connected({ tokenExpiresAt: Date.now() + 30 * 1000 });
+    // Refreshing needs Firestore, which this suite has no emulator for, so
+    // assert the decision rather than the outcome: it must NOT hand back the
+    // nearly-dead token.
+    const result = await zenodoProvider.resolveToken(userData, "owner-uid").catch(() => null);
+    expect(result?.token).not.toBe("plain-token");
   });
 });
 
@@ -512,18 +548,47 @@ describe("8. downloadFile", () => {
   });
 });
 
-describe("9. validateStaticToken", () => {
-  it("returns true on 200", async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse({ status: 200, jsonBody: [] }));
-    expect(await zenodoProvider.validateStaticToken(auth)).toBe(true);
-    expect(callArgs(0).url).toBe(`${SERVER_URL}/api/deposit/depositions?size=1`);
+describe("9. oauthConfig", () => {
+  it("targets the installation named by ZENODO_ENV", () => {
+    const config = zenodoProvider.oauthConfig();
+    expect(config.authorizeUrl).toBe("https://sandbox.zenodo.org/oauth/authorize");
+    expect(config.tokenUrl).toBe("https://sandbox.zenodo.org/oauth/token");
   });
 
-  // An under-scoped token is "not valid" here rather than an exception --
-  // catching it at connect time is the point.
-  it("returns false on 403 without throwing", async () => {
-    mockFetch.mockResolvedValueOnce(mockResponse({ status: 403, jsonBody: { message: "Insufficient scope" } }));
-    expect(await zenodoProvider.validateStaticToken(auth)).toBe(false);
+  it("defaults to production when ZENODO_ENV is unset", () => {
+    delete process.env.ZENODO_ENV;
+    const config = zenodoProvider.oauthConfig();
+    expect(config.authorizeUrl).toBe("https://zenodo.org/oauth/authorize");
+  });
+
+  // THE SCOPE LIST IS A DECISION, NOT A DETAIL. invenio-oauth2server also
+  // registers a user:email scope, and asking for it would hand us the
+  // researcher's identity in the token response itself. We deliberately do
+  // not: identity is Firebase's job (lib/auth-providers.js), and Zenodo could
+  // not serve as a sign-in provider regardless -- invenio-oauth2server
+  // implements no OIDC layer at all, so there is no id_token for Firebase to
+  // verify. Widening this list would widen the consent screen for nothing.
+  it("requests exactly the two deposit scopes and no identity scope", () => {
+    const scopes = zenodoProvider.oauthConfig().scope.split(" ").sort();
+    expect(scopes).toEqual(["deposit:actions", "deposit:write"]);
+  });
+
+  // Google needs access_type=offline&prompt=consent to issue a refresh token
+  // at all. Zenodo issues one unconditionally on the authorization_code
+  // grant, so there is nothing to add here -- but the field must still be an
+  // object, because generate-oauth-state.ts iterates it unguarded.
+  it("adds no extra authorize parameters, but still supplies the object", () => {
+    expect(zenodoProvider.oauthConfig().extraAuthParams).toEqual({});
+  });
+
+  it("reads client credentials from the environment at call time", () => {
+    process.env.ZENODO_CLIENT_ID = "test-client";
+    process.env.ZENODO_REDIRECT_URI = "https://datapipe-test.web.app/oauth2/connect";
+    const config = zenodoProvider.oauthConfig();
+    expect(config.clientId).toBe("test-client");
+    expect(config.redirectUri).toBe("https://datapipe-test.web.app/oauth2/connect");
+    delete process.env.ZENODO_CLIENT_ID;
+    delete process.env.ZENODO_REDIRECT_URI;
   });
 });
 
@@ -744,7 +809,7 @@ describe("9e. writeStreamedFile", () => {
 describe("10. registry wiring", () => {
   it("declares the capability surface the framework reads", () => {
     expect(zenodoProvider.id).toBe("zenodo");
-    expect(zenodoProvider.authMethod).toBe("static-token");
+    expect(zenodoProvider.authMethod).toBe("oauth2");
     // No folder concept in either Zenodo API generation -- the framework's
     // filename-prefix fallback has to apply.
     expect(zenodoProvider.capabilities.nativeSubfolders).toBe(false);

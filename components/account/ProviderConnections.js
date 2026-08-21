@@ -69,10 +69,12 @@ export default function ProviderConnections() {
           idToken,
           token: apiToken.trim(),
           // connectstatictokenprovider ALWAYS requires a serverUrl, but not
-          // every static-token provider is federated. Dataverse is (the
-          // researcher types their institution's installation); Zenodo is not
-          // -- there is exactly one production host -- so its config supplies
-          // a fixed defaultServerUrl and renders no field at all.
+          // every static-token provider is federated, so a provider may supply
+          // a fixed defaultServerUrl and render no field at all. Dataverse is
+          // federated (the researcher types their institution's installation)
+          // and is currently the only provider reaching this branch -- Zenodo
+          // was the non-federated example until it moved to OAuth2 on
+          // 2026-08-21 and stopped coming through here entirely.
           serverUrl: STORAGE_PROVIDERS[providerId]?.needsServerUrl
             ? serverUrl.trim()
             : STORAGE_PROVIDERS[providerId]?.defaultServerUrl,

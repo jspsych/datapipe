@@ -830,3 +830,141 @@ Google Drive provider is announced:
   one on `experiments`). The Firestore emulator does not enforce composite
   indexes, so the test suite passes without them and only a deploy can confirm
   the query shapes match.
+
+## Zenodo: static token → OAuth2 (2026-08-21)
+
+Zenodo shipped as a static-token provider: the researcher created a personal
+access token on Zenodo and pasted it into DataPipe. It is now OAuth2. There
+were no existing Zenodo connections anywhere but the test deployment, so this
+was a clean cut with no dual-mode period and no migration path.
+
+### What the source says, because the documentation does not exist
+
+Zenodo publishes nothing about its OAuth application flow —
+`developers.zenodo.org` documents personal access tokens only. Zenodo runs
+InvenioRDM (it reports `InvenioRDM 15.0` in its page generator meta tag), so
+the answers came from reading `invenio-oauth2server` and `oauthlib` directly:
+
+- **Endpoints** are `/oauth/authorize` and `/oauth/token`. `POST /oauth/token`
+  answers **404** when `client_id` matches no registered Client — the view
+  calls `abort(404)` before oauthlib sees the request. A 404 there means a
+  misconfigured client, not a missing endpoint.
+- **Scopes**: `deposit:write`, `deposit:actions`, and — undocumented by Zenodo
+  — `user:email`, registered by `invenio-oauth2server` itself via its own
+  entry point, so it exists on every Invenio instance. DataPipe requests only
+  the two deposit scopes.
+- **Identity comes back in the token response.** `save_token` attaches
+  `user: {id}` unconditionally and adds `email`/`email_verified` only when
+  `user:email` was granted. No `/api/me` round trip is needed by anyone who
+  wants it.
+- **Access tokens expire after sixty days.** The `Token` model has a single
+  `expires` column, governing the access token. Reading the source predicts one
+  hour — Invenio never sets `OAUTH2_PROVIDER_TOKEN_EXPIRES_IN`, so it falls
+  through to oauthlib's `expires_in or 3600` — but the sandbox actually issues
+  `expires_in=5184000`, i.e. 60 days. Zenodo overrides it in deployment config,
+  which is not public. Measured by spike gate J on 2026-08-21; do not trust the
+  source figure.
+- **Refresh tokens rotate, and the old one dies immediately.** oauthlib's
+  `rotate_refresh_token` defaults to `True`, and `save_token` deletes *every*
+  prior `Token` row for `(client_id, user_id)` before inserting the new one:
+  *"make sure that every client has only one token connected to a user."*
+
+### Why Zenodo is not a sign-in provider
+
+It was considered and rejected on evidence. `invenio-oauth2server` contains
+**zero** references to `id_token`, `openid`, `oidc`, `jwks`, or `userinfo` — it
+is a pure OAuth2 authorization server with no OIDC layer. Firebase's generic
+OIDC provider has nothing to discover or verify, so Zenodo sign-in would mean
+reintroducing a server-side custom-token path of the kind the OSF split
+removed. ORCID already covers researcher identity and *is* a real OIDC
+provider. See `lib/auth-providers.js`.
+
+### What the rotation rule forces
+
+Two things, both in `functions/src/providers/zenodo-oauth.ts`:
+
+1. **Persisting the rotated refresh token is part of the refresh's
+   correctness.** The presented token is dead the moment Zenodo answers, so a
+   crash between the HTTP response and the Firestore write leaves the
+   researcher unable to write data mid-experiment, with no symptom until the
+   access token lapses an hour later. Google's stable refresh tokens make the
+   same crash harmless, which is why `gdrive-oauth.ts` can be simpler.
+2. **A concurrent refresh is not a dead connection.** Two submissions after an
+   idle hour both refresh; the loser presents a token that no longer exists and
+   gets `400 invalid_grant`. `recoverFromRotationRace()` re-reads the stored
+   connection and continues with whatever the winner persisted, rather than
+   tearing down a working account. Only an `invalid_grant` whose stored refresh
+   token is *unchanged* is a genuine revocation.
+
+Deployment config, not the stored connection, decides which Zenodo we mean: an
+OAuth `client_id` is registered against one installation, so a sandbox client
+cannot complete a flow on `zenodo.org`. `resolveToken` ignores any `serverUrl`
+left on a connection.
+
+### What the spike found (2026-08-21, sandbox)
+
+`scripts/zenodo-oauth-spike.mjs` against sandbox.zenodo.org. All gates pass.
+
+| Gate | Result |
+| --- | --- |
+| J. authorization_code exchange | **PASS** — `expires_in=5184000` (60 days), refresh_token present |
+| J0. client authentication | `client_secret_post` accepted; HTTP Basic never needed |
+| K. identity without `user:email` | **PASS** — `user.id` returned, no email |
+| O. OAuth token drives the adapter | **PASS** — created a deposition, wrote a file; the two deposit scopes suffice |
+| L. refresh rotates the refresh token | **PASS** — new value differs, as `rotate_refresh_token=True` implies |
+| M. superseded refresh token rejected | **PASS** — replay returns `400 invalid_grant` |
+| N. previous access token survives | **NO** — it is dead immediately |
+
+**The application must be registered as a CONFIDENTIAL client.** Registered as
+public, everything works except refresh, which fails with `400 invalid_grant` —
+`get_token`'s refresh branch filters on `Client.is_confidential == True`, so the
+lookup simply returns nothing. The symptom appears two months after connecting,
+when the first refresh is due, and looks nothing like its cause. The
+registration form defaults to Confidential; this was found by registering one
+that was not.
+
+**Zenodo answers 403 for every auth failure.** Measured directly: a revoked
+token, a garbage token, an access token rotated away by a concurrent refresh,
+and a request with no `Authorization` header at all all return 403. It never
+returns 401. So the response cannot distinguish a transient rotation from a
+terminal revocation — only comparing the token used against the one now stored
+can, which is what `recoverFromRotationRace()` does for refresh tokens.
+
+**Gate N's consequence, and the probe retry tier.** Because a refresh deletes
+the prior access token, an upload already in flight when another request
+refreshes fails with 403 and maps to `AUTH_EXPIRED` — a code that meant
+"reconnect by hand" and sat on the retry queue's hours-scale tier, when this
+particular instance of it heals itself in seconds.
+
+The fix is a third tier in `queue-upload.ts`: `PROBE_RETRY_CODES`. A probe code
+takes ONE minute-scale look and then, if that fails, resumes the ordinary
+hours-scale chain. It is free rather than additive — the early attempt
+displaces the 1-hour first attempt instead of extending the chain, so an item
+still gets five tries across ~30 hours instead of ~31, with the first look ~59
+minutes earlier. Nothing in `scheduled-upload-retry.ts` changes: the probe only
+moves the first delay, and that file's existing backoff already yields 2 hours
+for the next attempt.
+
+Its members are `AUTH_EXPIRED` and `UNAVAILABLE` — the two codes that cannot
+distinguish a transient failure from a terminal one, so looking once is the
+cheapest way to find out. `RATE_LIMITED` is excluded because the provider has
+stated how long it will keep refusing and probing inside its own window is the
+one thing it asked us not to do; `QUOTA_EXCEEDED` because it needs compaction
+or a human and neither happens within a minute. `CONTENTION` keeps its full
+fast tier, which is a different thing: a minutes-scale schedule for all five
+attempts rather than a single early look.
+
+Note that the retry worker runs on `*/5`, so a 60-second delay really means
+"the next five-minute tick" — that is the number to judge this against, and it
+is still an order of magnitude better than an hour.
+
+This generalizes beyond Zenodo: any provider that conflates a transient auth
+failure with a terminal one now gets one cheap look before the long wait.
+
+### Production checklist
+
+Register an application at `zenodo.org/account/settings/applications/`
+(confidential client, redirect `https://pipe.jspsych.org/oauth2/connect`), then
+set `ZENODO_CLIENT_ID` / `ZENODO_REDIRECT_URI` in the production functions env
+and add the secret to the production deploy workflow. Leave `ZENODO_ENV` unset
+so it resolves to `zenodo.org`.
