@@ -12,7 +12,15 @@ import {
   DeleteResult,
   ProviderErrorCode,
   TokenResult,
+  OAuthConfig,
 } from "./types.js";
+import {
+  refreshZenodoToken,
+  zenodoAuthorizeUrl,
+  zenodoTokenUrl,
+  zenodoOAuthHost,
+  EXPIRY_MARGIN_MS,
+} from "./zenodo-oauth.js";
 
 // ---------------------------------------------------------------------------
 // WHICH ZENODO API THIS TARGETS, AND WHY
@@ -252,12 +260,26 @@ function mapZenodoError(
 
   let error: ProviderErrorCode;
   if (status === 401) {
+    // Kept as a defensive branch, but Zenodo appears never to use it: measured
+    // 2026-08-21, a revoked token, a garbage token and NO token at all all
+    // return 403.
     error = "AUTH_EXPIRED";
   } else if (status === 403) {
-    // Zenodo returns 403 both for an invalid/revoked token and for a token
-    // whose scopes are insufficient (a PAT created without deposit:write).
-    // Neither is retryable and both are fixed the same way -- reconnect with a
-    // correctly scoped token -- so both map here.
+    // Zenodo returns 403 for every authentication and authorization failure
+    // there is -- an invalid or revoked token, a token whose scopes are
+    // insufficient, an access token a concurrent refresh rotated away, and a
+    // request with no Authorization header at all. All four were measured
+    // against the sandbox on 2026-08-21 and all four are 403.
+    //
+    // MOST of those are fixed the same way (reconnect) and are not retryable,
+    // which is why they map here. The rotated-away case is the exception: it
+    // is transient and self-healing, and mapping it to AUTH_EXPIRED puts the
+    // submission on the retry queue's HOURS-scale tier when it would succeed
+    // seconds later. The status code cannot separate them -- only comparing
+    // the token we used against the one now stored can, which this function
+    // has no access to. See the rotation-race note in zenodo-oauth.ts for why
+    // that window is one upload wide, once per sixty days, and why the
+    // consequence is "arrives late", never "lost".
     error = "AUTH_EXPIRED";
   } else if (status === 413 || status === 507) {
     error = "QUOTA_EXCEEDED";
@@ -341,7 +363,7 @@ interface DepositionFileResponse {
 
 export const zenodoProvider: StorageProvider = {
   id: "zenodo",
-  authMethod: "static-token",
+  authMethod: "oauth2",
   capabilities: {
     // Zenodo file keys are a flat namespace -- there is no folder concept in
     // either API generation. The framework's filename-prefix fallback applies.
@@ -363,10 +385,34 @@ export const zenodoProvider: StorageProvider = {
     { name: "affiliation", label: "Affiliation", required: false, placeholder: "Your institution" },
   ],
 
-  async resolveToken(userData: UserData, _owner: string): Promise<TokenResult> {
-    // _owner is unused: Zenodo is a static-token provider with no refresh token
-    // to rotate, so there is no persist-back step (cf. gdrive's resolveToken,
-    // which calls refreshGdriveToken(owner, ...)).
+  // A method rather than a static object so env vars are read at CALL time,
+  // not module load -- same reason as getApiBase() above.
+  oauthConfig(): OAuthConfig {
+    return {
+      authorizeUrl: zenodoAuthorizeUrl(),
+      tokenUrl: zenodoTokenUrl(),
+      clientId: process.env.ZENODO_CLIENT_ID as string,
+      clientSecret: process.env.ZENODO_CLIENT_SECRET as string,
+      redirectUri: process.env.ZENODO_REDIRECT_URI as string,
+      // deposit:write uploads files; deposit:actions publishes and edits. Both
+      // are on the write path and neither is optional.
+      //
+      // Deliberately NOT user:email, which invenio-oauth2server also offers:
+      // identity is Firebase's job (lib/auth-providers.js), and Zenodo could
+      // not serve as a sign-in provider even if we wanted it to --
+      // invenio-oauth2server implements no OIDC layer at all (no id_token, no
+      // discovery document, no userinfo endpoint), so there is nothing for
+      // Firebase to verify. Asking for an identity scope we have no use for
+      // would only widen the consent screen.
+      scope: "deposit:write deposit:actions",
+      // Nothing to add: Zenodo issues a refresh token on the
+      // authorization_code grant unconditionally, so there is no equivalent of
+      // Google's access_type=offline&prompt=consent dance.
+      extraAuthParams: {},
+    };
+  },
+
+  async resolveToken(userData: UserData, owner: string): Promise<TokenResult> {
     const zenodo = userData.connectedAccounts?.zenodo;
 
     if (!zenodo) {
@@ -377,36 +423,33 @@ export const zenodoProvider: StorageProvider = {
       };
     }
 
-    // No expiry branch here, unlike dataverse.ts. Zenodo personal access
-    // tokens have no documented expiry and the API exposes no endpoint that
-    // reports one, which is also why staticTokenExpiry is deliberately NOT
-    // implemented on this provider -- its absence means "this provider cannot
-    // report an expiry", which connect-provider.ts already handles by omitting
-    // tokenExpiresAt. If a stored tokenExpiresAt ever does appear (e.g. set by
-    // a future Zenodo change), it is still honored rather than ignored.
-    if (zenodo.tokenExpiresAt && zenodo.tokenExpiresAt < Date.now()) {
-      return {
-        success: false,
-        error: "PROVIDER_TOKEN_EXPIRED",
-        detail: "The Zenodo API token for this experiment's owner has expired",
-      };
+    // serverUrl comes from deployment config, NOT from the stored connection.
+    // Under static tokens a researcher pasted a token and told us which
+    // installation it belonged to; an OAuth client_id is registered against
+    // exactly one installation, so a sandbox client physically cannot complete
+    // a flow on zenodo.org. Trusting a stored value here would let a stale
+    // connection point a live client at the wrong host.
+    const serverUrl = zenodoOAuthHost();
+
+    if (zenodo.tokenExpiresAt > Date.now() + EXPIRY_MARGIN_MS) {
+      return { success: true, token: decrypt(zenodo.encryptedToken), serverUrl };
     }
 
-    return { success: true, token: decrypt(zenodo.encryptedToken), serverUrl: zenodo.serverUrl };
-  },
+    // Refresh inline on demand rather than from a scheduled pass, which is
+    // also why zenodo implements no refreshExpiringTokens (cf. gdrive, whose
+    // 10-minute window rides the weekly pass).
+    //
+    // Zenodo access tokens last SIXTY DAYS (measured, spike gate J), so a
+    // proactive sweep would spend two months of weekly wake-ups per account to
+    // save one inline request. The submission that needs the token is the only
+    // caller that knows it is needed, and an experiment idle past expiry pays
+    // for the refresh exactly once, on its next submission.
+    const refreshResult = await refreshZenodoToken(owner, zenodo);
+    if (!refreshResult.success) {
+      return { success: false, error: refreshResult.error, detail: refreshResult.detail };
+    }
 
-  async validateStaticToken(auth: ResolvedAuth): Promise<boolean> {
-    const serverUrl = resolveServerUrl(auth);
-    // size=1 keeps the response tiny -- this only needs the status code. A
-    // token missing the deposit:write scope still 403s here, which is the
-    // point: it would fail at the first upload otherwise, months later.
-    const response = await fetch(`${serverUrl}/api/deposit/depositions?size=1`, {
-      method: "GET",
-      headers: authHeaders(auth),
-    });
-    // Never throw on a non-200 -- a bad or under-scoped token is "not valid",
-    // not an exceptional condition.
-    return response.status === 200;
+    return { success: true, token: refreshResult.accessToken, serverUrl };
   },
 
   async createDataContainer(auth: ResolvedAuth, researcherInput: Record<string, unknown>): Promise<ContainerRef> {

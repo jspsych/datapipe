@@ -67,6 +67,10 @@ jobs:
           # Google Drive client secret for the deployed test site. Client id and
           # redirect uri are non-secret and live in functions/.env.datapipe-test.
           echo "GDRIVE_CLIENT_SECRET=${{ secrets.TEST_GDRIVE_CLIENT_SECRET }}" >> .env
+          # Zenodo OAuth client secret for the deployed test site. Client id,
+          # redirect uri and ZENODO_ENV are non-secret and live in
+          # functions/.env.datapipe-test.
+          echo "ZENODO_CLIENT_SECRET=${{ secrets.TEST_ZENODO_CLIENT_SECRET }}" >> .env
       - name: Install dependencies and build functions
         working-directory: functions
         run: |

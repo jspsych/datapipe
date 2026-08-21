@@ -355,11 +355,16 @@ export interface ConnectedAccounts {
   gdrive?: OAuth2AccountConnection;
   figshare?: OAuth2AccountConnection;
   dataverse?: StaticTokenAccountConnection;
-  // Zenodo reuses the static-token shape, but its tokenExpiresAt is expected
-  // to stay ABSENT: Zenodo personal access tokens have no documented expiry
-  // and no endpoint reports one, so zenodo.ts implements no staticTokenExpiry
-  // and connect-provider.ts therefore omits the field.
-  zenodo?: StaticTokenAccountConnection;
+  // Zenodo was a static-token provider until 2026-08-21 and is now OAuth2.
+  // Its tokenExpiresAt is always PRESENT, unlike the personal access tokens
+  // this replaced, which never expired at all -- but it is SIXTY DAYS out, not
+  // the one hour the upstream source implies (Zenodo overrides oauthlib's
+  // default in deployment config; measured by spike gate J, 2026-08-21).
+  // The refresh token behind it carries no expiry of its own, so a connection
+  // can survive indefinitely -- but only if every rotation is persisted,
+  // because Zenodo destroys the previous refresh token on each refresh. See
+  // zenodo-oauth.ts.
+  zenodo?: OAuth2AccountConnection;
 }
 
 // experiments/{id}.collisionCache (additive Firestore schema). The salt is a

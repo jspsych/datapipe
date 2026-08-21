@@ -111,15 +111,17 @@ describe("zenodo: which Zenodo a deployment points at", () => {
   }
 
   it("points production at the real zenodo.org", () => {
-    expect(loadWith("").zenodo.defaultServerUrl).toBe("https://zenodo.org");
+    expect(loadWith("").zenodo.containerLink({})).toBe(
+      "https://zenodo.org/deposit/undefined"
+    );
   });
 
   it("points the test deployment at the sandbox", () => {
     // The whole reason this setting exists: without it the test site creates
     // real depositions on the live service using the researcher's real
     // account.
-    expect(loadWith("sandbox.").zenodo.defaultServerUrl).toBe(
-      "https://sandbox.zenodo.org"
+    expect(loadWith("sandbox.").zenodo.containerLink({})).toBe(
+      "https://sandbox.zenodo.org/deposit/undefined"
     );
   });
 
@@ -127,7 +129,9 @@ describe("zenodo: which Zenodo a deployment points at", () => {
     // An unset variable must never resolve to something like
     // "https://undefinedzenodo.org", and defaulting to sandbox would be worse
     // -- a misconfigured production deploy would silently write nowhere real.
-    expect(loadWith(undefined).zenodo.defaultServerUrl).toBe("https://zenodo.org");
+    expect(loadWith(undefined).zenodo.containerLink({})).toBe(
+      "https://zenodo.org/deposit/undefined"
+    );
   });
 
   it("containerLink follows the container's host, not the current deployment", () => {

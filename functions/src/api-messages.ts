@@ -47,12 +47,14 @@ const MESSAGES = {
     error: "PROVIDER_NOT_CONNECTED",
     message: "The experiment owner has not connected an account for this experiment's storage provider",
   },
-  // Named no provider. Both static-token adapters emit this code (dataverse.ts
-  // and zenodo.ts), so hardcoding "Dataverse" told a Zenodo owner to go fix a
-  // token on a service they may not even use. The wording still carries what
-  // makes this code distinct from AUTH_EXPIRED -- a static token cannot be
-  // refreshed, so the researcher has to CREATE a new one and reconnect, not
-  // just re-authorize.
+  // Names no provider. It once had to cover two static-token adapters, and
+  // hardcoding "Dataverse" told a Zenodo owner to go fix a token on a service
+  // they may not even use. Zenodo moved to OAuth2 on 2026-08-21 and no longer
+  // emits this at all, leaving dataverse.ts as the only source -- but the
+  // wording stays provider-neutral, since the next static-token provider would
+  // reintroduce exactly the same bug. What it carries is what makes this code
+  // distinct from AUTH_EXPIRED: a static token cannot be refreshed, so the
+  // researcher has to CREATE a new one and reconnect, not just re-authorize.
   PROVIDER_TOKEN_EXPIRED: {
     error: "PROVIDER_TOKEN_EXPIRED",
     message:
