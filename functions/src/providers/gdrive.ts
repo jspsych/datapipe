@@ -59,6 +59,27 @@ interface MappedDriveError {
   retryAfter: number | null;
 }
 
+// Raised by the folder helpers so a failure part-way through a nested path
+// keeps its CLASSIFICATION, not just its text.
+//
+// findFolder/createFolder both compute a MappedDriveError and then used to
+// stringify it into a plain Error, so writeSessionFile's segment walk could
+// only report a generic UNAVAILABLE. That is user-facing: QueuePanel.js shows
+// "your storage provider connection may need to be refreshed" for
+// AUTH_EXPIRED and "temporarily unavailable" for UNAVAILABLE, so a researcher
+// with an expired Drive token was told to wait for an outage that would never
+// clear. It only misfired on NESTED paths -- i.e. every metadataActive
+// experiment, which writes to data/raw/... -- while the same expired token on
+// a flat filename classified correctly, which is why it went unnoticed.
+class DriveFolderError extends Error {
+  readonly mapped: MappedDriveError;
+  constructor(message: string, mapped: MappedDriveError) {
+    super(message);
+    this.name = "DriveFolderError";
+    this.mapped = mapped;
+  }
+}
+
 // Shared error-mapping helper — every write/update/list/download call routes
 // its non-2xx response through this. Drive never yields a duplicate-name
 // conflict (NAME_CONFLICT): Drive allows multiple files with the same name
@@ -139,7 +160,10 @@ async function findFolder(
 
   if (!isSuccessStatus(response.status)) {
     const mapped = await mapErrorResponse(response);
-    throw new Error(`Google Drive folder lookup failed: ${mapped.providerStatus} ${mapped.providerMessage}`);
+    throw new DriveFolderError(
+      `Google Drive folder lookup failed: ${mapped.providerStatus} ${mapped.providerMessage}`,
+      mapped
+    );
   }
 
   const body = (await response.json()) as { files?: { id: string }[] };
@@ -159,7 +183,10 @@ async function createFolder(auth: ResolvedAuth, name: string, parentId: string):
 
   if (!isSuccessStatus(response.status)) {
     const mapped = await mapErrorResponse(response);
-    throw new Error(`Google Drive folder creation failed: ${mapped.providerStatus} ${mapped.providerMessage}`);
+    throw new DriveFolderError(
+      `Google Drive folder creation failed: ${mapped.providerStatus} ${mapped.providerMessage}`,
+      mapped
+    );
   }
 
   const body = (await response.json()) as { id: string };
@@ -354,6 +381,12 @@ export const gdriveProvider: StorageProvider = {
         parentId = await findOrCreateFolder(auth, segment, parentId);
       }
     } catch (e) {
+      // A provider failure keeps whatever mapErrorResponse decided; only a
+      // genuinely non-provider throw (a network error, a bug) falls back to
+      // UNAVAILABLE. See DriveFolderError.
+      if (e instanceof DriveFolderError) {
+        return { success: false, ...e.mapped };
+      }
       return {
         success: false,
         error: "UNAVAILABLE",

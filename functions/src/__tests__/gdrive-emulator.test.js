@@ -48,7 +48,7 @@
 // the gdrive generalization must not be able to break it.
 
 import { initializeApp } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { randomUUID } from "crypto";
 import express from "express";
 import MESSAGES from "../api-messages";
@@ -315,6 +315,57 @@ function createMockDriveServer() {
           getUploadCount: (name) => uploadCountsByName.get(name) || 0,
           getUpdateCount: (id) => updateCountsById.get(id) || 0,
           forceStatus: (nameOrId, status) => forcedStatus.set(nameOrId, status),
+          // Places a file several real folder levels deep under rootFolderId,
+          // creating the intermediate folders directly (bypassing the
+          // adapter/API) -- mirrors dataverse-emulator.test.js's seedFile and
+          // zenodo-emulator.test.js's seedFile: a file the COLLISION CACHE
+          // does not know about because DataPipe never wrote it, standing in
+          // for "an earlier session, or a researcher's own upload, already on
+          // the provider when the cache goes cold." fullPath is slash-
+          // separated (e.g. "data/raw/subject-1.json"); every segment but the
+          // last becomes a real nested folder, exactly as writeSessionFile's
+          // own segment walk would have created them.
+          seedNestedFile: (rootFolderId, fullPath, content = "seeded") => {
+            const segments = fullPath.split("/");
+            const leafName = segments.pop();
+            let parentId = rootFolderId;
+            for (const segment of segments) {
+              let folder = Array.from(filesById.values()).find(
+                (f) => f.name === segment && f.mimeType === FOLDER_MIME && f.parents.includes(parentId)
+              );
+              if (!folder) {
+                const id = `mock-folder-${nextSeq}`;
+                folder = {
+                  id,
+                  name: segment,
+                  mimeType: FOLDER_MIME,
+                  parents: [parentId],
+                  content: "",
+                  contentType: FOLDER_MIME,
+                  __seq: nextSeq++,
+                };
+                filesById.set(id, folder);
+              }
+              parentId = folder.id;
+            }
+            const id = `mock-file-${nextSeq}`;
+            filesById.set(id, {
+              id,
+              name: leafName,
+              mimeType: "application/json",
+              parents: [parentId],
+              content,
+              contentType: "application/json",
+              __seq: nextSeq++,
+            });
+            return id;
+          },
+          // Leaf-name lookup (not full-path), matching how listFiles reports
+          // every file regardless of which folder it was found in.
+          getContentByLeafName: (name) => {
+            const file = Array.from(filesById.values()).find((f) => f.name === name && f.mimeType !== FOLDER_MIME);
+            return file ? file.content : null;
+          },
           reset: () => {
             filesById.clear();
             uploadCountsByName.clear();
@@ -548,5 +599,65 @@ describe("16. OSF experiment in the same run still works (legacy dispatch untouc
 
     expect(response.status).toBe(201);
     expect(mockOSF.getUploadCount(filename)).toBe(1);
+  });
+});
+
+// 17. cold collision-cache rehydration for gdrive. Dataverse (D9,
+// dataverse-emulator.test.js) and Zenodo (Z8, zenodo-emulator.test.js) both
+// have this test; gdrive did not, and it is the highest-value gap of the
+// three -- Drive has no 409 backstop at all (mapDriveError has no
+// NAME_CONFLICT case, see gdrive.ts), so the Firestore cache is the ONLY
+// duplicate gate this provider has. A rehydration that misses a name lets a
+// duplicate through completely silently.
+//
+// This is also the one place gdrive's rehydration test has to do MORE than
+// its Dataverse/Zenodo counterparts: the seeded file has to sit several real
+// folder levels deep (data/raw/<name>), because listFiles' recursion into
+// subfolders -- and its collapsing of every result down to the bare leaf
+// name, per storedNameFor -- is exactly the mechanism this test is meant to
+// exercise. A file seeded flat at the folder root would not touch that path
+// at all.
+describe("17. cold collision cache rehydrates from a nested (data/raw/) folder listing", () => {
+  it("a file already sitting in a nested Drive folder is caught as a duplicate after the cache goes cold", async () => {
+    const experimentID = `gdrive-int17-${randomUUID()}`;
+    const folderId = `folder-${randomUUID()}`;
+    const filename = `case17-${randomUUID()}.json`;
+    // metadataActive so the raw submission is routed to data/raw/<filename>
+    // (see uploadPathFor in api-data.ts), matching where the file is seeded
+    // below and putting listFiles' recursion on the hook.
+    await createGdriveExperiment(experimentID, folderId, {
+      metadataActive: true,
+      // An experiment that collected data, went cold, and had its claims
+      // expire -- the salt is retained permanently, warmUntil is not.
+      collisionCache: {
+        salt: "case17-retained-salt",
+        warmUntil: Timestamp.fromMillis(Date.now() - 60 * 60 * 1000),
+      },
+    });
+    // Present on the provider, several folders deep, with no claim in
+    // Firestore -- exactly the state rehydration exists to recover from.
+    mockDrive.seedNestedFile(folderId, `data/raw/${filename}`, "an earlier session");
+
+    const response = await saveData({ experimentID, data: sampleData, filename });
+
+    expect(response.status).toBe(400);
+    // objectContaining, not exact equality: metadataActive:true runs the
+    // metadata block (which creates dataset_description.json on this, the
+    // experiment's first-ever submission) BEFORE the collision check that
+    // rejects the raw file, so metadataMessage carries whatever that block
+    // produced rather than the "" a metadataActive:false experiment would
+    // have -- mirrors dataverse-emulator.test.js's D9, the equivalent test.
+    expect(response.body).toEqual(expect.objectContaining(MESSAGES.OSF_FILE_EXISTS));
+    // Never overwritten, and no second upload of the RAW file was ever
+    // attempted (the metadata file upload above is a separate, expected
+    // upload and is not what this gate is checking).
+    expect(mockDrive.getUploadCount(filename)).toBe(0);
+    expect(mockDrive.getContentByLeafName(filename)).toBe("an earlier session");
+
+    const expDataAfter = (await db.collection("experiments").doc(experimentID).get()).data();
+    // Rehydration re-warms the cache and keeps the original salt (claims
+    // hashed under a new salt would never match the old ones).
+    expect(expDataAfter.collisionCache.salt).toBe("case17-retained-salt");
+    expect(expDataAfter.collisionCache.warmUntil.toMillis()).toBeGreaterThan(Date.now());
   });
 });
