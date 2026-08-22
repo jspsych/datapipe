@@ -1107,3 +1107,138 @@ describe("F11. the merged archive is a valid Psych-DS dataset on its own", () =>
     expect(claim.data().sealed).toBe(true);
   });
 });
+
+describe("F12. a loose original that compaction failed to delete is not merged twice", () => {
+  // FOUND LIVE, NOT THEORISED. On 2026-08-22 a compaction pass on the test
+  // site archived 75 files and Zenodo rejected 3 of the follow-up deletes with
+  // "Not a valid value." -- the keys were valid and still addressable
+  // afterwards, so this is a provider fault, not a bug in the delete path.
+  //
+  // Compaction tolerates that by design: the archive was verified before any
+  // delete, the claims are sealed, and the next pass skips the survivors.
+  // Nothing is lost. But it leaves the same bytes in two places, and
+  // finalization merges everything it can see -- so the final archive used to
+  // get the content twice, the second copy under mergeEntries' collision
+  // fallback name ("x.json__data/raw/x.json"). A Psych-DS dataset carrying a
+  // mangled duplicate of every unluckily-undeleted file is not publishable.
+  async function seedWithUndeletedOriginal() {
+    const seeded = await seedFinalizableExperiment();
+    const { experimentID, batch1 } = seeded;
+
+    // The loose original of a file that is ALREADY inside batch1: exactly what
+    // a failed delete leaves behind.
+    const survivor = batch1.memberNames[0];
+    mock.seed(survivor, batch1.contents.get(survivor));
+
+    // Its claim is sealed and recorded against the batch, which is what makes
+    // the duplicate provable rather than guessed at.
+    await db
+      .collection("experiments")
+      .doc(experimentID)
+      .collection("compactionBatches")
+      .doc("0001")
+      .set({
+        index: 1,
+        archiveName: "datapipe-batch-0001.zip",
+        status: "sealed",
+        memberHashes: batch1.memberNames.map((name) => claimDocId(SALT, name)),
+        expectedMd5: "seeded",
+        fileCount: batch1.memberNames.length,
+      });
+
+    return { ...seeded, survivor };
+  }
+
+  it("carries the content exactly once, under its real Psych-DS path", async () => {
+    const { experimentID, survivor, batch1 } = await seedWithUndeletedOriginal();
+
+    const result = await finalizeExperiment(experimentID);
+    expect(result.status).toBe("finalized");
+
+    const entries = readZipEntries(finalArchiveBytes());
+    const paths = [...entries.keys()];
+
+    // No member name carries mergeEntries' "__" collision fallback.
+    expect(paths.filter((p) => p.includes("__"))).toEqual([]);
+
+    // And the real path appears once, with the right bytes.
+    const realPath = archivePathsFor(zenodoProvider, true, [survivor]).get(survivor);
+    expect(paths.filter((p) => p === realPath)).toHaveLength(1);
+    expect(entries.get(realPath).equals(batch1.contents.get(survivor))).toBe(true);
+  });
+
+  it("still REMOVES the redundant original, leaving the record as one file", async () => {
+    const { experimentID, survivor } = await seedWithUndeletedOriginal();
+
+    expect(mock.has(survivor)).toBe(true);
+
+    const result = await finalizeExperiment(experimentID);
+    expect(result.status).toBe("finalized");
+
+    // Skipping it from the MERGE must not spare it from the DELETE -- the
+    // redundant copy has no reason to outlive finalization, and leaving it
+    // would break the "record ends as exactly one file" invariant just as
+    // surely as archiving it twice would.
+    expect(mock.has(survivor)).toBe(false);
+    expect(mock.size()).toBe(1);
+    expect(mock.has("datapipe-final.zip")).toBe(true);
+  });
+
+  // Guard on the belt-and-braces branch: NEVER_ARCHIVE already keeps the
+  // descriptor out of every batch, so it cannot be sealed -- but if that ever
+  // changed, silently dropping it would produce an archive that is not a
+  // Psych-DS dataset at all, which F11 exists to prevent.
+  it("never skips dataset_description.json, even if its hash is sealed", async () => {
+    const { experimentID } = await seedFinalizableExperiment();
+    await db
+      .collection("experiments")
+      .doc(experimentID)
+      .collection("compactionBatches")
+      .doc("0001")
+      .set({
+        index: 1,
+        archiveName: "datapipe-batch-0001.zip",
+        status: "sealed",
+        memberHashes: [claimDocId(SALT, "dataset_description.json")],
+        expectedMd5: "seeded",
+        fileCount: 1,
+      });
+
+    const result = await finalizeExperiment(experimentID);
+    expect(result.status).toBe("finalized");
+    expect([...readZipEntries(finalArchiveBytes()).keys()]).toContain("dataset_description.json");
+  });
+
+  // An "uploading" batch has NOT proven its archive landed. Treating its
+  // members as already-stored is precisely the mistake that would lose data:
+  // skip the loose copy, then discover the archive never uploaded.
+  it("ignores an unsealed batch and merges the loose copy normally", async () => {
+    const seeded = await seedFinalizableExperiment();
+    const { experimentID, batch1 } = seeded;
+    const survivor = batch1.memberNames[0];
+    mock.seed(survivor, batch1.contents.get(survivor));
+
+    await db
+      .collection("experiments")
+      .doc(experimentID)
+      .collection("compactionBatches")
+      .doc("0001")
+      .set({
+        index: 1,
+        archiveName: "datapipe-batch-0001.zip",
+        status: "uploading",
+        memberHashes: batch1.memberNames.map((name) => claimDocId(SALT, name)),
+        expectedMd5: "seeded",
+        fileCount: batch1.memberNames.length,
+      });
+
+    const result = await finalizeExperiment(experimentID);
+    expect(result.status).toBe("finalized");
+
+    // Merged from the loose file rather than skipped, so the content survives
+    // even though the batch zip's own upload was never confirmed.
+    const entries = readZipEntries(finalArchiveBytes());
+    const realPath = archivePathsFor(zenodoProvider, true, [survivor]).get(survivor);
+    expect(entries.has(realPath)).toBe(true);
+  });
+});
