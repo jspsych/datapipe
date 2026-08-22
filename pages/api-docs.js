@@ -54,6 +54,16 @@ function Param({ name, type, children }) {
   );
 }
 
+function ErrorRow({ code, status, children }) {
+  return (
+    <Table.Row>
+      <Table.Cell><Code>{code}</Code></Table.Cell>
+      <Table.Cell><Text fontSize="sm" color="gray.400">{status}</Text></Table.Cell>
+      <Table.Cell>{children}</Table.Cell>
+    </Table.Row>
+  );
+}
+
 export default function ApiDocs() {
   return (
     <Stack w={["95%", 960]} gap={12} py={4}>
@@ -69,6 +79,12 @@ export default function ApiDocs() {
           on DataPipe. Code examples for jsPsych and JavaScript are
           available on each experiment&apos;s dashboard.
         </Text>
+        <Text>
+          The API is the same whichever storage provider an experiment uses.
+          DataPipe routes each submission to that experiment&apos;s own
+          destination — a Google Drive folder, a Dataverse dataset, or a
+          Zenodo deposition — so your experiment code never names a provider.
+        </Text>
       </Stack>
 
       {/* Save text data */}
@@ -77,16 +93,16 @@ export default function ApiDocs() {
           Save text data
         </EndpointHeading>
         <Text>
-          Save a text file (CSV, JSON, etc.) to your OSF project. If you
-          have validation rules configured, the data will be checked before
-          it is sent to the OSF.
+          Save a text file (CSV, JSON, etc.) to your experiment&apos;s
+          storage. If you have validation rules configured, DataPipe checks
+          the data before sending it on.
         </Text>
         <ParamTable>
           <Param name="experimentID" type="string">
             Your experiment ID, found on the experiment dashboard.
           </Param>
           <Param name="filename" type="string">
-            Name for the file on OSF (e.g., <Code>subject01.csv</Code>).
+            Name for the stored file (e.g., <Code>subject01.csv</Code>).
             Must be unique — the request will fail if a file with this name
             already exists.
           </Param>
@@ -114,14 +130,14 @@ export default function ApiDocs() {
         <Text>
           Save a binary file (audio, video, images) encoded as a base64
           string. DataPipe decodes the string and stores the resulting
-          file in your OSF project.
+          file alongside the experiment&apos;s other data.
         </Text>
         <ParamTable>
           <Param name="experimentID" type="string">
             Your experiment ID.
           </Param>
           <Param name="filename" type="string">
-            Name for the decoded file on OSF (e.g., <Code>recording_01.webm</Code>).
+            Name for the decoded file (e.g., <Code>recording_01.webm</Code>).
             Must be unique.
           </Param>
           <Param name="data" type="string">
@@ -161,36 +177,98 @@ export default function ApiDocs() {
           Responses
         </Heading>
         <Text>
-          All responses are JSON. A successful request returns{" "}
-          <Code>{`{ "message": "Success" }`}</Code>. The condition
-          endpoint also includes a <Code>condition</Code> field.
-          On failure, the response contains an <Code>error</Code> code
-          and a <Code>message</Code> describing the problem.
+          All responses are JSON. On failure, the body carries an{" "}
+          <Code>error</Code> code from the table below and a{" "}
+          <Code>message</Code> describing the problem. When metadata
+          production is enabled, write responses also include a{" "}
+          <Code>metadataMessage</Code> field reporting what happened to the
+          metadata file; it never affects whether the data itself was stored.
+        </Text>
+        <Table.Root variant="outline">
+          <Table.Header>
+            <Table.Row>
+              <Table.ColumnHeader color="white">Status</Table.ColumnHeader>
+              <Table.ColumnHeader color="white">Meaning</Table.ColumnHeader>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
+            <Table.Row>
+              <Table.Cell><Code>201</Code></Table.Cell>
+              <Table.Cell>
+                Stored. The body is{" "}
+                <Code>{`{ "message": "Success" }`}</Code>. The condition
+                endpoint returns <Code>200</Code> with a{" "}
+                <Code>condition</Code> field instead.
+              </Table.Cell>
+            </Table.Row>
+            <Table.Row>
+              <Table.Cell><Code>202</Code></Table.Cell>
+              <Table.Cell>
+                Accepted and queued. DataPipe has your data safely but could
+                not reach your storage provider yet, so it will retry
+                automatically. <Code>error</Code> is <Code>null</Code>.{" "}
+                <strong>Treat this as success and do not resubmit</strong> —
+                retrying would store the participant&apos;s data twice.
+              </Table.Cell>
+            </Table.Row>
+            <Table.Row>
+              <Table.Cell><Code>400</Code></Table.Cell>
+              <Table.Cell>
+                The request was rejected and the data was not stored.
+              </Table.Cell>
+            </Table.Row>
+            <Table.Row>
+              <Table.Cell><Code>500</Code></Table.Cell>
+              <Table.Cell>
+                Something failed on our side. See the individual codes below
+                for whether the data was stored.
+              </Table.Cell>
+            </Table.Row>
+          </Table.Body>
+        </Table.Root>
+
+        <Heading as="h3" size="sm" mt={4}>
+          Error codes
+        </Heading>
+        <Text fontSize="sm" color="gray.400">
+          Codes beginning <Code>OSF_</Code> are historical names kept for
+          backward compatibility. <Code>OSF_FILE_EXISTS</Code>,{" "}
+          <Code>OSF_UPLOAD_ERROR</Code> and <Code>OSF_UPLOAD_EXCEPTION</Code>{" "}
+          are returned for every storage provider, not only OSF.{" "}
+          <Code>INVALID_OSF_TOKEN</Code> and <Code>INVALID_REFRESH_TOKEN</Code>{" "}
+          occur only on experiments still collecting to OSF.
         </Text>
         <Table.Root variant="outline">
           <Table.Header>
             <Table.Row>
               <Table.ColumnHeader color="white">Error code</Table.ColumnHeader>
+              <Table.ColumnHeader color="white">Status</Table.ColumnHeader>
               <Table.ColumnHeader color="white">Meaning</Table.ColumnHeader>
             </Table.Row>
           </Table.Header>
           <Table.Body>
-            <Table.Row><Table.Cell><Code>MISSING_PARAMETER</Code></Table.Cell><Table.Cell>One or more required fields are missing from the request body.</Table.Cell></Table.Row>
-            <Table.Row><Table.Cell><Code>EXPERIMENT_NOT_FOUND</Code></Table.Cell><Table.Cell>No experiment matches the provided ID.</Table.Cell></Table.Row>
-            <Table.Row><Table.Cell><Code>DATA_COLLECTION_NOT_ACTIVE</Code></Table.Cell><Table.Cell>Data collection is not enabled for this experiment.</Table.Cell></Table.Row>
-            <Table.Row><Table.Cell><Code>BASE64DATA_COLLECTION_NOT_ACTIVE</Code></Table.Cell><Table.Cell>Base64 data collection is not enabled for this experiment.</Table.Cell></Table.Row>
-            <Table.Row><Table.Cell><Code>CONDITION_ASSIGNMENT_NOT_ACTIVE</Code></Table.Cell><Table.Cell>Condition assignment is not enabled for this experiment.</Table.Cell></Table.Row>
-            <Table.Row><Table.Cell><Code>SESSION_LIMIT_REACHED</Code></Table.Cell><Table.Cell>The experiment has reached its session limit. Increase the limit in the dashboard.</Table.Cell></Table.Row>
-            <Table.Row><Table.Cell><Code>INVALID_DATA</Code></Table.Cell><Table.Cell>The data did not pass the validation rules configured for this experiment.</Table.Cell></Table.Row>
-            <Table.Row><Table.Cell><Code>INVALID_BASE64_DATA</Code></Table.Cell><Table.Cell>The data is not valid base64.</Table.Cell></Table.Row>
-            <Table.Row><Table.Cell><Code>OSF_FILE_EXISTS</Code></Table.Cell><Table.Cell>A file with this name already exists in the OSF project. Filenames must be unique.</Table.Cell></Table.Row>
-            <Table.Row><Table.Cell><Code>OSF_UPLOAD_ERROR</Code></Table.Cell><Table.Cell>DataPipe could not upload the file to OSF. Try again later.</Table.Cell></Table.Row>
-            <Table.Row><Table.Cell><Code>INVALID_OWNER</Code></Table.Cell><Table.Cell>The experiment owner does not match a valid user account.</Table.Cell></Table.Row>
-            <Table.Row><Table.Cell><Code>INVALID_OSF_TOKEN</Code></Table.Cell><Table.Cell>The OSF token for this account is invalid or expired. Reconnect your OSF account in settings.</Table.Cell></Table.Row>
-            <Table.Row><Table.Cell><Code>INVALID_METADATA_ERROR</Code></Table.Cell><Table.Cell>The metadata generated from the data is invalid.</Table.Cell></Table.Row>
-            <Table.Row><Table.Cell><Code>OSF_METADATA_UPLOAD_ERROR</Code></Table.Cell><Table.Cell>DataPipe could not upload the metadata file to OSF.</Table.Cell></Table.Row>
-            <Table.Row><Table.Cell><Code>METADATA_ERROR</Code></Table.Cell><Table.Cell>An error occurred while processing metadata.</Table.Cell></Table.Row>
-            <Table.Row><Table.Cell><Code>UNKNOWN_ERROR_GETTING_CONDITION</Code></Table.Cell><Table.Cell>An unexpected error occurred while assigning a condition.</Table.Cell></Table.Row>
+            <ErrorRow code="MISSING_PARAMETER" status={400}>One or more required fields are missing from the request body.</ErrorRow>
+            <ErrorRow code="EXPERIMENT_NOT_FOUND" status={400}>No experiment matches the provided ID.</ErrorRow>
+            <ErrorRow code="EXPERIMENT_DATA_NOT_FOUND" status={400}>The experiment exists but its configuration could not be read.</ErrorRow>
+            <ErrorRow code="USER_DATA_NOT_FOUND" status={400}>The account that owns the experiment could not be read.</ErrorRow>
+            <ErrorRow code="INVALID_OWNER" status={400}>The experiment owner does not match a valid user account.</ErrorRow>
+            <ErrorRow code="EXPERIMENT_FINALIZED" status={400}>The experiment has been finalized and no longer accepts submissions.</ErrorRow>
+            <ErrorRow code="DATA_COLLECTION_NOT_ACTIVE" status={400}>Data collection is not enabled for this experiment.</ErrorRow>
+            <ErrorRow code="BASE64DATA_COLLECTION_NOT_ACTIVE" status={400}>Base64 data collection is not enabled for this experiment.</ErrorRow>
+            <ErrorRow code="CONDITION_ASSIGNMENT_NOT_ACTIVE" status={400}>Condition assignment is not enabled for this experiment.</ErrorRow>
+            <ErrorRow code="SESSION_LIMIT_REACHED" status={400}>The experiment has reached its session limit. Raise the limit in the dashboard.</ErrorRow>
+            <ErrorRow code="INVALID_DATA" status={400}>The data did not pass the validation rules configured for this experiment.</ErrorRow>
+            <ErrorRow code="INVALID_BASE64_DATA" status={400}>The data is not valid base64.</ErrorRow>
+            <ErrorRow code="OSF_FILE_EXISTS" status={400}>A file with this name already exists in the experiment&apos;s storage. Filenames must be unique.</ErrorRow>
+            <ErrorRow code="OSF_UPLOAD_ERROR" status={400}>The storage provider rejected the upload.</ErrorRow>
+            <ErrorRow code="PROVIDER_NOT_CONNECTED" status={400}>The owner has not connected an account for this experiment&apos;s storage provider.</ErrorRow>
+            <ErrorRow code="PROVIDER_TOKEN_EXPIRED" status={400}>The API token for the storage provider has expired. The owner must create a new one and reconnect it.</ErrorRow>
+            <ErrorRow code="INVALID_OSF_TOKEN" status={400}>The OSF token for this account is invalid or expired.</ErrorRow>
+            <ErrorRow code="INVALID_REFRESH_TOKEN" status={400}>The owner&apos;s OSF refresh token is no longer valid.</ErrorRow>
+            <ErrorRow code="UNKNOWN_ERROR_GETTING_CONDITION" status={400}>An unexpected error occurred while assigning a condition.</ErrorRow>
+            <ErrorRow code="TOKEN_RESOLUTION_ERROR" status={500}>DataPipe could not resolve the owner&apos;s storage credentials.</ErrorRow>
+            <ErrorRow code="OSF_UPLOAD_EXCEPTION" status={500}>An unexpected error occurred while uploading to the storage provider.</ErrorRow>
+            <ErrorRow code="DATA_PERSIST_ERROR" status={500}>DataPipe could not save the data. It was not stored, and a live participant may need to resubmit.</ErrorRow>
           </Table.Body>
         </Table.Root>
       </Stack>

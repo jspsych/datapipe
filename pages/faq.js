@@ -8,9 +8,14 @@ import {
 } from "@chakra-ui/react";
 import NextLink from "next/link";
 import { useState, useEffect } from "react";
+import { osfSunsetLabel } from "../lib/osf-sunset";
 
 export default function FAQ() {
   const [openItems, setOpenItems] = useState(["item-0"]);
+  // Read from lib/osf-sunset.js rather than restated here, so this answer, the
+  // dashboard banners and the getting-started guide can never disagree about
+  // the date. Tolerates a null date the same way they do.
+  const osfDeadline = osfSunsetLabel();
 
   useEffect(() => {
     function scrollToHash() {
@@ -47,20 +52,44 @@ export default function FAQ() {
             <Link asChild>
               <NextLink href="/getting-started">getting started guide</NextLink>
             </Link>
-            . In short: create an OSF project, link your OSF account to
-            DataPipe, set up an experiment, and add a few lines of code to
-            your study to send data through DataPipe to the OSF. The easiest
-            way to get started is to sign in to DataPipe with your OSF
-            account, which automatically authorizes DataPipe to write data
-            on your behalf.
+            . In short: connect a storage provider — Google Drive,
+            Dataverse, or Zenodo — to your DataPipe account, create an
+            experiment, and add a few lines of code to your study to send data
+            through DataPipe to that provider. Google Drive and Zenodo connect
+            in one click; Dataverse asks for an API token from your
+            institution&apos;s installation.
+          </Text>
+        </FAQItem>
+        <FAQItem value="item-0b" question="I collect data on OSF. What happens now?">
+          <Text mb={2}>
+            OSF is shutting down its projects feature, so DataPipe can no
+            longer create new experiments there.{" "}
+            {osfDeadline
+              ? `Experiments already collecting keep running until ${osfDeadline}, after which DataPipe stops writing to OSF.`
+              : "Experiments already collecting keep running for now."}
+          </Text>
+          <Text mb={2}>
+            Data already on OSF is unaffected. It stays in your OSF account,
+            and DataPipe never removes it.
+          </Text>
+          <Text>
+            To keep collecting, connect Google Drive, Dataverse, or Zenodo in
+            your{" "}
+            <Link asChild>
+              <NextLink href="/admin/account">account settings</NextLink>
+            </Link>
+            , create a new experiment on that provider, and point your study
+            at the new experiment ID. Your existing data does not move, so it
+            is worth finishing a study on OSF if you are close to done rather
+            than switching mid-collection.
           </Text>
         </FAQItem>
         <FAQItem value="item-1" question="Will DataPipe host my experiment?">
           <Text mb={2}>
             No. You need a separate service to host your experiment online
             (e.g., GitHub Pages, Netlify, or university hosting). DataPipe
-            only handles sending data to the OSF, so you do not need to
-            configure any backend or server components yourself.
+            only handles sending data to your storage provider, so you do not
+            need to configure any backend or server components yourself.
           </Text>
           <Text>
             <Link href="https://pages.github.com/" target="_blank" rel="noopener noreferrer">
@@ -72,26 +101,28 @@ export default function FAQ() {
         </FAQItem>
         <FAQItem value="item-2" question="Will DataPipe store my data?">
           <Text mb={2}>
-            Under normal operation, no. DataPipe routes your data to the Open
-            Science Framework but does not keep a copy. Data passes through
-            DataPipe for optional validation and is then sent directly to your
-            OSF project.
+            Under normal operation, no. DataPipe routes your data to the
+            storage provider you connected but does not keep a copy. Data
+            passes through DataPipe for optional validation and then goes
+            straight to your Drive folder, Dataverse dataset, or Zenodo
+            deposition.
           </Text>
           <Text>
-            The one exception is when an upload to the OSF fails (for example,
-            due to a temporary OSF outage or rate limit). In that case,
-            DataPipe temporarily caches the data so it can retry the upload
+            The one exception is when an upload fails (for example, because
+            your provider is briefly unavailable or rate-limits us). In that
+            case, DataPipe temporarily caches the data so it can retry the upload
             automatically. Cached data is encrypted at rest, stored for up to
             one week, and deleted as soon as the upload succeeds. See the
             question below for details.
           </Text>
         </FAQItem>
-        <FAQItem value="item-2b" question="What happens if an upload to the OSF fails?">
+        <FAQItem value="item-2b" question="What happens if an upload fails?">
           <Text mb={2}>
-            If the OSF is temporarily unavailable or returns an error, DataPipe
-            will not lose your data. Failed uploads are automatically cached
-            and retried with increasing intervals (starting at one hour, up to
-            24 hours) for up to five attempts over approximately one week.
+            If your storage provider is temporarily unavailable or returns an
+            error, DataPipe will not lose your data. Failed uploads are
+            automatically cached and retried with increasing intervals
+            (starting at one hour, up to 24 hours) for up to five attempts
+            over approximately one week.
           </Text>
           <Text mb={2}>
             Your experiment dashboard will show an orange badge for pending
@@ -136,9 +167,10 @@ export default function FAQ() {
         <FAQItem value="item-4" question="Why is DataPipe free?">
           <Text>
             The expensive parts of running an online experiment — hosting files
-            and storing data — are handled by free services like GitHub Pages
-            and the OSF. DataPipe is a lightweight bridge between them, which
-            makes it inexpensive to operate.
+            and storing data — are handled by services you already have access
+            to, like GitHub Pages for hosting and Google Drive, Dataverse, or
+            Zenodo for storage. DataPipe is a lightweight bridge between them,
+            which makes it inexpensive to operate.
           </Text>
         </FAQItem>
         <FAQItem value="item-5" question="How expensive is it to run DataPipe?">
@@ -169,9 +201,13 @@ export default function FAQ() {
         <FAQItem value="item-6" question="Who can see the data I collect?">
           <Text>
             DataPipe does not store or log your data. Once data reaches your
-            OSF project, visibility depends on your OSF settings. If the
-            receiving component is private, only you and your collaborators
-            can see the data. If it is public, anyone can.
+            storage provider, visibility is governed entirely by that
+            provider&apos;s own sharing settings. A Google Drive folder is
+            private until you share it. A Zenodo deposition stays a private
+            draft until you publish it. A Dataverse dataset stays a draft
+            until you publish it, and its access is then set by your
+            installation&apos;s policies. In every case DataPipe changes
+            nothing about who can see your data — you do.
           </Text>
         </FAQItem>
         <FAQItem value="item-7" question="What are the risks of using DataPipe?">
@@ -181,17 +217,18 @@ export default function FAQ() {
           <ol style={{ paddingLeft: "1.5em" }}>
             <li style={{ marginBottom: "0.5em" }}>
               <strong>Authorization tokens.</strong> DataPipe needs permission
-              to write to your OSF account. All tokens are stored encrypted.
-              If you sign in with your OSF account, tokens are managed and
-              refreshed automatically. If you use a personal access token
-              instead, create one specifically for DataPipe and revoke it when
-              you are done collecting data.
+              to write to your storage account, and all tokens are stored
+              encrypted. For Google Drive and Zenodo you authorize DataPipe
+              directly, and it manages and refreshes those tokens for you. For
+              Dataverse you supply an API token, so create one specifically for
+              DataPipe and revoke it when you are done collecting data. You can
+              disconnect any provider from your account settings at any time.
             </li>
             <li style={{ marginBottom: "0.5em" }}>
               <strong>Fake or spam data.</strong> As with any online experiment,
               a technically savvy user could submit fabricated data or spam
-              files to your OSF project. DataPipe provides validation rules
-              and session limits to reduce this risk.
+              files to your storage. DataPipe provides validation rules and
+              session limits to reduce this risk.
             </li>
             <li>
               <strong>Support availability.</strong> DataPipe is not a
@@ -207,16 +244,17 @@ export default function FAQ() {
         </FAQItem>
         <FAQItem value="item-8" question="How does data validation work?">
           <Text mb={2}>
-            When enabled, DataPipe checks incoming data before sending it to
-            the OSF. You can validate that files are well-formed JSON or CSV,
+            When enabled, DataPipe checks incoming data before sending it on
+            to your storage provider. You can validate that files are
+            well-formed JSON or CSV,
             and you can specify a list of required columns or fields that must
             be present. For JSON arrays (like jsPsych output), DataPipe checks
             whether the required fields appear in at least one object across
             the array.
           </Text>
           <Text>
-            Invalid files are rejected and not sent to the OSF. Rejected data
-            cannot be recovered. This feature is designed to block malicious
+            Invalid files are rejected and never sent to your storage
+            provider. Rejected data cannot be recovered. This feature is designed to block malicious
             submissions, not to catch errors in legitimate data.
           </Text>
         </FAQItem>
@@ -224,8 +262,9 @@ export default function FAQ() {
           <Text mb={2}>
             Base64 data collection lets you send binary files — like audio
             recordings, video, or images — encoded as base64 strings. DataPipe
-            decodes the string and stores the resulting file in your OSF
-            project. Each request sends one file at a time.
+            decodes the string and stores the resulting file alongside the rest
+            of your experiment&apos;s data. Each request sends one file at a
+            time.
           </Text>
           <Text>
             Validation is not currently supported for base64 data, so enabling
@@ -290,8 +329,8 @@ export default function FAQ() {
         </FAQItem>
         <FAQItem value="item-11" question="How does metadata production work?">
           <Text mb={2}>
-            When enabled, DataPipe generates a dataset_description.json file in
-            your OSF project that describes your dataset and its variables
+            When enabled, DataPipe generates a dataset_description.json file
+            alongside your data that describes the dataset and its variables
             according to the Psych-DS specification. The file is updated
             automatically as new sessions are uploaded.
           </Text>
@@ -315,18 +354,20 @@ export default function FAQ() {
             to learn more.
           </Text>
         </FAQItem>
-        <FAQItem value="item-12" question="What is one-click authentication?">
+        <FAQItem value="item-12" question="How does DataPipe get permission to write to my storage?">
           <Text mb={2}>
-            One-click authentication lets you sign in to DataPipe with your
-            OSF account. DataPipe then manages your authorization tokens
-            automatically, including refreshing them when they expire. This
-            is the recommended approach for most users.
+            It depends on the provider. <strong>Google Drive</strong> and{" "}
+            <strong>Zenodo</strong> use a one-click authorization: you approve
+            DataPipe on their site, and DataPipe then manages the resulting
+            tokens for you, including refreshing them before they expire.
           </Text>
           <Text>
-            The alternative is a personal access token, which you create on
-            the OSF and paste into DataPipe. This gives you direct control
-            but requires you to manage the token yourself. Both methods store
-            tokens encrypted.
+            <strong>Dataverse</strong> uses an API token that you create on
+            your institution&apos;s installation and paste into DataPipe. That
+            gives you direct control, but nothing can renew it for you: when
+            the token expires, data stops arriving until you create a new one
+            and reconnect. Tokens are stored encrypted either way, and you can
+            disconnect a provider at any time from your account settings.
           </Text>
         </FAQItem>
         <FAQItem value="item-13" question="How should I cite DataPipe?">

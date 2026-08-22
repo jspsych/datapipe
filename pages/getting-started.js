@@ -11,6 +11,12 @@ import {
 } from "@chakra-ui/react";
 import { ChevronDown, ChevronRight, Shield } from "lucide-react";
 import { useState } from "react";
+import { osfSunsetLabel } from "../lib/osf-sunset";
+
+// Which Zenodo this deployment points at -- "" on production, "sandbox." on
+// the test site. Same reasoning as lib/provider-config.js: the test
+// deployment must not send researchers to sign up on the live service.
+const ZENODO_HOST = `https://${process.env.NEXT_PUBLIC_ZENODO_ENV ?? ""}zenodo.org`;
 
 function StepNumber({ number }) {
   return (
@@ -107,7 +113,48 @@ function FeatureItem({ name, children }) {
   );
 }
 
+// One storage provider, in the terms a researcher choosing between them
+// actually needs: whether it is the right fit, where the data physically ends
+// up, how they connect, and the limit that will eventually matter. The
+// decision sentence leads because that is the only line someone skimming for
+// "which one do I pick" needs to read. Plain rows rather than a comparison
+// table so it stays readable on a phone.
+function ProviderOption({ name, summary, landsIn, connect, limits }) {
+  return (
+    <Box borderWidth="1px" borderColor="gray.700" borderRadius={8} p={4}>
+      <Text fontWeight="semibold" color="brandOrange.300" mb={1}>
+        {name}
+      </Text>
+      <Text fontSize="sm" mb={3}>
+        {summary}
+      </Text>
+      <Stack gap={1}>
+        <Text fontSize="sm" color="gray.400">
+          <Text as="span" fontWeight="semibold">Data lands in:</Text> {landsIn}
+        </Text>
+        <Text fontSize="sm" color="gray.400">
+          <Text as="span" fontWeight="semibold">Connect with:</Text> {connect}
+        </Text>
+        <Text fontSize="sm" color="gray.400">
+          <Text as="span" fontWeight="semibold">Limits:</Text> {limits}
+        </Text>
+      </Stack>
+    </Box>
+  );
+}
+
 export default function GettingStarted() {
+  const osfDeadline = osfSunsetLabel();
+  // Consequence first (PRODUCT.md principle 2): what stops working, then why.
+  // Both sentences degrade gracefully when no cutoff has been announced --
+  // lib/osf-sunset.js tolerates a null date and so must every reader of it.
+  const osfStops = osfDeadline
+    ? `DataPipe will stop writing to OSF after ${osfDeadline}.`
+    : "DataPipe is winding down its support for OSF.";
+  const osfUntil = osfDeadline
+    ? "Experiments already collecting keep running until that date."
+    : "Experiments already collecting keep running for now.";
+
   return (
     <Stack w={["95%", 960]} gap={8} py={4}>
       <VStack gap={2} align="start">
@@ -115,80 +162,134 @@ export default function GettingStarted() {
           Getting Started
         </Heading>
         <Text color="gray.400" fontSize="lg">
-          Set up DataPipe to send experiment data directly to the OSF. This
-          guide covers a typical online experiment using free tools.
+          DataPipe sends data from your experiment straight to storage you
+          control — Google Drive, Dataverse, or Zenodo. This guide sets up one
+          experiment end to end, from choosing a provider to your first test
+          run.
         </Text>
       </VStack>
 
-      <StepCard number={1} title="Create an OSF project">
+      <StepCard number={1} title="Choose where your data goes">
         <Text>
-          Create a project at{" "}
-          <Link href={`https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io`} target="_blank" rel="noopener noreferrer" color="brandOrange.300">
-            osf.io
+          DataPipe writes each participant&apos;s data into your own account
+          with one of the three storage providers below. The data is yours
+          throughout — DataPipe only ever asks for permission to add files.
+          You can use a different provider for each experiment, so this choice
+          is not permanent.
+        </Text>
+        <Stack gap={3}>
+          <ProviderOption
+            name="Google Drive"
+            summary="Your own Google Drive. Choose this if you want the fewest steps and do not need a citable dataset."
+            landsIn="a folder in My Drive/DataPipe, or in a parent folder you pick."
+            connect="your Google account, in one click."
+            limits="free Google accounts share 15 GB across Drive, Gmail, and Photos. Uploads stop once that is full."
+          />
+          <ProviderOption
+            name="Dataverse"
+            summary="Institutional repositories run by universities and consortia — Harvard Dataverse, Borealis, DataverseNL, and others. Choose this if your institution or funder expects data to live there."
+            landsIn="a draft dataset, in a collection you name."
+            connect="an API token from your institution's installation."
+            limits="your installation sets its own file size and storage limits. API tokens expire, often yearly, and DataPipe cannot renew them — data stops arriving until you reconnect."
+          />
+          <ProviderOption
+            name="Zenodo"
+            summary="An open repository run by CERN that issues a DOI for every published record. Choose this if you want your data citable without an institutional repository."
+            landsIn="a deposition that stays private until you publish it."
+            connect="your Zenodo account, in one click."
+            limits="100 files and 50 GB per record. DataPipe merges completed sessions into archives so a long study stays under the file limit."
+          />
+        </Stack>
+        <Text>
+          You need an account with whichever provider you choose:{" "}
+          <Link href="https://drive.google.com" target="_blank" rel="noopener noreferrer" color="brandOrange.300">
+            Google Drive
           </Link>
-          {" "}to store your experiment data. You will need an OSF account
-          — create one if you do not have one already.
-        </Text>
-        <Text>
-          Once you have an account, click <strong>Create Project</strong> and
-          give it any name you like. Your OSF account can also be used to
-          sign in to DataPipe directly.
-        </Text>
-      </StepCard>
-
-      <StepCard number={2} title="Link your OSF account to DataPipe">
-        <Text>
-          DataPipe needs authorization to create files in your OSF projects.
-          If you signed up for DataPipe using your OSF account, this is
-          already done.
-        </Text>
-        <Text>
-          Otherwise, go to your{" "}
-          <Link href="/admin/account" color="brandOrange.300">
-            Account Settings
+          ,{" "}
+          <Link href="https://dataverse.org/institutions" target="_blank" rel="noopener noreferrer" color="brandOrange.300">
+            your Dataverse installation
           </Link>
-          , switch to one-click authentication if not already enabled, and
-          click <strong>Link OSF Account</strong>. You will be redirected to
-          OSF to authorize DataPipe, then sent back automatically.
+          , or{" "}
+          <Link href={ZENODO_HOST} target="_blank" rel="noopener noreferrer" color="brandOrange.300">
+            Zenodo
+          </Link>
+          .
         </Text>
-        <CollapsibleSection title="Using a personal access token instead (legacy)">
+        <CollapsibleSection title="Already collecting data on OSF?">
           <Text>
-            Go to your DataPipe Account Settings and switch to &quot;Personal
-            access token&quot; mode. Then on OSF, go to your account settings,
-            click the <strong>Personal Access Tokens</strong> tab, and create
-            a new token with the <strong>osf.full_write</strong> scope.
+            {osfStops} OSF is shutting down its projects feature, so DataPipe
+            can no longer create new experiments there. {osfUntil}
           </Text>
           <Text>
-            Copy the token value and paste it into your DataPipe Account
-            Settings. A green checkmark will confirm the token is valid.
+            Data already on OSF is unaffected and stays in your OSF account. To
+            keep collecting past that point, connect one of the providers
+            above, create a new experiment on it, and point your experiment
+            code at the new experiment ID.
           </Text>
         </CollapsibleSection>
       </StepCard>
 
+      <StepCard number={2} title="Connect your storage provider">
+        <Text>
+          Go to your{" "}
+          <Link href="/admin/account" color="brandOrange.300">
+            Account Settings
+          </Link>
+          {" "}and find the <strong>Storage Providers</strong> section. Click{" "}
+          <strong>Connect</strong> next to the provider you chose. A green{" "}
+          <strong>Connected</strong> label confirms it worked.
+        </Text>
+        <Text>
+          <strong>Google Drive</strong> and <strong>Zenodo</strong> hand you
+          to their own sign-in page to authorize DataPipe, then bring you
+          straight back.
+        </Text>
+        <Text>
+          <strong>Dataverse</strong> opens a short form instead. It needs the
+          full address of your institution&apos;s installation — for
+          example, <em>https://dataverse.harvard.edu</em> — and an API token,
+          which you create under the <strong>API Token</strong> tab of your
+          Dataverse account.
+        </Text>
+        <Text color="gray.400" fontSize="sm">
+          You can connect more than one provider, and disconnect any of them
+          from the same screen. Disconnecting stops new data from reaching
+          that provider. It never removes data already stored there.
+        </Text>
+      </StepCard>
+
       <StepCard number={3} title="Create a DataPipe experiment">
         <Text>
-          Click <strong>New Experiment</strong> in the navigation bar. You will
-          need to provide:
+          Click <strong>New Experiment</strong> in the navigation bar. Pick
+          your storage provider at the top of the form and give the experiment
+          a <strong>Title</strong>. The rest of the form changes with the
+          provider:
         </Text>
         <Stack gap={2} pl={4}>
           <Text>
-            <Text as="span" fontWeight="semibold">Title</Text> — a name for
-            your experiment.
+            <Text as="span" fontWeight="semibold">Google Drive</Text> — nothing
+            else is required. To keep the data somewhere specific,
+            click <strong>Choose Drive folder</strong> and pick a parent
+            folder. Otherwise DataPipe creates the folder
+            in <em>My Drive/DataPipe</em>.
           </Text>
           <Text>
-            <Text as="span" fontWeight="semibold">OSF Project ID</Text> — the
-            short code from your OSF project URL. For example, if your project
-            is at <em>osf.io/abcde</em>, the ID is <strong>abcde</strong>.
+            <Text as="span" fontWeight="semibold">Dataverse</Text> — the{" "}
+            <strong>collection alias</strong>, which is the short name from
+            your collection&apos;s URL, plus the author name, contact email,
+            and description that Dataverse requires for every dataset. Subject
+            is optional.
           </Text>
           <Text>
-            <Text as="span" fontWeight="semibold">Data Component Name</Text> — DataPipe
-            will create a new component with this name inside your OSF project
-            to store all data files.
+            <Text as="span" fontWeight="semibold">Zenodo</Text> — the{" "}
+            <strong>creator name</strong> and a <strong>description</strong>{" "}
+            for the deposition. Affiliation is optional.
           </Text>
         </Stack>
         <Text>
-          Click <strong>Create</strong> and you will be taken to the experiment
-          dashboard.
+          Click <strong>Create</strong>. DataPipe makes the folder, dataset,
+          or deposition for you and opens the experiment dashboard, which
+          links straight to it.
         </Text>
       </StepCard>
 
@@ -206,8 +307,8 @@ export default function GettingStarted() {
             specify required fields. This helps prevent malicious submissions.
           </FeatureItem>
           <FeatureItem name="Session limit">
-            — cap the number of data files that can be sent to your OSF
-            project. You can increase this later.
+            — cap how many data files DataPipe will accept. You can raise the
+            limit later.
           </FeatureItem>
           <FeatureItem name="Psych-DS metadata">
             — automatically produce metadata adhering to{" "}
@@ -221,8 +322,9 @@ export default function GettingStarted() {
         </Stack>
         <Callout>
           Only activate the features you need, and only during active data
-          collection. DataPipe creates an open path to your OSF project —
-          validation and session limits reduce the risk of unwanted submissions.
+          collection. DataPipe creates an open path into your storage provider
+          — validation and session limits reduce the risk of unwanted
+          submissions.
         </Callout>
       </StepCard>
 
@@ -236,8 +338,10 @@ export default function GettingStarted() {
           . Otherwise, you can use the DataPipe API directly with fetch requests.
         </Text>
         <Text>
-          Your experiment dashboard has ready-to-use code snippets for both
-          jsPsych and plain JavaScript. Go to{" "}
+          The code is the same whichever storage provider you chose — your
+          experiment sends data to DataPipe, and DataPipe handles the rest.
+          Your experiment dashboard has ready-to-use snippets for both jsPsych
+          and plain JavaScript. Go to{" "}
           <Link href="/admin" color="brandOrange.300">My Experiments</Link>,
           select your experiment, and copy the code from the{" "}
           <strong>Code Samples</strong> panel.
@@ -289,7 +393,7 @@ export default function GettingStarted() {
         <Stack gap={2} pl={4}>
           <Text>
             <Text as="span" fontWeight="semibold">Enable data collection</Text> — for
-            sending text files (JSON, CSV) to OSF.
+            sending text files (JSON, CSV).
           </Text>
           <Text>
             <Text as="span" fontWeight="semibold">Enable base64 data collection</Text> — for
@@ -301,9 +405,26 @@ export default function GettingStarted() {
           </Text>
         </Stack>
         <Text>
-          Run through your experiment once to verify data files appear in
-          your OSF data component. You should see them immediately after
-          completing the experiment.
+          Run through your experiment once to check that the data arrives. The
+          experiment dashboard links straight to your Drive folder, Dataverse
+          dataset, or Zenodo deposition — your file should appear there
+          shortly after you finish.
+        </Text>
+      </StepCard>
+
+      <StepCard number={8} title="When data collection ends">
+        <Text>
+          When your study is finished, <strong>finalize</strong> the
+          experiment from its dashboard. DataPipe merges every remaining data
+          file into a single archive on your storage provider and stops
+          accepting new submissions, which makes the dataset easier to share
+          and cite. Finalizing cannot be undone, so do it only when you are
+          certain no more data is coming.
+        </Text>
+        <Text color="gray.400" fontSize="sm">
+          On Zenodo, finalizing prepares the deposition but does not publish
+          it. Publishing the record, and with it issuing the DOI, stays your
+          decision and happens on Zenodo itself.
         </Text>
       </StepCard>
     </Stack>
