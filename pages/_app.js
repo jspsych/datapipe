@@ -35,7 +35,11 @@ function MyApp({ Component, pageProps }) {
       </Center>
       <Footer />
       {
-        process.env.NEXT_PUBLIC_OSF_ENV !== "" && <TestEnvironmentWarning />
+        /* A `!== ""` guard renders whenever the var is UNDEFINED
+           (`undefined !== ""` is true), so an unset var in a deploy would
+           have shipped this banner to production. Truthiness check instead --
+           TestEnvironmentWarning itself repeats the check as a second guard. */
+        !!process.env.NEXT_PUBLIC_OSF_ENV && <TestEnvironmentWarning />
       }
     </Box>
   ));

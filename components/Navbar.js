@@ -1,5 +1,6 @@
 import NextLink from "next/link";
 import { useContext, useSyncExternalStore } from "react";
+import { useRouter } from "next/router";
 import { UserContext } from "../lib/context";
 import {
   Box,
@@ -45,54 +46,64 @@ export default function Navbar() {
   const { user } = useContext(UserContext);
   const hydrated = useHydrated();
   const showUser = hydrated ? user : null;
+  const router = useRouter();
+  const current = (href) => (router.pathname === href ? "page" : undefined);
 
   return (
-    <Box as="nav" flexShrink={0}>
+    <Box
+      as="nav"
+      aria-label="Main"
+      flexShrink={0}
+      bg="bg"
+      borderBottomWidth="1px"
+      borderColor="border"
+    >
       <Flex
         justifyContent={"space-between"}
         alignItems={"center"}
         p={"4"}
         w={"100%"}
-        color={"white"}
+        color={"fg"}
       >
         <HStack gap={4} alignItems={"center"} pe={"2"}>
           <NextLink href="/">
             <Box display={"flex"} alignItems={"center"} gap={2.5} pr={10}>
-              {/* Explicit dark-surface colorway (README.md's "Dark bg"
-                  column): the app renders on a permanently dark surface
-                  (see lib/theme.js), so this is not a light/dark toggle --
-                  hardcode it rather than lean on currentColor inheritance
-                  across the font className boundary below. */}
-              <LogoMark size={40} color="#F2F5F1" />
+              {/* The mark and wordmark render in the logo's own colors, not
+                  the page `fg` -- DESIGN.md §1 "Logo" / "The navbar is
+                  mode-aware": `logo.mark` resolves #2E7D32 light / #F2F5F1
+                  dark, deliberately distinct from `fg` in both modes.
+                  LogoMark is a raw SVG component whose `color` prop lands
+                  directly on a `fill` attribute, so it needs a real CSS
+                  value rather than a Chakra token path -- the resolved CSS
+                  custom property does that. The Text wordmark is a Chakra
+                  component, so it can reference the token path directly.
+                  The echo chevron keeps LogoMark's own #8BC34A default --
+                  mark-only, never themed, LogoMark internals untouched. */}
+              <LogoMark size={40} color="var(--chakra-colors-logo-mark)" />
               <Text
                 className={spaceGrotesk.className}
                 fontWeight="600"
                 fontSize="22px"
                 lineHeight="1"
                 letterSpacing="-0.03em"
-                color="#F2F5F1"
+                color="logo.mark"
               >
                 DataPipe
               </Text>
             </Box>
           </NextLink>
-          <HStack
-            as={"nav"}
-            fontSize="lg"
-            gap={8}
-            display={{ base: "none", md: "flex" }}
-          >
-            <Link color="white" focusRing="none" asChild>
+          <HStack fontSize="lg" gap={8} display={{ base: "none", md: "flex" }}>
+            <Link color="fg" aria-current={current("/getting-started")} asChild>
               <NextLink href="/getting-started">Getting Started</NextLink>
             </Link>
-            <Link color="white" focusRing="none" asChild>
+            <Link color="fg" aria-current={current("/api-docs")} asChild>
               <NextLink href="/api-docs">API Docs</NextLink>
             </Link>
-            <Link color="white" focusRing="none" asChild>
+            <Link color="fg" aria-current={current("/faq")} asChild>
               <NextLink href="/faq">FAQ</NextLink>
             </Link>
             {showUser && (
-              <Link color="white" focusRing="none" asChild>
+              <Link color="fg" aria-current={current("/admin")} asChild>
                 <NextLink href="/admin">My Experiments</NextLink>
               </Link>
             )}
@@ -101,45 +112,39 @@ export default function Navbar() {
         <HStack display={{ base: "none", md: "flex" }} gap={8}>
           {!showUser && (
             <>
-              <NextLink href="/signin">
-                <Button
-                  variant={"ghost"}
-                  color="white"
-                  size={"sm"}
-                  mr={4}
-                  _hover={{ bg: "whiteAlpha.300" }}
-                >
-                  Sign In
-                </Button>
-              </NextLink>
-              <NextLink href="/signup">
-                <Button
-                  variant={"outline"}
-                  color="white"
-                  borderColor="white"
-                  size={"sm"}
-                  _hover={{ bg: "whiteAlpha.300" }}
-                >
-                  Sign Up
-                </Button>
-              </NextLink>
+              <Button
+                asChild
+                variant={"ghost"}
+                color="fg"
+                size={"sm"}
+                mr={4}
+                _hover={{ bg: "bg.muted" }}
+              >
+                <NextLink href="/signin">Sign In</NextLink>
+              </Button>
+              <Button
+                asChild
+                variant={"outline"}
+                color="fg"
+                borderColor="border"
+                size={"sm"}
+                _hover={{ bg: "bg.muted" }}
+              >
+                <NextLink href="/signup">Sign Up</NextLink>
+              </Button>
             </>
           )}
           {showUser && (
             <>
-              <NextLink href="/admin/new">
-                <Button
-                  variant={"solid"}
-                  colorPalette={"brandTeal"}
-                  size={"sm"}
-                >
+              <Button asChild variant={"solid"} colorPalette={"brandGreen"} size={"sm"}>
+                <NextLink href="/admin/new">
                   <Plus /> New Experiment
-                </Button>
-              </NextLink>
+                </NextLink>
+              </Button>
               <Menu.Root>
                 <Menu.Trigger asChild>
                   <Button
-                    color="white"
+                    color="fg"
                     rounded={"full"}
                     variant={"plain"}
                     cursor={"pointer"}
@@ -149,12 +154,26 @@ export default function Navbar() {
                   </Button>
                 </Menu.Trigger>
                 <Menu.Positioner>
-                  <Menu.Content bg="greyBackground" borderWidth="1px" borderColor="white" p="2">
-                    <Menu.Item value="settings" bg="greyBackground" color="white" py="2" px="3" asChild>
+                  <Menu.Content bg="bg.panel" borderWidth="1px" borderColor="border" p="2">
+                    <Menu.Item
+                      value="settings"
+                      color="fg"
+                      py="2"
+                      px="3"
+                      _hover={{ bg: "bg.muted" }}
+                      asChild
+                    >
                       <NextLink href="/admin/account">Settings</NextLink>
                     </Menu.Item>
-                    <Menu.Separator />
-                    <Menu.Item value="signout" bg="greyBackground" color="white" py="2" px="3" onClick={() => auth.signOut()}>
+                    <Menu.Separator borderColor="border.subtle" />
+                    <Menu.Item
+                      value="signout"
+                      color="fg"
+                      py="2"
+                      px="3"
+                      _hover={{ bg: "bg.muted" }}
+                      onClick={() => auth.signOut()}
+                    >
                       Sign Out
                     </Menu.Item>
                   </Menu.Content>
@@ -167,50 +186,96 @@ export default function Navbar() {
           <Menu.Root>
             <Menu.Trigger asChild>
               <IconButton
-                color="white"
+                color="fg"
                 cursor={"pointer"}
                 minW={0}
                 variant="ghost"
                 aria-label="Menu"
-                _hover={{ bg: "whiteAlpha.300" }}
+                _hover={{ bg: "bg.muted" }}
               >
                 <MenuIcon size={32} />
               </IconButton>
             </Menu.Trigger>
             <Menu.Positioner>
-              <Menu.Content w="90vw" bg="greyBackground" borderWidth="1px" borderColor="white" p="2">
-                <Menu.Item value="getting-started" bg="greyBackground" color="white" py="2" px="3" asChild>
+              <Menu.Content w="90vw" bg="bg.panel" borderWidth="1px" borderColor="border" p="2">
+                <Menu.Item
+                  value="getting-started"
+                  color="fg"
+                  py="2"
+                  px="3"
+                  _hover={{ bg: "bg.muted" }}
+                  asChild
+                >
                   <NextLink href="/getting-started">Getting Started</NextLink>
                 </Menu.Item>
-                <Menu.Item value="api-docs" bg="greyBackground" color="white" py="2" px="3" asChild>
+                <Menu.Item value="api-docs" color="fg" py="2" px="3" _hover={{ bg: "bg.muted" }} asChild>
                   <NextLink href="/api-docs">API Docs</NextLink>
                 </Menu.Item>
-                <Menu.Item value="faq" bg="greyBackground" color="white" py="2" px="3" asChild>
+                <Menu.Item value="faq" color="fg" py="2" px="3" _hover={{ bg: "bg.muted" }} asChild>
                   <NextLink href="/faq">FAQ</NextLink>
                 </Menu.Item>
                 {showUser && (
                   <>
-                    <Menu.Item value="experiments" bg="greyBackground" color="white" py="2" px="3" asChild>
+                    <Menu.Item
+                      value="experiments"
+                      color="fg"
+                      py="2"
+                      px="3"
+                      _hover={{ bg: "bg.muted" }}
+                      asChild
+                    >
                       <NextLink href="/admin">My Experiments</NextLink>
                     </Menu.Item>
-                    <Menu.Item value="new-experiment" bg="greyBackground" color="white" py="2" px="3" asChild>
+                    <Menu.Item
+                      value="new-experiment"
+                      color="fg"
+                      py="2"
+                      px="3"
+                      _hover={{ bg: "bg.muted" }}
+                      asChild
+                    >
                       <NextLink href="/admin/new">New Experiment</NextLink>
+                    </Menu.Item>
+                    {/* Settings is the required activation step (PRODUCT.md
+                        "first-time setup"): /admin/account must be reachable
+                        from the mobile menu, not desktop-only. Placed last in
+                        this group, immediately before the separator, to
+                        mirror the desktop Account menu's Settings -> Sign Out
+                        adjacency below. */}
+                    <Menu.Item
+                      value="settings"
+                      color="fg"
+                      py="2"
+                      px="3"
+                      _hover={{ bg: "bg.muted" }}
+                      asChild
+                    >
+                      <NextLink href="/admin/account">Settings</NextLink>
                     </Menu.Item>
                   </>
                 )}
-                <Menu.Separator />
+                <Menu.Separator borderColor="border.subtle" />
                 {!showUser && (
                   <>
-                    <Menu.Item value="signup" bg="greyBackground" color="white" py="2" px="3" asChild>
-                      <NextLink href="/signup">Sign Up</NextLink>
-                    </Menu.Item>
-                    <Menu.Item value="signin" bg="greyBackground" color="white" py="2" px="3" asChild>
+                    {/* Matches the desktop order (Sign In, then Sign Up) --
+                        the previous markup reversed them on mobile only. */}
+                    <Menu.Item value="signin" color="fg" py="2" px="3" _hover={{ bg: "bg.muted" }} asChild>
                       <NextLink href="/signin">Sign In</NextLink>
+                    </Menu.Item>
+                    <Menu.Item value="signup" color="fg" py="2" px="3" _hover={{ bg: "bg.muted" }} asChild>
+                      <NextLink href="/signup">Sign Up</NextLink>
                     </Menu.Item>
                   </>
                 )}
                 {showUser && (
-                  <Menu.Item value="signout" bg="greyBackground" color="white" py="2" px="3" onClick={() => auth.signOut()}>
+                  <Menu.Item
+                    value="signout"
+                    color="fg"
+                    py="2"
+                    px="3"
+                    _hover={{ bg: "bg.muted" }}
+                    onClick={() => auth.signOut()}
+                  >
                     Sign Out
                   </Menu.Item>
                 )}
