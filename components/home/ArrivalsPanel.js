@@ -38,7 +38,7 @@ export default function ArrivalsPanel() {
           color="code.fg.muted"
           truncate
         >
-          DataPipe/memory-task/
+          My Drive/DataPipe/memory-task/
         </Text>
       </HStack>
       <Box as="ul" listStyleType="none" px={4} py={2}>

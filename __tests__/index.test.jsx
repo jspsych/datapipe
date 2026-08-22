@@ -47,8 +47,30 @@ function renderHome() {
 describe("Home", () => {
   it("renders Home component", () => {
     renderHome();
-    // "Get started" is the hero CTA and the closing CTA -- the same door, twice.
-    expect(screen.getAllByText("Get started").length).toBeGreaterThan(0);
+    // The hero CTA and the closing CTA are the same door, twice.
+    expect(screen.getAllByText("Create an account").length).toBeGreaterThan(0);
+  });
+
+  it("labels each CTA with the page it actually opens", () => {
+    renderHome();
+    // Signed out, the primary goes to /signup, so it may not promise a guide.
+    // "Get started" did.
+    expect(screen.queryByText("Get started")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /create an account/i }).length)
+      .toBeGreaterThan(0);
+    // The secondary goes to /getting-started and now says so, in the same
+    // words faq.js and the closing band use for that page.
+    expect(
+      screen.getByRole("link", { name: /read the getting started guide/i })
+    ).toHaveAttribute("href", "/getting-started");
+  });
+
+  it("says in visible text that the arrivals panel is not live", () => {
+    renderHome();
+    // PRODUCT.md principle 5: invented filenames must never be dressed up as
+    // telemetry. "Illustration." named the genre without answering the
+    // reader's question.
+    expect(screen.getByText(/Example, not live data/)).toBeInTheDocument();
   });
 
   it("describes the providers DataPipe actually ships", () => {

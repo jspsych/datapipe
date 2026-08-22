@@ -254,7 +254,12 @@ export default function Home() {
   const osfDeadline = osfSunsetLabel();
 
   const primaryHref = user ? "/admin" : "/signup";
-  const primaryLabel = user ? "Go to dashboard" : "Get started";
+  // The label names the destination the click actually reaches. "/admin" is
+  // "My Experiments" in the navbar, not a "dashboard" -- getting-started.js
+  // reserves "experiment dashboard" for the per-experiment page, so "Go to
+  // dashboard" pointed at the wrong screen. Signed out, "Get started" promised
+  // a guide and delivered a signup form.
+  const primaryLabel = user ? "Go to my experiments" : "Create an account";
 
   return (
     <Box w="100%">
@@ -302,11 +307,20 @@ export default function Home() {
             >
               DataPipe is a free, open-source service that sends data from any
               online experiment to your own Google Drive, Dataverse, or Zenodo
-              account. No server to set up, no download step.
+              account as each participant finishes. No server to set up,
+              nothing to download by hand.
             </Text>
+            {/* This line is the trust claim and must not restate the two above
+                it. "The account stays yours" was the third sentence in a row
+                saying the same thing; the permission scope and the exit are
+                new information, and both are checkable. Scope is stated as
+                what DataPipe asks for, not as what a provider forbids -- a
+                Dataverse API token carries the researcher's full privileges,
+                so "it cannot read or delete anything" would be false there
+                (PRODUCT.md principle 5). */}
             <Text fontSize={["md", "lg"]} color="band.fg" lineHeight="tall" maxW="60ch">
-              The account stays yours throughout: DataPipe only ever asks for
-              permission to add files.
+              DataPipe only ever asks your storage provider for permission to
+              add files. You can disconnect it at any time.
             </Text>
             {/* TODO(owner): retention claim -- needs a decision on what DataPipe
                 retains and for how long */}
@@ -323,7 +337,12 @@ export default function Home() {
                   is an outline in the band's own border color, because the
                   neutral gray it would otherwise take is 1.2:1 here. */}
               <Button asChild size="lg" variant="outline" css={BAND_SECONDARY}>
-                <NextLink href="/getting-started">How it works</NextLink>
+                {/* Names the page it opens, in the same words faq.js and the
+                    closing band use for it. "How it works" described a concept
+                    page; the destination is a step-by-step setup guide. */}
+                <NextLink href="/getting-started">
+                  Read the getting started guide
+                </NextLink>
               </Button>
             </HStack>
             <Text fontSize="sm" color="band.fg.subtle" pt={2}>
@@ -349,18 +368,24 @@ export default function Home() {
               </SectionHeading>
             </Box>
             <VStack align="start" gap={[6, 8]} flex="1.5" maxW="70ch">
+              {/* One imperative verb per step, in the order the researcher
+                  performs them, matching getting-started.js steps 2, 3+5 and 7
+                  and the labels they will actually click. "your study" is gone:
+                  this page now says "a DataPipe experiment" for the record and
+                  "your experiment" for the thing participants run. */}
               <StepItem number="1">
                 Connect a storage provider — Google Drive, Dataverse, or Zenodo
                 — to your DataPipe account.
               </StepItem>
               <StepItem number="2">
-                Create an experiment on DataPipe and add a few lines of code to
-                your study to send data through the API.
+                Create a DataPipe experiment, then add a few lines of code to
+                the experiment your participants run so it sends data to
+                DataPipe.
               </StepItem>
               <StepItem number="3">
-                Turn on data collection. Each participant&apos;s data goes
-                straight to your folder, dataset, or deposition — no downloads,
-                no manual transfers.
+                Enable data collection and run your experiment. Each
+                participant&apos;s data lands in your Drive folder, Dataverse
+                dataset, or Zenodo deposition as they finish.
               </StepItem>
             </VStack>
           </Stack>
@@ -386,15 +411,22 @@ export default function Home() {
           <Box as="figure" m={0} flex="1" w="100%" minW={0}>
             <CodeSpecimen />
             <Text as="figcaption" fontSize="sm" color="fg.muted" mt={3}>
-              The code is the same whichever provider you chose. Full details
-              are in the <ProseLink href="/api-docs">API reference</ProseLink>.
+              The code is the same whichever storage provider you chose. Every
+              endpoint and error code is in the{" "}
+              <ProseLink href="/api-docs">API reference</ProseLink>.
             </Text>
           </Box>
           <Box as="figure" m={0} flex="1" w="100%" minW={0}>
             <ArrivalsPanel />
+            {/* "Illustration." named the genre without saying why it mattered.
+                The reader's question is whether these are real arrivals, so the
+                caption answers that first. "the ... you connected" was also
+                wrong: a researcher connects a provider, and DataPipe creates
+                the folder, dataset or deposition. */}
             <Text as="figcaption" fontSize="sm" color="fg.muted" mt={3}>
-              Illustration. Each session arrives as its own file in the folder,
-              dataset, or deposition you connected.
+              Example, not live data. Each participant&apos;s data arrives as
+              its own file in your Drive folder, Dataverse dataset, or Zenodo
+              deposition.
             </Text>
           </Box>
         </Stack>
@@ -415,19 +447,22 @@ export default function Home() {
             <Heading as="h3" fontSize="lg" fontWeight="600" mb={2}>
               Born-open data collection
             </Heading>
+            {/* "Born-open" is the paper's term and stays in the heading, but
+                the first sentence now defines it instead of restating it, and
+                the link text names the paper rather than only its journal. */}
             <Text color="fg.muted" lineHeight="tall">
-              DataPipe sends experiment data to your storage as it is collected,
-              so openness is the default rather than an afterthought. The
-              rationale and design are described in{" "}
+              Born-open means each participant&apos;s data is already in your
+              own storage the moment it is collected, instead of being uploaded
+              months later when the paper is written. The reasoning behind that
+              is set out in the{" "}
               <ProseLink
                 href="https://doi.org/10.3758/s13428-023-02161-x"
                 ground="soft"
                 external
               >
-                <em>Behavior Research Methods</em>
+                DataPipe paper in <em>Behavior Research Methods</em>
               </ProseLink>
-              . If you use DataPipe in your research, we&apos;d appreciate a
-              citation.
+              . If you use DataPipe in your research, please cite it.
             </Text>
           </Box>
 
@@ -435,17 +470,29 @@ export default function Home() {
               at the same size as the headings they sat on, and one of them meant
               nothing at all. */}
           <Stack direction={["column", "column", "row"]} gap={[8, 8, 12]}>
-            <Feature title="Multiple data formats">
-              Send CSV, JSON, or base64-encoded files such as audio and video
-              recordings. DataPipe decodes them and stores them for you.
+            {/* Blurb rules for this audience: name the dashboard feature the
+                researcher will switch on, say what it does to their data, and
+                spend a clause explaining any term they may not own. "base64"
+                is now introduced by what it carries; "condition assignment" is
+                their own vocabulary and keeps its name. Required-field checks
+                are part of data validation, so listing them as a third
+                separate safeguard was inaccurate. */}
+            <Feature title="CSV, JSON, and media files">
+              Send text data as CSV or JSON, and recordings — audio, video,
+              images — as base64 strings. DataPipe decodes each string and
+              saves the original file alongside the rest of your data.
             </Feature>
             <Feature title="Built-in safeguards">
-              Data validation, session limits, and required-field checks protect
-              your storage from malformed or malicious submissions.
+              Data validation checks that every submission is well-formed JSON
+              or CSV and carries the fields you require; anything else is
+              rejected before it reaches your storage. A session limit caps how
+              many files DataPipe will accept.
             </Feature>
             <Feature title="Condition assignment">
-              DataPipe hands out condition numbers in sequence, so assignment
-              stays balanced as data arrives. No server-side code required.
+              Ask DataPipe for the next condition and it counts through your
+              conditions in order — 0, 1, 2, back to 0 — so groups stay
+              balanced as participants arrive. You write no server code of your
+              own.
             </Feature>
           </Stack>
         </Box>
@@ -467,8 +514,11 @@ export default function Home() {
             color="band.fg.muted"
             lineHeight="tall"
           >
-            Pick a provider, connect it, and paste a few lines of code into your
-            study. The{" "}
+            {/* Recaps the three steps in the same three verbs they use above --
+                connect, create, add -- rather than a fourth wording of the same
+                sequence. */}
+            Connect a storage provider, create an experiment, and add a few
+            lines of code. The{" "}
             <ProseLink href="/getting-started" ground="band">
               getting started guide
             </ProseLink>{" "}
@@ -487,14 +537,21 @@ export default function Home() {
             covers what DataPipe stores, what it costs to run, and what happens
             when an upload fails.
           </Text>
+          {/* The cause sentence is faq.js item-0b's opening, verbatim, and it
+              earns its space here: without it the notice reads as DataPipe
+              retreating rather than OSF closing a feature. The dated sentence
+              is already identical to the one getting-started.js builds. Link
+              text says where it goes, not "what to do next". */}
           <Text fontSize="sm" color="band.fg.subtle" maxW="70ch">
-            Already collecting on OSF?{" "}
+            Already collecting on OSF? OSF is shutting down its projects
+            feature.{" "}
             {osfDeadline
               ? `DataPipe will stop writing to OSF after ${osfDeadline}.`
               : "DataPipe is winding down its support for OSF."}{" "}
-            Data already there stays in your OSF account —{" "}
+            Data already there stays in your OSF account, and DataPipe never
+            removes it. See{" "}
             <ProseLink href="/faq#item-0b" ground="band">
-              what to do next
+              how to move to another provider
             </ProseLink>
             .
           </Text>

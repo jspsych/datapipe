@@ -24,7 +24,7 @@ export const snippets = [
     id: "jspsych",
     label: "jsPsych",
     lines: [
-      { role: "comment", text: "// Save data with the jsPsych pipe plugin\n" },
+      { role: "comment", text: "// Save data with the jsPsychPipe plugin\n" },
       { role: "fg", text: "const " },
       { role: "fg", text: "save_data" },
       { role: "fg", text: " = {\n" },
