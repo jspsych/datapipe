@@ -15,6 +15,22 @@ const deviceFocusRing = {
   outlineOffset: "2px",
 };
 
+// The device's controls change color on hover and on selection, and those
+// changes used to snap. DESIGN.md §7: 150-200ms, ease-out only
+// (cubic-bezier(0, 0, 0.2, 1)), and feedback is one of the four things motion
+// is allowed to convey. Color only -- nothing here moves, so there is no
+// transform to suppress; under `prefers-reduced-motion: reduce` the
+// transition is dropped and every state change lands instantly, which is the
+// behaviour this file had before.
+const deviceTransition = {
+  transitionProperty: "color, background-color, border-color",
+  transitionDuration: "160ms",
+  transitionTimingFunction: "cubic-bezier(0, 0, 0.2, 1)",
+  "@media (prefers-reduced-motion: reduce)": {
+    transitionProperty: "none",
+  },
+};
+
 // The visitor's literal next action on a page of code is to copy it, so the
 // chrome carries a real Copy button rather than the three fake macOS traffic
 // lights that used to sit here.
@@ -57,6 +73,7 @@ function CopyCodeButton({ code }) {
       color="code.fg.muted"
       _hover={{ color: "code.fg.strong", bg: "code.bg.active" }}
       _focusVisible={deviceFocusRing}
+      css={deviceTransition}
       onClick={onCopy}
     >
       {state === "copied" ? <Check size={14} /> : <Copy size={14} />}
@@ -130,6 +147,7 @@ export default function CodeSpecimen() {
               }}
               _hover={{ color: "code.fg.strong" }}
               _focusVisible={deviceFocusRing}
+              css={deviceTransition}
             >
               {s.label}
             </Tabs.Trigger>
