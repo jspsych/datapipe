@@ -8,17 +8,17 @@ import {
   Flex,
   HStack,
   Link,
-  Image,
   IconButton,
 } from "@chakra-ui/react";
 import { Plus, Menu as MenuIcon } from "lucide-react";
 import { Menu } from "@chakra-ui/react";
 
 import { auth } from "../lib/firebase";
+import LogoMark from "./LogoMark";
 
-import { Rubik } from "next/font/google";
+import { Space_Grotesk } from "next/font/google";
 
-const rubik = Rubik({ subsets: ["latin"] });
+const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], weight: ["600"] });
 
 // `user` comes from an auth listener, so it is null in the server-rendered
 // HTML and may be populated by the time the client hydrates -- rendering it
@@ -57,21 +57,23 @@ export default function Navbar() {
       >
         <HStack gap={4} alignItems={"center"} pe={"2"}>
           <NextLink href="/">
-            <Box
-              display={"flex"}
-              alignItems={"center"}
-              fontSize={"2xl"}
-              className={rubik.className}
-              pr={10}
-            >
-              <Box p={2}>
-                <Image
-                  src="/logo.png"
-                  alt="DataPipe Logo"
-                  boxSize="64px"
-                />
-              </Box>
-              <Text>DataPipe</Text>
+            <Box display={"flex"} alignItems={"center"} gap={2.5} pr={10}>
+              {/* Explicit dark-surface colorway (README.md's "Dark bg"
+                  column): the app renders on a permanently dark surface
+                  (see lib/theme.js), so this is not a light/dark toggle --
+                  hardcode it rather than lean on currentColor inheritance
+                  across the font className boundary below. */}
+              <LogoMark size={40} color="#F2F5F1" />
+              <Text
+                className={spaceGrotesk.className}
+                fontWeight="600"
+                fontSize="22px"
+                lineHeight="1"
+                letterSpacing="-0.03em"
+                color="#F2F5F1"
+              >
+                DataPipe
+              </Text>
             </Box>
           </NextLink>
           <HStack

@@ -9,9 +9,13 @@ jest.mock("../lib/firebase", () => ({
   db: {},
 }));
 
-// Mock next/font/google since it's not available in test env
+// Mock next/font/google since it's not available in test env. Every font
+// any rendered component imports must appear here -- a missing export
+// crashes the suite at module load (Navbar's Space_Grotesk did exactly
+// that when the logo lockup replaced Rubik there).
 jest.mock("next/font/google", () => ({
   Rubik: () => ({ className: "mock-rubik" }),
+  Space_Grotesk: () => ({ className: "mock-space-grotesk" }),
 }));
 
 // Mock context to provide a default user value

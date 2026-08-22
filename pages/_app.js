@@ -45,6 +45,16 @@ function MyApp({ Component, pageProps }) {
         <Head>
           <title>DataPipe</title>
           <meta name="viewport" content="width=device-width, initial-scale=1" />
+          {/* Vector favicon first so modern browsers get the new mark at any
+              resolution; PNG/ICO fallbacks follow for browsers that don't
+              support type="image/svg+xml" icons. */}
+          <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+          <link rel="icon" href="/favicon-32x32.png" sizes="32x32" type="image/png" />
+          <link rel="icon" href="/favicon-16x16.png" sizes="16x16" type="image/png" />
+          <link rel="shortcut icon" href="/favicon.ico" />
+          <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+          <link rel="manifest" href="/site.webmanifest" />
+          <meta name="theme-color" content="#1C2A22" />
         </Head>
         {getLayout(<Component {...pageProps} />)}
       </UserContext.Provider>
