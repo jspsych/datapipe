@@ -33,30 +33,23 @@ import { CircleCheck, TriangleAlert, CircleX, Minus } from "lucide-react";
  * call site that needs an announcement should wrap this in its own live
  * region at the point the status actually changes.
  *
- * Contrast (measured against the app body #1C1F22, same method as
- * lib/theme.js):
- *   - ok / CircleCheck: literal `brandGreen.500` (#4CAF50) -> 5.96:1. NOT
- *     Chakra's `green.500`: DESIGN.md §1 commits to one green ("ok" IS the
- *     brand green), and giving this primitive a second green at birth would
- *     re-create the two-greens drift it exists to end. This was the retired
- *     `brandTeal.500` (#13b24b, 5.91:1) until the logo green #2E7D32 became
- *     the primary; the ramp is Material Green, so `ok` moved with it.
- *   - warning / TriangleAlert: literal `orange.500` (#f97316) -> 5.91:1.
- *   - error / CircleX: literal `red.400` (#f87171) -> 5.99:1.
- *   - neutral / Minus: literal `gray.400` (#a1a1aa) -> 6.46:1.
- *   All four clear the 3:1 floor WCAG 1.4.11 sets for non-text UI (icons
- *   count as non-text), with headroom to spare.
- *   NOTE (dark-surface assumption): all four are literal Chakra palette
- *   steps passed as raw CSS color strings to lucide-react's `color` prop
- *   (lucide icons are not Chakra-token-aware), because lib/theme.js has no
- *   semantic success/warning/error/neutral color tokens yet -- only the
- *   brand palettes and the re-pointed `gray` get semantic treatment. These
- *   were chosen and measured for the current permanently-dark surface;
- *   revisit when the light/dark mode migration adds semantic status
- *   tokens.
- *   - Label: `color="fg"` (semantic, gray.50 / #fafafa) -> 15.86:1, well
- *     above the 4.5:1 body-text floor. Semantic, so it tracks the
- *     light/dark migration automatically.
+ * Contrast: icon colors are the semantic `status.*` tokens from
+ * lib/theme.js (DESIGN.md §1 status aliases -- one green, no blue), so
+ * every value is mode-aware and computed in both modes against the worst
+ * permitted surface:
+ *   - ok / CircleCheck: `status.ok` = brandGreen.800 light (4.77:1) /
+ *     brandGreen.300 dark (6.71:1).
+ *   - warning / TriangleAlert: `status.warning` = brandOrange.800 light
+ *     (6.63:1) / brandOrange.300 dark (7.80:1).
+ *   - error / CircleX: `status.error` = brandRed.700 light (5.92:1) /
+ *     brandRed.300 dark (4.86:1 on bg.muted, the worst case).
+ *   - neutral / Minus: `status.neutral` = gray.700 light / gray.300 dark
+ *     (8.30:1 / 9.14:1).
+ *   All clear the 3:1 floor WCAG 1.4.11 sets for non-text UI (icons count
+ *   as non-text) in BOTH modes -- an earlier revision hardcoded dark-mode
+ *   palette steps here, which measured 2.39-2.61:1 on the light page.
+ *   - Label: `color="fg"` -> 13.16:1 light / 12.94:1 dark (worst case
+ *     bg.muted), well above the 4.5:1 body-text floor.
  *
  * @param {"ok"|"warning"|"error"|"neutral"} status
  * @param {string} label - REQUIRED. Always rendered as visible text beside
@@ -73,14 +66,13 @@ const STATUS_ICONS = {
 };
 
 // Raw CSS color strings (Chakra's generated custom properties), not Chakra
-// style props -- lucide-react's `color` prop is not token-aware, so this is
-// the same `var(--chakra-colors-...)` pattern already used for icon color
-// elsewhere in the app (see components/account/ProviderConnections.js).
+// style props -- lucide-react's `color` prop is not token-aware. These are
+// the semantic `status.*` vars, so they resolve per color mode.
 const STATUS_COLORS = {
-  ok: "var(--chakra-colors-brand-green-500)",
-  warning: "var(--chakra-colors-orange-500)",
-  error: "var(--chakra-colors-red-400)",
-  neutral: "var(--chakra-colors-gray-400)",
+  ok: "var(--chakra-colors-status-ok)",
+  warning: "var(--chakra-colors-status-warning)",
+  error: "var(--chakra-colors-status-error)",
+  neutral: "var(--chakra-colors-status-neutral)",
 };
 
 export default function StatusIndicator({ status, label, size = 16 }) {

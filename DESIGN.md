@@ -161,6 +161,23 @@ authoritative over the ramp, not the other way round.
 | Bar + chevron 1, dark bg | `#F2F5F1` | 15.06 on `#1C1F22`. Not `fg` — the mark keeps its own paper white |
 | Chevron 2 (echo) | `#8BC34A` | **Mark only.** Identical in both modes by design |
 
+**The navbar is mode-aware, not a permanent dark slab.** In light mode it is a light
+bar (`bg` + `border`-bottom) and the mark/wordmark render via `logo.mark`
+(`#2E7D32` light / `#F2F5F1` dark — the mark's own colors, deliberately not `fg`).
+The logo handoff specifies both grounds; keeping the bar dark on a light page would
+read as an unconverted region, not a brand device.
+
+**Mode-invariant `code.*` tokens** carry the code-specimen "device" (landing terminal
+mock, `CodeBlock`, `CodeHints`): `code.bg = gray.950 #111111` (17.57:1 against the
+light page — a deliberate object), `code.bg.header`, `code.bg.active`, `code.border =
+gray.500` (the seam: 4.50 light / 3.43 dark, one value both modes), `code.border.subtle`,
+`code.fg 12.78:1`, `code.fg.strong`, `code.fg.muted 7.37:1`, `code.comment`,
+`code.string 10.91:1`, `code.fn 9.38:1`. `_light` and `_dark` are identical *on
+purpose*; the invariance is the design.
+
+**`status.*` aliases** exist as tokens (`status.ok/warning/error/neutral`) mirroring
+each palette's `fg` slot in both modes — components never hand-pick status hues.
+
 **The echo green `#8BC34A` is never a UI color.** It is 2.10:1 on white and off the
 Material Green ramp entirely — it exists because it is the one tone that holds against
 both `#FFFFFF` and the logo's `#101A14`, inside a mark where it carries no meaning on
@@ -224,8 +241,9 @@ tokens only.
 Already clean, leave alone: `contact.js`, `redirect.js`, `admin/deleted-account.js`,
 `dashboard/ErrorPanel.js`, `AuthCheck.js`, `Loader.js`, `TestEnvironmentWarning.js`,
 `auth/AuthProviderButtons.js`, `account/OsfRelinkButton.js`. Third-party brand SVGs
-keep their literal hexes — but `AuthProviderIcons.js:35` `fill="#FFF"` disappears on a
-light background and needs a `currentColor` fix. `styles/Home.module.css` is imported
+keep their literal hexes — including `AuthProviderIcons.js:35` `fill="#FFF"`, which is
+the ORCID glyph *inside* the brand's `#A6CE39` circle, not on the page ground: it is
+correct in both modes and must **not** get a `currentColor` "fix". `styles/Home.module.css` is imported
 nowhere; delete it rather than migrate it.
 
 **Phase 3 — ship the toggle.** Only after Phase 2 clears. Light mode must never
@@ -235,11 +253,13 @@ render a half-converted page. Then flip the default to `system`.
 
 ## 3. Typography
 
-One family. Body, headings, labels, buttons and data all run on the existing system
-stack (`-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, …`). **Rubik stays
-logo-only** — the wordmark in `Navbar.js` and the `index.js` hero. It is not
-introduced anywhere else; a display face in UI labels is a product-register ban, and
-a second webfont costs a load for no legibility gain.
+One family for UI. Body, headings, labels, buttons and data all run on the existing
+system stack (`-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, …`). **Rubik is
+retired entirely.** The wordmark is **Space Grotesk, lockup-only** — the `LogoMark` +
+wordmark pairing in `Navbar.js` (600 / 22px / -0.03em), owner-ratified with the |>
+logo adoption. It appears nowhere else: not in headings, not in the hero, not in
+labels — a display face in UI text is a product-register ban, and the single webfont
+load is spent on the brand lockup alone.
 
 Fixed rem scale, tight ratio, four roles:
 
@@ -368,7 +388,10 @@ orchestrated page-load sequences.
   (`globals.css:26–42`) has none. Its fallback: under
   `@media (prefers-reduced-motion: reduce)` drop the `spin` animation, leaving a static
   ring plus a visible `aria-live` "Loading…" label — the label is required regardless of
-  motion preference. Its `white` / `darkblue` borders become `border` / `brandGreen.solid`.
+  motion preference. Its `white` / `darkblue` borders become `border.subtle` (track) /
+  `brandGreen.solid` (arc) — the arc-vs-track pair computes 3.47:1 light / 3.54:1 dark;
+  a `border` track would sit at 1.06:1 against the light arc and the ring would appear
+  static.
 - Skeletons over centered spinners for content loading in place; spinners are for
   actions, not regions.
 
@@ -399,5 +422,9 @@ orchestrated page-load sequences.
 8. **`focusRing="none"`.** Four instances in `Navbar.js`. Keyboard operability is not
    optional.
 9. **Validation errors before first input.** Gate on touched/dirty, not on value.
+11. **Marketing copy that describes a retired product.** The landing page (and any
+    public surface) must describe what `lib/provider-config.js` actually ships. When
+    providers change, the landing copy converts in the same slice — stale "OSF"
+    claims on the trust-deciding surface are a P0, not a copy nit.
 10. **Modal as first thought.** Exhaust inline and progressive disclosure first;
     dialogs are for confirming consequences, not for holding forms that fit on a page.

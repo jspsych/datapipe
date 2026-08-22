@@ -32,7 +32,7 @@ a {
    worked against the forced-dark body. `border` and `brandGreen.solid` are
    theme-consistent in both modes. */
 .loader {
-  border: 10px solid var(--chakra-colors-border);
+  border: 10px solid var(--chakra-colors-border-subtle);
   border-top: 10px solid var(--chakra-colors-brand-green-solid);
   border-radius: 50%;
   width: 50px;

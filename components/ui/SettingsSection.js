@@ -36,18 +36,13 @@ import { Box, Heading, Text } from "@chakra-ui/react";
  *     6.46:1. Also semantic. NEVER use `fg.subtle` here -- that semantic
  *     token resolves to the literal gray.500 step (#71717a), which is the
  *     same 3.43:1 failure this component exists to retire.
- *   - Danger heading tint: literal `red.400` (#f87171) -> 5.99:1, clears
+ *   - Danger heading tint: `brandRed.fg` = brandRed.700 light (5.92:1) /
+ *     brandRed.300 dark (4.86:1 worst case), clears
  *     the 4.5:1 body-text floor.
- *   - Danger border: literal `red.500` (#ef4444) -> 4.40:1 against
+ *   - Danger border: `brandRed.border` = brandRed.600 light (4.51:1) /
+ *     brandRed.400 dark (4.89:1) against
  *     #1C1F22, clears the 3:1 floor WCAG 1.4.11 sets for non-text UI
  *     boundaries.
- *   NOTE (dark-surface assumption): `red.400`/`red.500` above are literal
- *   Chakra palette steps, not house semantic tokens -- there is no
- *   semantic "danger"/"error" text or border token in lib/theme.js yet
- *   (only the brand palettes and the re-pointed `gray` get that
- *   treatment). Revisit these two literal references when the light/dark
- *   mode migration lands; they were chosen and measured for the current
- *   permanently-dark surface only.
  *
  * @param {string} title - Required. Rendered as an <h2>. Pass sentence
  *   case ("Storage providers", not "STORAGE PROVIDERS" or "Storage
@@ -80,7 +75,7 @@ export default function SettingsSection({
         as="h2"
         size="md"
         fontWeight="semibold"
-        color={isDanger ? "red.400" : "fg"}
+        color={isDanger ? "brandRed.fg" : "fg"}
         mb={description ? 1 : 4}
       >
         {title}
@@ -104,7 +99,7 @@ export default function SettingsSection({
     <Box
       w="100%"
       borderWidth="1px"
-      borderColor="red.500"
+      borderColor="brandRed.border"
       borderRadius="md"
       p={4}
     >
