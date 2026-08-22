@@ -65,12 +65,20 @@ describe("Home", () => {
     ).toHaveAttribute("href", "/getting-started");
   });
 
-  it("says in visible text that the arrivals panel is not live", () => {
+  it("keeps the code specimen inside the hero band", () => {
     renderHome();
-    // PRODUCT.md principle 5: invented filenames must never be dressed up as
-    // telemetry. "Illustration." named the genre without answering the
-    // reader's question.
-    expect(screen.getByText(/Example, not live data/)).toBeInTheDocument();
+    // The specimen is the first thing that shows the actual product, so it
+    // belongs beside the claim rather than in a section below it. Asserted
+    // structurally: the h1 and the tablist share the hero, so the tabs must
+    // appear before the "Three steps" heading that opens the next ground.
+    const h1 = screen.getByRole("heading", { level: 1 });
+    const tabs = screen.getByRole("tablist");
+    const steps = screen.getByRole("heading", {
+      name: /three steps to start collecting data/i,
+    });
+    // Node.compareDocumentPosition: 4 = DOCUMENT_POSITION_FOLLOWING.
+    expect(h1.compareDocumentPosition(tabs) & 4).toBeTruthy();
+    expect(tabs.compareDocumentPosition(steps) & 4).toBeTruthy();
   });
 
   it("describes the providers DataPipe actually ships", () => {

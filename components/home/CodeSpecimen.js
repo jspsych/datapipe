@@ -9,6 +9,13 @@ import { CODE_ROLE, snippets, snippetText } from "./hero-snippets";
 // `code.fn` (brandGreen.300) is 9.38:1 on code.bg and clears the 3:1 non-text
 // floor against every other surface inside the device (header strip, active tab
 // fill) with room, so one ring value is visible in both modes, as the device is.
+//
+// The device sits on the green band now, which does not change this. The ring
+// is drawn on `code.bg.header` in every case -- the triggers and the Copy
+// button are inset from the device's edge, and `overflow: hidden` on the root
+// clips an outline that reached it anyway. Computed for the worst case where
+// one did: brandGreen.300 is 3.91:1 on band.bg #1B5E20, still over the 3:1
+// non-text floor. There is no ground on this page where this ring vanishes.
 const deviceFocusRing = {
   outline: "2px solid",
   outlineColor: "code.fn",
@@ -106,10 +113,25 @@ export default function CodeSpecimen() {
       variant="plain"
       bg="code.bg"
       borderWidth="1px"
-      // The seam where the invariant device meets the mode-aware page:
-      // gray.500 is 4.50:1 on the light page and 3.43:1 on the dark one, both
-      // clear of the 3:1 non-text floor, with one value and no branch.
-      borderColor="code.border"
+      // THE SEAM IS GROUND-SPECIFIC, and this device now lives on exactly one
+      // ground: the hero band. `code.border` (gray.500) is the right seam
+      // where the invariant device meets the mode-aware PAGE -- 4.50:1 light,
+      // 3.43:1 dark -- but it is 1.63:1 on band.bg #1B5E20, which is no edge
+      // at all. On the band the device takes `band.border` (brandGreen.200
+      // #A5D6A7): 4.79:1 against the band and 11.49:1 against code.bg, so the
+      // line is decisively an edge from both sides. It is also the value the
+      // secondary CTA outlines itself with, so the two objects in the hero
+      // are drawn in one language.
+      //
+      // gray.400 (code.fg.muted) was the other candidate and was rejected on
+      // its number: 3.07:1 clears the non-text floor by 2%, and it is this
+      // device's own muted TEXT color, so a hairline of it reads as internal
+      // chrome leaking outward rather than as a boundary.
+      //
+      // If this specimen is ever placed on `bg` again, this must go back to
+      // `code.border`: no single value clears 3:1 against both #1B5E20 and
+      // the light page (the band needs L >= 0.3503, the page L <= 0.2757).
+      borderColor="band.border"
       borderRadius={12}
       overflow="hidden"
     >
