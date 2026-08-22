@@ -14,6 +14,7 @@ import { ArrowRight, Database, Shield, Zap, BookOpen } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import TestEnvironmentWarning from "../components/TestEnvironmentWarning";
+import OsfSunsetBanner from "../components/OsfSunsetBanner";
 import { Rubik } from "next/font/google";
 
 const rubik = Rubik({ subsets: ["latin"] });
@@ -239,6 +240,8 @@ export default function Home() {
 
   return (
     <Box w="100%">
+      <OsfSunsetBanner />
+
       {/* Hero */}
       <Box
         px={[4, 8, 12]}
