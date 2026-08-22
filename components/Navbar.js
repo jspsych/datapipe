@@ -16,6 +16,8 @@ import { Menu } from "@chakra-ui/react";
 
 import { auth } from "../lib/firebase";
 import LogoMark from "./LogoMark";
+import ThemeSelect from "./ThemeSelect";
+import { COLOR_MODE_TOGGLE } from "../lib/feature-flags";
 
 import { Space_Grotesk } from "next/font/google";
 
@@ -155,6 +157,12 @@ export default function Navbar() {
                 </Menu.Trigger>
                 <Menu.Positioner>
                   <Menu.Content bg="bg.panel" borderWidth="1px" borderColor="border" p="2">
+                    {COLOR_MODE_TOGGLE && (
+                      <>
+                        <ThemeSelect />
+                        <Menu.Separator borderColor="border.subtle" />
+                      </>
+                    )}
                     <Menu.Item
                       value="settings"
                       color="fg"
@@ -214,6 +222,18 @@ export default function Navbar() {
                 <Menu.Item value="faq" color="fg" py="2" px="3" _hover={{ bg: "bg.muted" }} asChild>
                   <NextLink href="/faq">FAQ</NextLink>
                 </Menu.Item>
+                {/* The desktop Account menu only exists for signed-in
+                    users, so this shared mobile/overflow menu is the only
+                    place a signed-out visitor can reach the color-mode
+                    control (DESIGN.md §2 "signed-out visitors get the same
+                    control from the mobile/overflow menu"). Placed outside
+                    the `showUser` blocks below so both audiences see it. */}
+                {COLOR_MODE_TOGGLE && (
+                  <>
+                    <Menu.Separator borderColor="border.subtle" />
+                    <ThemeSelect />
+                  </>
+                )}
                 {showUser && (
                   <>
                     <Menu.Item

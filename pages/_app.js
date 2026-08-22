@@ -12,6 +12,7 @@ import { useAuthState } from "react-firebase-hooks/auth";
 import { system } from "../lib/theme";
 import Head from "next/head";
 import TestEnvironmentWarning from "../components/TestEnvironmentWarning";
+import { COLOR_MODE_TOGGLE } from "../lib/feature-flags";
 
 function MyApp({ Component, pageProps }) {
   const [user, loading, error] = useAuthState(auth);
@@ -47,8 +48,8 @@ function MyApp({ Component, pageProps }) {
   return (
     <ThemeProvider
       attribute="class"
-      defaultTheme="dark"
-      enableSystem={false}
+      defaultTheme={COLOR_MODE_TOGGLE ? "system" : "dark"}
+      enableSystem={COLOR_MODE_TOGGLE}
       storageKey="datapipe-color-mode"
       disableTransitionOnChange
     >
