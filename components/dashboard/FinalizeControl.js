@@ -195,7 +195,7 @@ export default function FinalizeControl({ data, experimentId }) {
             </Dialog.Body>
 
             <Dialog.Footer>
-              <Button onClick={() => setOpen(false)} colorPalette="brandTeal">
+              <Button onClick={() => setOpen(false)} colorPalette="brandGreen">
                 Cancel
               </Button>
               <Button

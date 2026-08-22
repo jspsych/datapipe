@@ -35,10 +35,12 @@ import { CircleCheck, TriangleAlert, CircleX, Minus } from "lucide-react";
  *
  * Contrast (measured against the app body #1C1F22, same method as
  * lib/theme.js):
- *   - ok / CircleCheck: literal `brandTeal.500` (#13b24b) -> 5.91:1. NOT
+ *   - ok / CircleCheck: literal `brandGreen.500` (#4CAF50) -> 5.96:1. NOT
  *     Chakra's `green.500`: DESIGN.md §1 commits to one green ("ok" IS the
- *     brand teal), and giving this primitive a second green at birth would
- *     re-create the two-greens drift it exists to end.
+ *     brand green), and giving this primitive a second green at birth would
+ *     re-create the two-greens drift it exists to end. This was the retired
+ *     `brandTeal.500` (#13b24b, 5.91:1) until the logo green #2E7D32 became
+ *     the primary; the ramp is Material Green, so `ok` moved with it.
  *   - warning / TriangleAlert: literal `orange.500` (#f97316) -> 5.91:1.
  *   - error / CircleX: literal `red.400` (#f87171) -> 5.99:1.
  *   - neutral / Minus: literal `gray.400` (#a1a1aa) -> 6.46:1.
@@ -75,7 +77,7 @@ const STATUS_ICONS = {
 // the same `var(--chakra-colors-...)` pattern already used for icon color
 // elsewhere in the app (see components/account/ProviderConnections.js).
 const STATUS_COLORS = {
-  ok: "var(--chakra-colors-brand-teal-500)",
+  ok: "var(--chakra-colors-brand-green-500)",
   warning: "var(--chakra-colors-orange-500)",
   error: "var(--chakra-colors-red-400)",
   neutral: "var(--chakra-colors-gray-400)",

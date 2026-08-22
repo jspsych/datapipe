@@ -87,7 +87,7 @@ function ExperimentPageDashboard({ experiment_id }) {
 
   return (
     <>
-      {loading && <Spinner color="brandTeal.500" size={"xl"} />}
+      {loading && <Spinner color="brandGreen.500" size={"xl"} />}
       {error && <Text>This experiment does not exist.</Text>}
       {data && (
         <VStack alignSelf="flex-start" align="flex-start" w="100%" maxW={1200} px={4}>

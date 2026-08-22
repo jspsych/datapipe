@@ -15,7 +15,7 @@ export default function AuthCheck({ children, fallback, fallbackRoute }) {
   }, [user, router, fallbackRoute]);
 
   if (loading || (user && !user.uid)) {
-    return <Center py={8}><Spinner size="lg" color="brandTeal.500" /></Center>;
+    return <Center py={8}><Spinner size="lg" color="brandGreen.500" /></Center>;
   }
 
   return (user && user.uid)

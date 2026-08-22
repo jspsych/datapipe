@@ -152,7 +152,7 @@ export default function LinkedAccounts() {
               </Button>
             ) : (
               <Button
-                colorPalette="brandTeal"
+                colorPalette="brandGreen"
                 size="sm"
                 loading={pendingId === entry.id}
                 onClick={() => handleLink(entry)}
@@ -244,7 +244,7 @@ function AddPasswordRow({ user, setAfterAction }) {
   return (
     <HStack justifyContent="space-between" w="100%">
       <Text fontSize="lg">Email and password</Text>
-      <Button colorPalette="brandTeal" size="sm" onClick={() => setOpen(true)}>
+      <Button colorPalette="brandGreen" size="sm" onClick={() => setOpen(true)}>
         Add password
       </Button>
 
@@ -304,7 +304,7 @@ function AddPasswordRow({ user, setAfterAction }) {
                 Cancel
               </Button>
               <Button
-                colorPalette="brandTeal"
+                colorPalette="brandGreen"
                 onClick={handleAddPassword}
                 loading={isSubmitting}
                 disabled={!passwordMatch || !passwordLengthSatisfied}

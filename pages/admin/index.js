@@ -51,7 +51,7 @@ function ExperimentList() {
   if (loading) {
     return (
       <Center w="100%" py={8}>
-        <Spinner color="brandTeal.500" size={"xl"} />
+        <Spinner color="brandGreen.500" size={"xl"} />
       </Center>
     );
   }
@@ -82,7 +82,7 @@ function ExperimentList() {
 
                 <Link href="/admin/new">
                   <Button
-                    colorPalette="brandTeal"
+                    colorPalette="brandGreen"
                     size="lg"
                     width="full"
                   >
@@ -117,7 +117,7 @@ function ExperimentList() {
         <Link href="/admin/new">
           <Button
             variant={"solid"}
-            colorPalette={"brandTeal"}
+            colorPalette={"brandGreen"}
             size={"md"}
             mr={4}
           >
@@ -254,7 +254,7 @@ function DeleteAlertDialog({ exp }) {
             </Dialog.Body>
 
             <Dialog.Footer>
-              <Button onClick={() => setOpen(false)} colorPalette="brandTeal">
+              <Button onClick={() => setOpen(false)} colorPalette="brandGreen">
                 Cancel
               </Button>
               <Button

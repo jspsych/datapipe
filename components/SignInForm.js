@@ -87,7 +87,7 @@ export default function SignInForm({ routeAfterSignIn }) {
             </Field.Root>
 
             <Button
-              colorPalette="brandTeal"
+              colorPalette="brandGreen"
               loading={isSubmitting}
               onClick={onSubmit}
               w="full"

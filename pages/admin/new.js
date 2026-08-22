@@ -236,7 +236,7 @@ function NewExperimentForm() {
 
   return (
     <>
-      {loading && <Spinner color="brandTeal.500" size={"xl"} />}
+      {loading && <Spinner color="brandGreen.500" size={"xl"} />}
       {!loading && (
         <Stack gap={6} w="100%" maxW="540px" px={4}>
           <Heading>Create a New Experiment</Heading>
@@ -267,7 +267,7 @@ function NewExperimentForm() {
                 {STORAGE_PROVIDERS[provider]?.name} account to get started.
               </Text>
               <Link href="/admin/account">
-                <Button variant={"solid"} colorPalette={"brandTeal"} size={"lg"}>
+                <Button variant={"solid"} colorPalette={"brandGreen"} size={"lg"}>
                   Connect {STORAGE_PROVIDERS[provider]?.name} Account
                 </Button>
               </Link>
@@ -339,7 +339,7 @@ function NewExperimentForm() {
                   <HStack gap={3}>
                     <Button
                       variant="outline"
-                      colorPalette="brandTeal"
+                      colorPalette="brandGreen"
                       size="md"
                       loading={folderPickerLoading}
                       onClick={handleChooseFolder}
@@ -370,7 +370,7 @@ function NewExperimentForm() {
               <Button
                 onClick={handleProviderSubmit}
                 loading={providerSubmitting}
-                colorPalette={"brandTeal"}
+                colorPalette={"brandGreen"}
               >
                 Create
               </Button>

@@ -4,9 +4,17 @@ Forward-looking. Not a description of what the app looks like today; the target 
 design task converges on. Where this document and the code disagree, the code is wrong.
 Read `PRODUCT.md` first — this exists to serve it.
 
-**Brand constants, non-negotiable:** `brandTeal #13b24b`, `brandOrange #f78f1e`,
-`brandRed #ee4523`, the dark surface `#1C1F22`, the plain jsPsych-adjacent aesthetic.
-Register is *product*: earned familiarity, the tool disappears into the task.
+**Brand constants, non-negotiable:** `brandGreen #2E7D32` (the logo's green — see
+*Logo* below), `brandOrange #f78f1e`, `brandRed #ee4523`, the dark surface `#1C1F22`,
+the plain jsPsych-adjacent aesthetic. Register is *product*: earned familiarity, the
+tool disappears into the task.
+
+**`brandTeal #13b24b` is retired.** It measured 1.83:1 against the logo green — close
+enough to read as a mistake rather than a pairing — and 2.80:1 on white, which barred
+it from light mode entirely. `#2E7D32` is 5.13:1 on white and 4.77:1 on the `#F5F7F8`
+page, so adopting the logo's green is also the fix for the teal's AA failures. A
+transitional `brandTeal` alias in `lib/theme.js` resolves to the brandGreen values so
+un-renamed references keep rendering; it is deleted once the rename completes.
 
 **The headline change:** DataPipe moves from a forced-dark theme to an opt-in
 light/dark mode. Every color below is specified for both modes with a computed WCAG 2.1
@@ -65,21 +73,46 @@ One value serves both modes. `whiteAlpha.200` (1.92:1) is **banned**.
 Each `colorPalette` supplies `fg` (text on `bg`/`bg.panel`), `subtle`+`muted` (tinted
 fills), `solid`+`contrast` (filled controls), `border`, `focusRing`.
 
-**brandTeal** — the primary action color.
+**brandGreen** — the primary action color. The ramp is **Material Green verbatim**
+(`50 #E8F5E9`, `100 #C8E6C9`, `200 #A5D6A7`, `300 #81C784`, `400 #66BB6A`,
+`500 #4CAF50`, `600 #43A047`, `700 #388E3C`, `800 #2E7D32`, `900 #1B5E20`), because
+the logo green `#2E7D32` *is* Material Green 800 and the logo's own token sheet names
+`#43A047` (600) as its mid step. The brand color sits on the ramp rather than near it,
+and every step is a hand-tuned tone instead of an interpolation off one hex.
 
 | Slot | Light | ratio | Dark | ratio |
 |---|---|---|---|---|
-| `fg` | `700 #0B7230` | 5.24 (on `bg.subtle`) | `300 #58D183` | 6.99 (on `bg.muted`) |
-| `solid` | `700 #0B7230` | fill 5.64 vs page | `500 #13b24b` | fill 5.91 vs page |
-| `contrast` | `white` | **6.06** on solid | `#1C1F22` | **5.91** on solid |
-| `subtle` (bg) | `50 #E8F9EE` | text `800` → 8.57 | `900 #043216` | text `300` → 7.37 |
-| `border` | `600 #0E923D` | 3.76 | `400 #2CC35E` | 7.15 |
-| `focusRing` | `600 #0E923D` | 3.21 (worst, on `bg.muted`) | `400 #2CC35E` | 5.84 |
+| `fg` | `800 #2E7D32` | 4.77 (on `bg`; 5.13 on `bg.panel`) | `300 #81C784` | 6.71 (on `bg.muted`) |
+| `solid` | `800 #2E7D32` | fill 4.77 vs page | `500 #4CAF50` | fill 5.96 vs page |
+| `contrast` | `white` | **5.13** on solid | `#1C1F22` | **5.96** on solid |
+| `subtle` (bg) | `50 #E8F5E9` | text `900` → 7.00 | `900 #1B5E20` | text `50` → 7.00 |
+| `border` | `700 #388E3C` | 3.83 | `400 #66BB6A` | 7.00 |
+| `focusRing` | `700 #388E3C` | 3.27 (worst, on `bg.muted`) | `400 #66BB6A` | 5.71 (worst, on `bg.muted`) |
 
-> `#13b24b` on white is **2.80:1**. It can never be light-mode text, and never a
-> light-mode solid fill under white text. Today's `solid: brandTeal.600` + `white`
-> contrast is **4.04:1 — a live AA failure in both modes.** Fix: light flips to `700`;
-> dark flips the *text* to `#1C1F22` on the bright `500` fill.
+Palette `fg` is text on `bg` / `bg.panel` only. On the light tinted neutrals it drops
+to 4.43 (`bg.subtle`) and 4.08 (`bg.muted`), so a green label inside a recessed or
+hover-filled region uses `fg` (the neutral), not `brandGreen.fg`.
+
+> **Superseded — the teal fix below is now moot; the green replaces it.** `#13b24b` on
+> white was **2.80:1**: it could never be light-mode text, and never a light-mode solid
+> fill under white text, and `solid: brandTeal.600` + `white` was **4.04:1 — a live AA
+> failure in both modes.** The teal fix was to flip light to `700` and flip dark's
+> *text* to `#1C1F22` on the bright `500` fill. Adopting the logo green retires the
+> problem at its source instead: `#2E7D32` clears 4.5:1 on both light surfaces, so
+> light-mode green text and a white-on-green solid are both legal for the first time.
+> The dark-side flip survives on its merits — computed both ways on `#1C1F22`, a dark
+> fill under white text (`800` + `white`) gives fill 3.23 / text 5.13, while the bright
+> fill under dark text (`500` + `#1C1F22`) gives fill 5.96 / text 5.96, better on both
+> axes. On a dark page a dark green button is a hole; the bright chip reads as a control.
+
+> **Caveat on `subtle`.** Chakra's `subtle` and `surface` variants paint
+> `colorPalette.fg` on `colorPalette.subtle`, and in dark mode that pairing is
+> `300` on `900` = **3.91:1**, under the body floor. Material Green 900 is a mid-dark
+> green, not the near-black the hand-tuned teal 900 was, and the ramp has nothing
+> darker. Text on `brandGreen.subtle` is therefore named explicitly (`50`, above), and
+> `variant="subtle"` / `variant="surface"` on `brandGreen` is **not approved for body
+> text** until a semantic pairing token exists. No call site uses either variant on
+> this palette today.
 
 **brandOrange** — warning / attention only.
 
@@ -113,9 +146,25 @@ button fill.
 | `border` | `500` (4.50) | `500` (3.43) |
 
 **Status** aliases onto the brand hues — one green, not two:
-`ok = brandTeal`, `warning = brandOrange`, `error = brandRed`, `neutral = fg.muted`
+`ok = brandGreen`, `warning = brandOrange`, `error = brandRed`, `neutral = fg.muted`
 (neutral; **no blue**). `brandLime` is legacy and should be deleted once
 `JsPsychIcon` is confirmed to be its only consumer.
+
+### Logo
+
+The mark (`docs/brand/logo/README.md`) is the source of the brand green and is
+authoritative over the ramp, not the other way round.
+
+| Role | Value | Where |
+|---|---|---|
+| Bar + chevron 1, light bg | `#2E7D32` | = `brandGreen.800`. The anchor |
+| Bar + chevron 1, dark bg | `#F2F5F1` | 15.06 on `#1C1F22`. Not `fg` — the mark keeps its own paper white |
+| Chevron 2 (echo) | `#8BC34A` | **Mark only.** Identical in both modes by design |
+
+**The echo green `#8BC34A` is never a UI color.** It is 2.10:1 on white and off the
+Material Green ramp entirely — it exists because it is the one tone that holds against
+both `#FFFFFF` and the logo's `#101A14`, inside a mark where it carries no meaning on
+its own. It is never text, never a fill, never a border, never a status hue.
 
 ---
 
@@ -234,12 +283,12 @@ cannot carry alone gets a bordered container (see `SettingsSection` danger varia
 
 ## 5. Color semantics
 
-- **`brandTeal` is the primary action color, app-wide. One primary per screen.**
+- **`brandGreen` is the primary action color, app-wide. One primary per screen.**
   Every other action on that screen is `outline` or `ghost` on `gray`.
 - **`blue` is retired as an action color.** Five `colorPalette="blue"` and five raw
   `blue.500` links remain (`ProviderConnections.js:188,247`, `SelectAuth.js:120`,
   `OAuthTokenStatus.js:92`, both `oauth2/*` pages, `QueuePanel.js` status map).
-  Links become `brandTeal.fg`; secondary buttons become neutral outline.
+  Links become `brandGreen.fg`; secondary buttons become neutral outline.
 - **`brandRed` is exclusively for irreversible destruction** — account deletion,
   experiment deletion. Routine, reversible actions (disconnect a provider, unlink a
   sign-in method) are **neutral outline**. Red that means "routine" cannot also mean
@@ -249,7 +298,7 @@ cannot carry alone gets a bordered container (see `SettingsSection` danger varia
   rendered, never behind a tooltip or `title`. Non-text status marks still clear 3:1.
 - **Focus ring:** `2px solid {colorPalette}.focusRing` with a `2px` offset, on *every*
   interactive element including icon-only and link-styled controls. Default palette
-  ring is `brandTeal.focusRing` (3.21:1 worst case light, 5.84:1 dark).
+  ring is `brandGreen.focusRing` (3.27:1 worst case light, 5.71:1 dark).
   `focusRing="none"` — currently on four `Navbar` links — is banned.
 - **Semantic z-index scale.** `globals.css:54` has the app's only z-index, an
   arbitrary `1000`. Replace with theme tokens and use nothing else:
@@ -290,9 +339,9 @@ ship.
 - **`ConfirmDialog`** — async `onConfirm` with a loading state on the confirm button;
   failures are caught and surfaced **inside the dialog via `FormErrorAlert`**, and the
   dialog stays open. **Cancel is always neutral** (`variant="outline"`,
-  `colorPalette="gray"`) and is the default-focused control; the confirm button
-  carries the destructive palette. The green solid "Cancel" in `DeleteAccount.js:100`
-  is the exact shape this bans.
+  `colorPalette="gray"`) and is the default-focused control; the confirm button carries
+  `brandRed` when `destructive`, `brandGreen` — the primary — otherwise. The green solid
+  "Cancel" in `DeleteAccount.js:100` is the exact shape this bans.
 
 **Anticipated for the wider pass:**
 
@@ -319,7 +368,7 @@ orchestrated page-load sequences.
   (`globals.css:26–42`) has none. Its fallback: under
   `@media (prefers-reduced-motion: reduce)` drop the `spin` animation, leaving a static
   ring plus a visible `aria-live` "Loading…" label — the label is required regardless of
-  motion preference. Its `white` / `darkblue` borders become `border` / `brandTeal.solid`.
+  motion preference. Its `white` / `darkblue` borders become `border` / `brandGreen.solid`.
 - Skeletons over centered spinners for content loading in place; spinners are for
   actions, not regions.
 

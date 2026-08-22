@@ -89,7 +89,7 @@ export default function ResetPassword() {
                 password.
               </Text>
               <Button
-                colorPalette={"brandTeal"}
+                colorPalette={"brandGreen"}
                 loading={isSubmitting}
                 onClick={resetPassword}
               >
@@ -114,7 +114,7 @@ export default function ResetPassword() {
                 <Field.ErrorText>{error}</Field.ErrorText>
               </Field.Root>
               <Button
-                colorPalette={"brandTeal"}
+                colorPalette={"brandGreen"}
                 loading={isSubmitting}
                 onClick={setNewPassword}
               >

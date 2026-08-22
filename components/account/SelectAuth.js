@@ -86,7 +86,7 @@ export default function SelectAuth() {
         }
     }
 
-    if (loading) return <Center py={8}><Spinner size="lg" color="brandTeal.500" /></Center>;
+    if (loading) return <Center py={8}><Spinner size="lg" color="brandGreen.500" /></Center>;
     if (error) return <div>Error: {error.message}</div>;
 
     const usingPersonalToken = data?.usingPersonalToken;
@@ -129,7 +129,7 @@ export default function SelectAuth() {
                     {!hasValidPersonalToken && <TriangleAlert color="var(--chakra-colors-orange-500)" size={18} />}
                 </HStack>
                 <Button
-                    colorPalette="brandTeal"
+                    colorPalette="brandGreen"
                     onClick={openTokenDialog}
                     loading={isSubmittingToken}
                 >
@@ -195,7 +195,7 @@ export default function SelectAuth() {
                         <Dialog.Footer>
                             <Button
                                 variant="solid"
-                                colorPalette="brandTeal"
+                                colorPalette="brandGreen"
                                 size="md"
                                 onClick={handleSaveToken}
                                 loading={isSubmittingToken}

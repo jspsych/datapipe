@@ -13,7 +13,7 @@ import { Alert, Button, CloseButton, Dialog, Text } from "@chakra-ui/react";
  *   - children: dialog body -- the consequence copy the caller composes.
  *   - confirmLabel: text on the confirm button.
  *   - destructive: red solid confirm for actions that cannot be undone;
- *     brandTeal solid (the default) for actions that are consequential but
+ *     brandGreen solid (the default) for actions that are consequential but
  *     reversible. Keep red scarce -- it only means something in the Danger
  *     Zone if routine actions do not also wear it.
  *   - onConfirm: may be async. While it is pending the confirm button shows
@@ -25,7 +25,7 @@ import { Alert, Button, CloseButton, Dialog, Text } from "@chakra-ui/react";
  *     success the dialog closes itself.
  *
  * Cancel is ALWAYS the neutral button (variant="outline", no colorPalette) --
- * never brandTeal solid. A solid green Cancel next to a solid red Confirm
+ * never brandGreen solid. A solid green Cancel next to a solid red Confirm
  * reads as the button to press, which is backwards: walking away is supposed
  * to be the free, obvious choice, not competing for attention with the
  * action that has a consequence.
@@ -94,7 +94,7 @@ export default function ConfirmDialog({
               Cancel
             </Button>
             <Button
-              colorPalette={destructive ? "red" : "brandTeal"}
+              colorPalette={destructive ? "red" : "brandGreen"}
               variant="solid"
               loading={isPending}
               onClick={handleConfirm}

@@ -128,7 +128,7 @@ export default function SignUpPage() {
             </Field.Root>
 
             <Button
-              colorPalette="brandTeal"
+              colorPalette="brandGreen"
               loading={isSubmitting}
               onClick={onSubmit}
               w="full"

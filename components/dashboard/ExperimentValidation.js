@@ -79,14 +79,14 @@ export default function ExperimentValidation({ data }) {
             }}
           >
             <Stack gap={5} direction="row">
-              <Checkbox.Root value="json" colorPalette="brandTeal">
+              <Checkbox.Root value="json" colorPalette="brandGreen">
                 <Checkbox.HiddenInput />
                 <Checkbox.Control>
                   <Checkbox.Indicator />
                 </Checkbox.Control>
                 <Checkbox.Label>Allow JSON</Checkbox.Label>
               </Checkbox.Root>
-              <Checkbox.Root value="csv" colorPalette="brandTeal">
+              <Checkbox.Root value="csv" colorPalette="brandGreen">
                 <Checkbox.HiddenInput />
                 <Checkbox.Control>
                   <Checkbox.Indicator />

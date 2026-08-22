@@ -89,7 +89,7 @@ export default function ChangePassword() {
         {submitStatus === "success" && (
           <Text fontSize="sm" color="green.400">Success</Text>
         )}
-        <Button loading={isSubmitting} onClick={() => setOpen(true)} colorPalette="brandTeal">
+        <Button loading={isSubmitting} onClick={() => setOpen(true)} colorPalette="brandGreen">
           Change Password
         </Button>
       </HStack>
@@ -143,7 +143,7 @@ export default function ChangePassword() {
             <Dialog.Footer>
               <Button
                 variant={"solid"}
-                colorPalette={"brandTeal"}
+                colorPalette={"brandGreen"}
                 size={"md"}
                 onClick={handleChangePassword}
                 loading={isSubmitting}

@@ -49,13 +49,13 @@ describe("ConfirmDialog", () => {
     ).toBeInTheDocument();
   });
 
-  it("Cancel is always the neutral outline button, never brandTeal solid", () => {
+  it("Cancel is always the neutral outline button, never brandGreen solid", () => {
     renderDialog({ onConfirm: jest.fn() });
     const cancel = screen.getByRole("button", { name: "Cancel" });
     // Chakra v3 recipes resolve variant/colorPalette into data attributes
     // rather than literal class names, so assert on those rather than on
     // computed colors (jsdom does not run the CSS engine).
-    expect(cancel).not.toHaveAttribute("data-colorPalette", "brandTeal");
+    expect(cancel).not.toHaveAttribute("data-colorPalette", "brandGreen");
   });
 
   it("calls onConfirm and closes on success", async () => {
