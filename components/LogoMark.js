@@ -45,7 +45,12 @@ export default function LogoMark({
       {...props}
     >
       <rect x="10" y="12" width="10" height="80" rx="1" fill={color} />
+      {/* The dp-logo-chevron-* classes are animation hooks only (see
+          globals.css "logo emit"): a wrapping .dp-logo-link animates the
+          chevrons out of the bar on hover/focus. Purely additive -- the
+          mark renders identically wherever those rules are absent. */}
       <path
+        className="dp-logo-chevron-1"
         d="M32 26 L62 52 L32 78"
         fill="none"
         stroke={color}
@@ -54,6 +59,7 @@ export default function LogoMark({
         strokeLinejoin="round"
       />
       <path
+        className="dp-logo-chevron-2"
         d="M62 26 L92 52 L62 78"
         fill="none"
         stroke={echoColor}

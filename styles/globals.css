@@ -77,3 +77,49 @@ pre::-webkit-scrollbar-thumb:hover {
   text-align: center;
   font-size: 1rem;
 }
+
+/* Logo "emit": on hover or keyboard focus of the navbar lockup, the |>
+   mark's chevrons re-fire out of the bar -- the pipe passing data, which
+   is the product. Chevron geometry lives on LogoMark's 104-unit grid and
+   CSS px on SVG children map to user units (transform-box: view-box), so
+   -22px pulls each chevron back to the bar's face at any rendered size.
+   DESIGN.md §7: 200ms, ease-out only; the 70ms stagger keeps the total
+   under 300ms. `backwards` fill hides the delayed echo chevron until its
+   turn. Hover-out simply removes the animation -- instant rest state, and
+   re-hovering replays it. */
+@keyframes dp-logo-emit {
+  from {
+    transform: translateX(-22px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.dp-logo-chevron-1,
+.dp-logo-chevron-2 {
+  transform-box: view-box;
+}
+
+.dp-logo-link:hover .dp-logo-chevron-1,
+.dp-logo-link:focus-visible .dp-logo-chevron-1 {
+  animation: dp-logo-emit 200ms cubic-bezier(0, 0, 0.2, 1) backwards;
+}
+
+.dp-logo-link:hover .dp-logo-chevron-2,
+.dp-logo-link:focus-visible .dp-logo-chevron-2 {
+  animation: dp-logo-emit 200ms cubic-bezier(0, 0, 0.2, 1) 70ms backwards;
+}
+
+/* DESIGN.md §7: every animation needs a reduced-motion story. The mark
+   simply stays at rest -- the hover state loses nothing functional. */
+@media (prefers-reduced-motion: reduce) {
+  .dp-logo-link:hover .dp-logo-chevron-1,
+  .dp-logo-link:focus-visible .dp-logo-chevron-1,
+  .dp-logo-link:hover .dp-logo-chevron-2,
+  .dp-logo-link:focus-visible .dp-logo-chevron-2 {
+    animation: none;
+  }
+}
