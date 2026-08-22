@@ -6,7 +6,7 @@ import { Alert, Text } from "@chakra-ui/react";
  * The one error surface for the app. Extracted verbatim from the pattern
  * `components/account/LinkedAccounts.js` already uses correctly:
  *
- *   <Alert.Root status="error" borderRadius="md">
+ *   <Alert.Root status="error" borderRadius="md" role="alert">
  *     <Alert.Indicator />
  *     <Text fontSize="sm">{error}</Text>
  *   </Alert.Root>
@@ -40,7 +40,7 @@ export default function FormErrorAlert({ children }) {
   if (!children) return null;
 
   return (
-    <Alert.Root status="error" borderRadius="md">
+    <Alert.Root status="error" borderRadius="md" role="alert">
       <Alert.Indicator />
       <Text fontSize="sm">{children}</Text>
     </Alert.Root>

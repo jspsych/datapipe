@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Alert, Text, VStack } from "@chakra-ui/react";
+import { Button, VStack } from "@chakra-ui/react";
 import { linkWithPopup, signInWithPopup } from "firebase/auth";
 import { auth } from "../../lib/firebase";
 import { AUTH_PROVIDER_LIST } from "../../lib/auth-providers";
@@ -9,6 +9,7 @@ import {
   messageForAuthError,
 } from "../../lib/auth-errors";
 import { ensureUserDocument } from "../../lib/user-bootstrap";
+import FormErrorAlert from "../ui/FormErrorAlert";
 
 // The federated provider buttons, rendered from AUTH_PROVIDERS. Used by the
 // sign-in page, the sign-up page, and the "add a sign-in method" migration
@@ -62,18 +63,14 @@ export default function AuthProviderButtons({
 
   return (
     <VStack gap={3} w="full">
-      {error && (
-        <Alert.Root status="error" borderRadius="md">
-          <Alert.Indicator />
-          <Text fontSize="sm">{error}</Text>
-        </Alert.Root>
-      )}
+      <FormErrorAlert>{error}</FormErrorAlert>
 
       {AUTH_PROVIDER_LIST.map((entry) => {
         const Icon = AUTH_PROVIDER_ICONS[entry.id];
         return (
           <Button
             key={entry.id}
+            type="button"
             variant="outline"
             width="full"
             size="lg"

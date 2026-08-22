@@ -19,7 +19,7 @@ jest.mock("../lib/context", () => ({
 const mockPush = jest.fn();
 let mockQuery = {};
 jest.mock("next/router", () => ({
-  useRouter: () => ({ query: mockQuery, push: mockPush }),
+  useRouter: () => ({ query: mockQuery, push: mockPush, isReady: true }),
 }));
 
 import { UserContext } from "../lib/context";
@@ -83,9 +83,13 @@ describe("oauth2/connect callback page", () => {
 
     renderPage();
 
+    // Copy changed from the raw "Invalid state parameter. Possible CSRF
+    // attack." to a calm, actionable message (DESIGN.md / PRODUCT.md
+    // "consequence before mechanism") -- assert on the new wording rather
+    // than the old machine text.
     await waitFor(() =>
       expect(
-        screen.getByText(/invalid state|csrf/i)
+        screen.getByText(/expired|out of order/i)
       ).toBeInTheDocument()
     );
     expect(
@@ -111,5 +115,31 @@ describe("oauth2/connect callback page", () => {
       ).toBeInTheDocument()
     );
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("12. a provider's access_denied is a neutral cancellation, not an error alert", async () => {
+    mockQuery = { error: "access_denied" };
+
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.getByText(/cancelled the connection/i)).toBeInTheDocument()
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("13. opening the page with no code/state shows an error with a way back instead of spinning forever", async () => {
+    mockQuery = {};
+
+    renderPage();
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/start the connection again/i)
+      ).toBeInTheDocument()
+    );
+    expect(
+      screen.getByRole("link", { name: /account/i })
+    ).toHaveAttribute("href", "/admin/account");
   });
 });
