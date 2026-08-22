@@ -25,12 +25,18 @@
  *   against both #FFFFFF and dark surfaces (#101A14). Do not theme this
  *   value or otherwise vary it by color mode.
  */
+import { useId } from "react";
+
 export default function LogoMark({
   size = 104,
   color = "currentColor",
   echoColor = "#8BC34A",
   ...props
 }) {
+  // Unique per instance -- the navbar and the landing band both render
+  // this component on the same page, and SVG clipPath ids are global.
+  const clipId = useId();
+
   // Decorative (aria-hidden, no role): the visible wordmark beside the mark
   // carries the name, so the SVG is hidden from assistive tech rather than
   // announced twice.
@@ -45,28 +51,40 @@ export default function LogoMark({
       {...props}
     >
       <rect x="10" y="12" width="10" height="80" rx="1" fill={color} />
-      {/* The dp-logo-chevron-* classes are animation hooks only (see
-          globals.css "logo emit"): a wrapping .dp-logo-link animates the
-          chevrons out of the bar on hover/focus. Purely additive -- the
-          mark renders identically wherever those rules are absent. */}
-      <path
-        className="dp-logo-chevron-1"
-        d="M32 26 L62 52 L32 78"
-        fill="none"
-        stroke={color}
-        strokeWidth="10"
-        strokeLinecap="square"
-        strokeLinejoin="round"
-      />
-      <path
-        className="dp-logo-chevron-2"
-        d="M62 26 L92 52 L62 78"
-        fill="none"
-        stroke={echoColor}
-        strokeWidth="10"
-        strokeLinecap="square"
-        strokeLinejoin="round"
-      />
+      {/* Animation infrastructure, inert at rest. The clip window hides
+          everything left of x=22 (just past the bar's right edge at 20),
+          so when globals.css's "logo emit" slides the chevrons in from
+          translateX(-76px) they genuinely emerge from behind the bar
+          rather than fading in place. At rest both chevrons sit fully
+          inside the window (chevron 1's visual left edge is x~27), so the
+          mark renders identically wherever the CSS rules are absent. The
+          dp-logo-chevron-* classes are the CSS hooks; the clip is applied
+          to the group, not the paths, so it stays fixed while they move. */}
+      <defs>
+        <clipPath id={clipId}>
+          <rect x="22" y="0" width="82" height="104" />
+        </clipPath>
+      </defs>
+      <g clipPath={`url(#${clipId})`}>
+        <path
+          className="dp-logo-chevron-1"
+          d="M32 26 L62 52 L32 78"
+          fill="none"
+          stroke={color}
+          strokeWidth="10"
+          strokeLinecap="square"
+          strokeLinejoin="round"
+        />
+        <path
+          className="dp-logo-chevron-2"
+          d="M62 26 L92 52 L62 78"
+          fill="none"
+          stroke={echoColor}
+          strokeWidth="10"
+          strokeLinecap="square"
+          strokeLinejoin="round"
+        />
+      </g>
     </svg>
   );
 }
