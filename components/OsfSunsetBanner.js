@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Box, HStack, IconButton, Text } from "@chakra-ui/react";
+import { Box, HStack, IconButton, Link, Text } from "@chakra-ui/react";
 import { TriangleAlert, X } from "lucide-react";
 import { osfSunsetLabel } from "../lib/osf-sunset";
 
@@ -29,8 +29,9 @@ function rememberDismissal() {
 }
 
 // Homepage announcement that OSF-backed storage is going away and DataPipe is
-// becoming multi-backend. Deliberately self-contained -- there is nowhere on
-// the site to link to for more detail yet.
+// becoming multi-backend. Links out to COS's own announcement rather than to
+// anything on this site: the FAQ and getting-started pages still describe OSF
+// as the only destination, so there is nothing here worth sending people to.
 export default function OsfSunsetBanner() {
   // Starts hidden and is revealed in an effect. The site is statically
   // exported, so the server-rendered HTML cannot know whether this visitor has
@@ -70,7 +71,18 @@ export default function OsfSunsetBanner() {
           multi-backend model with support for Google Drive, Zenodo, and other
           storage providers. Experiments collecting data today keep running
           until then, and data already on OSF stays in your OSF account. We
-          will publish migration instructions before anything stops working.
+          will publish migration instructions before anything stops working.{" "}
+          <Link
+            href="https://www.cos.io/blog/osf-changes-a-note-to-users"
+            target="_blank"
+            rel="noopener noreferrer"
+            color="brandOrange.200"
+            textDecoration="underline"
+            _hover={{ color: "white" }}
+          >
+            Read the announcement from COS
+          </Link>
+          .
         </Text>
         <IconButton
           aria-label="Dismiss announcement"

@@ -32,6 +32,19 @@ describe("OsfSunsetBanner", () => {
     expect(screen.getByText(/multi-backend/i)).toBeInTheDocument();
   });
 
+  it("links out to the COS announcement, safely", () => {
+    renderBanner();
+    const link = screen.getByRole("link", { name: /announcement from COS/i });
+    expect(link).toHaveAttribute(
+      "href",
+      "https://www.cos.io/blog/osf-changes-a-note-to-users"
+    );
+    // Opening in a new tab without noopener hands the COS page a window
+    // reference back to DataPipe.
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
+  });
+
   it("hides itself when dismissed and records the dismissal", () => {
     renderBanner();
 
