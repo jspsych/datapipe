@@ -164,7 +164,36 @@ export const connectProvider = onRequest({ cors: true }, async (req, res) => {
 
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text();
-      console.error('Token exchange failed:', errorText);
+      // Log WHICH failure this is, not just that one happened. These three
+      // look identical to the researcher ("Token exchange failed") and have
+      // completely different causes, and a bare error body cost a live
+      // debugging cycle on 2026-08-21 working out which one we were seeing:
+      //
+      //   invalid_client -- OUR misconfiguration. The client id/secret the
+      //     function is running with are wrong or absent. Note that a deploy
+      //     can look green and still leave these stale: `firebase deploy`
+      //     reports "Skipped (No changes detected)" when only .env changed,
+      //     so adding a secret and re-running the workflow does NOT
+      //     necessarily update the function.
+      //   invalid_grant -- the authorization code was rejected: already
+      //     spent, or expired. Codes are single-use and short-lived, so a
+      //     page reload after a failed attempt produces exactly this.
+      //   anything else -- provider-side or a request-shape problem.
+      //
+      // Whether the credentials are merely PRESENT is logged as a boolean, so
+      // a stale/empty deploy is distinguishable from a wrong value without
+      // ever putting the credential itself in a log line.
+      const kind = errorText.includes('invalid_client')
+        ? 'invalid_client (our client credentials are wrong or missing)'
+        : errorText.includes('invalid_grant')
+          ? 'invalid_grant (the authorization code was already spent or expired)'
+          : 'unclassified';
+      console.error(
+        `Token exchange failed for ${provider}: ${kind}; ` +
+          `clientId=${config.clientId ? 'present' : 'MISSING'}, ` +
+          `clientSecret=${config.clientSecret ? 'present' : 'MISSING'}, ` +
+          `redirectUri=${config.redirectUri || 'MISSING'}; body: ${errorText}`
+      );
       res.status(400).json({ error: 'Token exchange failed' });
       return;
     }
