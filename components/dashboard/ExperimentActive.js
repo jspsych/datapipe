@@ -1,23 +1,36 @@
-import {
-  Field,
-  HStack,
-  Switch,
-  Stack,
-  NumberInput,
-} from "@chakra-ui/react";
+import { Field, NumberInput } from "@chakra-ui/react";
 
 import { useState } from "react";
 
 import { setDoc, doc } from "firebase/firestore";
 
 import { db } from "../../lib/firebase";
+import SettingsRow, {
+  SaveStatus,
+  SettingsRowGroup,
+  useTrackedSave,
+} from "../ui/SettingsRow";
+
+// Every writer below returns the setDoc promise UNCAUGHT. That is the point of
+// this file's rewrite: each one used to end in `catch (error) { }` -- seven
+// empty catches, one per write -- so a rejected write looked exactly like a
+// successful one and the switch stayed where the researcher put it while
+// Firestore held the opposite value. See components/ui/SettingsRow.js for the
+// full argument; the short version is that a data-collection switch which can
+// silently lie about whether collection is on is the worst failure this
+// product has, and PRODUCT.md Principle 5 / DESIGN.md §8.7 both forbid it.
+//
+// The rejection is now the signal. SettingsRow (and useTrackedSave, for the
+// numeric fields) awaits these, reverts the control on failure, and renders a
+// human message. Do not reintroduce a catch here.
+function writeExperiment(expId, fields) {
+  return setDoc(doc(db, `experiments/${expId}`), fields, { merge: true });
+}
 
 export default function ExperimentActive({ data }) {
   const [sessionLimitActive, setSessionLimitActive] = useState(
     data.limitSessions
   );
-  const [experimentActive, setExperimentActive] = useState(data.active);
-  const [base64Active, setBase64Active] = useState(data.activeBase64 || false);
   const [conditionActive, setConditionActive] = useState(
     "activeConditionAssignment" in data
       ? data.activeConditionAssignment
@@ -26,218 +39,123 @@ export default function ExperimentActive({ data }) {
   const [maxSessions, setMaxSessions] = useState(data.maxSessions);
   const [nConditions, setNConditions] = useState(data.nConditions);
 
-  return (
-    <Stack w="100%" gap={2}>
-      <Field.Root>
-        <HStack justify="space-between" alignItems="center" w="100%">
-          <Field.Label fontWeight={"normal"} mb={0}>Enable data collection?</Field.Label>
-          <Switch.Root
-            colorPalette="green"
-            size="md"
-            checked={experimentActive}
-            onCheckedChange={(e) => {
-              setExperimentActive(e.checked);
-              toggleExperimentActive(data.id, e.checked);
-            }}
-          >
-            <Switch.HiddenInput />
-            <Switch.Control>
-              <Switch.Thumb />
-            </Switch.Control>
-          </Switch.Root>
-        </HStack>
-      </Field.Root>
-
-      <Field.Root>
-        <HStack justify="space-between" alignItems="center" w="100%">
-          <Field.Label fontWeight={"normal"} mb={0}>
-            Enable base64 data collection?
-          </Field.Label>
-          <Switch.Root
-            colorPalette="green"
-            size="md"
-            checked={base64Active}
-            onCheckedChange={(e) => {
-              setBase64Active(e.checked);
-              toggleBase64Active(data.id, e.checked);
-            }}
-          >
-            <Switch.HiddenInput />
-            <Switch.Control>
-              <Switch.Thumb />
-            </Switch.Control>
-          </Switch.Root>
-        </HStack>
-      </Field.Root>
-
-      <Field.Root>
-        <HStack justify="space-between" alignItems="center" w="100%">
-          <Field.Label fontWeight={"normal"} mb={0}>
-            Enable condition assignment?
-          </Field.Label>
-          <Switch.Root
-            colorPalette="green"
-            size="md"
-            checked={conditionActive}
-            onCheckedChange={(e) => {
-              setConditionActive(e.checked);
-              updateConditionActive(data.id, e.checked);
-            }}
-          >
-            <Switch.HiddenInput />
-            <Switch.Control>
-              <Switch.Thumb />
-            </Switch.Control>
-          </Switch.Root>
-        </HStack>
-      </Field.Root>
-      {conditionActive && (
-        <Field.Root id="n-conditions" pb={6}>
-          <Field.Label>How many conditions?</Field.Label>
-          <NumberInput.Root
-            value={String(nConditions)}
-            min={2}
-            onValueChange={(e) => {
-              setNConditions(e.value);
-              if (e.value !== "" && parseInt(e.value) >= 0) {
-                updateNConditions(data.id, e.value);
-              }
-            }}
-          >
-            <NumberInput.Input />
-            <NumberInput.Control>
-              <NumberInput.IncrementTrigger />
-              <NumberInput.DecrementTrigger />
-            </NumberInput.Control>
-          </NumberInput.Root>
-        </Field.Root>
-      )}
-
-      <Field.Root>
-        <HStack justify="space-between" alignItems="center" w="100%">
-          <Field.Label fontWeight={"normal"} mb={0}>Enable session limit?</Field.Label>
-          <Switch.Root
-            colorPalette="green"
-            size="md"
-            checked={sessionLimitActive}
-            onCheckedChange={(e) => {
-              setSessionLimitActive(e.checked);
-              updateSessionLimitActive(data.id, e.checked);
-            }}
-          >
-            <Switch.HiddenInput />
-            <Switch.Control>
-              <Switch.Thumb />
-            </Switch.Control>
-          </Switch.Root>
-        </HStack>
-      </Field.Root>
-      {sessionLimitActive && (
-        <Field.Root id="session-limit">
-          <Field.Label>How many total sessions?</Field.Label>
-          <NumberInput.Root
-            value={String(maxSessions)}
-            min={0}
-            onValueChange={(e) => {
-              setMaxSessions(e.value);
-              if (e.value !== "" && parseInt(e.value) >= 0) {
-                updateMaxSessions(data.id, e.value);
-              }
-            }}
-          >
-            <NumberInput.Input />
-            <NumberInput.Control>
-              <NumberInput.IncrementTrigger />
-              <NumberInput.DecrementTrigger />
-            </NumberInput.Control>
-          </NumberInput.Root>
-        </Field.Root>
-      )}
-    </Stack>
+  // The two numeric fields are not switch rows, so they use the same write
+  // tracking directly. Each keeps its own tracker: a failed session-limit
+  // write must not put an error message under the conditions field.
+  const nConditionsSave = useTrackedSave(
+    "Could not save the number of conditions. Your experiment is still " +
+      "assigning conditions using the previous value -- check your " +
+      "connection and try again."
   );
-}
+  const maxSessionsSave = useTrackedSave(
+    "Could not save the session limit. Your experiment is still using the " +
+      "previous limit -- check your connection and try again."
+  );
 
-async function toggleExperimentActive(expId, active) {
-  if (active) {
-    activateExperiment(expId);
-  } else {
-    deactivateExperiment(expId);
-  }
-}
+  return (
+    <SettingsRowGroup>
+      <SettingsRow
+        label="Accept new data"
+        description="While this is on, your experiment ID accepts submissions from participants. Turning it off stops new submissions immediately; data you have already collected is not affected."
+        checked={data.active}
+        onSave={(next) => writeExperiment(data.id, { active: next })}
+        failureMessage="Could not change data collection. Your experiment is still set the way it was before -- check your connection and try again."
+        savedLabel="Data collection setting saved"
+      />
 
-async function activateExperiment(expId) {
-  try {
-    await setDoc(
-      doc(db, `experiments/${expId}`),
-      { active: true },
-      { merge: true }
-    );
-  } catch (error) {
-  }
-}
+      <SettingsRow
+        label="Accept base64 file uploads"
+        description="Needed only if your experiment sends binary files -- audio, video or images -- rather than CSV or JSON data."
+        checked={data.activeBase64 || false}
+        onSave={(next) => writeExperiment(data.id, { activeBase64: next })}
+        failureMessage="Could not change base64 uploads. The setting is unchanged -- check your connection and try again."
+      />
 
-async function deactivateExperiment(expId) {
-  try {
-    await setDoc(
-      doc(db, `experiments/${expId}`),
-      { active: false },
-      { merge: true }
-    );
-  } catch (error) {
-  }
-}
+      <SettingsRow
+        label="Assign conditions in sequence"
+        description="DataPipe hands each participant the next condition number in order, so your conditions stay balanced."
+        checked={conditionActive}
+        onChange={setConditionActive}
+        onSave={(next) =>
+          writeExperiment(data.id, { activeConditionAssignment: next })
+        }
+        failureMessage="Could not change condition assignment. The setting is unchanged -- check your connection and try again."
+      >
+        {conditionActive && (
+          <Field.Root id="n-conditions">
+            <Field.Label>How many conditions?</Field.Label>
+            <NumberInput.Root
+              value={String(nConditions)}
+              min={2}
+              onValueChange={(e) => {
+                const previous = nConditions;
+                setNConditions(e.value);
+                if (e.value !== "" && parseInt(e.value) >= 0) {
+                  nConditionsSave.save(
+                    () =>
+                      writeExperiment(data.id, {
+                        nConditions: parseInt(e.value),
+                      }),
+                    () => setNConditions(previous)
+                  );
+                }
+              }}
+            >
+              <NumberInput.Input />
+              <NumberInput.Control>
+                <NumberInput.IncrementTrigger />
+                <NumberInput.DecrementTrigger />
+              </NumberInput.Control>
+            </NumberInput.Root>
+            <SaveStatus
+              saved={nConditionsSave.saved}
+              error={nConditionsSave.error}
+            />
+          </Field.Root>
+        )}
+      </SettingsRow>
 
-async function toggleBase64Active(expId, active) {
-  try {
-    await setDoc(
-      doc(db, `experiments/${expId}`),
-      { activeBase64: active },
-      { merge: true }
-    );
-  } catch (error) {
-  }
-}
-
-async function updateSessionLimitActive(expId, active) {
-  try {
-    await setDoc(
-      doc(db, `experiments/${expId}`),
-      { limitSessions: active },
-      { merge: true }
-    );
-  } catch (error) {
-  }
-}
-
-async function updateMaxSessions(expId, maxSessions) {
-  try {
-    await setDoc(
-      doc(db, `experiments/${expId}`),
-      { maxSessions: parseInt(maxSessions) },
-      { merge: true }
-    );
-  } catch (error) {
-  }
-}
-
-async function updateConditionActive(expId, active) {
-  try {
-    await setDoc(
-      doc(db, `experiments/${expId}`),
-      { activeConditionAssignment: active },
-      { merge: true }
-    );
-  } catch (error) {
-  }
-}
-
-async function updateNConditions(expId, nConditions) {
-  try {
-    await setDoc(
-      doc(db, `experiments/${expId}`),
-      { nConditions: parseInt(nConditions) },
-      { merge: true }
-    );
-  } catch (error) {
-  }
+      <SettingsRow
+        label="Stop after a set number of sessions"
+        description="Once the limit is reached your experiment stops accepting data, so a study cannot overrun its recruitment target."
+        checked={sessionLimitActive}
+        onChange={setSessionLimitActive}
+        onSave={(next) => writeExperiment(data.id, { limitSessions: next })}
+        failureMessage="Could not change the session limit setting. It is unchanged -- check your connection and try again."
+      >
+        {sessionLimitActive && (
+          <Field.Root id="session-limit">
+            <Field.Label>How many total sessions?</Field.Label>
+            <NumberInput.Root
+              value={String(maxSessions)}
+              min={0}
+              onValueChange={(e) => {
+                const previous = maxSessions;
+                setMaxSessions(e.value);
+                if (e.value !== "" && parseInt(e.value) >= 0) {
+                  maxSessionsSave.save(
+                    () =>
+                      writeExperiment(data.id, {
+                        maxSessions: parseInt(e.value),
+                      }),
+                    () => setMaxSessions(previous)
+                  );
+                }
+              }}
+            >
+              <NumberInput.Input />
+              <NumberInput.Control>
+                <NumberInput.IncrementTrigger />
+                <NumberInput.DecrementTrigger />
+              </NumberInput.Control>
+            </NumberInput.Root>
+            <SaveStatus
+              saved={maxSessionsSave.saved}
+              error={maxSessionsSave.error}
+            />
+          </Field.Root>
+        )}
+      </SettingsRow>
+    </SettingsRowGroup>
+  );
 }

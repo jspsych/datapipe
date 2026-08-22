@@ -13,15 +13,49 @@ import {
   Button,
   Stack,
   HStack,
-  Heading,
   Field,
   Input,
   Textarea,
-  Spinner,
+  Skeleton,
+  RadioGroup,
   VStack,
   Text,
   Alert,
 } from "@chakra-ui/react";
+import PageHeader from "../../components/ui/PageHeader";
+import GuidanceLine from "../../components/ui/GuidanceLine";
+import FormErrorAlert from "../../components/ui/FormErrorAlert";
+
+// The title survives the round trip to account settings and back.
+//
+// A new signup cannot create an experiment until a storage provider is
+// connected, so the most common path through this form is: type a title, be
+// told to connect a provider, leave, come back. Before this, the typed title
+// was simply gone, and the researcher had no sign they had been mid-task.
+// sessionStorage (not localStorage) so it is scoped to the tab and the visit.
+const DRAFT_TITLE_KEY = "datapipe:new-experiment-title";
+
+function readDraftTitle() {
+  if (typeof window === "undefined") return "";
+  try {
+    return window.sessionStorage.getItem(DRAFT_TITLE_KEY) || "";
+  } catch {
+    // Private-browsing modes and locked-down profiles can throw on access.
+    // A lost draft is a nuisance; a crashed create form is a blocked
+    // researcher, so this failure is genuinely ignorable.
+    return "";
+  }
+}
+
+function writeDraftTitle(value) {
+  if (typeof window === "undefined") return;
+  try {
+    if (value) window.sessionStorage.setItem(DRAFT_TITLE_KEY, value);
+    else window.sessionStorage.removeItem(DRAFT_TITLE_KEY);
+  } catch {
+    /* see readDraftTitle */
+  }
+}
 
 // OSF is deliberately absent from this form. It is shutting down its projects
 // feature, so no new experiment may be created against it -- a rule enforced
@@ -43,6 +77,13 @@ function NewExperimentForm() {
 
   const [provider, setProvider] = useState(DEFAULT_PROVIDER);
   const [providerTitle, setProviderTitle] = useState("");
+  // Restored after mount rather than as lazy initial state: this page is
+  // server-rendered, and reading sessionStorage during the first render would
+  // produce a hydration mismatch.
+  useEffect(() => {
+    const draft = readDraftTitle();
+    if (draft) setProviderTitle(draft);
+  }, []);
   const [providerTitleError, setProviderTitleError] = useState(false);
   const [providerSubmitting, setProviderSubmitting] = useState(false);
   const [providerError, setProviderError] = useState(null);
@@ -176,6 +217,7 @@ function NewExperimentForm() {
         selectedFolder?.id,
         researcherInput
       );
+      writeDraftTitle("");
       Router.push(`/admin/${result.experimentId}`);
     } catch (err) {
       console.error(err);
@@ -236,53 +278,110 @@ function NewExperimentForm() {
 
   return (
     <>
-      {loading && <Spinner color="brandGreen.500" size={"xl"} />}
+      {/* A bare centered spinner with no layout container made the page jump
+          when content arrived (DESIGN.md §7: skeletons for content loading in
+          place, spinners for actions). This holds the form's shape. */}
+      {loading && (
+        <Stack gap={6} w="100%" maxW="560px" px={4}>
+          <Skeleton height="40px" width="60%" />
+          <Skeleton height="80px" />
+          <Skeleton height="80px" />
+        </Stack>
+      )}
       {!loading && (
-        <Stack gap={6} w="100%" maxW="540px" px={4}>
-          <Heading>Create a New Experiment</Heading>
+        // 560px, DESIGN.md §4's single-subject column. Was a stray 540px.
+        <Stack gap={6} w="100%" maxW="560px" px={4}>
+          <PageHeader
+            title="Create an experiment"
+            purpose="An experiment gives you an ID to paste into your study, and a folder for its data to land in."
+            backHref="/admin"
+            backLabel="Back to experiments"
+            mb={0}
+          />
 
-          <Field.Root>
-            <Field.Label>Where should data be stored?</Field.Label>
-            <HStack gap={6} mt={2} role="radiogroup" aria-label="Where should data be stored?">
+          {/* Chakra RadioGroup, not raw `<input type="radio">`. The native
+              inputs inherited no focus ring, no palette and no sizing from
+              the theme while sitting beside themed Switch controls.
+
+              The group labels itself with `RadioGroup.Label` rather than
+              sitting inside a `Field.Root` + `Field.Label`. Field.Label
+              renders `htmlFor` pointing at the field's own control id, and
+              RadioGroup does not consume field context -- so that label
+              pointed at an element that does not exist, leaving the group
+              with no accessible name at all. RadioGroup.Label wires
+              `aria-labelledby` on the real `role="radiogroup"`. This also
+              retires the hand-written `role="radiogroup"` + `aria-label` the
+              old markup carried, which duplicated the visible label for
+              screen readers. */}
+          <RadioGroup.Root
+            name="storage-provider"
+            value={provider}
+            onValueChange={(e) => handleProviderChange(e.value)}
+            colorPalette="brandGreen"
+          >
+            <RadioGroup.Label fontWeight="medium" color="fg">
+              Where should data be stored?
+            </RadioGroup.Label>
+            <HStack gap={6} flexWrap="wrap" mt={2}>
               {Object.values(STORAGE_PROVIDERS).map((p) => (
-                <HStack as="label" gap={2} cursor="pointer" key={p.id}>
-                  <input
-                    type="radio"
-                    name="storage-provider"
-                    value={p.id}
-                    checked={provider === p.id}
-                    onChange={() => handleProviderChange(p.id)}
-                  />
-                  <Text>{p.name}</Text>
-                </HStack>
+                <RadioGroup.Item key={p.id} value={p.id}>
+                  <RadioGroup.ItemHiddenInput />
+                  {/* ItemIndicator, NOT a bare ItemControl. `ItemControl` is
+                      an empty `aria-hidden` div: the recipe styles the ring
+                      on it but the mark itself lives in `& .dot`, which only
+                      Chakra's Radiomark renders -- and Radiomark is what
+                      ItemIndicator mounts, with the item's `checked` state
+                      passed in. With a bare ItemControl the selected provider
+                      showed as a filled disc with no radio dot, reading as a
+                      checkbox rather than a radio. */}
+                  <RadioGroup.ItemIndicator />
+                  <RadioGroup.ItemText>{p.name}</RadioGroup.ItemText>
+                </RadioGroup.Item>
               ))}
             </HStack>
-          </Field.Root>
+            <GuidanceLine mt={2}>
+              Data goes straight from your participants to this account.
+              DataPipe never keeps a copy.
+            </GuidanceLine>
+          </RadioGroup.Root>
 
           {!providerConnected && (
-            <VStack gap={3}>
-              <Text color="gray.400" textAlign="center">
-                DataPipe sends experiment data directly to your{" "}
-                {STORAGE_PROVIDERS[provider]?.name}. Connect your{" "}
-                {STORAGE_PROVIDERS[provider]?.name} account to get started.
-              </Text>
-              <Link href="/admin/account">
-                <Button variant={"solid"} colorPalette={"brandGreen"} size={"lg"}>
-                  Connect {STORAGE_PROVIDERS[provider]?.name} Account
-                </Button>
-              </Link>
+            <VStack gap={3} align="flex-start">
+              <GuidanceLine>
+                You cannot create an experiment until DataPipe has somewhere to
+                put its data. Connecting your{" "}
+                {STORAGE_PROVIDERS[provider]?.name} account takes a minute, and
+                the title you have typed here will still be waiting when you
+                come back.
+              </GuidanceLine>
+              <Button asChild variant="solid" colorPalette="brandGreen" size="md">
+                {/* `next` is a forward-compatible hint for account settings to
+                    offer a "return to creating your experiment" affordance.
+                    It is inert until that page reads it; the sessionStorage
+                    draft above is what actually saves the researcher's work
+                    today. */}
+                <Link href="/admin/account?next=/admin/new">
+                  Connect {STORAGE_PROVIDERS[provider]?.name}
+                </Link>
+              </Button>
             </VStack>
           )}
 
           {providerConnected && (
             <>
-              {providerError && (
-                <Text color="red.400" fontSize="sm">
-                  {providerError}
-                </Text>
-              )}
+              {/* Was a bare `<Text color="red.400">` -- no role="alert", no
+                  icon, no mapping, a raw adapter string shown verbatim.
+                  FormErrorAlert is the app's one error surface (DESIGN.md
+                  §6). */}
+              <FormErrorAlert>{providerError}</FormErrorAlert>
               {providerWarnings.map((warning, index) => (
-                <Alert.Root key={index} status="warning" variant="subtle" borderRadius="md">
+                <Alert.Root
+                  key={index}
+                  status="warning"
+                  colorPalette="brandOrange"
+                  variant="subtle"
+                  borderRadius="md"
+                >
                   <Alert.Indicator />
                   <Alert.Description>{warning}</Alert.Description>
                 </Alert.Root>
@@ -294,12 +393,14 @@ function NewExperimentForm() {
                   value={providerTitle}
                   onChange={(e) => {
                     setProviderTitle(e.target.value);
+                    writeDraftTitle(e.target.value);
                     setProviderTitleError(false);
                   }}
                 />
-                <Field.ErrorText color="red.400">
-                  This field is required
-                </Field.ErrorText>
+                {/* `color="red.400"` dropped -- the Field recipe already owns
+                    error text coloring, and the literal was a raw palette
+                    step (DESIGN.md §8.5). */}
+                <Field.ErrorText>This field is required</Field.ErrorText>
               </Field.Root>
 
               {STORAGE_PROVIDERS[provider]?.containerInputFields.map((field) => (
@@ -323,9 +424,7 @@ function NewExperimentForm() {
                       }
                     />
                   )}
-                  <Field.ErrorText color="red.400">
-                    This field is required
-                  </Field.ErrorText>
+                  <Field.ErrorText>This field is required</Field.ErrorText>
                 </Field.Root>
               ))}
 
@@ -337,9 +436,12 @@ function NewExperimentForm() {
                 <Field.Root>
                   <Field.Label>Parent Drive Folder (optional)</Field.Label>
                   <HStack gap={3}>
+                    {/* Neutral outline, not green. DESIGN.md §5: one primary
+                        per screen, and on this form the primary is Create.
+                        Every other action is outline or ghost on gray. */}
                     <Button
                       variant="outline"
-                      colorPalette="brandGreen"
+                      colorPalette="gray"
                       size="md"
                       loading={folderPickerLoading}
                       onClick={handleChooseFolder}
@@ -359,7 +461,11 @@ function NewExperimentForm() {
                       </HStack>
                     )}
                   </HStack>
-                  <Field.HelperText color="gray">
+                  {/* `color="gray"` was the CSS named color #808080 --
+                      4.19:1 on the dark page, under the body floor, and a raw
+                      literal. The recipe's own fg.muted is 8.30:1 light /
+                      9.14:1 dark. */}
+                  <Field.HelperText>
                     {selectedFolder
                       ? "The experiment's data folder will be created inside this folder."
                       : "If not set, the experiment's data folder will be created in My Drive/DataPipe."}
@@ -370,9 +476,9 @@ function NewExperimentForm() {
               <Button
                 onClick={handleProviderSubmit}
                 loading={providerSubmitting}
-                colorPalette={"brandGreen"}
+                colorPalette="brandGreen"
               >
-                Create
+                Create experiment
               </Button>
             </>
           )}

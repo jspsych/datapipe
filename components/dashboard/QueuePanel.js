@@ -4,7 +4,6 @@ import {
   Accordion,
   Alert,
   Table,
-  Badge,
   IconButton,
   Button,
   Text,
@@ -12,6 +11,8 @@ import {
 } from "@chakra-ui/react";
 import { Download } from "lucide-react";
 import { auth } from "../../lib/firebase";
+import StatusIndicator from "../ui/StatusIndicator";
+import FormErrorAlert from "../ui/FormErrorAlert";
 
 // Copy keyed off the provider-agnostic error taxonomy that adapters map their
 // own failures into (functions/src/providers/types.ts's ProviderErrorCode).
@@ -148,18 +149,37 @@ function friendlyReason(entry) {
   return reasonCopy(entry?.failureReason);
 }
 
-function statusBadge(status) {
-  const labels = {
-    pending: { color: "orange", text: "Retrying" },
-    processing: { color: "blue", text: "Retrying now" },
-    failed: { color: "red", text: "Failed" },
+// Status rendering, rebuilt on StatusIndicator.
+//
+// What was here before was the single worst contrast failure in the app. The
+// panel painted itself `Alert variant="solid"`, which fills the root with
+// `colorPalette.solid`; each row then rendered a `Badge variant="solid"` in
+// the SAME palette. Status warning -> orange.600 badge on an orange.600
+// panel: 1.00:1. Literally invisible. In the all-failed case the red "Failed"
+// badges disappeared into the red panel identically, "Failed" on the warning
+// panel measured 1.36:1, and the blue "Retrying now" chip measured 1.45:1 --
+// so the one surface in DataPipe whose entire job is telling a researcher
+// which participant files are about to be lost could not communicate which
+// files were about to be lost.
+//
+// StatusIndicator is icon + always-visible text on `status.*` tokens, which
+// satisfies DESIGN.md §5's "status is never color-alone" and, because the
+// panel below is now `variant="subtle"`, sits on a readable ground: status.ok
+// 4.77/6.71, status.warning 6.63/7.80, status.error 5.92/4.86, status.neutral
+// 8.30/9.14 (light/dark). The blue `processing` entry is gone with it --
+// DESIGN.md §5 retires blue as a status and action color.
+const STATUS_LABELS = {
+  pending: { status: "warning", label: "Retrying" },
+  processing: { status: "warning", label: "Retrying now" },
+  failed: { status: "error", label: "Failed" },
+};
+
+function statusIndicator(status) {
+  const mapped = STATUS_LABELS[status] || {
+    status: "neutral",
+    label: status || "Unknown",
   };
-  const { color, text } = labels[status] || { color: "gray", text: status };
-  return (
-    <Badge colorPalette={color} variant="solid" px={2}>
-      {text}
-    </Badge>
-  );
+  return <StatusIndicator status={mapped.status} label={mapped.label} />;
 }
 
 function nextRetryText(nextRetryAt) {
@@ -208,14 +228,23 @@ async function fetchFile(experimentId, entryId) {
 export default function QueuePanel({ entries, experimentId }) {
   const [downloading, setDownloading] = useState(null);
   const [downloadingAll, setDownloadingAll] = useState(false);
+  // Four download paths used to end in `console.error` with NOTHING rendered:
+  // the spinner stopped and the page looked exactly as it had before. These
+  // buttons serve the last remaining copy of a participant's data before the
+  // 7-day expiry, so a researcher who clicks, sees no change, and concludes
+  // "that must have downloaded already" loses the file permanently. This is
+  // the failure mode DESIGN.md §8.7 bans and the one PRODUCT.md Principle 5
+  // singles out. One message at a time is deliberate -- the researcher is
+  // acting on one file.
+  const [downloadError, setDownloadError] = useState(null);
 
   const handleDownload = async (entry) => {
     setDownloading(entry.id);
+    setDownloadError(null);
     try {
       const response = await fetchFile(experimentId, entry.id);
       if (!response || !response.ok) {
-        console.error("Failed to download file");
-        return;
+        throw new Error(`Download responded ${response?.status ?? "no response"}`);
       }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
@@ -226,6 +255,12 @@ export default function QueuePanel({ entries, experimentId }) {
       URL.revokeObjectURL(url);
     } catch (e) {
       console.error("Download failed:", e);
+      const stored = timeRemaining(entry.createdAt);
+      setDownloadError(
+        `Could not download ${entry.filename}. DataPipe still has this file` +
+          (stored ? ` for another ${stored}` : "") +
+          " -- try again, and contact support if it keeps failing."
+      );
     } finally {
       setDownloading(null);
     }
@@ -233,17 +268,19 @@ export default function QueuePanel({ entries, experimentId }) {
 
   const handleDownloadAll = async () => {
     setDownloadingAll(true);
+    setDownloadError(null);
     try {
       const user = auth.currentUser;
-      if (!user) return;
+      if (!user) {
+        throw new Error("Not signed in");
+      }
       const idToken = await user.getIdToken();
       const response = await fetch(
         `/api/queuestatus?experimentID=${experimentId}&downloadAll=true`,
         { headers: { Authorization: `Bearer ${idToken}` } }
       );
       if (!response.ok) {
-        console.error("Failed to download ZIP");
-        return;
+        throw new Error(`Download-all responded ${response.status}`);
       }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
@@ -254,6 +291,11 @@ export default function QueuePanel({ entries, experimentId }) {
       URL.revokeObjectURL(url);
     } catch (e) {
       console.error("Download all failed:", e);
+      setDownloadError(
+        "Could not build the ZIP of queued files. Nothing has been lost -- " +
+          "try again, or download the files one at a time using the buttons " +
+          "in the table below."
+      );
     } finally {
       setDownloadingAll(false);
     }
@@ -282,11 +324,30 @@ export default function QueuePanel({ entries, experimentId }) {
   }
 
   return (
-    <Alert.Root status={allFailed ? "error" : "warning"} variant="solid">
+    // `variant="subtle"` instead of `solid`, and the palette named explicitly
+    // as the brand hue rather than left to Chakra's stock orange/red.
+    // DESIGN.md §1: brandOrange has NO solid slot at all (every orange dark
+    // enough to hold white text has stopped being the brand orange), and
+    // brandRed is reserved for irreversible destruction, which a retrying
+    // upload is not. Subtle pairs colorPalette.subtle with colorPalette.fg:
+    // brandOrange 800-on-50 = 7.00 light, 300-on-900 dark; brandRed
+    // 700-on-50 light, 300-on-900 dark. Body text on the old solid fill was
+    // white-on-#ea580c = 3.56:1, failing at the `sm`/`xs` sizes this panel is
+    // built from.
+    <Alert.Root
+      status={allFailed ? "error" : "warning"}
+      colorPalette={allFailed ? "brandRed" : "brandOrange"}
+      variant="subtle"
+    >
       <Alert.Indicator />
-      <Box flex="1">
+      <Box flex="1" minW={0}>
         <Alert.Title mb={1}>{alertTitle}</Alert.Title>
         <Text fontSize="sm" mb={4}>{alertDescription}</Text>
+        {downloadError && (
+          <Box mb={4}>
+            <FormErrorAlert>{downloadError}</FormErrorAlert>
+          </Box>
+        )}
         <Accordion.Root collapsible size="sm" mb={4}>
           <Accordion.Item value="why">
             <Accordion.ItemTrigger>
@@ -323,9 +384,15 @@ export default function QueuePanel({ entries, experimentId }) {
           </Accordion.Item>
         </Accordion.Root>
         <HStack mb={4}>
+          {/* Was `variant="solid" colorPalette="gray"`, which put gray.200 on
+              the old orange.600 fill at 2.81:1 -- under the 3:1 floor WCAG
+              1.4.11 sets for a control's boundary. Outline on the panel's own
+              ground uses border gray.500 (4.50:1 light / 3.43:1 dark). It is
+              also correctly secondary: DESIGN.md \u00a75 allows one primary per
+              screen, and on the experiment page that is not this button. */}
           <Button
             size="sm"
-            variant="solid"
+            variant="outline"
             colorPalette="gray"
             loading={downloadingAll}
             onClick={handleDownloadAll}
@@ -334,54 +401,74 @@ export default function QueuePanel({ entries, experimentId }) {
             Download all as ZIP
           </Button>
         </HStack>
-        <Table.Root variant="line" size="sm">
-          <Table.Header>
-            <Table.Row>
-              <Table.ColumnHeader>FILENAME</Table.ColumnHeader>
-              <Table.ColumnHeader>STATUS</Table.ColumnHeader>
-              <Table.ColumnHeader>REASON</Table.ColumnHeader>
-              <Table.ColumnHeader>STORED FOR</Table.ColumnHeader>
-              <Table.ColumnHeader></Table.ColumnHeader>
-            </Table.Row>
-          </Table.Header>
-          <Table.Body>
-            {entries.map((entry) => (
-              <Table.Row key={entry.id}>
-                <Table.Cell>{entry.filename}</Table.Cell>
-                <Table.Cell>
-                  {statusBadge(entry.status)}
-                  {(entry.status === "pending" || entry.status === "processing") &&
-                    entry.nextRetryAt && (
-                      <Text fontSize="xs" color="gray.400" mt={1}>
-                        Next retry {nextRetryText(entry.nextRetryAt)}
-                      </Text>
-                    )}
-                </Table.Cell>
-                <Table.Cell>
-                  <Text fontSize="xs">
-                    {friendlyReason(entry) || "\u2014"}
-                  </Text>
-                </Table.Cell>
-                <Table.Cell>
-                  <Text fontSize="xs">
-                    {timeRemaining(entry.createdAt) || "\u2014"}
-                  </Text>
-                </Table.Cell>
-                <Table.Cell>
-                  <IconButton
-                    aria-label={`Download ${entry.filename}`}
-                    size="xs"
-                    variant="ghost"
-                    loading={downloading === entry.id}
-                    onClick={() => handleDownload(entry)}
-                  >
-                    <Download size={14} />
-                  </IconButton>
-                </Table.Cell>
+        {/* The table gets its own panel surface and border so it reads as a
+            table rather than as a stripe of paint inside the alert, and
+            scrolls horizontally instead of overflowing on a phone -- the
+            5-column layout had no responsive strategy at all. */}
+        <Box
+          bg="bg.panel"
+          borderWidth="1px"
+          borderColor="border"
+          borderRadius="md"
+          overflowX="auto"
+          color="fg"
+        >
+          <Table.Root variant="line" size="sm">
+            <Table.Header>
+              <Table.Row>
+                {/* Sentence case, per DESIGN.md \u00a73. The uppercase literals
+                    here were the table-header instance of the same reflex
+                    \u00a78.1 bans for section eyebrows. */}
+                <Table.ColumnHeader>Filename</Table.ColumnHeader>
+                <Table.ColumnHeader>Status</Table.ColumnHeader>
+                <Table.ColumnHeader>Reason</Table.ColumnHeader>
+                <Table.ColumnHeader>Stored for</Table.ColumnHeader>
+                <Table.ColumnHeader>
+                  <Box as="span" srOnly>
+                    Download
+                  </Box>
+                </Table.ColumnHeader>
               </Table.Row>
-            ))}
-          </Table.Body>
-        </Table.Root>
+            </Table.Header>
+            <Table.Body>
+              {entries.map((entry) => (
+                <Table.Row key={entry.id}>
+                  <Table.Cell>{entry.filename}</Table.Cell>
+                  <Table.Cell>
+                    {statusIndicator(entry.status)}
+                    {(entry.status === "pending" || entry.status === "processing") &&
+                      entry.nextRetryAt && (
+                        <Text fontSize="xs" color="fg.muted" mt={1}>
+                          Next retry {nextRetryText(entry.nextRetryAt)}
+                        </Text>
+                      )}
+                  </Table.Cell>
+                  <Table.Cell>
+                    <Text fontSize="sm" color="fg">
+                      {friendlyReason(entry) || "\u2014"}
+                    </Text>
+                  </Table.Cell>
+                  <Table.Cell>
+                    <Text fontSize="sm" color="fg.muted" whiteSpace="nowrap">
+                      {timeRemaining(entry.createdAt) || "\u2014"}
+                    </Text>
+                  </Table.Cell>
+                  <Table.Cell>
+                    <IconButton
+                      aria-label={`Download ${entry.filename}`}
+                      size="xs"
+                      variant="ghost"
+                      loading={downloading === entry.id}
+                      onClick={() => handleDownload(entry)}
+                    >
+                      <Download size={14} />
+                    </IconButton>
+                  </Table.Cell>
+                </Table.Row>
+              ))}
+            </Table.Body>
+          </Table.Root>
+        </Box>
       </Box>
     </Alert.Root>
   );
@@ -392,10 +479,31 @@ export default function QueuePanel({ entries, experimentId }) {
  * previously pending/failed uploads have all been resolved.
  */
 export function UploadsResolvedNotice() {
+  // Not an `Alert status="success"`: that resolves to Chakra's stock `green`
+  // palette, which is the second green DESIGN.md §1 retires, and switching it
+  // to brandGreen is not available either -- the caveat in §1 is that
+  // `variant="subtle"` paints brandGreen.fg on brandGreen.subtle, and in dark
+  // mode that pairing is 300-on-900 = 3.91:1, below the body floor, with
+  // nothing darker on the Material Green ramp to fix it with. So this uses
+  // the neutral panel surface with a StatusIndicator, whose icon rides
+  // `status.ok` (4.77:1 light / 6.71:1 dark) and whose label is `fg`
+  // (13.16 / 12.94). Icon plus visible text, per DESIGN.md §5.
   return (
-    <Alert.Root status="success" variant="subtle" size="sm">
-      <Alert.Indicator />
-      <Alert.Title fontSize="sm">All queued uploads completed successfully.</Alert.Title>
-    </Alert.Root>
+    <Box
+      w="100%"
+      bg="bg.panel"
+      borderWidth="1px"
+      borderColor="border"
+      borderRadius="md"
+      px={4}
+      py={3}
+      role="status"
+      aria-live="polite"
+    >
+      <StatusIndicator
+        status="ok"
+        label="All queued uploads completed successfully."
+      />
+    </Box>
   );
 }

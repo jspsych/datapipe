@@ -48,7 +48,9 @@ describe("FinalizeControl — idle state", () => {
     // be undone AND that it deletes the loose files -- not just "are you
     // sure?".
     expect(await screen.findByText(/cannot be undone/i)).toBeInTheDocument();
-    expect(screen.getByText(/delete/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/permanently deletes the loose files/i)
+    ).toBeInTheDocument();
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
@@ -84,7 +86,7 @@ describe("FinalizeControl — idle state", () => {
     expect(JSON.parse(options.body)).toEqual({ experimentID: "exp1" });
   });
 
-  it("shows a retryable inline error when the API call fails", async () => {
+  it("keeps the dialog open and shows the server's message when the API call fails", async () => {
     global.fetch.mockResolvedValue({
       ok: false,
       status: 500,
@@ -102,8 +104,16 @@ describe("FinalizeControl — idle state", () => {
     await waitFor(() => {
       expect(screen.getByText(/something broke/i)).toBeInTheDocument();
     });
-    // Still retryable -- the button must come back rather than getting stuck.
-    expect(screen.getByRole("button", { name: /finalize/i })).toBeInTheDocument();
+
+    // The control now routes through components/ui/ConfirmDialog, whose
+    // contract is that a failed onConfirm leaves the dialog OPEN with the
+    // error rendered inside it. The hand-rolled dialog this replaced closed
+    // on failure, which threw away the researcher's context (what they were
+    // about to do) at the exact moment they needed it. Confirm is still
+    // there, so the retry is one click.
+    expect(
+      screen.getByRole("button", { name: /^confirm$/i })
+    ).toBeInTheDocument();
   });
 });
 
