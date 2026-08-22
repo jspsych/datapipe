@@ -1,6 +1,22 @@
-import { useContext, useState } from "react";
-import { HStack, VStack, Text, Button, Alert, Badge } from "@chakra-ui/react";
-import { linkWithPopup, unlink } from "firebase/auth";
+import { useContext, useEffect, useState } from "react";
+import {
+  HStack,
+  VStack,
+  Text,
+  Button,
+  Alert,
+  Badge,
+  Dialog,
+  Field,
+  Input,
+  CloseButton,
+} from "@chakra-ui/react";
+import {
+  EmailAuthProvider,
+  linkWithCredential,
+  linkWithPopup,
+  unlink,
+} from "firebase/auth";
 import { CircleCheck } from "lucide-react";
 import { UserContext } from "../../lib/context";
 import { auth } from "../../lib/firebase";
@@ -148,7 +164,7 @@ export default function LinkedAccounts() {
         );
       })}
 
-      {hasPassword && (
+      {hasPassword ? (
         <HStack justifyContent="space-between" w="100%">
           <HStack>
             <Text fontSize="lg">Email and password</Text>
@@ -156,7 +172,150 @@ export default function LinkedAccounts() {
           </HStack>
           <Badge colorPalette="gray">Enabled</Badge>
         </HStack>
+      ) : (
+        // ORCID lets researchers keep their email private (see the
+        // providesEmail comment in lib/auth-providers.js), and a password
+        // credential has to be built from a real email address. An
+        // ORCID-only account with no disclosed email has nothing to attach
+        // a password to, so render nothing rather than a button that can
+        // only fail.
+        user.email && (
+          <AddPasswordRow user={user} setAfterAction={setAfterAction} />
+        )
       )}
     </VStack>
+  );
+}
+
+// Lets a researcher whose only sign-in methods are federated add an
+// email/password fallback, using the email address Firebase already has on
+// file for them (there is nowhere else on this page to type a different one,
+// and EmailAuthProvider.credential needs a real address to attach the
+// password to).
+function AddPasswordRow({ user, setAfterAction }) {
+  const [open, setOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  // Same touched-gating as ChangePassword: no red validation text before the
+  // researcher has typed anything.
+  const [touchedPassword, setTouchedPassword] = useState(false);
+  const [touchedConfirm, setTouchedConfirm] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      setPassword("");
+      setConfirmPassword("");
+      setTouchedPassword(false);
+      setTouchedConfirm(false);
+      setError("");
+    }
+  }, [open]);
+
+  const passwordMatch = password === confirmPassword;
+  // Mirrors ChangePassword's 12-character rule -- same Firebase project,
+  // same policy. Not shared as a constant: each dialog is small enough that
+  // the duplication costs less than a new module for one number.
+  const passwordLengthSatisfied = password.length >= 12;
+
+  const handleAddPassword = async () => {
+    setIsSubmitting(true);
+    setError("");
+    try {
+      const credential = EmailAuthProvider.credential(user.email, password);
+      const result = await linkWithCredential(auth.currentUser, credential);
+      // Same tagging discipline as handleLink above: linking mutates
+      // providerData in place without re-emitting an auth state, so the
+      // returned user is recorded here, tagged with its uid, and takes
+      // precedence over the derived read.
+      setAfterAction({
+        uid: result.user.uid,
+        ids: linkedProviderIds(result.user),
+      });
+      setOpen(false);
+    } catch (err) {
+      setError(messageForAuthError(err?.code, "password", "setPassword"));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <HStack justifyContent="space-between" w="100%">
+      <Text fontSize="lg">Email and password</Text>
+      <Button colorPalette="brandTeal" size="sm" onClick={() => setOpen(true)}>
+        Add password
+      </Button>
+
+      <Dialog.Root open={open} onOpenChange={(e) => setOpen(e.open)}>
+        <Dialog.Backdrop />
+        <Dialog.Positioner>
+          <Dialog.Content bg="greyBackground" color="white">
+            <Dialog.CloseTrigger asChild>
+              <CloseButton size="sm" aria-label="Close" />
+            </Dialog.CloseTrigger>
+            <Dialog.Header>Add a Password</Dialog.Header>
+            <Dialog.Body>
+              <VStack gap={4} align="stretch">
+                <Text fontSize="sm" color="gray.400">
+                  This adds a password to sign in as {user.email}, alongside
+                  the methods you already use.
+                </Text>
+                <Field.Root
+                  invalid={touchedPassword && !passwordLengthSatisfied}
+                >
+                  <Field.Label>New Password</Field.Label>
+                  <Input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    onBlur={() => setTouchedPassword(true)}
+                  />
+                  <Field.ErrorText>
+                    Password must be at least 12 characters
+                  </Field.ErrorText>
+                </Field.Root>
+                <Field.Root invalid={touchedConfirm && !passwordMatch}>
+                  <Field.Label>Confirm Password</Field.Label>
+                  <Input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    onBlur={() => setTouchedConfirm(true)}
+                  />
+                  <Field.ErrorText>Passwords do not match</Field.ErrorText>
+                </Field.Root>
+
+                {error && (
+                  <Alert.Root status="error" borderRadius="md">
+                    <Alert.Indicator />
+                    <Text fontSize="sm">{error}</Text>
+                  </Alert.Root>
+                )}
+              </VStack>
+            </Dialog.Body>
+            <Dialog.Footer>
+              <Button
+                variant="outline"
+                onClick={() => setOpen(false)}
+                disabled={isSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button
+                colorPalette="brandTeal"
+                onClick={handleAddPassword}
+                loading={isSubmitting}
+                disabled={!passwordMatch || !passwordLengthSatisfied}
+                ml={3}
+              >
+                Add Password
+              </Button>
+            </Dialog.Footer>
+          </Dialog.Content>
+        </Dialog.Positioner>
+      </Dialog.Root>
+    </HStack>
   );
 }

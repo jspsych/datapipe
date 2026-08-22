@@ -1,17 +1,11 @@
 import { useState } from "react";
 
-import {
-  HStack,
-  VStack,
-  Button,
-  Text,
-  Alert,
-  Dialog,
-} from "@chakra-ui/react";
+import { HStack, VStack, Button, Text } from "@chakra-ui/react";
 
 import { auth } from "../../lib/firebase";
 
 import { useRouter } from "next/router";
+import ConfirmDialog from "../ui/ConfirmDialog";
 
 // Deletion runs server-side (functions/src/delete-account.ts) rather than
 // through deleteUser() here. The client SDK can only delete the auth record,
@@ -20,13 +14,16 @@ import { useRouter } from "next/router";
 // off the uid, and destroying the account first means a failed cleanup strands
 // them with no owner and no way to sign back in and retry.
 export default function DeleteAccount({ setDeleting }) {
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [open, setOpen] = useState(false);
-  const [deleteError, setDeleteError] = useState(null);
   const router = useRouter();
 
   const deleteAccount = async function () {
-    setIsSubmitting(true);
+    // `setDeleting(true)` has to land before the request can possibly fail
+    // or succeed. AccountPage passes `deleting` straight into AuthCheck's
+    // fallbackRoute, so a sign-out that lands mid-request -- ours below on
+    // success, or an unrelated one -- resolves to the "your account is gone"
+    // page instead of dumping the researcher back at the sign-in form.
+    setDeleting(true);
     try {
       // Not forced: a refreshed token carries the same auth_time, so it would
       // not get past the endpoint's recent-login check anyway.
@@ -51,71 +48,40 @@ export default function DeleteAccount({ setDeleting }) {
       await auth.signOut().catch(() => {});
       router.push("/admin/deleted-account");
     } catch (error) {
+      // Not deleted after all -- undo the redirect-on-signout wiring above so
+      // an unrelated sign-out (or none at all) leaves the researcher on this
+      // page, where ConfirmDialog now shows `error` and keeps the dialog open.
       setDeleting(false);
-      setIsSubmitting(false);
-      setDeleteError(error.message);
+      throw error;
     }
   };
 
   return (
     <VStack w="100%" align="stretch" gap={3}>
-      {deleteError && (
-        <Alert.Root status="error" borderRadius="md">
-          <Alert.Indicator />
-          <Text fontSize="sm">{deleteError}</Text>
-        </Alert.Root>
-      )}
-
       <HStack justifyContent="space-between" w="100%" flexWrap="wrap" gap={3}>
         <Text fontSize={"lg"}>Delete DataPipe Account</Text>
-        <Button
-          loading={isSubmitting}
-          onClick={() => setOpen(true)}
-          colorPalette="red"
-        >
+        <Button onClick={() => setOpen(true)} colorPalette="red">
           Delete Account
         </Button>
 
-        <Dialog.Root open={open} onOpenChange={(e) => setOpen(e.open)}>
-          <Dialog.Backdrop />
-          <Dialog.Positioner>
-            <Dialog.Content bg="greyBackground" color="white">
-              <Dialog.Header fontSize="lg" fontWeight="bold">
-                Delete Account
-              </Dialog.Header>
-
-              <Dialog.Body>
-                <Text mb={4}>
-                  Are you sure? This action is final. We cannot recover any
-                  experiments that are associated with this account after
-                  deletion.
-                </Text>
-                <Text>
-                  Deleting your DataPipe account will not affect any data
-                  already written to your storage provider.
-                </Text>
-              </Dialog.Body>
-
-              <Dialog.Footer>
-                <Button onClick={() => setOpen(false)} colorPalette="brandTeal">
-                  Cancel
-                </Button>
-                <Button
-                  colorPalette="red"
-                  onClick={() => {
-                    setDeleting(true);
-                    setOpen(false);
-                    setDeleteError(null);
-                    deleteAccount();
-                  }}
-                  ml={3}
-                >
-                  Delete
-                </Button>
-              </Dialog.Footer>
-            </Dialog.Content>
-          </Dialog.Positioner>
-        </Dialog.Root>
+        <ConfirmDialog
+          open={open}
+          onOpenChange={(e) => setOpen(e.open)}
+          title="Delete Account"
+          confirmLabel="Delete"
+          destructive
+          onConfirm={deleteAccount}
+        >
+          <Text mb={4}>
+            Are you sure? This action is final. We cannot recover any
+            experiments that are associated with this account after
+            deletion.
+          </Text>
+          <Text>
+            Deleting your DataPipe account will not affect any data
+            already written to your storage provider.
+          </Text>
+        </ConfirmDialog>
       </HStack>
     </VStack>
   );

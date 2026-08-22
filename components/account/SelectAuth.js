@@ -9,6 +9,8 @@ import {
   Input,
   Spinner,
   Center,
+  Alert,
+  CloseButton,
 } from "@chakra-ui/react"
 import { useContext, useState, useRef } from "react";
 import { UserContext } from "../../lib/context";
@@ -28,7 +30,13 @@ export default function SelectAuth() {
 
     const [isTokenOpen, setIsTokenOpen] = useState(false);
     const [isSubmittingToken, setIsSubmittingToken] = useState(false);
+    const [tokenError, setTokenError] = useState(null);
     const tokenRef = useRef(null);
+
+    const openTokenDialog = () => {
+        setTokenError(null);
+        setIsTokenOpen(true);
+    };
 
     const handleSwitchToPersonalToken = () => {
         setDoc(doc(db, "users", user.uid), {
@@ -45,6 +53,7 @@ export default function SelectAuth() {
     const handleSaveToken = async () => {
         const token = tokenRef.current?.value;
         setIsSubmittingToken(true);
+        setTokenError(null);
         try {
             const idToken = await auth.currentUser.getIdToken();
             const response = await fetch("/api/saveosftoken", {
@@ -56,11 +65,23 @@ export default function SelectAuth() {
                 body: JSON.stringify({ token }),
             });
             if (!response.ok) {
-                throw new Error("Failed to save token");
+                throw new Error(
+                    response.status === 401 || response.status === 403
+                        ? "You are not signed in to the right account. Try reloading the page and signing in again."
+                        : "Could not save your OSF token. Please try again."
+                );
             }
-            setIsSubmittingToken(false);
             setIsTokenOpen(false);
         } catch (error) {
+            // Dialog stays open (it already did -- this just makes the
+            // failure visible instead of leaving the researcher watching the
+            // spinner stop with nothing to show for it).
+            setTokenError(
+                error instanceof TypeError
+                    ? "Could not reach DataPipe. Check your connection and try again."
+                    : error.message
+            );
+        } finally {
             setIsSubmittingToken(false);
         }
     }
@@ -109,7 +130,7 @@ export default function SelectAuth() {
                 </HStack>
                 <Button
                     colorPalette="brandTeal"
-                    onClick={() => setIsTokenOpen(true)}
+                    onClick={openTokenDialog}
                     loading={isSubmittingToken}
                 >
                     Set OSF Token
@@ -131,8 +152,10 @@ export default function SelectAuth() {
                 <Dialog.Backdrop />
                 <Dialog.Positioner>
                     <Dialog.Content bg="greyBackground" color="white">
+                        <Dialog.CloseTrigger asChild>
+                            <CloseButton size="sm" aria-label="Close" />
+                        </Dialog.CloseTrigger>
                         <Dialog.Header>Set OSF Personal Access Token</Dialog.Header>
-                        <Dialog.CloseTrigger />
                         <Dialog.Body>
                             <VStack gap={4} w="100%">
                                 <Text>
@@ -159,6 +182,13 @@ export default function SelectAuth() {
                                             <Input ref={tokenRef} type="text" placeholder="Paste your OSF token here" />
                                         </Field.Root>
                                     </VStack>
+                                )}
+
+                                {tokenError && (
+                                    <Alert.Root status="error" borderRadius="md">
+                                        <Alert.Indicator />
+                                        <Text fontSize="sm">{tokenError}</Text>
+                                    </Alert.Root>
                                 )}
                             </VStack>
                         </Dialog.Body>
