@@ -14,9 +14,7 @@ import { ArrowRight, Database, Shield, Zap, BookOpen } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import TestEnvironmentWarning from "../components/TestEnvironmentWarning";
-import { Rubik } from "next/font/google";
 
-const rubik = Rubik({ subsets: ["latin"] });
 
 function FeatureCard({ icon, title, children }) {
   return (
@@ -47,7 +45,7 @@ function StepItem({ number, children }) {
       <Text
         fontWeight="bold"
         fontSize="sm"
-        color="brandTeal.400"
+        color="brandGreen.400"
         flexShrink={0}
         mt="1px"
       >
@@ -71,7 +69,7 @@ const snippets = [
       { color: "brandOrange.300", text: "save_data" },
       { color: "gray.300", text: " = {\n" },
       { color: "gray.300", text: "  type: " },
-      { color: "brandTeal.300", text: "jsPsychPipe" },
+      { color: "brandGreen.300", text: "jsPsychPipe" },
       { color: "gray.300", text: ",\n" },
       { color: "gray.300", text: '  action: ' },
       { color: "brandOrange.300", text: '"save"' },
@@ -85,7 +83,7 @@ const snippets = [
       { color: "gray.300", text: "  data_string: " },
       { color: "gray.400", text: "() =>\n" },
       { color: "gray.300", text: "    jsPsych.data.get()." },
-      { color: "brandTeal.300", text: "csv" },
+      { color: "brandGreen.300", text: "csv" },
       { color: "gray.300", text: "()\n" },
       { color: "gray.300", text: "};" },
     ],
@@ -96,7 +94,7 @@ const snippets = [
     caption: "Not using jsPsych? A single fetch call is all you need.",
     lines: [
       { color: "gray.500", text: "// Send data with a fetch request\n" },
-      { color: "brandTeal.300", text: "fetch" },
+      { color: "brandGreen.300", text: "fetch" },
       { color: "gray.300", text: "(url, {\n" },
       { color: "gray.300", text: "  method: " },
       { color: "brandOrange.300", text: '"POST"' },
@@ -108,7 +106,7 @@ const snippets = [
       { color: "brandOrange.300", text: '"application/json"' },
       { color: "gray.300", text: "\n  },\n" },
       { color: "gray.300", text: "  body: JSON." },
-      { color: "brandTeal.300", text: "stringify" },
+      { color: "brandGreen.300", text: "stringify" },
       { color: "gray.300", text: "({\n" },
       { color: "gray.300", text: "    experimentID: " },
       { color: "brandOrange.300", text: '"your_id"' },
@@ -255,7 +253,6 @@ export default function Home() {
           <VStack gap={6} align="start" flex="1">
             <Heading
               as="h1"
-              className={rubik.className}
               fontSize={["3xl", "5xl", "6xl"]}
               fontWeight="800"
               lineHeight="1.1"
@@ -280,7 +277,7 @@ export default function Home() {
               {user ? (
                 <Link href="/admin">
                   <Button
-                    colorPalette="brandTeal"
+                    colorPalette="brandGreen"
                     size="lg"
                   >
                     Go to Dashboard <ArrowRight size={18} />
@@ -289,7 +286,7 @@ export default function Home() {
               ) : (
                 <Link href="/signup">
                   <Button
-                    colorPalette="brandTeal"
+                    colorPalette="brandGreen"
                     size="lg"
                   >
                     Get started <ArrowRight size={18} />
@@ -338,14 +335,13 @@ export default function Home() {
                 fontWeight="bold"
                 textTransform="uppercase"
                 letterSpacing="0.1em"
-                color="brandTeal.400"
+                color="brandGreen.400"
               >
                 How it works
               </Text>
               <Heading
                 as="h2"
-                className={rubik.className}
-                fontSize={["xl", "2xl"]}
+                  fontSize={["xl", "2xl"]}
                 fontWeight="700"
               >
                 Three steps to start collecting data
@@ -379,7 +375,7 @@ export default function Home() {
             fontWeight="bold"
             textTransform="uppercase"
             letterSpacing="0.1em"
-            color="brandTeal.400"
+            color="brandGreen.400"
             mb={8}
           >
             Features
