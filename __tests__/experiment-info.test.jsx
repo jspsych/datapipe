@@ -22,8 +22,10 @@ describe("ExperimentInfo — legacy OSF experiments (pinned regression)", () => 
       sessions: 3,
     });
 
-    expect(screen.getByText("OSF Project")).toBeInTheDocument();
-    expect(screen.getByText("OSF Data Component")).toBeInTheDocument();
+    // Sentence case per DESIGN.md §3 -- these labels were "OSF Project" and
+    // "OSF Data Component" before the dashboard conversion.
+    expect(screen.getByText("OSF project")).toBeInTheDocument();
+    expect(screen.getByText("OSF data component")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /abc12/ })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /def34/ })).toBeInTheDocument();
   });
@@ -45,7 +47,7 @@ describe("ExperimentInfo — provider-aware rendering", () => {
       "https://drive.google.com/drive/folders/folder123"
     );
 
-    expect(screen.queryByText("OSF Project")).not.toBeInTheDocument();
-    expect(screen.queryByText("OSF Data Component")).not.toBeInTheDocument();
+    expect(screen.queryByText("OSF project")).not.toBeInTheDocument();
+    expect(screen.queryByText("OSF data component")).not.toBeInTheDocument();
   });
 });

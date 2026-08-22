@@ -15,39 +15,89 @@ import { signInWithEmailAndPassword } from "firebase/auth";
 import { useState } from "react";
 import { useRouter } from "next/router";
 import NextLink from "next/link";
-import { ERROR, getError } from "../lib/utils";
+import { messageForAuthError } from "../lib/auth-errors";
 import AuthProviderButtons from "./auth/AuthProviderButtons";
 import SignInWithOSF from "./SignInWithOSF";
+import FormErrorAlert from "./ui/FormErrorAlert";
+
+function fieldErrorsFor(email, password) {
+  return {
+    email: email.trim() ? "" : "Enter your email address.",
+    password: password ? "" : "Enter your password.",
+  };
+}
 
 export default function SignInForm({ routeAfterSignIn }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [errorEmail, setErrorEmail] = useState("");
-  const [errorPassword, setErrorPassword] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({ email: "", password: "" });
+  const [touched, setTouched] = useState({ email: false, password: false });
+  const [formError, setFormError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const onSubmit = async () => {
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setFormError("");
+
+    const errors = fieldErrorsFor(email, password);
+    setFieldErrors(errors);
+    setTouched({ email: true, password: true });
+    if (errors.email || errors.password) return;
+
     setIsSubmitting(true);
     try {
-      const user = await signInWithEmailAndPassword(auth, email, password);
+      await signInWithEmailAndPassword(auth, email, password);
       router.push(routeAfterSignIn);
     } catch (error) {
       setIsSubmitting(false);
       const { code } = error;
-      if (code == ERROR.PASSWORD_WRONG) {
-        setErrorPassword(getError(code));
+      if (code === "auth/invalid-email") {
+        // The one code from this call that really is about the shape of the
+        // email field rather than the credential pair -- safe to attribute.
+        setFieldErrors((prev) => ({
+          ...prev,
+          email: messageForAuthError(code, null, "password"),
+        }));
       } else {
-        setErrorEmail(getError(code));
+        // auth/invalid-credential (modern Firebase with email enumeration
+        // protection on) and auth/wrong-password / auth/user-not-found
+        // (protection off, or an older SDK) all mean "this email+password
+        // pair doesn't match" and are indistinguishable from here.
+        // Attributing the error to one field would be a guess -- and, worse,
+        // exactly the account-existence confirmation enumeration protection
+        // exists to prevent. Shown at the credentials level instead.
+        setFormError(messageForAuthError(code, null, "password"));
       }
     }
   };
 
   return (
-    <Card.Root w="100%" maxW={400} mx="auto" variant="unstyled" color="white">
+    <Card.Root
+      w="100%"
+      maxW="560px"
+      mx="auto"
+      px={4}
+      variant="unstyled"
+      bg="bg.panel"
+      borderWidth="1px"
+      borderColor="border"
+      rounded="lg"
+    >
       <Card.Body p={8}>
-        <VStack gap={6}>
-          <Heading size="lg" textAlign="center">Sign In</Heading>
+        <VStack gap={6} as="form" onSubmit={handleSubmit} noValidate>
+          <VStack gap={1} textAlign="center">
+            <Heading as="h1" fontSize="2xl" fontWeight="700" color="fg">
+              Sign in
+            </Heading>
+            <Text fontSize="sm" color="fg.muted">
+              Sign in to manage your experiments. New here?{" "}
+              <Link asChild color="brandGreen.fg" textDecoration="underline">
+                <NextLink href="/signup">Create an account</NextLink>
+              </Link>
+              .
+            </Text>
+          </VStack>
 
           <AuthProviderButtons
             verb="Sign in"
@@ -56,44 +106,62 @@ export default function SignInForm({ routeAfterSignIn }) {
 
           <HStack w="full" alignItems="center">
             <Separator flex="1" />
-            <Text fontSize="sm" color="gray.400" px={3} whiteSpace="nowrap" textTransform="uppercase" fontWeight="medium" letterSpacing="wide">or</Text>
+            <Text fontSize="sm" color="fg.muted" px={3} whiteSpace="nowrap">
+              or
+            </Text>
             <Separator flex="1" />
           </HStack>
 
+          <FormErrorAlert>{formError}</FormErrorAlert>
+
           <VStack gap={4} w="full">
-            <Field.Root invalid={!!errorEmail}>
+            <Field.Root invalid={touched.email && !!fieldErrors.email}>
               <Field.Label>Email</Field.Label>
               <Input
                 type="email"
+                name="email"
+                autoComplete="email"
+                value={email}
                 onChange={(e) => {
                   setEmail(e.target.value);
-                  setErrorEmail("");
+                  setFieldErrors((prev) => ({ ...prev, email: "" }));
+                  setFormError("");
                 }}
+                onBlur={() =>
+                  setTouched((prev) => ({ ...prev, email: true }))
+                }
               />
-              <Field.ErrorText>{errorEmail}</Field.ErrorText>
+              <Field.ErrorText>{fieldErrors.email}</Field.ErrorText>
             </Field.Root>
 
-            <Field.Root invalid={!!errorPassword}>
+            <Field.Root invalid={touched.password && !!fieldErrors.password}>
               <Field.Label>Password</Field.Label>
               <Input
                 type="password"
+                name="password"
+                autoComplete="current-password"
+                value={password}
                 onChange={(e) => {
                   setPassword(e.target.value);
-                  setErrorPassword("");
+                  setFieldErrors((prev) => ({ ...prev, password: "" }));
+                  setFormError("");
                 }}
-                onKeyDown={(e) => e.key === "Enter" && onSubmit()}
+                onBlur={() =>
+                  setTouched((prev) => ({ ...prev, password: true }))
+                }
               />
-              <Field.ErrorText>{errorPassword}</Field.ErrorText>
+              <Field.ErrorText>{fieldErrors.password}</Field.ErrorText>
             </Field.Root>
 
             <Button
-              colorPalette="brandTeal"
+              type="submit"
+              colorPalette="brandGreen"
               loading={isSubmitting}
-              onClick={onSubmit}
+              loadingText="Signing in…"
               w="full"
               size="lg"
             >
-              Sign In
+              Sign in
             </Button>
 
             {/* OSF sign-in stays available through the wind-down, and ONLY
@@ -106,18 +174,14 @@ export default function SignInForm({ routeAfterSignIn }) {
                 signup branch of functions/src/oauth2-callback.ts, not before. */}
             <SignInWithOSF />
 
-            <VStack gap={2} w="full">
-              <Link asChild fontSize="sm" color="brandOrange.300">
-                <NextLink href="/reset-password">Forgot password?</NextLink>
-              </Link>
-
-              <Text fontSize="sm" color="gray.400">
-                Need an account?{" "}
-                <Link asChild color="brandOrange.300">
-                  <NextLink href="/signup">Sign Up</NextLink>
-                </Link>
-              </Text>
-            </VStack>
+            <Link
+              asChild
+              fontSize="sm"
+              color="brandGreen.fg"
+              textDecoration="underline"
+            >
+              <NextLink href="/reset-password">Forgot password?</NextLink>
+            </Link>
           </VStack>
         </VStack>
       </Card.Body>

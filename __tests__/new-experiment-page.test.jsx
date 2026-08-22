@@ -48,6 +48,18 @@ jest.mock("../lib/google-picker", () => ({
   pickDriveFolder: (...args) => mockPickDriveFolder(...args),
 }));
 
+// Ark UI widgets (the provider RadioGroup here) measure their elements.
+// jsdom ships no ResizeObserver, and a missing global there is a module-load
+// crash rather than a test failure -- index.test.jsx carries the same guard
+// for the landing page's Tabs.
+if (typeof global.ResizeObserver === "undefined") {
+  global.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
+
 import { useDocumentData } from "react-firebase-hooks/firestore";
 import NewExperimentPage from "../pages/admin/new";
 
@@ -58,6 +70,41 @@ function renderPage() {
     </ChakraProvider>
   );
 }
+
+// Selecting a storage provider.
+//
+// The provider control is a Chakra/Ark `RadioGroup`, not the raw
+// `<input type="radio">` this page used to render. Both expose the option's
+// accessible name the same way -- the item is a `<label htmlFor>` pointing at
+// a hidden radio input -- so `getByLabelText` still finds the right element
+// and the assertions below are unchanged in intent.
+//
+// What DID change is the timing. A native radio ran React's `onChange`
+// synchronously inside the click, so a plain `fireEvent.click` was followed by
+// a fully re-rendered form. Ark routes the click through its own state machine
+// (@zag-js/radio-group), which sends SET_VALUE, updates its bindable, and only
+// then calls `onValueChange` -> `setProvider`. Asserting synchronously after
+// the click can therefore observe the PREVIOUS provider's render.
+//
+// So this helper waits for the selection to actually land before returning.
+// `data-state="checked"` on the item is the honest signal: zag derives it from
+// `itemState.checked`, and because the group is controlled (`value={provider}`)
+// that resolves to the page's own React state -- not merely to the DOM
+// checkedness jsdom sets during click activation. If the page failed to update
+// its provider, this wait fails, which is the correct outcome.
+async function selectProvider(labelMatcher) {
+  const input = screen.getByLabelText(labelMatcher);
+  fireEvent.click(input);
+  // The item IS the <label> wrapping the hidden input, and zag writes
+  // data-state onto it. Reached via closest("label") rather than a data-part
+  // selector so this does not depend on Ark's internal part naming.
+  await waitFor(() =>
+    expect(input.closest("label")).toHaveAttribute("data-state", "checked")
+  );
+}
+
+const selectGoogleDrive = () => selectProvider(/Google Drive/i);
+const selectDataverse = () => selectProvider(/^Dataverse$/i);
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -102,7 +149,7 @@ describe("NewExperimentPage — OSF is closed to new experiments", () => {
     // gdrive is connected, so a gdrive default renders the create form. If
     // the page still defaulted to OSF this would show a connect CTA instead.
     expect(screen.getByLabelText(/^Title$/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^Create$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Create experiment$/i })).toBeInTheDocument();
   });
 });
 
@@ -112,13 +159,10 @@ describe("NewExperimentPage — Google Drive provider selector", () => {
   // label text via getByLabelText, which works for either control as long
   // as the GREEN implementation gives the Google Drive option an
   // accessible name of "Google Drive" (radio input's associated label, or
-  // an <option>/aria-label on a Select). Adjust the query, not the intent,
-  // if the chosen control needs a different accessible-name strategy.
-  function selectGoogleDrive() {
-    fireEvent.click(screen.getByLabelText(/Google Drive/i));
-  }
+  // an <option>/aria-label on a Select). See selectProvider above for why
+  // the selection itself is awaited.
 
-  it("3. selecting Google Drive with no connection shows a connect CTA, no title-only submit", () => {
+  it("3. selecting Google Drive with no connection shows a connect CTA, no title-only submit", async () => {
     useDocumentData.mockReturnValue([
       {
         refreshToken: "osf-refresh-token",
@@ -129,18 +173,21 @@ describe("NewExperimentPage — Google Drive provider selector", () => {
     ]);
 
     renderPage();
-    selectGoogleDrive();
+    await selectGoogleDrive();
 
     const cta = screen.getByRole("link", {
-      name: /Connect Google Drive Account/i,
+      name: /Connect Google Drive/i,
     });
-    expect(cta).toHaveAttribute("href", "/admin/account");
+    // The CTA now carries a return hint so account settings can offer a
+    // "back to creating your experiment" affordance. The destination is
+    // unchanged.
+    expect(cta).toHaveAttribute("href", "/admin/account?next=/admin/new");
     expect(
-      screen.queryByRole("button", { name: /^Create$/i })
+      screen.queryByRole("button", { name: /^Create experiment$/i })
     ).not.toBeInTheDocument();
   });
 
-  it("4. selecting Google Drive while connected shows only the title field + create button", () => {
+  it("4. selecting Google Drive while connected shows only the title field + create button", async () => {
     useDocumentData.mockReturnValue([
       {
         refreshToken: "osf-refresh-token",
@@ -151,10 +198,10 @@ describe("NewExperimentPage — Google Drive provider selector", () => {
     ]);
 
     renderPage();
-    selectGoogleDrive();
+    await selectGoogleDrive();
 
     expect(screen.getByLabelText(/^Title$/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^Create$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Create experiment$/i })).toBeInTheDocument();
     expect(
       screen.queryByText("Existing OSF Project")
     ).not.toBeInTheDocument();
@@ -178,12 +225,12 @@ describe("NewExperimentPage — Google Drive provider selector", () => {
     });
 
     renderPage();
-    selectGoogleDrive();
+    await selectGoogleDrive();
 
     fireEvent.change(screen.getByLabelText(/^Title$/i), {
       target: { value: "My Study" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /^Create$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Create experiment$/i }));
 
     // Look up the createexperiment call by URL rather than assuming index 0:
     // selecting a connected provider also fires a background
@@ -227,12 +274,12 @@ describe("NewExperimentPage — Google Drive provider selector", () => {
     });
 
     renderPage();
-    selectGoogleDrive();
+    await selectGoogleDrive();
 
     fireEvent.change(screen.getByLabelText(/^Title$/i), {
       target: { value: "My Study" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /^Create$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Create experiment$/i }));
 
     await waitFor(() =>
       expect(
@@ -244,14 +291,6 @@ describe("NewExperimentPage — Google Drive provider selector", () => {
 });
 
 describe("NewExperimentPage — Dataverse provider (provider-generic rendering)", () => {
-  function selectDataverse() {
-    fireEvent.click(screen.getByLabelText(/^Dataverse$/i));
-  }
-
-  function selectGoogleDrive() {
-    fireEvent.click(screen.getByLabelText(/Google Drive/i));
-  }
-
   function fillDataverseFields({
     collectionAlias = "my-lab",
     authorName = "Smith, Jane",
@@ -288,7 +327,7 @@ describe("NewExperimentPage — Dataverse provider (provider-generic rendering)"
     expect(screen.getByLabelText(/^Dataverse$/i)).toBeInTheDocument();
   });
 
-  it("selecting Dataverse with no connection shows the connect CTA and no create form", () => {
+  it("selecting Dataverse with no connection shows the connect CTA and no create form", async () => {
     useDocumentData.mockReturnValue([
       { refreshToken: "osf-refresh-token", connectedAccounts: {} },
       false,
@@ -296,18 +335,21 @@ describe("NewExperimentPage — Dataverse provider (provider-generic rendering)"
     ]);
 
     renderPage();
-    selectDataverse();
+    await selectDataverse();
 
     const cta = screen.getByRole("link", {
-      name: /Connect Dataverse Account/i,
+      name: /Connect Dataverse/i,
     });
-    expect(cta).toHaveAttribute("href", "/admin/account");
+    // The CTA now carries a return hint so account settings can offer a
+    // "back to creating your experiment" affordance. The destination is
+    // unchanged.
+    expect(cta).toHaveAttribute("href", "/admin/account?next=/admin/new");
     expect(
-      screen.queryByRole("button", { name: /^Create$/i })
+      screen.queryByRole("button", { name: /^Create experiment$/i })
     ).not.toBeInTheDocument();
   });
 
-  it("selecting a CONNECTED Dataverse renders the declared fields alongside Title", () => {
+  it("selecting a CONNECTED Dataverse renders the declared fields alongside Title", async () => {
     useDocumentData.mockReturnValue([
       {
         refreshToken: "osf-refresh-token",
@@ -318,7 +360,7 @@ describe("NewExperimentPage — Dataverse provider (provider-generic rendering)"
     ]);
 
     renderPage();
-    selectDataverse();
+    await selectDataverse();
 
     expect(screen.getByLabelText(/^Title$/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Collection alias/i)).toBeInTheDocument();
@@ -326,10 +368,10 @@ describe("NewExperimentPage — Dataverse provider (provider-generic rendering)"
     expect(screen.getByLabelText(/Contact email/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Description/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Subject/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^Create$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Create experiment$/i })).toBeInTheDocument();
   });
 
-  it("submitting with a required field blank does NOT call the API", () => {
+  it("submitting with a required field blank does NOT call the API", async () => {
     useDocumentData.mockReturnValue([
       {
         refreshToken: "osf-refresh-token",
@@ -340,7 +382,7 @@ describe("NewExperimentPage — Dataverse provider (provider-generic rendering)"
     ]);
 
     renderPage();
-    selectDataverse();
+    await selectDataverse();
 
     fireEvent.change(screen.getByLabelText(/^Title$/i), {
       target: { value: "My Dataverse Study" },
@@ -356,9 +398,15 @@ describe("NewExperimentPage — Dataverse provider (provider-generic rendering)"
       target: { value: "A study about things" },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /^Create$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Create experiment$/i }));
 
-    expect(global.fetch).not.toHaveBeenCalled();
+    // The page legitimately fetches /api/providersetupwarnings on provider
+    // selection now -- the invariant is that no CREATE happens, not that
+    // the network stays silent.
+    const createCalls = global.fetch.mock.calls.filter(
+      ([url]) => url === "/api/createexperiment"
+    );
+    expect(createCalls).toHaveLength(0);
   });
 
   it("a full submit calls /api/createexperiment with researcherInput carrying exactly the five declared fields, and navigates on success", async () => {
@@ -376,14 +424,14 @@ describe("NewExperimentPage — Dataverse provider (provider-generic rendering)"
     });
 
     renderPage();
-    selectDataverse();
+    await selectDataverse();
 
     fireEvent.change(screen.getByLabelText(/^Title$/i), {
       target: { value: "My Dataverse Study" },
     });
     fillDataverseFields();
 
-    fireEvent.click(screen.getByRole("button", { name: /^Create$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Create experiment$/i }));
 
     // Look up the createexperiment call by URL rather than assuming index 0
     // -- same reasoning as the gdrive submit test above.
@@ -447,7 +495,7 @@ describe("NewExperimentPage — Dataverse provider (provider-generic rendering)"
     renderPage();
 
     // Pick a Drive folder on the gdrive path.
-    selectGoogleDrive();
+    await selectGoogleDrive();
     fireEvent.change(screen.getByLabelText(/^Title$/i), {
       target: { value: "Leak check" },
     });
@@ -457,9 +505,9 @@ describe("NewExperimentPage — Dataverse provider (provider-generic rendering)"
     );
 
     // Switch to Dataverse and submit.
-    selectDataverse();
+    await selectDataverse();
     fillDataverseFields();
-    fireEvent.click(screen.getByRole("button", { name: /^Create$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Create experiment$/i }));
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalled());
     const createCall = global.fetch.mock.calls.find(([url]) =>
@@ -470,7 +518,7 @@ describe("NewExperimentPage — Dataverse provider (provider-generic rendering)"
     expect(body.parentFolderId).toBeUndefined();
   });
 
-  it("switching provider away and back clears the entered values (no stale carry-over)", () => {
+  it("switching provider away and back clears the entered values (no stale carry-over)", async () => {
     useDocumentData.mockReturnValue([
       {
         refreshToken: "osf-refresh-token",
@@ -481,13 +529,13 @@ describe("NewExperimentPage — Dataverse provider (provider-generic rendering)"
     ]);
 
     renderPage();
-    selectDataverse();
+    await selectDataverse();
     fillDataverseFields({ collectionAlias: "stale-lab" });
 
     expect(screen.getByLabelText(/Collection alias/i)).toHaveValue("stale-lab");
 
-    selectGoogleDrive();
-    selectDataverse();
+    await selectGoogleDrive();
+    await selectDataverse();
 
     expect(screen.getByLabelText(/Collection alias/i)).toHaveValue("");
     expect(screen.getByLabelText(/Author name/i)).toHaveValue("");
@@ -498,10 +546,6 @@ describe("NewExperimentPage — Dataverse provider (provider-generic rendering)"
 });
 
 describe("NewExperimentPage — provider setup warnings (Dataverse)", () => {
-  function selectDataverse() {
-    fireEvent.click(screen.getByLabelText(/^Dataverse$/i));
-  }
-
   it("selecting a connected Dataverse shows a warning returned by /api/providersetupwarnings", async () => {
     useDocumentData.mockReturnValue([
       { refreshToken: "osf-refresh-token", connectedAccounts: { dataverse: true } },
@@ -527,7 +571,7 @@ describe("NewExperimentPage — provider setup warnings (Dataverse)", () => {
     });
 
     renderPage();
-    selectDataverse();
+    await selectDataverse();
 
     await waitFor(() =>
       expect(screen.getByText(/predates Dataverse 5\.11/i)).toBeInTheDocument()
@@ -548,7 +592,7 @@ describe("NewExperimentPage — provider setup warnings (Dataverse)", () => {
     });
 
     renderPage();
-    selectDataverse();
+    await selectDataverse();
 
     await waitFor(() =>
       expect(
@@ -579,7 +623,7 @@ describe("NewExperimentPage — provider setup warnings (Dataverse)", () => {
     const consoleErrorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
 
     renderPage();
-    selectDataverse();
+    await selectDataverse();
 
     // Let the failed warnings fetch settle before interacting further.
     await waitFor(() =>
@@ -603,7 +647,7 @@ describe("NewExperimentPage — provider setup warnings (Dataverse)", () => {
       target: { value: "A study about things" },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /^Create$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Create experiment$/i }));
 
     await waitFor(() =>
       expect(

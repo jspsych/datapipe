@@ -41,9 +41,9 @@ export default function AddSignInMethodBanner() {
   return (
     <Box
       w="100%"
-      bg="orange.900"
+      bg="brandOrange.subtle"
       border="1px solid"
-      borderColor="orange.500"
+      borderColor="brandOrange.border"
       borderRadius="md"
       px={4}
       py={4}
@@ -53,7 +53,7 @@ export default function AddSignInMethodBanner() {
           <Text fontWeight="semibold" mb={1}>
             Add a way to sign in
           </Text>
-          <Text fontSize="sm" color="gray.200">
+          <Text fontSize="sm" color="fg.muted">
             You currently sign in to DataPipe through OSF, which is being
             retired. Link another provider now and you will keep this account,
             your experiments, and your settings exactly as they are.

@@ -6,8 +6,13 @@ body {
     Ubuntu, Cantarell, Fira Sans, Droid Sans, Helvetica Neue, sans-serif;
   display: grid;
   height: 100%;
-  background-color: #1C1F22;
-  color: white;
+  /* DESIGN.md §1/§2: was hardcoded to the permanently-dark body (#1C1F22 /
+     white). Now reads the theme's `bg`/`fg` semantic tokens directly, so the
+     body flips with the `dark`/`light` class next-themes puts on <html> --
+     with the app defaulting dark (see pages/_app.js), this resolves to the
+     identical #1C1F22 / white(ish, via fg's gray.50) pixels today. */
+  background-color: var(--chakra-colors-bg);
+  color: var(--chakra-colors-fg);
 }
 
 #__next {
@@ -23,38 +28,22 @@ a {
   box-sizing: border-box;
 }
 
-.loader {
-  border: 10px solid white;
-  border-top: 10px solid darkblue;
-  border-radius: 50%;
-  width: 50px;
-  height: 50px;
-  animation: spin 2s linear infinite;
-}
-
-@keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
 /* hide Firebase Emulator warning banner, we are using custom one */
 .firebase-emulator-warning {
   display: none;
 }
 
 .sticky-alert {
-  position: fixed; 
+  position: fixed;
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 1000;
+  /* DESIGN.md §5: the app's only arbitrary z-index. TestEnvironmentWarning
+     is the `banner` layer. */
+  z-index: var(--chakra-z-index-banner);
   display: flex;
-  justify-content: center; 
-  pointer-events: none; 
+  justify-content: center;
+  pointer-events: none;
 }
 
 pre {

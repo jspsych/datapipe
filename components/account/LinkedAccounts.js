@@ -1,7 +1,22 @@
-import { useContext, useState } from "react";
-import { HStack, VStack, Text, Button, Alert, Badge } from "@chakra-ui/react";
-import { linkWithPopup, unlink } from "firebase/auth";
-import { CircleCheck } from "lucide-react";
+import { useContext, useEffect, useState } from "react";
+import {
+  HStack,
+  VStack,
+  Text,
+  Button,
+  Dialog,
+  Field,
+  Input,
+  CloseButton,
+} from "@chakra-ui/react";
+import {
+  EmailAuthProvider,
+  linkWithCredential,
+  linkWithPopup,
+  unlink,
+} from "firebase/auth";
+import FormErrorAlert from "../ui/FormErrorAlert";
+import StatusIndicator from "../ui/StatusIndicator";
 import { UserContext } from "../../lib/context";
 import { auth } from "../../lib/firebase";
 import {
@@ -81,15 +96,23 @@ export default function LinkedAccounts() {
 
   return (
     <VStack gap={3} w="100%" align="stretch">
-      {error && (
-        <Alert.Root status="error" borderRadius="md">
-          <Alert.Indicator />
-          <Text fontSize="sm">{error}</Text>
-        </Alert.Root>
+      <FormErrorAlert>{error}</FormErrorAlert>
+
+      {/* Zero linked methods is not "nothing to say" -- it is the OSF-only
+          population, reachable by the sign-in flow that is being removed and
+          by nothing else (see AddSignInMethodBanner, which carries the same
+          message on /admin). They were the one group this section stayed
+          silent for. */}
+      {linkedIds.length === 0 && (
+        <Text fontSize="sm" color="fg.muted">
+          You sign in to DataPipe through OSF, which is being retired. Link a
+          method below and you keep this account, your experiments, and your
+          settings exactly as they are.
+        </Text>
       )}
 
       {linkedIds.length === 1 && (
-        <Text fontSize="sm" color="gray.400">
+        <Text fontSize="sm" color="fg.muted">
           You have one way to sign in. Adding a second means you keep access if
           you ever lose the first.
         </Text>
@@ -104,59 +127,202 @@ export default function LinkedAccounts() {
         const last = linked && !canUnlink(linkedIds, entry.providerId);
 
         return (
-          <HStack
-            key={entry.id}
-            justifyContent="space-between"
-            w="100%"
-            flexWrap="wrap"
-            gap={3}
-          >
-            <HStack>
-              {Icon && <Icon />}
-              <Text fontSize="lg">{entry.name}</Text>
-              {linked && (
-                <CircleCheck color="var(--chakra-colors-green-500)" size={18} />
+          <VStack key={entry.id} w="100%" align="stretch" gap={1}>
+            <HStack justifyContent="space-between" w="100%" flexWrap="wrap" gap={3}>
+              <HStack>
+                {Icon && <Icon />}
+                <Text fontSize="lg">{entry.name}</Text>
+                {linked && <StatusIndicator status="ok" label="Linked" />}
+              </HStack>
+
+              {linked ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={last}
+                  loading={pendingId === entry.id}
+                  onClick={() => handleUnlink(entry)}
+                >
+                  {last ? "Only sign-in method" : "Unlink"}
+                </Button>
+              ) : (
+                <Button
+                  colorPalette="brandGreen"
+                  size="sm"
+                  loading={pendingId === entry.id}
+                  onClick={() => handleLink(entry)}
+                >
+                  Link {entry.name}
+                </Button>
               )}
             </HStack>
 
-            {linked ? (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={last}
-                loading={pendingId === entry.id}
-                onClick={() => handleUnlink(entry)}
-                title={
-                  last
-                    ? "This is your only way to sign in. Add another method before removing it."
-                    : undefined
-                }
-              >
-                {last ? "Only sign-in method" : "Unlink"}
-              </Button>
-            ) : (
-              <Button
-                colorPalette="brandTeal"
-                size="sm"
-                loading={pendingId === entry.id}
-                onClick={() => handleLink(entry)}
-              >
-                Link {entry.name}
-              </Button>
+            {/* Why the button is dead, in visible text next to it. This used
+                to live in a `title` on the disabled button -- invisible on
+                touch, unreliable on a disabled element, and never announced. */}
+            {last && (
+              <Text fontSize="sm" color="fg.muted">
+                This is your only way to sign in. Add another method before
+                removing it.
+              </Text>
             )}
-          </HStack>
+          </VStack>
         );
       })}
 
-      {hasPassword && (
+      {hasPassword ? (
+        // One status per row, in the slot the action would occupy. The row
+        // used to carry two -- a bare check icon beside the name AND a gray
+        // "Enabled" badge -- saying the same thing twice in two visual
+        // languages, neither of which matched the other sections.
         <HStack justifyContent="space-between" w="100%">
-          <HStack>
-            <Text fontSize="lg">Email and password</Text>
-            <CircleCheck color="var(--chakra-colors-green-500)" size={18} />
-          </HStack>
-          <Badge colorPalette="gray">Enabled</Badge>
+          <Text fontSize="lg">Email and password</Text>
+          <StatusIndicator status="ok" label="Enabled" />
         </HStack>
+      ) : (
+        // ORCID lets researchers keep their email private (see the
+        // providesEmail comment in lib/auth-providers.js), and a password
+        // credential has to be built from a real email address. An
+        // ORCID-only account with no disclosed email has nothing to attach
+        // a password to, so render nothing rather than a button that can
+        // only fail.
+        user.email && (
+          <AddPasswordRow user={user} setAfterAction={setAfterAction} />
+        )
       )}
     </VStack>
+  );
+}
+
+// Lets a researcher whose only sign-in methods are federated add an
+// email/password fallback, using the email address Firebase already has on
+// file for them (there is nowhere else on this page to type a different one,
+// and EmailAuthProvider.credential needs a real address to attach the
+// password to).
+function AddPasswordRow({ user, setAfterAction }) {
+  const [open, setOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  // Same touched-gating as ChangePassword: no red validation text before the
+  // researcher has typed anything.
+  const [touchedPassword, setTouchedPassword] = useState(false);
+  const [touchedConfirm, setTouchedConfirm] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      setPassword("");
+      setConfirmPassword("");
+      setTouchedPassword(false);
+      setTouchedConfirm(false);
+      setError("");
+    }
+  }, [open]);
+
+  const passwordMatch = password === confirmPassword;
+  // Mirrors ChangePassword's 12-character rule -- same Firebase project,
+  // same policy. Not shared as a constant: each dialog is small enough that
+  // the duplication costs less than a new module for one number.
+  const passwordLengthSatisfied = password.length >= 12;
+
+  const handleAddPassword = async () => {
+    setIsSubmitting(true);
+    setError("");
+    try {
+      const credential = EmailAuthProvider.credential(user.email, password);
+      const result = await linkWithCredential(auth.currentUser, credential);
+      // Same tagging discipline as handleLink above: linking mutates
+      // providerData in place without re-emitting an auth state, so the
+      // returned user is recorded here, tagged with its uid, and takes
+      // precedence over the derived read.
+      setAfterAction({
+        uid: result.user.uid,
+        ids: linkedProviderIds(result.user),
+      });
+      setOpen(false);
+    } catch (err) {
+      setError(messageForAuthError(err?.code, "password", "setPassword"));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <HStack justifyContent="space-between" w="100%">
+      <Text fontSize="lg">Email and password</Text>
+      <Button colorPalette="brandGreen" size="sm" onClick={() => setOpen(true)}>
+        Add password
+      </Button>
+
+      <Dialog.Root open={open} onOpenChange={(e) => setOpen(e.open)}>
+        <Dialog.Backdrop />
+        <Dialog.Positioner>
+          <Dialog.Content
+            bg="bg.panel"
+            color="fg"
+            borderWidth="1px"
+            borderColor="border"
+          >
+            <Dialog.CloseTrigger asChild>
+              <CloseButton size="sm" aria-label="Close" />
+            </Dialog.CloseTrigger>
+            <Dialog.Header>Add a password</Dialog.Header>
+            <Dialog.Body>
+              <VStack gap={4} align="stretch">
+                <Text fontSize="sm" color="fg.muted">
+                  This adds a password to sign in as {user.email}, alongside
+                  the methods you already use.
+                </Text>
+                <Field.Root
+                  invalid={touchedPassword && !passwordLengthSatisfied}
+                >
+                  <Field.Label>New password</Field.Label>
+                  <Input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    onBlur={() => setTouchedPassword(true)}
+                  />
+                  <Field.ErrorText>
+                    Password must be at least 12 characters
+                  </Field.ErrorText>
+                </Field.Root>
+                <Field.Root invalid={touchedConfirm && !passwordMatch}>
+                  <Field.Label>Confirm password</Field.Label>
+                  <Input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    onBlur={() => setTouchedConfirm(true)}
+                  />
+                  <Field.ErrorText>Passwords do not match</Field.ErrorText>
+                </Field.Root>
+
+                <FormErrorAlert>{error}</FormErrorAlert>
+              </VStack>
+            </Dialog.Body>
+            <Dialog.Footer>
+              <Button
+                variant="outline"
+                onClick={() => setOpen(false)}
+                disabled={isSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button
+                colorPalette="brandGreen"
+                onClick={handleAddPassword}
+                loading={isSubmitting}
+                disabled={!passwordMatch || !passwordLengthSatisfied}
+                ml={3}
+              >
+                Add password
+              </Button>
+            </Dialog.Footer>
+          </Dialog.Content>
+        </Dialog.Positioner>
+      </Dialog.Root>
+    </HStack>
   );
 }

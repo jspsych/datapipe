@@ -5,8 +5,7 @@ import { useDocumentData, useCollectionData } from "react-firebase-hooks/firesto
 import { db, auth } from "../../lib/firebase";
 import { doc, collection, query, where, orderBy } from "firebase/firestore";
 
-import { Spinner, Flex, VStack, HStack, Text, Badge, Separator, Popover, IconButton, Link } from "@chakra-ui/react";
-import { CircleHelp } from "lucide-react";
+import { Spinner, Flex, VStack, HStack, Text, Box, Center } from "@chakra-ui/react";
 
 import Title from "../../components/dashboard/Title";
 import ExperimentInfo from "../../components/dashboard/ExperimentInfo";
@@ -18,9 +17,17 @@ import CodeHints from "../../components/dashboard/CodeHints";
 import ErrorPanel from "../../components/dashboard/ErrorPanel";
 import QueuePanel, { UploadsResolvedNotice } from "../../components/dashboard/QueuePanel";
 
+import PageHeader from "../../components/ui/PageHeader";
+import SettingsSection from "../../components/ui/SettingsSection";
+import GuidanceLine from "../../components/ui/GuidanceLine";
+import StatusIndicator from "../../components/ui/StatusIndicator";
+import EmptyState from "../../components/ui/EmptyState";
+
 export async function getServerSideProps() {
   return { props: {} };
 }
+
+const plural = (n, word) => `${n} ${word}${n !== 1 ? "s" : ""}`;
 
 export default function ExperimentPage() {
   const router = useRouter();
@@ -46,9 +53,15 @@ function ExperimentPageDashboard({ experiment_id }) {
         orderBy("createdAt", "desc")
       )
     : null;
-  const [data, loading, error, snapshot, reload] = useDocumentData(experimentRef);
+  const [data, loading, error, snapshot] = useDocumentData(experimentRef);
   const logs = useDocumentData(logsRef)?.[0] || null;
-  const [, , , queueSnapshot] = useCollectionData(queueRef);
+  // The error slot used to be discarded here. This query needs a composite
+  // index (experimentID + owner + status + createdAt); if that index is
+  // missing, or security rules reject the read, `queueEntries` is [] forever
+  // and the researcher sees a clean page while participant files sit
+  // un-uploaded. A data-loss warning that silently disables itself is worse
+  // than no warning at all -- PRODUCT.md Principle 5.
+  const [, , queueError, queueSnapshot] = useCollectionData(queueRef);
   const queueEntries = queueSnapshot?.docs.map(d => ({ id: d.id, ...d.data() })) || [];
 
   const uploadError = logs?.logError;
@@ -85,104 +98,198 @@ function ExperimentPageDashboard({ experiment_id }) {
     return () => clearTimeout(timer);
   }, [showResolved]);
 
+  if (loading) {
+    return (
+      <Center w="100%" py={16}>
+        <Spinner color="brandGreen.solid" size="xl" />
+      </Center>
+    );
+  }
+
+  // "This experiment does not exist." used to be printed for ANY error,
+  // including permission-denied and offline -- a false statement, with no
+  // retry and no route back. Split, and both branches now offer a way out.
+  //
+  // Not-found is decided from the SNAPSHOT rather than from `!data`: a
+  // document that is merely still settling also has no data, and asserting
+  // "not found" during that window would flash a false answer on every load.
+  // `snapshot.exists()` is only false once Firestore has actually answered.
+  const notFound = !!snapshot && !snapshot.exists();
+  if (error || notFound) {
+    return (
+      <VStack w="100%" maxW="1100px" px={4} align="stretch">
+        <PageHeader
+          title={notFound ? "Experiment not found" : "Could not load this experiment"}
+          backHref="/admin"
+          backLabel="Back to experiments"
+        />
+        <GuidanceLine>
+          {notFound
+            ? "No experiment with this ID belongs to your account. It may have been deleted, or the link may be wrong."
+            : "DataPipe could not read this experiment. This is usually a connection problem -- reload the page to try again. If it keeps happening, the experiment may belong to a different account."}
+        </GuidanceLine>
+      </VStack>
+    );
+  }
+
+  if (!data) return null;
+
   return (
-    <>
-      {loading && <Spinner color="brandTeal.500" size={"xl"} />}
-      {error && <Text>This experiment does not exist.</Text>}
-      {data && (
-        <VStack alignSelf="flex-start" align="flex-start" w="100%" maxW={1200} px={4}>
-          <Title data={data} />
-          <HStack gap={3} mb={2} flexWrap="wrap">
-            <Badge colorPalette={data.active ? "green" : "gray"} variant="solid" px={2} py={1}>
-              {data.active ? "Active" : "Inactive"}
-            </Badge>
-            <Text fontSize="sm" color="gray.400">
-              {data.sessions || 0} session{data.sessions !== 1 ? "s" : ""}
-            </Text>
-            {uploadError && queueEntries.length === 0 && !showResolved && (
-              <Badge colorPalette="red" variant="solid" px={2} py={1}>
-                Data upload errors
-              </Badge>
-            )}
-            {queueEntries.length > 0 && (
-              <Badge
-                colorPalette={queueEntries.some(e => e.status === "failed") ? "red" : "orange"}
-                variant="solid"
-                px={2}
-                py={1}
-              >
-                {queueEntries.length} upload{queueEntries.length !== 1 ? "s" : ""} queued
-              </Badge>
-            )}
-          </HStack>
-          {showResolved && <UploadsResolvedNotice />}
-          {uploadError && queueEntries.length === 0 && !showResolved && <ErrorPanel errors={errorLog} />}
-          {queueEntries.length > 0 && (
-            <QueuePanel entries={queueEntries} experimentId={experiment_id} />
-          )}
-          <Flex w="100%" gap={8} wrap="wrap" alignItems="flex-start">
-            <VStack flex="1" minW="300px" gap={0} align="stretch">
-              <ExperimentInfo data={data} />
+    <VStack
+      alignSelf="flex-start"
+      align="flex-start"
+      w="100%"
+      // 1100px, DESIGN.md §4's dashboard measure. Was an unexplained 1200.
+      maxW="1100px"
+      px={4}
+      gap={0}
+    >
+      <PageHeader
+        backHref="/admin"
+        backLabel="Back to experiments"
+        titleSlot={<Title data={data} />}
+        mb={4}
+      />
 
-              <Separator my={5} borderColor="whiteAlpha.200" />
-              <Text fontSize="xs" fontWeight="semibold" textTransform="uppercase" letterSpacing="wide" color="gray.500" mb={3}>
-                Data Collection
-              </Text>
-              <ExperimentActive data={data} />
+      <HStack gap={4} mb={6} flexWrap="wrap">
+        {/* Badges -> StatusIndicator. The "Active" badge was white on
+            green.600 at 3.30:1, and the queued/error badges were solid chips
+            in a second red and a second orange. StatusIndicator rides
+            `status.*` and always states the status in words. */}
+        <StatusIndicator
+          status={data.active ? "ok" : "neutral"}
+          label={data.active ? "Accepting data" : "Not accepting data"}
+        />
+        <Text fontSize="sm" color="fg.muted">
+          {plural(data.sessions || 0, "completed session")}
+        </Text>
+        {queueEntries.length > 0 && (
+          <StatusIndicator
+            status={
+              queueEntries.some((e) => e.status === "failed") ? "error" : "warning"
+            }
+            label={`${plural(queueEntries.length, "upload")} waiting to be stored`}
+          />
+        )}
+        {uploadError && queueEntries.length === 0 && !showResolved && (
+          <StatusIndicator status="error" label="Some submissions were rejected" />
+        )}
+      </HStack>
 
-              <Separator my={5} borderColor="whiteAlpha.200" />
-              <Text fontSize="xs" fontWeight="semibold" textTransform="uppercase" letterSpacing="wide" color="gray.500" mb={3}>
-                Validation
-              </Text>
-              <ExperimentValidation data={data} />
-
-              <Separator my={5} borderColor="whiteAlpha.200" />
-              <HStack gap={1} mb={3} alignItems="center">
-                <Text fontSize="xs" fontWeight="semibold" textTransform="uppercase" letterSpacing="wide" color="gray.500">
-                  Metadata
-                </Text>
-                <Popover.Root>
-                  <Popover.Trigger asChild>
-                    <IconButton
-                      aria-label="What is metadata production?"
-                      variant="ghost"
-                      size="2xs"
-                      color="gray.500"
-                    >
-                      <CircleHelp size={14} />
-                    </IconButton>
-                  </Popover.Trigger>
-                  <Popover.Positioner>
-                    <Popover.Content maxW="xs">
-                      <Popover.Body>
-                        <Text fontSize="sm">
-                          Generates Psych-DS metadata describing your data&apos;s
-                          columns (descriptions, value ranges, and levels), making
-                          your dataset easier to share and reuse.{" "}
-                          <Link href="https://psychds-docs.readthedocs.io/en/latest/" target="_blank" rel="noopener noreferrer" color="blue.500">
-                            Learn more
-                          </Link>
-                        </Text>
-                      </Popover.Body>
-                    </Popover.Content>
-                  </Popover.Positioner>
-                </Popover.Root>
-              </HStack>
-              <MetadataControl data={data} />
-
-              <Separator my={5} borderColor="whiteAlpha.200" />
-              <Text fontSize="xs" fontWeight="semibold" textTransform="uppercase" letterSpacing="wide" color="gray.500" mb={3}>
-                Finalize
-              </Text>
-              <FinalizeControl data={data} experimentId={experiment_id} />
-            </VStack>
-
-            <VStack flex="1" minW="300px" align="stretch">
-              <CodeHints expId={experiment_id} />
-            </VStack>
-          </Flex>
-        </VStack>
+      {queueError && (
+        <Box mb={6}>
+          <StatusIndicator
+            status="warning"
+            label="DataPipe could not check for queued uploads."
+          />
+          <GuidanceLine mt={1}>
+            Files may be waiting to reach your storage provider without this
+            page being able to show them. Reload to try again.
+          </GuidanceLine>
+        </Box>
       )}
-    </>
+
+      {showResolved && (
+        <Box w="100%" mb={6}>
+          <UploadsResolvedNotice />
+        </Box>
+      )}
+      {uploadError && queueEntries.length === 0 && !showResolved && (
+        <Box w="100%" mb={6}>
+          <ErrorPanel errors={errorLog} />
+        </Box>
+      )}
+      {queueEntries.length > 0 && (
+        <Box w="100%" mb={6}>
+          <QueuePanel entries={queueEntries} experimentId={experiment_id} />
+        </Box>
+      )}
+
+      <Flex w="100%" gap={10} wrap="wrap" alignItems="flex-start">
+        <VStack flex="1" minW="300px" gap={0} align="stretch">
+          <ExperimentInfo data={data} />
+
+          {/* Four `<Separator borderColor="whiteAlpha.200">` rules used to
+              divide these sections. They composite to 1.26:1 -- not a weak
+              separator, an absent one -- and DESIGN.md §4 bans the value and
+              commits to spacing-only grouping between sections: mt={10}
+              between routine ones, mt={16} before anything irreversible. The
+              five illegible `xs`/uppercase/`gray.500` (3.43:1) eyebrows they
+              sat under are gone with them; SettingsSection renders a real
+              <h2> in sentence case, and every section now carries the
+              one-line description this page has never had. */}
+          <Box mt={10}>
+            <SettingsSection
+              title="Data collection"
+              description="Turn this off to stop accepting new submissions. Data you have already collected is not affected."
+            >
+              <ExperimentActive data={data} />
+            </SettingsSection>
+          </Box>
+
+          <Box mt={10}>
+            <SettingsSection
+              title="Validation"
+              description="Reject submissions that do not match the format you expect, before they reach your storage provider."
+            >
+              <ExperimentValidation data={data} />
+            </SettingsSection>
+          </Box>
+
+          <Box mt={10}>
+            <SettingsSection title="Metadata">
+              {/* The Psych-DS explanation used to live inside a popover
+                  behind an icon-only "?" trigger -- meaning in a tooltip,
+                  DESIGN.md §8.3. It is the section's description now, and
+                  the link is brandGreen.fg (4.77:1 light / 6.71:1 dark)
+                  rather than the retired blue.500 (§5). */}
+              <GuidanceLine
+                mb={4}
+                href="https://psychds-docs.readthedocs.io/en/latest/"
+                linkText="Learn more about Psych-DS"
+                external
+              >
+                DataPipe can describe your data&apos;s columns -- their
+                descriptions, value ranges and levels -- in a standard
+                metadata file, so your dataset is easier for others to read
+                and reuse.
+              </GuidanceLine>
+              <MetadataControl data={data} />
+            </SettingsSection>
+          </Box>
+
+          {/* mt={16}, not mt={10}: the extra air is the signal that the next
+              section plays by different rules. */}
+          <Box mt={16}>
+            <SettingsSection
+              title="Finalize"
+              description="Finalizing merges every file into a single archive on your storage provider, permanently deletes the loose files it was built from, and stops this experiment from accepting data forever. This cannot be undone."
+              variant="danger"
+            >
+              <FinalizeControl data={data} experimentId={experiment_id} />
+            </SettingsSection>
+          </Box>
+        </VStack>
+
+        <VStack flex="1" minW="300px" align="stretch" gap={6}>
+          {(data.sessions || 0) === 0 && (
+            <EmptyState
+              title="No data yet"
+              body="Paste the code below into your experiment and run one session yourself. If it arrives, your study is wired up correctly."
+            />
+          )}
+          <SettingsSection title="Integration code">
+            <GuidanceLine
+              mb={4}
+              href="/getting-started"
+              linkText="Read the getting started guide"
+            >
+              Paste this into your experiment to send its data to DataPipe.
+            </GuidanceLine>
+            <CodeHints expId={experiment_id} />
+          </SettingsSection>
+        </VStack>
+      </Flex>
+    </VStack>
   );
 }

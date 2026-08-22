@@ -16,22 +16,27 @@ jest.mock("../lib/context", () => ({
   }),
 }));
 
+const mockGetDocs = jest.fn(() =>
+  Promise.resolve({ docs: [] })
+);
 jest.mock("firebase/firestore", () => ({
   doc: jest.fn(() => ({})),
   setDoc: jest.fn(() => Promise.resolve()),
+  collection: jest.fn(() => ({})),
+  query: jest.fn(() => ({})),
+  where: jest.fn(() => ({})),
+  getDocs: (...args) => mockGetDocs(...args),
 }));
 
-jest.mock("react-firebase-hooks/firestore", () => ({
-  useDocumentData: jest.fn(),
-}));
-
-import { useDocumentData } from "react-firebase-hooks/firestore";
 import ProviderConnections from "../components/account/ProviderConnections";
 
-function renderComponent() {
+// The users/{uid} document arrives as a PROP now -- pages/admin/account.js
+// owns the single subscription and passes it down, so there is no
+// useDocumentData call left in this component to mock.
+function renderComponent(data = { connectedAccounts: {} }) {
   return render(
     <ChakraProvider value={system}>
-      <ProviderConnections />
+      <ProviderConnections data={data} />
     </ChakraProvider>
   );
 }
@@ -40,6 +45,8 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockGetIdToken.mockClear();
   mockGetIdToken.mockImplementation(() => Promise.resolve("id-token-123"));
+  mockGetDocs.mockClear();
+  mockGetDocs.mockResolvedValue({ docs: [] });
   global.fetch = jest.fn();
   localStorage.clear();
 
@@ -55,7 +62,6 @@ beforeEach(() => {
 
 describe("ProviderConnections", () => {
   it("7. not connected: Connect click generates state, stores CSRF+flow, and redirects", async () => {
-    useDocumentData.mockReturnValue([{ connectedAccounts: {} }, false, undefined]);
     global.fetch.mockResolvedValue({
       ok: true,
       json: () =>
@@ -87,8 +93,6 @@ describe("ProviderConnections", () => {
   });
 
   it("static-token provider: Connect opens an inline form instead of redirecting", async () => {
-    useDocumentData.mockReturnValue([{ connectedAccounts: {} }, false, undefined]);
-
     renderComponent();
 
     fireEvent.click(screen.getByRole("button", { name: /^Connect Dataverse$/i }));
@@ -102,7 +106,6 @@ describe("ProviderConnections", () => {
   });
 
   it("static-token provider: Save posts token + serverUrl to connectstatictokenprovider", async () => {
-    useDocumentData.mockReturnValue([{ connectedAccounts: {} }, false, undefined]);
     global.fetch.mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ success: true, provider: "dataverse" }),
@@ -134,8 +137,6 @@ describe("ProviderConnections", () => {
   });
 
   it("static-token provider: Save stays disabled until both fields are filled", async () => {
-    useDocumentData.mockReturnValue([{ connectedAccounts: {} }, false, undefined]);
-
     renderComponent();
     fireEvent.click(screen.getByRole("button", { name: /^Connect Dataverse$/i }));
 
@@ -157,7 +158,6 @@ describe("ProviderConnections", () => {
   });
 
   it("static-token provider: a rejected server URL is explained, not surfaced verbatim", async () => {
-    useDocumentData.mockReturnValue([{ connectedAccounts: {} }, false, undefined]);
     global.fetch.mockResolvedValue({
       ok: false,
       status: 400,
@@ -184,21 +184,31 @@ describe("ProviderConnections", () => {
     expect(screen.getByLabelText(/Dataverse server URL/i)).toBeInTheDocument();
   });
 
-  it("8. connected: shows Connected status + Disconnect; click posts to disconnectprovider", async () => {
-    useDocumentData.mockReturnValue([
-      { connectedAccounts: { gdrive: true } },
-      false,
-      undefined,
-    ]);
+  it("8. connected: shows Connected status; Disconnect opens a confirmation dialog, and confirming posts to disconnectprovider", async () => {
+    const connectedData = { connectedAccounts: { gdrive: true } };
+    mockGetDocs.mockResolvedValue({
+      docs: [{ data: () => ({ storageProvider: "gdrive" }) }],
+    });
     global.fetch.mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ success: true }),
     });
 
-    renderComponent();
+    renderComponent(connectedData);
 
     expect(screen.getByText(/Connected/i)).toBeInTheDocument();
+
+    // Clicking Disconnect only opens the confirmation dialog -- no request
+    // yet, and the row button is neutral now (red is reserved for
+    // irreversible actions), not the confirm button inside the dialog.
     fireEvent.click(screen.getByRole("button", { name: /^Disconnect Google Drive$/i }));
+    expect(global.fetch).not.toHaveBeenCalled();
+
+    expect(
+      await screen.findByText(/1 experiment is set up to send data to Google Drive/i)
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /^Disconnect$/i }));
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalled());
     const [url, options] = global.fetch.mock.calls[0];
@@ -209,4 +219,45 @@ describe("ProviderConnections", () => {
       idToken: "id-token-123",
     });
   });
+
+  it("disconnect dialog: zero experiments shows the reassuring zero-count copy", async () => {
+    const connectedData = { connectedAccounts: { gdrive: true } };
+    mockGetDocs.mockResolvedValue({ docs: [] });
+
+    renderComponent(connectedData);
+    fireEvent.click(screen.getByRole("button", { name: /^Disconnect Google Drive$/i }));
+
+    expect(
+      await screen.findByText(/No experiments are currently using this connection/i)
+    ).toBeInTheDocument();
+  });
+
+  it(
+    "disconnect dialog: a failed disconnect stays open and shows the error",
+    async () => {
+    const connectedData = { connectedAccounts: { gdrive: true } };
+      mockGetDocs.mockResolvedValue({ docs: [] });
+      global.fetch.mockResolvedValue({ ok: false });
+
+      renderComponent(connectedData);
+      fireEvent.click(screen.getByRole("button", { name: /^Disconnect Google Drive$/i }));
+      await screen.findByText(/No experiments are currently using this connection/i);
+
+      fireEvent.click(screen.getByRole("button", { name: /^Disconnect$/i }));
+
+      expect(
+        await screen.findByText(/Could not reach DataPipe/i)
+      ).toBeInTheDocument();
+      // Dialog is still open -- Cancel is still on screen.
+      expect(screen.getByRole("button", { name: /^Cancel$/i })).toBeInTheDocument();
+    },
+    // This test's full round trip -- open, resolve the count query, submit,
+    // reject the fetch, re-render the error inside the dialog -- occasionally
+    // outran Jest's default 5000ms per-test budget under a heavily parallel
+    // full-suite run (many worker processes contending for CPU), even though
+    // it passes quickly in isolation. The component isn't slow; the CI
+    // scheduler sometimes is, so this test gets more room rather than being
+    // left flaky.
+    15000
+  );
 });
