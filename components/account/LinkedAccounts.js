@@ -258,7 +258,12 @@ function AddPasswordRow({ user, setAfterAction }) {
       <Dialog.Root open={open} onOpenChange={(e) => setOpen(e.open)}>
         <Dialog.Backdrop />
         <Dialog.Positioner>
-          <Dialog.Content bg="greyBackground" color="white">
+          <Dialog.Content
+            bg="bg.panel"
+            color="fg"
+            borderWidth="1px"
+            borderColor="border"
+          >
             <Dialog.CloseTrigger asChild>
               <CloseButton size="sm" aria-label="Close" />
             </Dialog.CloseTrigger>

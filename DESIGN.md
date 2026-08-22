@@ -308,7 +308,11 @@ cannot carry alone gets a bordered container (see `SettingsSection` danger varia
 - **`blue` is retired as an action color.** Five `colorPalette="blue"` and five raw
   `blue.500` links remain (`ProviderConnections.js:188,247`, `SelectAuth.js:120`,
   `OAuthTokenStatus.js:92`, both `oauth2/*` pages, `QueuePanel.js` status map).
-  Links become `brandGreen.fg`; secondary buttons become neutral outline.
+  Links become `brandGreen.fg` **with a persistent underline** — no green/body text
+  pair reaches the 3:1 color-difference floor in either mode (2.04 light / 1.36 dark),
+  so color alone can never mark a link. `globals.css` strips the default underline;
+  every prose link sets it back explicitly.
+  Secondary buttons become neutral outline.
 - **`brandRed` is exclusively for irreversible destruction** — account deletion,
   experiment deletion. Routine, reversible actions (disconnect a provider, unlink a
   sign-in method) are **neutral outline**. Red that means "routine" cannot also mean

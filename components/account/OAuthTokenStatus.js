@@ -54,6 +54,7 @@ export default function OAuthTokenStatus({ data }) {
           target="_blank"
           rel="noopener noreferrer"
           color="brandGreen.fg"
+          textDecoration="underline"
           fontSize="sm"
           fontWeight="medium"
         >

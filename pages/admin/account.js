@@ -39,7 +39,7 @@ export default function AccountPage() {
   if (loading) {
     return (
       <Center py={16}>
-        <Spinner size="lg" color="brandGreen.500" />
+        <Spinner size="lg" color="brandGreen.solid" />
       </Center>
     );
   }

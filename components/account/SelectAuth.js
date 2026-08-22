@@ -110,6 +110,7 @@ export default function SelectAuth({ data }) {
                 <HStack justifyContent="flex-end" w="100%">
                     <Link
                         color="brandGreen.fg"
+                        textDecoration="underline"
                         fontSize="sm"
                         onClick={handleSwitchToPersonalToken}
                         cursor="pointer"
@@ -143,6 +144,7 @@ export default function SelectAuth({ data }) {
             <HStack justifyContent="flex-end" w="100%">
                 <Link
                     color="brandGreen.fg"
+                    textDecoration="underline"
                     fontSize="sm"
                     onClick={handleSwitchToOAuth}
                     cursor="pointer"
@@ -155,7 +157,12 @@ export default function SelectAuth({ data }) {
             <Dialog.Root open={isTokenOpen} onOpenChange={(e) => setIsTokenOpen(e.open)}>
                 <Dialog.Backdrop />
                 <Dialog.Positioner>
-                    <Dialog.Content bg="greyBackground" color="white">
+                    <Dialog.Content
+                        bg="bg.panel"
+                        color="fg"
+                        borderWidth="1px"
+                        borderColor="border"
+                    >
                         <Dialog.CloseTrigger asChild>
                             <CloseButton size="sm" aria-label="Close" />
                         </Dialog.CloseTrigger>
@@ -165,7 +172,8 @@ export default function SelectAuth({ data }) {
                                 <Text>
                                     To generate an OSF token, go to{" "}
                                     <Link
-                                        color="brandOrange.100"
+                                        color="brandGreen.fg"
+                                        textDecoration="underline"
                                         href={`https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/settings/tokens/`}
                                         target="_blank"
                                         rel="noopener noreferrer"

@@ -252,7 +252,7 @@ export default function ProviderConnections({ data }) {
         <Text fontSize="sm" color="fg.muted">
           No storage connected yet — connect one to create your first
           experiment.{" "}
-          <ChakraLink asChild color="brandGreen.fg">
+          <ChakraLink asChild color="brandGreen.fg" textDecoration="underline">
             <Link href="/getting-started">How to choose a provider</Link>
           </ChakraLink>
         </Text>
