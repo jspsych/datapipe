@@ -8,6 +8,9 @@ import SelectAuth from "../../components/account/SelectAuth";
 import LinkedAccounts from "../../components/account/LinkedAccounts";
 import ProviderConnections from "../../components/account/ProviderConnections";
 import { UserContext } from "../../lib/context";
+import { useRouter } from "next/router";
+import NextLink from "next/link";
+import { Link as ChakraLink } from "@chakra-ui/react";
 import { useDocumentData } from "react-firebase-hooks/firestore";
 import { doc } from "firebase/firestore";
 import { db } from "../../lib/firebase";
@@ -22,6 +25,15 @@ import { hasLegacyOsfConnection, osfSunsetLabel } from "../../lib/osf-sunset";
 
 export default function AccountPage() {
   const { user } = useContext(UserContext);
+
+  const router = useRouter();
+  const rawNext = Array.isArray(router.query.next)
+    ? router.query.next[0]
+    : router.query.next;
+  const returnTo =
+    rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//")
+      ? rawNext
+      : null;
 
   // The ONLY subscription to users/{uid} on this page. ProviderConnections,
   // OAuthTokenStatus and SelectAuth each used to open their own, which meant
@@ -87,6 +99,23 @@ export default function AccountPage() {
           <Text fontSize="sm" color="fg.muted" mt={1}>
             {accountIdentity}
           </Text>
+          {/* /admin/new sends researchers here mid-creation with ?next= so
+              they aren't stranded after connecting a provider. Internal
+              paths only -- "/x" but not "//x" -- anything else is ignored. */}
+          {returnTo && (
+            <Text fontSize="sm" color="fg.muted" mt={2}>
+              When you&apos;re done here,{" "}
+              <ChakraLink
+                as={NextLink}
+                href={returnTo}
+                color="brandGreen.fg"
+                textDecoration="underline"
+              >
+                continue creating your experiment
+              </ChakraLink>
+              .
+            </Text>
+          )}
         </Box>
 
         {/* Spacing carries the grouping -- no separators. DESIGN.md §4:

@@ -28,38 +28,6 @@ a {
   box-sizing: border-box;
 }
 
-/* DESIGN.md §7: the ring was hardcoded white/darkblue, values that only ever
-   worked against the forced-dark body. `border` and `brandGreen.solid` are
-   theme-consistent in both modes. */
-.loader {
-  border: 10px solid var(--chakra-colors-border-subtle);
-  border-top: 10px solid var(--chakra-colors-brand-green-solid);
-  border-radius: 50%;
-  width: 50px;
-  height: 50px;
-  animation: spin 2s linear infinite;
-}
-
-@keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-/* DESIGN.md §7: every animation needs a prefers-reduced-motion story. The
-   spin had none. Reduced motion drops the rotation and leaves a static ring;
-   the required visible "Loading…" label lives in the component that renders
-   .loader (out of this file's scope) and is shown regardless of motion
-   preference. */
-@media (prefers-reduced-motion: reduce) {
-  .loader {
-    animation: none;
-  }
-}
-
 /* hide Firebase Emulator warning banner, we are using custom one */
 .firebase-emulator-warning {
   display: none;

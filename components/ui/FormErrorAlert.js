@@ -35,12 +35,15 @@ import { Alert, Text } from "@chakra-ui/react";
  *
  * @param {React.ReactNode} children - The error message. Nothing renders
  *   if this is falsy (null, undefined, "").
+ *
+ * Remaining props (mt, mb, ...) pass through to Alert.Root so call sites
+ * can space the alert without wrapping it.
  */
-export default function FormErrorAlert({ children }) {
+export default function FormErrorAlert({ children, ...rest }) {
   if (!children) return null;
 
   return (
-    <Alert.Root status="error" borderRadius="md" role="alert">
+    <Alert.Root status="error" borderRadius="md" role="alert" {...rest}>
       <Alert.Indicator />
       <Text fontSize="sm">{children}</Text>
     </Alert.Root>

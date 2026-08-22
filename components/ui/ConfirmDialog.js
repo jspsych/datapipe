@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Alert, Button, CloseButton, Dialog, Text } from "@chakra-ui/react";
+import { Button, CloseButton, Dialog } from "@chakra-ui/react";
+import FormErrorAlert from "./FormErrorAlert";
 
 /**
  * Confirmation dialog for consequential actions (disconnecting a provider,
@@ -83,10 +84,7 @@ export default function ConfirmDialog({
           <Dialog.Body>
             {children}
             {error && (
-              <Alert.Root status="error" borderRadius="md" mt={4}>
-                <Alert.Indicator />
-                <Text fontSize="sm">{error}</Text>
-              </Alert.Root>
+              <FormErrorAlert mt={4}>{error}</FormErrorAlert>
             )}
           </Dialog.Body>
 
@@ -99,7 +97,7 @@ export default function ConfirmDialog({
               Cancel
             </Button>
             <Button
-              colorPalette={destructive ? "red" : "brandGreen"}
+              colorPalette={destructive ? "brandRed" : "brandGreen"}
               variant="solid"
               loading={isPending}
               onClick={handleConfirm}
