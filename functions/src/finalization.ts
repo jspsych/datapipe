@@ -45,6 +45,7 @@ import {
   isArchiveName,
   acquireLease,
   releaseLease,
+  sealedBatchMemberHashes,
 } from "./compaction.js";
 
 // Fixed name, unlike compaction's numbered datapipe-batch-NNNN.zip: the
@@ -256,8 +257,54 @@ async function runFinalization(experimentID: string): Promise<Omit<FinalizationR
       };
     }
 
-    // Every file is both archived and removed -- see DESCRIPTOR above.
-    const members = files;
+    // Every file is removed -- see DESCRIPTOR above -- but not every file is
+    // ARCHIVED, and the two sets genuinely differ.
+    //
+    // A loose file whose claim hash is already sealed into a batch archive is
+    // a duplicate of content this record already holds: compaction verified
+    // the archive, sealed the claim, and then failed to delete the original.
+    // That is a tolerated outcome for compaction (nothing is lost, and the
+    // next pass skips it), but finalization merges everything it can see, so
+    // without this filter the same bytes land in the final archive twice --
+    // once at data/raw/x.json from the batch, and once at a mangled
+    // "x.json__data/raw/x.json" from mergeEntries' collision fallback. A
+    // Psych-DS dataset containing a duplicate of every unluckily-undeleted
+    // file is not one anybody would want to publish.
+    //
+    // Observed live rather than theorised: Zenodo rejected 3 of 75 deletes
+    // with "Not a valid value." on 2026-08-22, and the keys were valid and
+    // still addressable afterwards, so this is a provider fault we cannot
+    // prevent -- only decline to propagate.
+    //
+    // They are still REMOVED. The redundant copy has no reason to outlive
+    // finalization, and leaving it would defeat the "record ends as exactly
+    // one file" invariant just as surely as archiving it twice would.
+    const sealedHashes = await sealedBatchMemberHashes(experimentID);
+    const alreadyArchived = new Set(
+      files
+        .filter(
+          (file) =>
+            !isArchiveName(file.name) &&
+            // Belt and braces: NEVER_ARCHIVE keeps the two Psych-DS control
+            // files out of every batch, so neither can be sealed and neither
+            // can reach this branch. Excluding the descriptor explicitly
+            // anyway, because silently dropping it would produce an archive
+            // that is not a Psych-DS dataset, and that failure mode is worth
+            // more than one line of defence.
+            file.name !== DESCRIPTOR &&
+            sealedHashes.has(claimDocId(salt, file.name))
+        )
+        .map((file) => file.name)
+    );
+
+    if (alreadyArchived.size > 0) {
+      console.warn(
+        `finalization: ${experimentID} skipping ${alreadyArchived.size} loose file(s) already sealed ` +
+          `into a batch archive; they will be removed but not merged twice`
+      );
+    }
+
+    const members = files.filter((file) => !alreadyArchived.has(file.name));
     const removable = files;
 
     // "Nothing collected" is judged on DATA, not on file count: an experiment

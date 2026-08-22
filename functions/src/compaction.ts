@@ -420,6 +420,36 @@ export async function releaseLease(
   });
 }
 
+/**
+ * Every claim hash sealed into a COMPLETED batch archive for this experiment.
+ *
+ * Membership answers one question: "are these bytes already inside a sealed
+ * archive?" Sealing happens only after the archive has been uploaded AND its
+ * md5 verified (see sealAndDelete), so a hash in this set is proof the content
+ * is safely stored, independent of whether the loose original was successfully
+ * deleted afterwards.
+ *
+ * That distinction is the point. Deletes can fail -- Zenodo returned "Not a
+ * valid value." for 3 of 75 on the test site, 2026-08-22 -- and compaction
+ * deliberately tolerates it: the originals stay loose and are skipped by the
+ * next pass. Correct for compaction, but it leaves the same content in two
+ * places, and finalization merges everything it can see.
+ *
+ * Only "sealed" batches count. An "uploading" batch is a pass that has not yet
+ * proven its archive landed; treating its members as already-stored would be
+ * exactly the mistake this set exists to prevent.
+ */
+export async function sealedBatchMemberHashes(experimentID: string): Promise<Set<string>> {
+  const snapshot = await batchesCollection(experimentID).where("status", "==", "sealed").get();
+  const hashes = new Set<string>();
+  for (const doc of snapshot.docs) {
+    for (const hash of (doc.data() as BatchRecord).memberHashes ?? []) {
+      hashes.add(hash);
+    }
+  }
+  return hashes;
+}
+
 interface BatchRecord {
   index: number;
   archiveName: string;
