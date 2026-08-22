@@ -68,7 +68,7 @@ export default function Navbar() {
         color={"fg"}
       >
         <HStack gap={4} alignItems={"center"} pe={"2"}>
-          <NextLink href="/">
+          <NextLink href="/" className="dp-logo-link">
             <Box display={"flex"} alignItems={"center"} gap={2.5} pr={10}>
               {/* The mark and wordmark render in the logo's own colors, not
                   the page `fg` -- DESIGN.md §1 "Logo" / "The navbar is
