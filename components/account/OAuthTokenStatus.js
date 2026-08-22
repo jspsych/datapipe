@@ -68,7 +68,7 @@ export default function OAuthTokenStatus({ data }) {
           <Box>
             <Alert.Title>Re-authorization required</Alert.Title>
             <Alert.Description>
-              <VStack align="start" gap={3} mt={1}>
+              <VStack align="start" gap={3} mt={2}>
                 <Text fontSize="sm">
                   DataPipe&apos;s permission to write to your OSF account has
                   expired, so any experiment still sending data to OSF has

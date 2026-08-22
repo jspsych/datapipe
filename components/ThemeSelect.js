@@ -36,7 +36,7 @@ export default function ThemeSelect() {
 
   return (
     <Menu.ItemGroup>
-      <Menu.ItemGroupLabel color="fg.muted" px="3" py="1.5" fontSize="sm">
+      <Menu.ItemGroupLabel color="fg.muted" px="3" py="2" fontSize="sm">
         Theme
       </Menu.ItemGroupLabel>
       <Menu.RadioItemGroup

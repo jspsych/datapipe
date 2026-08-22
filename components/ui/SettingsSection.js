@@ -76,7 +76,7 @@ export default function SettingsSection({
         size="md"
         fontWeight="semibold"
         color={isDanger ? "brandRed.fg" : "fg"}
-        mb={description ? 1 : 4}
+        mb={description ? 2 : 4}
       >
         {title}
       </Heading>
@@ -101,7 +101,7 @@ export default function SettingsSection({
       borderWidth="1px"
       borderColor="brandRed.border"
       borderRadius="md"
-      p={4}
+      p={6}
     >
       {content}
     </Box>

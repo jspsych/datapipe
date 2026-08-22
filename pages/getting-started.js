@@ -59,7 +59,10 @@ function StepCard({ number, title, children }) {
           {title}
         </Heading>
       </HStack>
-      <Stack gap={4} pl={[0, "48px"]}>
+      {/* 12 == 48px == StepNumber (36px) + the header HStack's gap={3}:
+          the step body hangs off the title, not the number. Was the raw
+          string "48px". */}
+      <Stack gap={4} pl={[0, 12]}>
         {children}
       </Stack>
     </Box>
@@ -78,7 +81,7 @@ function Callout({ children }) {
       borderColor="brandGreen.border"
       borderRadius={8}
       px={4}
-      py={3}
+      py={4}
     >
       <HStack gap={2} alignItems="flex-start">
         <Shield size={18} style={{ flexShrink: 0, marginTop: "3px" }} />
@@ -107,7 +110,7 @@ function CollapsibleSection({ title, children }) {
       <Collapsible.Content>
         {/* Decorative hairline inside an already-grouped (collapsed)
             region, not the section's own boundary -- border.subtle. */}
-        <Stack gap={3} pt={2} pl={4} borderLeft="1px solid" borderColor="border.subtle">
+        <Stack gap={3} pt={2} pb={4} pl={4} borderLeft="1px solid" borderColor="border.subtle">
           {children}
         </Stack>
       </Collapsible.Content>
@@ -138,13 +141,13 @@ function ProviderOption({ name, summary, landsIn, connect, limits }) {
     // uses `border` (gray.500, 4.50 light / 3.43 dark) rather than
     // `border.subtle`, which DESIGN.md bans as a lone grouping device.
     <Box borderWidth="1px" borderColor="border" borderRadius={8} p={4}>
-      <Text fontWeight="semibold" color="brandOrange.fg" mb={1}>
+      <Text fontWeight="semibold" color="brandOrange.fg" mb={2}>
         {name}
       </Text>
       <Text fontSize="sm" mb={3}>
         {summary}
       </Text>
-      <Stack gap={1}>
+      <Stack gap={2}>
         <Text fontSize="sm" color="fg.muted">
           <Text as="span" fontWeight="semibold">Data lands in:</Text> {landsIn}
         </Text>
@@ -172,7 +175,11 @@ export default function GettingStarted() {
     : "Experiments already collecting keep running for now.";
 
   return (
-    <Stack w={["95%", 960]} gap={8} py={4}>
+    // 960 is one of the stray measures DESIGN.md §4 names for consolidation;
+    // this is a public docs page with cards, code blocks and a provider grid,
+    // so it takes the 1100px measure. `py={4}` is gone: the navbar gap and
+    // the footer gap are set once in _app.js for every page.
+    <Stack w="100%" maxW="1100px" gap={8}>
       <VStack gap={2} align="start">
         <Heading as="h1" size="2xl">
           Getting Started
@@ -428,7 +435,13 @@ export default function GettingStarted() {
         </Text>
       </StepCard>
 
-      <StepCard number={8} title="When data collection ends">
+      {/* mt={8} over the stack's gap={8} = 64px. Eight steps at an
+          identical 32px told the reader nothing about which one is
+          different; this last one is the irreversible one (finalizing
+          cannot be undone), so it gets the break DESIGN.md §4 reserves for
+          a consequential section. */}
+      <Box mt={8}>
+        <StepCard number={8} title="When data collection ends">
         <Text>
           When your study is finished, <strong>finalize</strong> the
           experiment from its dashboard. DataPipe merges every remaining data
@@ -442,7 +455,8 @@ export default function GettingStarted() {
           it. Publishing the record, and with it issuing the DOI, stays your
           decision and happens on Zenodo itself.
         </Text>
-      </StepCard>
+        </StepCard>
+      </Box>
     </Stack>
   );
 }

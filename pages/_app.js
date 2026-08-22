@@ -3,7 +3,7 @@ import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import { UserContext } from "../lib/context";
 import { ChakraProvider } from "@chakra-ui/react";
-import { Box, Center } from "@chakra-ui/react";
+import { Box, Flex } from "@chakra-ui/react";
 import { ThemeProvider } from "next-themes";
 
 import { auth } from "../lib/firebase";
@@ -26,14 +26,32 @@ function MyApp({ Component, pageProps }) {
       justifyContent="space-between"
     >
       <Navbar />
-      <Center
+      {/* This was a <Center>, which is `align-items: center` in BOTH axes:
+          the navbar-to-content gap was never specified, it was whatever
+          flexbox had left over -- zero on any page taller than the viewport
+          (the owner's "very tight" report) and a floating, vertically
+          centered column on any page shorter than it. The gap is now
+          declared once, here, for every page that uses the default layout,
+          rather than each page growing its own top margin.
+
+          DESIGN.md §4 ladder: pt 8/12 opens the page under the nav; the
+          larger pb 12/16 makes the hand-off into the footer band deliberate
+          and asymmetric -- more air before a change of surface than after a
+          change of chrome. */}
+      <Flex
+        as="main"
+        direction="column"
+        alignItems="center"
+        w="100%"
         flexGrow={1}
         flexShrink={0}
         flexBasis="auto"
-        justifySelf="flex-start"
+        px={4}
+        pt={{ base: 8, md: 12 }}
+        pb={{ base: 12, md: 16 }}
       >
         {page}
-      </Center>
+      </Flex>
       <Footer />
       {
         /* A `!== ""` guard renders whenever the var is UNDEFINED

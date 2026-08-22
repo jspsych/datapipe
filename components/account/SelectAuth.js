@@ -90,7 +90,7 @@ export default function SelectAuth({ data }) {
 
     if (!usingPersonalToken) {
         return (
-            <VStack gap={1} w="100%" align="stretch">
+            <VStack gap={2} w="100%" align="stretch">
                 <HStack justifyContent="space-between" w="100%" flexWrap="wrap" gap={3}>
                     <HStack>
                         <Text fontSize="lg">OSF account</Text>
@@ -123,7 +123,7 @@ export default function SelectAuth({ data }) {
     }
 
     return (
-        <VStack gap={1} w="100%" align="stretch">
+        <VStack gap={2} w="100%" align="stretch">
             <HStack justifyContent="space-between" w="100%" flexWrap="wrap" gap={3}>
                 <HStack>
                     <Text fontSize="lg">OSF token</Text>

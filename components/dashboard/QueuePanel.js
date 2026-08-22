@@ -341,7 +341,7 @@ export default function QueuePanel({ entries, experimentId }) {
     >
       <Alert.Indicator />
       <Box flex="1" minW={0}>
-        <Alert.Title mb={1}>{alertTitle}</Alert.Title>
+        <Alert.Title mb={2}>{alertTitle}</Alert.Title>
         <Text fontSize="sm" mb={4}>{alertDescription}</Text>
         {downloadError && (
           <Box mb={4}>
@@ -362,16 +362,16 @@ export default function QueuePanel({ entries, experimentId }) {
                 your storage provider immediately. If that fails, DataPipe saves a
                 copy and retries automatically. Common reasons include:
               </Text>
-              <Box as="ul" fontSize="sm" pl={5} pb={3} listStyleType="disc">
-                <Box as="li" mb={1}>
+              <Box as="ul" fontSize="sm" pl={6} pb={3} listStyleType="disc">
+                <Box as="li" mb={2}>
                   <strong>Server memory limit</strong> — Large data submissions
                   can occasionally exceed the server&apos;s memory capacity.
                 </Box>
-                <Box as="li" mb={1}>
+                <Box as="li" mb={2}>
                   <strong>Storage provider unavailable</strong> — Your storage
                   provider may be temporarily down or rate-limiting requests.
                 </Box>
-                <Box as="li" mb={1}>
+                <Box as="li" mb={2}>
                   <strong>Configuration issue</strong> — There may be a problem
                   with your storage provider settings or authentication token.
                 </Box>
@@ -438,7 +438,7 @@ export default function QueuePanel({ entries, experimentId }) {
                     {statusIndicator(entry.status)}
                     {(entry.status === "pending" || entry.status === "processing") &&
                       entry.nextRetryAt && (
-                        <Text fontSize="xs" color="fg.muted" mt={1}>
+                        <Text fontSize="xs" color="fg.muted" mt={2}>
                           Next retry {nextRetryText(entry.nextRetryAt)}
                         </Text>
                       )}
@@ -496,7 +496,7 @@ export function UploadsResolvedNotice() {
       borderColor="border"
       borderRadius="md"
       px={4}
-      py={3}
+      py={4}
       role="status"
       aria-live="polite"
     >

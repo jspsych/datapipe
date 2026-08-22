@@ -145,7 +145,7 @@ export default function FinalizeControl({ data, experimentId }) {
         borderColor="border"
         borderRadius="md"
         px={4}
-        py={3}
+        py={4}
       >
         <Stack gap={2}>
           <StatusIndicator status="ok" label="This experiment has been finalized." />
@@ -183,7 +183,7 @@ export default function FinalizeControl({ data, experimentId }) {
           variant="subtle"
         >
           <Alert.Indicator />
-          <Stack gap={1}>
+          <Stack gap={2}>
             <Alert.Title>{terminalCopy.title}</Alert.Title>
             <Text fontSize="sm">{terminalCopy.describe(data?.finalization?.detail)}</Text>
           </Stack>

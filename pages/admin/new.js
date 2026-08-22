@@ -282,7 +282,7 @@ function NewExperimentForm() {
           when content arrived (DESIGN.md §7: skeletons for content loading in
           place, spinners for actions). This holds the form's shape. */}
       {loading && (
-        <Stack gap={6} w="100%" maxW="560px" px={4}>
+        <Stack gap={6} w="100%" maxW="560px">
           <Skeleton height="40px" width="60%" />
           <Skeleton height="80px" />
           <Skeleton height="80px" />
@@ -290,7 +290,7 @@ function NewExperimentForm() {
       )}
       {!loading && (
         // 560px, DESIGN.md §4's single-subject column. Was a stray 540px.
-        <Stack gap={6} w="100%" maxW="560px" px={4}>
+        <Stack gap={6} w="100%" maxW="560px">
           <PageHeader
             title="Create an experiment"
             purpose="An experiment gives you an ID to paste into your study, and a folder for its data to land in."
@@ -313,7 +313,12 @@ function NewExperimentForm() {
               retires the hand-written `role="radiogroup"` + `aria-label` the
               old markup carried, which duplicated the visible label for
               screen readers. */}
+          {/* mt={4} on top of the stack's gap={6} = 40px, DESIGN.md §4's
+              routine-section distance. This page was ONE flat gap={6}: the
+              page title, the provider decision, every field and the submit
+              button were all 24px apart, so nothing on it was grouped. */}
           <RadioGroup.Root
+            mt={4}
             name="storage-provider"
             value={provider}
             onValueChange={(e) => handleProviderChange(e.value)}
@@ -346,7 +351,7 @@ function NewExperimentForm() {
           </RadioGroup.Root>
 
           {!providerConnected && (
-            <VStack gap={3} align="flex-start">
+            <VStack gap={3} mt={4} align="flex-start">
               <GuidanceLine>
                 You cannot create an experiment until DataPipe has somewhere to
                 put its data. Connecting your{" "}
@@ -368,7 +373,10 @@ function NewExperimentForm() {
           )}
 
           {providerConnected && (
-            <>
+            // A Stack, not a bare fragment: "describe the experiment" is a
+            // section distinct from "choose where data goes" above it, and
+            // mt={4} over the parent gap gives it the same 40px break.
+            <Stack gap={6} mt={4}>
               {/* Was a bare `<Text color="red.400">` -- no role="alert", no
                   icon, no mapping, a raw adapter string shown verbatim.
                   FormErrorAlert is the app's one error surface (DESIGN.md
@@ -473,14 +481,17 @@ function NewExperimentForm() {
                 </Field.Root>
               )}
 
+              {/* The submit sat exactly as far from the last field as the
+                  fields sat from each other. */}
               <Button
                 onClick={handleProviderSubmit}
                 loading={providerSubmitting}
                 colorPalette="brandGreen"
+                mt={4}
               >
                 Create experiment
               </Button>
-            </>
+            </Stack>
           )}
         </Stack>
       )}

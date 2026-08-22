@@ -88,7 +88,7 @@ export default function ConfirmDialog({
             )}
           </Dialog.Body>
 
-          <Dialog.Footer>
+          <Dialog.Footer gap={3}>
             <Button
               variant="outline"
               onClick={() => onOpenChange({ open: false })}
@@ -101,7 +101,6 @@ export default function ConfirmDialog({
               variant="solid"
               loading={isPending}
               onClick={handleConfirm}
-              ml={3}
             >
               {confirmLabel}
             </Button>

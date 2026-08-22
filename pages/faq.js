@@ -41,8 +41,13 @@ export default function FAQ() {
   }, []);
 
   return (
-    <Stack maxW={800} w="100%" my={10}>
-      <Heading as="h1" my={4}>
+    // maxW 800 was a fifth measure. This page is pure prose -- no tables, no
+    // code -- so it takes §4's single-subject column (560px) rather than the
+    // 1100px that getting-started and api-docs need for their tables.
+    // `my={10}` removed: _app.js owns the navbar and footer gaps, and the
+    // page-level margin was stacking on top of them.
+    <Stack maxW="560px" w="100%">
+      <Heading as="h1" mb={6}>
         FAQ
       </Heading>
       <Accordion.Root value={openItems} onValueChange={(e) => setOpenItems(e.value)} multiple collapsible>
@@ -214,8 +219,10 @@ export default function FAQ() {
           <Text mb={2}>
             There are a few risks to be aware of:
           </Text>
-          <ol style={{ paddingLeft: "1.5em" }}>
-            <li style={{ marginBottom: "0.5em" }}>
+          {/* Raw em inline styles (1.5em / 0.5em) replaced with the ladder --
+              pl={6} / mb={2} is the same list geometry QueuePanel uses. */}
+          <Box as="ol" pl={6}>
+            <Box as="li" mb={2}>
               <strong>Authorization tokens.</strong> DataPipe needs permission
               to write to your storage account, and all tokens are stored
               encrypted. For Google Drive and Zenodo you authorize DataPipe
@@ -223,14 +230,14 @@ export default function FAQ() {
               Dataverse you supply an API token, so create one specifically for
               DataPipe and revoke it when you are done collecting data. You can
               disconnect any provider from your account settings at any time.
-            </li>
-            <li style={{ marginBottom: "0.5em" }}>
+            </Box>
+            <Box as="li" mb={2}>
               <strong>Fake or spam data.</strong> As with any online experiment,
               a technically savvy user could submit fabricated data or spam
               files to your storage. DataPipe provides validation rules and
               session limits to reduce this risk.
-            </li>
-            <li>
+            </Box>
+            <Box as="li">
               <strong>Support availability.</strong> DataPipe is not a
               commercial product with a dedicated support team. However,
               the{" "}
@@ -239,8 +246,8 @@ export default function FAQ() {
               </Link>{" "}
               and thoroughly tested, and the service runs on Google Cloud
               infrastructure.
-            </li>
-          </ol>
+            </Box>
+          </Box>
         </FAQItem>
         <FAQItem value="item-8" question="How does data validation work?">
           <Text mb={2}>
@@ -406,13 +413,20 @@ function FAQItem({ question, children, value }) {
     <Box id={value}>
       <Accordion.Item value={value}>
         <Accordion.ItemTrigger>
-          <Heading as="h2" size="md" my={2} flex="1" textAlign="left">
+          {/* my={3}: 18 of these triggers stack down the page, and at my={2}
+              each row was ~36px. 12px around a 24px heading line is a 48px
+              target. */}
+          <Heading as="h2" size="md" my={3} flex="1" textAlign="left">
             {question}
           </Heading>
           <Accordion.ItemIndicator />
         </Accordion.ItemTrigger>
         <Accordion.ItemContent>
-          <Box pb={4} style={{ whiteSpace: "pre-line" }}>
+          {/* The answer had no pt at all -- it opened flush against its own
+              trigger -- and the same pb={4} below it, so it sat equidistant
+              from its question and the next one. Closer to the question it
+              answers than to the question after it. */}
+          <Box pt={2} pb={6} style={{ whiteSpace: "pre-line" }}>
             {children}
           </Box>
         </Accordion.ItemContent>

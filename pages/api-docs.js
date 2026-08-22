@@ -66,7 +66,10 @@ function ErrorRow({ code, status, children }) {
 
 export default function ApiDocs() {
   return (
-    <Stack w={["95%", 960]} gap={12} py={4}>
+    // 960 -> the committed 1100px measure (DESIGN.md §4), which this page
+    // wants anyway: it carries three reference tables, one of them 22 rows.
+    // `py={4}` removed -- _app.js owns the navbar and footer gaps now.
+    <Stack w="100%" maxW="1100px" gap={12}>
 
       <Stack gap={3}>
         <Heading as="h1" size="xl">

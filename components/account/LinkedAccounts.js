@@ -127,7 +127,7 @@ export default function LinkedAccounts() {
         const last = linked && !canUnlink(linkedIds, entry.providerId);
 
         return (
-          <VStack key={entry.id} w="100%" align="stretch" gap={1}>
+          <VStack key={entry.id} w="100%" align="stretch" gap={2}>
             <HStack justifyContent="space-between" w="100%" flexWrap="wrap" gap={3}>
               <HStack>
                 {Icon && <Icon />}

@@ -225,8 +225,10 @@ function ProviderConnectCallbackPage() {
 
       case "processing":
       default:
+        // gap={4}: the spinner, its heading and its explanation are one
+        // labelled loader, not three equidistant siblings.
         return (
-          <VStack gap={6}>
+          <VStack gap={4}>
             <Center>
               <Spinner size="xl" color="brandGreen.solid" borderWidth="4px" />
             </Center>
@@ -246,7 +248,9 @@ function ProviderConnectCallbackPage() {
       w="100%"
       maxW="560px"
       mx="auto"
-      px={4}
+      // No px here: this Card.Root padding sat INSIDE the card border and
+      // added to Card.Body's p={8}, making the card 48px horizontally and
+      // 32px vertically. The page gutter belongs to _app.js.
       variant="unstyled"
       bg="bg.panel"
       borderWidth="1px"
@@ -254,7 +258,10 @@ function ProviderConnectCallbackPage() {
       rounded="lg"
     >
       <Card.Body p={8}>
-        <VStack gap={6}>
+        {/* gap={8}, not gap={6}: the page heading and the status block below
+            it used to sit exactly as far apart as the elements INSIDE that
+            block, so the h1 read as one more line of the message. */}
+        <VStack gap={8}>
           <Heading as="h1" fontSize="2xl" fontWeight="700" textAlign="center" color="fg">
             Connect a storage provider
           </Heading>
