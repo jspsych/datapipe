@@ -1,5 +1,5 @@
-import Link from "next/link";
-import { useContext, useState, useEffect } from "react";
+import NextLink from "next/link";
+import { useContext } from "react";
 import { UserContext } from "../lib/context";
 import {
   Box,
@@ -9,443 +9,288 @@ import {
   Text,
   Button,
   Stack,
+  Link,
 } from "@chakra-ui/react";
-import { ArrowRight, Database, Shield, Zap, BookOpen } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import TestEnvironmentWarning from "../components/TestEnvironmentWarning";
+import CodeSpecimen from "../components/home/CodeSpecimen";
+import ArrivalsPanel from "../components/home/ArrivalsPanel";
+import { osfSunsetLabel } from "../lib/osf-sunset";
 
+// Prose links carry a PERSISTENT underline. styles/globals.css strips
+// underlines globally, and no color on this palette can carry a link by color
+// alone in both modes -- against body text, light brandGreen.800 vs gray.700 is
+// 2.04:1 and dark brandGreen.300 vs gray.300 is 1.36:1, both under WCAG F73's
+// 3:1. The underline is what makes a link a link here; the color is secondary.
+function ProseLink({ href, external, children }) {
+  const style = {
+    color: "brandGreen.fg",
+    textDecoration: "underline",
+    textUnderlineOffset: "2px",
+    _hover: { textDecorationThickness: "2px" },
+  };
 
-function FeatureCard({ icon, title, children }) {
-  return (
-    <VStack
-      align="start"
-      gap={3}
-      flex="1"
-      minW="200px"
-    >
-      <Box
-        color="brandOrange.400"
-      >
-        {icon}
-      </Box>
-      <Text fontWeight="bold" fontSize="lg">
-        {title}
-      </Text>
-      <Text color="gray.400" fontSize="sm" lineHeight="tall">
+  if (external) {
+    return (
+      <Link href={href} target="_blank" rel="noopener noreferrer" {...style}>
         {children}
-      </Text>
-    </VStack>
+      </Link>
+    );
+  }
+
+  return (
+    <Link asChild {...style}>
+      <NextLink href={href}>{children}</NextLink>
+    </Link>
   );
 }
 
 function StepItem({ number, children }) {
   return (
     <HStack gap={3} align="start">
-      <Text
-        fontWeight="bold"
-        fontSize="sm"
-        color="brandGreen.400"
-        flexShrink={0}
-        mt="1px"
-      >
+      <Text fontWeight="bold" color="brandGreen.fg" flexShrink={0}>
         {number}.
       </Text>
-      <Text color="gray.300" fontSize="sm">
-        {children}
-      </Text>
+      {/* The three steps are the argument for the product, not a hint under a
+          field: body size, body color (DESIGN.md §3). */}
+      <Text lineHeight="tall">{children}</Text>
     </HStack>
   );
 }
 
-const snippets = [
-  {
-    label: "jsPsych",
-    filename: "experiment.html",
-    caption: "Using jsPsych? One trial saves all your data.",
-    lines: [
-      { color: "gray.500", text: "// Save data with the jsPsych pipe plugin\n" },
-      { color: "gray.300", text: "const " },
-      { color: "brandOrange.300", text: "save_data" },
-      { color: "gray.300", text: " = {\n" },
-      { color: "gray.300", text: "  type: " },
-      { color: "brandGreen.300", text: "jsPsychPipe" },
-      { color: "gray.300", text: ",\n" },
-      { color: "gray.300", text: '  action: ' },
-      { color: "brandOrange.300", text: '"save"' },
-      { color: "gray.300", text: ",\n" },
-      { color: "gray.300", text: "  experiment_id: " },
-      { color: "brandOrange.300", text: '"your_id"' },
-      { color: "gray.300", text: ",\n" },
-      { color: "gray.300", text: "  filename: " },
-      { color: "brandOrange.300", text: "filename" },
-      { color: "gray.300", text: ",\n" },
-      { color: "gray.300", text: "  data_string: " },
-      { color: "gray.400", text: "() =>\n" },
-      { color: "gray.300", text: "    jsPsych.data.get()." },
-      { color: "brandGreen.300", text: "csv" },
-      { color: "gray.300", text: "()\n" },
-      { color: "gray.300", text: "};" },
-    ],
-  },
-  {
-    label: "JavaScript",
-    filename: "experiment.js",
-    caption: "Not using jsPsych? A single fetch call is all you need.",
-    lines: [
-      { color: "gray.500", text: "// Send data with a fetch request\n" },
-      { color: "brandGreen.300", text: "fetch" },
-      { color: "gray.300", text: "(url, {\n" },
-      { color: "gray.300", text: "  method: " },
-      { color: "brandOrange.300", text: '"POST"' },
-      { color: "gray.300", text: ",\n" },
-      { color: "gray.300", text: "  headers: {\n" },
-      { color: "gray.300", text: "    " },
-      { color: "brandOrange.300", text: '"Content-Type"' },
-      { color: "gray.300", text: ": " },
-      { color: "brandOrange.300", text: '"application/json"' },
-      { color: "gray.300", text: "\n  },\n" },
-      { color: "gray.300", text: "  body: JSON." },
-      { color: "brandGreen.300", text: "stringify" },
-      { color: "gray.300", text: "({\n" },
-      { color: "gray.300", text: "    experimentID: " },
-      { color: "brandOrange.300", text: '"your_id"' },
-      { color: "gray.300", text: ",\n" },
-      { color: "gray.300", text: "    filename: " },
-      { color: "brandOrange.300", text: '"subject01.csv"' },
-      { color: "gray.300", text: ",\n" },
-      { color: "gray.300", text: "    data: " },
-      { color: "brandOrange.300", text: "dataAsString" },
-      { color: "gray.300", text: "\n  })\n});" },
-    ],
-  },
-];
-
-function HeroCodeSnippet() {
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [fading, setFading] = useState(false);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setFading(true);
-      setTimeout(() => {
-        setActiveIndex((i) => (i + 1) % snippets.length);
-        setFading(false);
-      }, 300);
-    }, 6000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const snippet = snippets[activeIndex];
-
+function Feature({ title, children }) {
   return (
-    <Box
-      display={["none", "none", "block"]}
-      flex="1"
-      maxW="440px"
-    >
-      <Box
-        bg="gray.950"
-        borderRadius={12}
-        border="1px solid"
-        borderColor="gray.700"
-        overflow="hidden"
-      >
-        <HStack
-          px={4}
-          py={2}
-          bg="gray.900"
-          borderBottom="1px solid"
-          borderColor="gray.800"
-          justifyContent="space-between"
-        >
-          <HStack gap={2}>
-            <Box w="10px" h="10px" borderRadius="full" bg="gray.700" />
-            <Box w="10px" h="10px" borderRadius="full" bg="gray.700" />
-            <Box w="10px" h="10px" borderRadius="full" bg="gray.700" />
-            <Text fontSize="xs" color="gray.500" ml={2}>{snippet.filename}</Text>
-          </HStack>
-          <HStack gap={0}>
-            {snippets.map((s, i) => (
-              <Button
-                key={s.label}
-                variant="ghost"
-                size="xs"
-                px={2}
-                h="24px"
-                fontSize="xs"
-                color={i === activeIndex ? "white" : "gray.600"}
-                bg={i === activeIndex ? "gray.800" : "transparent"}
-                borderRadius={4}
-                _hover={{ color: "white", bg: "gray.800" }}
-                onClick={() => {
-                  setFading(true);
-                  setTimeout(() => {
-                    setActiveIndex(i);
-                    setFading(false);
-                  }, 200);
-                }}
-              >
-                {s.label}
-              </Button>
-            ))}
-          </HStack>
-        </HStack>
-        <Box position="relative">
-          {snippets.map((s, idx) => (
-            <Box
-              key={s.label}
-              as="pre"
-              p={5}
-              fontSize="sm"
-              fontFamily="monospace"
-              lineHeight="1.7"
-              whiteSpace="pre"
-              opacity={idx === activeIndex && !fading ? 1 : 0}
-              transition="opacity 0.3s ease"
-              position={idx === 1 ? "relative" : "absolute"}
-              top={idx === 1 ? undefined : 0}
-              left={idx === 1 ? undefined : 0}
-              right={idx === 1 ? undefined : 0}
-            >
-              {s.lines.map((line, i) => (
-                <Text as="span" color={line.color} key={`${idx}-${i}`}>
-                  {line.text}
-                </Text>
-              ))}
-            </Box>
-          ))}
-        </Box>
-      </Box>
-      <Text
-        fontSize="xs"
-        color="gray.400"
-        mt={3}
-        textAlign="center"
-        minH="1.2em"
-        opacity={fading ? 0 : 1}
-        transition="opacity 0.3s ease"
-      >
-        {snippet.caption}
+    <VStack align="start" gap={2} flex="1" minW="200px">
+      <Heading as="h3" fontSize="lg" fontWeight="600">
+        {title}
+      </Heading>
+      <Text color="fg.muted" lineHeight="tall">
+        {children}
       </Text>
-    </Box>
+    </VStack>
   );
 }
 
 export default function Home() {
   const { user } = useContext(UserContext);
+  // Read from lib/osf-sunset.js, like the FAQ and the getting-started guide, so
+  // the three surfaces can never disagree about the date. Tolerates a null date
+  // the same way they do.
+  const osfDeadline = osfSunsetLabel();
+
+  const primaryHref = user ? "/admin" : "/signup";
+  const primaryLabel = user ? "Go to dashboard" : "Get started";
 
   return (
     <Box w="100%">
       {/* Hero */}
-      <Box
-        px={[4, 8, 12]}
-        pt={[12, 20]}
-        pb={[16, 24]}
-        maxW="1100px"
-        mx="auto"
-      >
+      <Box px={[4, 8, 12]} pt={[12, 16]} pb={[12, 16]} maxW="1100px" mx="auto">
         <Stack
           direction={["column", "column", "row"]}
-          gap={[10, 10, 16]}
-          align={["start", "start", "center"]}
+          gap={[12, 12, 16]}
+          align="start"
         >
-          <VStack gap={6} align="start" flex="1">
+          <VStack gap={6} align="start" flex="1" maxW="640px">
+            {/* No accent word. The only saturated pixels above the fold are the
+                primary button and the code specimen, which is what "plain and
+                trustworthy" looks like as a decision rather than an absence.
+                The retired orange accent was also 1.81:1 on the light page. */}
             <Heading
               as="h1"
-              fontSize={["3xl", "5xl", "6xl"]}
-              fontWeight="800"
-              lineHeight="1.1"
-              letterSpacing="-0.02em"
+              fontSize={["3xl", "4xl", "5xl"]}
+              fontWeight="700"
+              lineHeight="1.15"
             >
-              Experiment data,{" "}
-              <Text as="span" color="brandOrange.400">
-                straight to OSF.
-              </Text>
+              Experiment data, straight to storage you control.
             </Heading>
-            <Text
-              fontSize={["md", "lg"]}
-              color="gray.400"
-              maxW="540px"
-              lineHeight="tall"
-            >
-              A free, open-source service that sends data from any online
-              experiment directly to the Open Science Framework. No server
-              setup, no download step.
+            <Text fontSize={["md", "lg"]} color="fg.muted" lineHeight="tall">
+              DataPipe is a free, open-source service that sends data from any
+              online experiment to your own Google Drive, Dataverse, or Zenodo
+              account. No server to set up, no download step.
             </Text>
+            <Text lineHeight="tall">
+              The account stays yours throughout: DataPipe only ever asks for
+              permission to add files.
+            </Text>
+            {/* TODO(owner): retention claim -- needs a decision on what DataPipe
+                retains and for how long */}
             <HStack gap={4} pt={2} flexWrap="wrap">
-              {user ? (
-                <Link href="/admin">
-                  <Button
-                    colorPalette="brandGreen"
-                    size="lg"
-                  >
-                    Go to Dashboard <ArrowRight size={18} />
-                  </Button>
-                </Link>
-              ) : (
-                <Link href="/signup">
-                  <Button
-                    colorPalette="brandGreen"
-                    size="lg"
-                  >
-                    Get started <ArrowRight size={18} />
-                  </Button>
-                </Link>
-              )}
-              <Link href="/getting-started">
-                <Button
-                  variant="ghost"
-                  color="gray.400"
-                  size="lg"
-                  _hover={{ color: "white", bg: "transparent" }}
-                >
-                  How it works
-                </Button>
-              </Link>
+              {/* asChild, not <Link><Button> -- that rendered <a><button></a>:
+                  invalid HTML, two tab stops for one control, and a focus ring
+                  on the element that is not focused. */}
+              <Button asChild colorPalette="brandGreen" size="lg">
+                <NextLink href={primaryHref}>
+                  {primaryLabel} <ArrowRight size={18} />
+                </NextLink>
+              </Button>
+              {/* One primary action per screen (DESIGN.md §5). The secondary
+                  action is a neutral ghost and takes its colors from the recipe
+                  rather than naming them. */}
+              <Button asChild variant="ghost" size="lg">
+                <NextLink href="/getting-started">How it works</NextLink>
+              </Button>
             </HStack>
-            <Text fontSize="sm" color="gray.500">
+            <Text fontSize="sm" color="fg.muted">
               Built by the{" "}
-              <Link href="https://www.jspsych.org" target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>
-                <Text as="span" color="gray.300" _hover={{ textDecoration: "underline" }}>jsPsych</Text>
-              </Link>
-              {" "}team
+              <ProseLink href="https://www.jspsych.org" external>
+                jsPsych
+              </ProseLink>{" "}
+              team
             </Text>
           </VStack>
 
-          {/* Code snippet */}
-          <HeroCodeSnippet />
+          {/* The specimen: what you send, then what you get. It renders at every
+              breakpoint now -- it is the page's proof, and hiding it below 768px
+              meant most first visits (a link in a paper, a message from a
+              labmate) never saw it. */}
+          <VStack
+            gap={6}
+            align="stretch"
+            flex="1"
+            w="100%"
+            maxW={["100%", "100%", "480px"]}
+          >
+            <Box as="figure" m={0}>
+              <CodeSpecimen />
+              <Text as="figcaption" fontSize="sm" color="fg.muted" mt={3}>
+                The code is the same whichever provider you chose. Full details
+                are in the{" "}
+                <ProseLink href="/api-docs">API reference</ProseLink>.
+              </Text>
+            </Box>
+            <Box as="figure" m={0}>
+              <ArrivalsPanel />
+              <Text as="figcaption" fontSize="sm" color="fg.muted" mt={3}>
+                Illustration. Each session arrives as its own file in the
+                folder, dataset, or deposition you connected.
+              </Text>
+            </Box>
+          </VStack>
         </Stack>
       </Box>
 
-      {/* How it works */}
-      <Box
-        bg="black"
-        px={[4, 8, 12]}
-        py={[12, 16]}
-      >
+      {/* How it works. No band: #000 was 1.27:1 against the page and
+          unsalvageable in light mode, and spacing carries the grouping
+          (DESIGN.md §4). No eyebrow: §8 ban 1. */}
+      <Box px={[4, 8, 12]} py={[12, 16]}>
         <Box maxW="1100px" mx="auto">
-          <Stack
-            direction={["column", "column", "row"]}
-            gap={[10, 10, 16]}
-          >
-            <VStack align="start" gap={4} flex="1">
-              <Text
-                fontSize="xs"
-                fontWeight="bold"
-                textTransform="uppercase"
-                letterSpacing="0.1em"
-                color="brandGreen.400"
-              >
-                How it works
-              </Text>
-              <Heading
-                as="h2"
-                  fontSize={["xl", "2xl"]}
-                fontWeight="700"
-              >
+          <Stack direction={["column", "column", "row"]} gap={[8, 8, 16]}>
+            <Box flex="1">
+              <Heading as="h2" fontSize={["xl", "2xl"]} fontWeight="700">
                 Three steps to start collecting data
               </Heading>
-            </VStack>
-            <VStack align="start" gap={4} flex="1.5">
+            </Box>
+            <VStack align="start" gap={4} flex="1.5" maxW="70ch">
               <StepItem number="1">
-                Create an OSF project and link your OSF account to DataPipe.
+                Connect a storage provider — Google Drive, Dataverse, or Zenodo
+                — to your DataPipe account.
               </StepItem>
               <StepItem number="2">
-                Set up an experiment on DataPipe and add a few lines of code
-                to your study to send data through the API.
+                Create an experiment on DataPipe and add a few lines of code to
+                your study to send data through the API.
               </StepItem>
               <StepItem number="3">
-                Activate data collection. Participant data goes straight to
-                your OSF project as files — no downloads, no manual transfers.
+                Turn on data collection. Each participant&apos;s data goes
+                straight to your folder, dataset, or deposition — no downloads,
+                no manual transfers.
               </StepItem>
             </VStack>
           </Stack>
         </Box>
       </Box>
 
-      {/* Features */}
-      <Box
-        px={[4, 8, 12]}
-        py={[12, 16]}
-      >
+      {/* What DataPipe does */}
+      <Box px={[4, 8, 12]} py={[12, 16]}>
         <Box maxW="1100px" mx="auto">
-          <Text
-            fontSize="xs"
-            fontWeight="bold"
-            textTransform="uppercase"
-            letterSpacing="0.1em"
-            color="brandGreen.400"
-            mb={8}
-          >
-            Features
-          </Text>
+          <Heading as="h2" fontSize={["xl", "2xl"]} fontWeight="700" mb={8}>
+            What DataPipe does
+          </Heading>
 
-          {/* Born-open data */}
-          <HStack gap={[4, 6]} align="start" mb={[8, 8, 12]}>
-            <Box color="brandOrange.400" flexShrink={0} mt="2px">
-              <BookOpen size={24} />
-            </Box>
-            <VStack align="start" gap={1}>
-              <Text fontWeight="bold" fontSize="lg">
-                Born-open data collection
-              </Text>
-              <Text color="gray.400" fontSize="sm" lineHeight="tall">
-                DataPipe sends experiment data directly to a public repository
-                as it is collected, making openness the default rather than an
-                afterthought. Read more about the rationale and design in{" "}
-                <Link
-                  href="https://doi.org/10.3758/s13428-023-02161-x"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <Text as="span" color="gray.200" _hover={{ textDecoration: "underline" }}>
-                    <em>Behavior Research Methods</em>
-                  </Text>
-                </Link>
-                . If you use DataPipe in your research, we&apos;d appreciate a
-                citation!
-              </Text>
-            </VStack>
-          </HStack>
+          <Box mb={[8, 8, 12]} maxW="70ch">
+            <Heading as="h3" fontSize="lg" fontWeight="600" mb={2}>
+              Born-open data collection
+            </Heading>
+            <Text color="fg.muted" lineHeight="tall">
+              DataPipe sends experiment data to your storage as it is collected,
+              so openness is the default rather than an afterthought. The
+              rationale and design are described in{" "}
+              <ProseLink href="https://doi.org/10.3758/s13428-023-02161-x" external>
+                <em>Behavior Research Methods</em>
+              </ProseLink>
+              . If you use DataPipe in your research, we&apos;d appreciate a
+              citation.
+            </Text>
+          </Box>
 
-          <Stack
-            direction={["column", "column", "row"]}
-            gap={[8, 8, 12]}
-          >
-            <FeatureCard icon={<Database size={24} />} title="Multiple data formats">
-              Send CSV, JSON, or base64-encoded files like audio and video
-              recordings. DataPipe handles decoding and storage automatically.
-            </FeatureCard>
-            <FeatureCard icon={<Shield size={24} />} title="Built-in safeguards">
-              Data validation, session limits, and required field checks
-              protect your OSF project from malformed or malicious submissions.
-            </FeatureCard>
-            <FeatureCard icon={<Zap size={24} />} title="Condition assignment">
-              Automatically cycle through experimental conditions with
-              balanced assignment, no server-side code required.
-            </FeatureCard>
+          {/* No icons above the cards. Database / Shield / Zap were decoration
+              at the same size as the headings they sat on, and one of them meant
+              nothing at all. */}
+          <Stack direction={["column", "column", "row"]} gap={[8, 8, 12]}>
+            <Feature title="Multiple data formats">
+              Send CSV, JSON, or base64-encoded files such as audio and video
+              recordings. DataPipe decodes them and stores them for you.
+            </Feature>
+            <Feature title="Built-in safeguards">
+              Data validation, session limits, and required-field checks protect
+              your storage from malformed or malicious submissions.
+            </Feature>
+            <Feature title="Condition assignment">
+              DataPipe hands out condition numbers in sequence, so assignment
+              stays balanced as data arrives. No server-side code required.
+            </Feature>
           </Stack>
         </Box>
       </Box>
 
+      {/* A door at the end, for the reader who got this far. Same action as the
+          hero, not a second competing one. */}
+      <Box px={[4, 8, 12]} pt={16} pb={[12, 16]}>
+        <VStack maxW="1100px" mx="auto" align="start" gap={6}>
+          <Heading as="h2" fontSize={["xl", "2xl"]} fontWeight="700">
+            Set up your first experiment
+          </Heading>
+          <Text maxW="70ch" lineHeight="tall">
+            Pick a provider, connect it, and paste a few lines of code into your
+            study. The{" "}
+            <ProseLink href="/getting-started">getting started guide</ProseLink>{" "}
+            walks through all of it, end to end.
+          </Text>
+          <Button asChild colorPalette="brandGreen" size="lg">
+            <NextLink href={primaryHref}>
+              {primaryLabel} <ArrowRight size={18} />
+            </NextLink>
+          </Button>
+          <Text fontSize="sm" color="fg.muted" maxW="70ch">
+            The <ProseLink href="/faq">FAQ</ProseLink> covers what DataPipe
+            stores, what it costs to run, and what happens when an upload fails.
+          </Text>
+          <Text fontSize="sm" color="fg.muted" maxW="70ch">
+            Already collecting on OSF?{" "}
+            {osfDeadline
+              ? `DataPipe will stop writing to OSF after ${osfDeadline}.`
+              : "DataPipe is winding down its support for OSF."}{" "}
+            Data already there stays in your OSF account —{" "}
+            <ProseLink href="/faq#item-0b">what to do next</ProseLink>.
+          </Text>
+        </VStack>
+      </Box>
     </Box>
   );
 }
 
 Home.getLayout = function getLayout(page) {
   return (
-    <Box
-      minH="100vh"
-      display="flex"
-      flexDirection="column"
-    >
+    <Box minH="100vh" display="flex" flexDirection="column">
       <Navbar />
-      <Box flexGrow={1}>
-        {page}
-      </Box>
+      <Box flexGrow={1}>{page}</Box>
       <Footer />
-      {process.env.NEXT_PUBLIC_OSF_ENV !== "" && <TestEnvironmentWarning />}
+      {/* Truthy, not `!== ""`: NEXT_PUBLIC_OSF_ENV is undefined in production,
+          and `undefined !== ""` put a red "OSF Environment:" banner on the
+          public homepage. pages/_app.js:38 still has the original test and is
+          owned elsewhere. */}
+      {Boolean(process.env.NEXT_PUBLIC_OSF_ENV) && <TestEnvironmentWarning />}
     </Box>
   );
 };
