@@ -59,15 +59,18 @@ export default function DeleteAccount({ setDeleting }) {
   return (
     <VStack w="100%" align="stretch" gap={3}>
       <HStack justifyContent="space-between" w="100%" flexWrap="wrap" gap={3}>
-        <Text fontSize={"lg"}>Delete DataPipe Account</Text>
-        <Button onClick={() => setOpen(true)} colorPalette="red">
-          Delete Account
+        <Text fontSize={"lg"}>Delete DataPipe account</Text>
+        {/* The one red control on the page. Everything else that changes a
+            connection is reversible and wears neutral outline, so red still
+            means "this cannot be undone" when it appears here. */}
+        <Button onClick={() => setOpen(true)} colorPalette="red" size="sm">
+          Delete account
         </Button>
 
         <ConfirmDialog
           open={open}
           onOpenChange={(e) => setOpen(e.open)}
-          title="Delete Account"
+          title="Delete account"
           confirmLabel="Delete"
           destructive
           onConfirm={deleteAccount}

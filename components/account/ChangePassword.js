@@ -8,10 +8,11 @@ import {
   Dialog,
   Field,
   Input,
-  Alert,
   CloseButton,
 } from "@chakra-ui/react";
 
+import FormErrorAlert from "../ui/FormErrorAlert";
+import StatusIndicator from "../ui/StatusIndicator";
 import { auth } from "../../lib/firebase";
 import { updatePassword } from "firebase/auth";
 import { messageForAuthError } from "../../lib/auth-errors";
@@ -87,10 +88,15 @@ export default function ChangePassword() {
       <Text fontSize={"lg"}>Password</Text>
       <HStack>
         {submitStatus === "success" && (
-          <Text fontSize="sm" color="green.400">Success</Text>
+          <StatusIndicator status="ok" label="Success" />
         )}
-        <Button loading={isSubmitting} onClick={() => setOpen(true)} colorPalette="brandGreen">
-          Change Password
+        <Button
+          loading={isSubmitting}
+          onClick={() => setOpen(true)}
+          colorPalette="brandGreen"
+          size="sm"
+        >
+          Change password
         </Button>
       </HStack>
       <Dialog.Root open={open} onOpenChange={(e) => setOpen(e.open)}>
@@ -100,14 +106,14 @@ export default function ChangePassword() {
             <Dialog.CloseTrigger asChild>
               <CloseButton size="sm" aria-label="Close" />
             </Dialog.CloseTrigger>
-            <Dialog.Header>Change Password</Dialog.Header>
+            <Dialog.Header>Change password</Dialog.Header>
             <Dialog.Body>
               <VStack gap={4}>
                 <Field.Root
                   id="new-password"
                   invalid={touchedPassword && !passwordLengthSatisfied}
                 >
-                  <Field.Label>New Password</Field.Label>
+                  <Field.Label>New password</Field.Label>
                   <Input
                     type="password"
                     value={password}
@@ -122,7 +128,7 @@ export default function ChangePassword() {
                   id="confirm-password"
                   invalid={touchedConfirm && !passwordMatch}
                 >
-                  <Field.Label>Confirm Password</Field.Label>
+                  <Field.Label>Confirm password</Field.Label>
                   <Input
                     type="password"
                     value={confirmPassword}
@@ -132,24 +138,18 @@ export default function ChangePassword() {
                   <Field.ErrorText>Passwords do not match</Field.ErrorText>
                 </Field.Root>
 
-                {error && (
-                  <Alert.Root status="error" borderRadius="md">
-                    <Alert.Indicator />
-                    <Text fontSize="sm">{error}</Text>
-                  </Alert.Root>
-                )}
+                <FormErrorAlert>{error}</FormErrorAlert>
               </VStack>
             </Dialog.Body>
             <Dialog.Footer>
               <Button
                 variant={"solid"}
                 colorPalette={"brandGreen"}
-                size={"md"}
                 onClick={handleChangePassword}
                 loading={isSubmitting}
                 disabled={!passwordMatch || !passwordLengthSatisfied}
               >
-                Change Password
+                Change password
               </Button>
             </Dialog.Footer>
           </Dialog.Content>

@@ -28,17 +28,15 @@ jest.mock("firebase/firestore", () => ({
   getDocs: (...args) => mockGetDocs(...args),
 }));
 
-jest.mock("react-firebase-hooks/firestore", () => ({
-  useDocumentData: jest.fn(),
-}));
-
-import { useDocumentData } from "react-firebase-hooks/firestore";
 import ProviderConnections from "../components/account/ProviderConnections";
 
-function renderComponent() {
+// The users/{uid} document arrives as a PROP now -- pages/admin/account.js
+// owns the single subscription and passes it down, so there is no
+// useDocumentData call left in this component to mock.
+function renderComponent(data = { connectedAccounts: {} }) {
   return render(
     <ChakraProvider value={system}>
-      <ProviderConnections />
+      <ProviderConnections data={data} />
     </ChakraProvider>
   );
 }
@@ -64,7 +62,6 @@ beforeEach(() => {
 
 describe("ProviderConnections", () => {
   it("7. not connected: Connect click generates state, stores CSRF+flow, and redirects", async () => {
-    useDocumentData.mockReturnValue([{ connectedAccounts: {} }, false, undefined]);
     global.fetch.mockResolvedValue({
       ok: true,
       json: () =>
@@ -96,8 +93,6 @@ describe("ProviderConnections", () => {
   });
 
   it("static-token provider: Connect opens an inline form instead of redirecting", async () => {
-    useDocumentData.mockReturnValue([{ connectedAccounts: {} }, false, undefined]);
-
     renderComponent();
 
     fireEvent.click(screen.getByRole("button", { name: /^Connect Dataverse$/i }));
@@ -111,7 +106,6 @@ describe("ProviderConnections", () => {
   });
 
   it("static-token provider: Save posts token + serverUrl to connectstatictokenprovider", async () => {
-    useDocumentData.mockReturnValue([{ connectedAccounts: {} }, false, undefined]);
     global.fetch.mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ success: true, provider: "dataverse" }),
@@ -143,8 +137,6 @@ describe("ProviderConnections", () => {
   });
 
   it("static-token provider: Save stays disabled until both fields are filled", async () => {
-    useDocumentData.mockReturnValue([{ connectedAccounts: {} }, false, undefined]);
-
     renderComponent();
     fireEvent.click(screen.getByRole("button", { name: /^Connect Dataverse$/i }));
 
@@ -166,7 +158,6 @@ describe("ProviderConnections", () => {
   });
 
   it("static-token provider: a rejected server URL is explained, not surfaced verbatim", async () => {
-    useDocumentData.mockReturnValue([{ connectedAccounts: {} }, false, undefined]);
     global.fetch.mockResolvedValue({
       ok: false,
       status: 400,
@@ -194,11 +185,7 @@ describe("ProviderConnections", () => {
   });
 
   it("8. connected: shows Connected status; Disconnect opens a confirmation dialog, and confirming posts to disconnectprovider", async () => {
-    useDocumentData.mockReturnValue([
-      { connectedAccounts: { gdrive: true } },
-      false,
-      undefined,
-    ]);
+    const connectedData = { connectedAccounts: { gdrive: true } };
     mockGetDocs.mockResolvedValue({
       docs: [{ data: () => ({ storageProvider: "gdrive" }) }],
     });
@@ -207,7 +194,7 @@ describe("ProviderConnections", () => {
       json: () => Promise.resolve({ success: true }),
     });
 
-    renderComponent();
+    renderComponent(connectedData);
 
     expect(screen.getByText(/Connected/i)).toBeInTheDocument();
 
@@ -234,14 +221,10 @@ describe("ProviderConnections", () => {
   });
 
   it("disconnect dialog: zero experiments shows the reassuring zero-count copy", async () => {
-    useDocumentData.mockReturnValue([
-      { connectedAccounts: { gdrive: true } },
-      false,
-      undefined,
-    ]);
+    const connectedData = { connectedAccounts: { gdrive: true } };
     mockGetDocs.mockResolvedValue({ docs: [] });
 
-    renderComponent();
+    renderComponent(connectedData);
     fireEvent.click(screen.getByRole("button", { name: /^Disconnect Google Drive$/i }));
 
     expect(
@@ -252,15 +235,11 @@ describe("ProviderConnections", () => {
   it(
     "disconnect dialog: a failed disconnect stays open and shows the error",
     async () => {
-      useDocumentData.mockReturnValue([
-        { connectedAccounts: { gdrive: true } },
-        false,
-        undefined,
-      ]);
+    const connectedData = { connectedAccounts: { gdrive: true } };
       mockGetDocs.mockResolvedValue({ docs: [] });
       global.fetch.mockResolvedValue({ ok: false });
 
-      renderComponent();
+      renderComponent(connectedData);
       fireEvent.click(screen.getByRole("button", { name: /^Disconnect Google Drive$/i }));
       await screen.findByText(/No experiments are currently using this connection/i);
 

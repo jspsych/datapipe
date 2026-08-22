@@ -1,13 +1,21 @@
 import { useContext, useState } from "react";
-import { VStack, HStack, Text, Button, Input, Field, Alert } from "@chakra-ui/react";
-import { collection, doc, getDocs, query, where } from "firebase/firestore";
+import {
+  VStack,
+  HStack,
+  Text,
+  Button,
+  Input,
+  Field,
+  Link as ChakraLink,
+} from "@chakra-ui/react";
+import Link from "next/link";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import { db, auth } from "../../lib/firebase";
-import { useDocumentData } from "react-firebase-hooks/firestore";
 import { UserContext } from "../../lib/context";
 import { STORAGE_PROVIDERS } from "../../lib/provider-config";
 import ConfirmDialog from "../ui/ConfirmDialog";
-
-import { CircleCheck } from "lucide-react";
+import FormErrorAlert from "../ui/FormErrorAlert";
+import StatusIndicator from "../ui/StatusIndicator";
 
 // Generic fetch-failure copy for handleConnect/handleDisconnect. Unlike
 // messageForError below -- which decodes Dataverse's specific rejection
@@ -17,10 +25,13 @@ import { CircleCheck } from "lucide-react";
 const NETWORK_ERROR_MESSAGE =
   "Could not reach DataPipe. Check your connection and try again.";
 
-export default function ProviderConnections() {
+// `data` is the users/{uid} document, subscribed to ONCE by
+// pages/admin/account.js and passed down. This component deliberately does
+// not open its own subscription: when it did, it resolved on its own
+// schedule and rendered isConnected(undefined) === false on first paint, so
+// a connected researcher saw every provider flash "Connect" before settling.
+export default function ProviderConnections({ data }) {
   const { user } = useContext(UserContext);
-
-  const [data] = useDocumentData(user?.uid ? doc(db, "users", user.uid) : null);
 
   const [connectingId, setConnectingId] = useState(null);
 
@@ -225,13 +236,26 @@ export default function ProviderConnections() {
     }
   };
 
+  // The blocked-first-timer state. A new signup cannot create an experiment
+  // until something here is connected, and the page said nothing about that
+  // -- it just showed three names and three buttons. Stated in the open, not
+  // in a tooltip, because this is the reason the product sent them here.
+  const noneConnected = !Object.values(STORAGE_PROVIDERS).some((provider) =>
+    provider.isConnected(data)
+  );
+
   return (
     <VStack gap={3} w="100%" align="stretch">
-      {error && (
-        <Alert.Root status="error" borderRadius="md">
-          <Alert.Indicator />
-          <Text fontSize="sm">{error}</Text>
-        </Alert.Root>
+      <FormErrorAlert>{error}</FormErrorAlert>
+
+      {noneConnected && (
+        <Text fontSize="sm" color="fg.muted">
+          No storage connected yet — connect one to create your first
+          experiment.{" "}
+          <ChakraLink asChild color="brandGreen.fg">
+            <Link href="/getting-started">How to choose a provider</Link>
+          </ChakraLink>
+        </Text>
       )}
 
       {Object.values(STORAGE_PROVIDERS).map((provider) => {
@@ -249,14 +273,7 @@ export default function ProviderConnections() {
           >
             <HStack>
               <Text fontSize="lg">{provider.name}</Text>
-              {connected && (
-                <HStack gap={1}>
-                  <CircleCheck color="var(--chakra-colors-green-500)" size={18} />
-                  <Text fontSize="sm" color="gray.400">
-                    Connected
-                  </Text>
-                </HStack>
-              )}
+              {connected && <StatusIndicator status="ok" label="Connected" />}
             </HStack>
             {connected ? (
               // Neutral, not red: disconnecting is reversible (reconnect any
@@ -265,7 +282,7 @@ export default function ProviderConnections() {
               // meaning where it actually matters.
               <Button
                 variant="outline"
-                size="md"
+                size="sm"
                 aria-label={`Disconnect ${provider.name}`}
                 onClick={() => openDisconnectDialog(provider.id)}
               >
@@ -273,8 +290,8 @@ export default function ProviderConnections() {
               </Button>
             ) : (
               <Button
-                colorPalette="blue"
-                size="md"
+                colorPalette="brandGreen"
+                size="sm"
                 variant={formOpen ? "outline" : "solid"}
                 aria-label={`${formOpen ? "Cancel" : "Connect"} ${provider.name}`}
                 loading={connectingId === provider.id && !isStaticToken}
@@ -324,16 +341,12 @@ export default function ProviderConnections() {
                 )}
               </Field.Root>
 
-              {formError && (
-                <Text fontSize="sm" color="red.400">
-                  {formError}
-                </Text>
-              )}
+              <FormErrorAlert>{formError}</FormErrorAlert>
 
               <HStack justifyContent="flex-end">
                 <Button
-                  colorPalette="blue"
-                  size="md"
+                  colorPalette="brandGreen"
+                  size="sm"
                   aria-label={`Save ${provider.name} connection`}
                   loading={connectingId === provider.id}
                   disabled={
