@@ -25,8 +25,8 @@ function StepNumber({ number }) {
       w="36px"
       h="36px"
       borderRadius="full"
-      bg="brandTeal.600"
-      color="white"
+      bg="brandGreen.solid"
+      color="brandGreen.contrast"
       display="flex"
       alignItems="center"
       justifyContent="center"
@@ -41,7 +41,14 @@ function StepNumber({ number }) {
 function StepCard({ number, title, children }) {
   return (
     <Box
-      bg="black"
+      // Was bg="black" -- a Card per DESIGN.md §1's own bucket ("Cards,
+      // dialogs, menus" -> bg.panel). Dark's bg.panel is #1C1F22, identical
+      // to the page body, so the border is now the only edge (per DESIGN.md:
+      // "panels must carry a border" -- page<->panel separation is 1.07:1
+      // by design in both modes).
+      bg="bg.panel"
+      borderWidth="1px"
+      borderColor="border"
       borderRadius={12}
       p={[4, 6]}
       w="100%"
@@ -62,9 +69,13 @@ function StepCard({ number, title, children }) {
 function Callout({ children }) {
   return (
     <Box
-      bg="brandTeal.900"
+      // Tinted callout: brandGreen.subtle + brandGreen.border. Text below has
+      // no explicit color, so it inherits the page's neutral `fg` -- exactly
+      // the caveat in DESIGN.md §1 ("body text on brandGreen.subtle must be
+      // brandGreen.50 or neutral fg, never brandGreen.300").
+      bg="brandGreen.subtle"
       border="1px solid"
-      borderColor="brandTeal.700"
+      borderColor="brandGreen.border"
       borderRadius={8}
       px={4}
       py={3}
@@ -84,17 +95,19 @@ function CollapsibleSection({ title, children }) {
       <Collapsible.Trigger asChild>
         <Button
           variant="ghost"
-          color="gray.400"
+          color="fg.muted"
           size="sm"
           px={0}
-          _hover={{ color: "white", bg: "transparent" }}
+          _hover={{ color: "fg", bg: "transparent" }}
         >
           {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
           {title}
         </Button>
       </Collapsible.Trigger>
       <Collapsible.Content>
-        <Stack gap={3} pt={2} pl={4} borderLeft="1px solid" borderColor="gray.700">
+        {/* Decorative hairline inside an already-grouped (collapsed)
+            region, not the section's own boundary -- border.subtle. */}
+        <Stack gap={3} pt={2} pl={4} borderLeft="1px solid" borderColor="border.subtle">
           {children}
         </Stack>
       </Collapsible.Content>
@@ -106,7 +119,7 @@ function FeatureItem({ name, children }) {
   return (
     <Box>
       <Text>
-        <Text as="span" fontWeight="semibold" color="brandOrange.300">{name}</Text>
+        <Text as="span" fontWeight="semibold" color="brandOrange.fg">{name}</Text>
         {" "}{children}
       </Text>
     </Box>
@@ -121,21 +134,24 @@ function FeatureItem({ name, children }) {
 // table so it stays readable on a phone.
 function ProviderOption({ name, summary, landsIn, connect, limits }) {
   return (
-    <Box borderWidth="1px" borderColor="gray.700" borderRadius={8} p={4}>
-      <Text fontWeight="semibold" color="brandOrange.300" mb={1}>
+    // Sole visual boundary of the row (WCAG 1.4.11 "panel edge"), so this
+    // uses `border` (gray.500, 4.50 light / 3.43 dark) rather than
+    // `border.subtle`, which DESIGN.md bans as a lone grouping device.
+    <Box borderWidth="1px" borderColor="border" borderRadius={8} p={4}>
+      <Text fontWeight="semibold" color="brandOrange.fg" mb={1}>
         {name}
       </Text>
       <Text fontSize="sm" mb={3}>
         {summary}
       </Text>
       <Stack gap={1}>
-        <Text fontSize="sm" color="gray.400">
+        <Text fontSize="sm" color="fg.muted">
           <Text as="span" fontWeight="semibold">Data lands in:</Text> {landsIn}
         </Text>
-        <Text fontSize="sm" color="gray.400">
+        <Text fontSize="sm" color="fg.muted">
           <Text as="span" fontWeight="semibold">Connect with:</Text> {connect}
         </Text>
-        <Text fontSize="sm" color="gray.400">
+        <Text fontSize="sm" color="fg.muted">
           <Text as="span" fontWeight="semibold">Limits:</Text> {limits}
         </Text>
       </Stack>
@@ -161,7 +177,7 @@ export default function GettingStarted() {
         <Heading as="h1" size="2xl">
           Getting Started
         </Heading>
-        <Text color="gray.400" fontSize="lg">
+        <Text color="fg.muted" fontSize="lg">
           DataPipe sends data from your experiment straight to storage you
           control — Google Drive, Dataverse, or Zenodo. This guide sets up one
           experiment end to end, from choosing a provider to your first test
@@ -202,15 +218,15 @@ export default function GettingStarted() {
         </Stack>
         <Text>
           You need an account with whichever provider you choose:{" "}
-          <Link href="https://drive.google.com" target="_blank" rel="noopener noreferrer" color="brandOrange.300">
+          <Link href="https://drive.google.com" target="_blank" rel="noopener noreferrer" color="brandOrange.fg">
             Google Drive
           </Link>
           ,{" "}
-          <Link href="https://dataverse.org/institutions" target="_blank" rel="noopener noreferrer" color="brandOrange.300">
+          <Link href="https://dataverse.org/institutions" target="_blank" rel="noopener noreferrer" color="brandOrange.fg">
             your Dataverse installation
           </Link>
           , or{" "}
-          <Link href={ZENODO_HOST} target="_blank" rel="noopener noreferrer" color="brandOrange.300">
+          <Link href={ZENODO_HOST} target="_blank" rel="noopener noreferrer" color="brandOrange.fg">
             Zenodo
           </Link>
           .
@@ -232,7 +248,7 @@ export default function GettingStarted() {
       <StepCard number={2} title="Connect your storage provider">
         <Text>
           Go to your{" "}
-          <Link href="/admin/account" color="brandOrange.300">
+          <Link href="/admin/account" color="brandOrange.fg">
             Account Settings
           </Link>
           {" "}and find the <strong>Storage Providers</strong> section. Click{" "}
@@ -251,7 +267,7 @@ export default function GettingStarted() {
           which you create under the <strong>API Token</strong> tab of your
           Dataverse account.
         </Text>
-        <Text color="gray.400" fontSize="sm">
+        <Text color="fg.muted" fontSize="sm">
           You can connect more than one provider, and disconnect any of them
           from the same screen. Disconnecting stops new data from reaching
           that provider. It never removes data already stored there.
@@ -312,11 +328,11 @@ export default function GettingStarted() {
           </FeatureItem>
           <FeatureItem name="Psych-DS metadata">
             — automatically produce metadata adhering to{" "}
-            <Link href="https://psychds-docs.readthedocs.io/en/latest/" target="_blank" rel="noopener noreferrer" color="brandOrange.300">
+            <Link href="https://psychds-docs.readthedocs.io/en/latest/" target="_blank" rel="noopener noreferrer" color="brandOrange.fg">
               Psych-DS
             </Link>
             , updated after each session. See{" "}
-            <Link href="/faq#item-11" color="brandOrange.300">how it works</Link>
+            <Link href="/faq#item-11" color="brandOrange.fg">how it works</Link>
             {" "}in the FAQ.
           </FeatureItem>
         </Stack>
@@ -332,7 +348,7 @@ export default function GettingStarted() {
         <Text>
           Add code to send data from your experiment to DataPipe. If you use
           jsPsych, the easiest option is the{" "}
-          <Link href="https://github.com/jspsych/jspsych-contrib/tree/main/packages/plugin-pipe" target="_blank" rel="noopener noreferrer" color="brandOrange.300">
+          <Link href="https://github.com/jspsych/jspsych-contrib/tree/main/packages/plugin-pipe" target="_blank" rel="noopener noreferrer" color="brandOrange.fg">
             jsPsychPipe plugin
           </Link>
           . Otherwise, you can use the DataPipe API directly with fetch requests.
@@ -342,7 +358,7 @@ export default function GettingStarted() {
           experiment sends data to DataPipe, and DataPipe handles the rest.
           Your experiment dashboard has ready-to-use snippets for both jsPsych
           and plain JavaScript. Go to{" "}
-          <Link href="/admin" color="brandOrange.300">My Experiments</Link>,
+          <Link href="/admin" color="brandOrange.fg">My Experiments</Link>,
           select your experiment, and copy the code from the{" "}
           <strong>Code Samples</strong> panel.
         </Text>
@@ -356,11 +372,11 @@ export default function GettingStarted() {
         <CollapsibleSection title="GitHub Pages setup instructions">
           <Text>
             1. Create a GitHub account at{" "}
-            <Link href="https://www.github.com" target="_blank" rel="noopener noreferrer" color="brandOrange.300">
+            <Link href="https://www.github.com" target="_blank" rel="noopener noreferrer" color="brandOrange.fg">
               github.com
             </Link>
             {" "}and{" "}
-            <Link href="https://www.github.com/new" target="_blank" rel="noopener noreferrer" color="brandOrange.300">
+            <Link href="https://www.github.com/new" target="_blank" rel="noopener noreferrer" color="brandOrange.fg">
               create a new repository
             </Link>
             . The repo name becomes part of your experiment URL, so avoid
@@ -421,7 +437,7 @@ export default function GettingStarted() {
           and cite. Finalizing cannot be undone, so do it only when you are
           certain no more data is coming.
         </Text>
-        <Text color="gray.400" fontSize="sm">
+        <Text color="fg.muted" fontSize="sm">
           On Zenodo, finalizing prepares the deposition but does not publish
           it. Publishing the record, and with it issuing the DOI, stays your
           decision and happens on Zenodo itself.

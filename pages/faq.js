@@ -375,7 +375,11 @@ export default function FAQ() {
             If you use DataPipe to collect data, please cite the following paper:
           </Text>
           <Text
-            bg="gray.800"
+            // Recessed prose citation block, not code -- bg.subtle (DESIGN.md
+            // §1: "Recessed: code blocks, table headers"). No color prop
+            // needed: body text inherits the page's neutral `fg`, which
+            // clears 4.5:1 on bg.subtle in both modes.
+            bg="bg.subtle"
             p={4}
             borderRadius="md"
             fontSize="sm"
