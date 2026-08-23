@@ -85,6 +85,14 @@
       {
         "source": "/api/finalize",
         "function": "apifinalize"
+      },
+      {
+        "source": "/api/sendcontactemailverification",
+        "function": "sendcontactemailverification"
+      },
+      {
+        "source": "/api/verifycontactemail",
+        "function": "verifycontactemail"
       }
     ]
   },
