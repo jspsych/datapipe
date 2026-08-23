@@ -1,4 +1,5 @@
 import { db, storage } from "./app.js";
+import { MAIL_COLLECTION } from "./mail.js";
 
 // Everything that belongs to one researcher, removed in one pass.
 //
@@ -33,6 +34,9 @@ export interface PurgeCounts {
   queueEntries: number;
   pendingFiles: number;
   userDocument: number;
+  // Contact-email additions (functions/src/mail.ts, lib/contact-email.js).
+  mailDocuments: number;
+  contactEmailVerification: number;
 }
 
 async function deleteInBatches(
@@ -66,6 +70,8 @@ export async function purgeUserData(uid: string): Promise<PurgeCounts> {
     queueEntries: 0,
     pendingFiles: 0,
     userDocument: 0,
+    mailDocuments: 0,
+    contactEmailVerification: 0,
   };
 
   const ownedExperiments = await db
@@ -119,6 +125,30 @@ export async function purgeUserData(uid: string): Promise<PurgeCounts> {
     .where("owner", "==", uid)
     .get();
   counts.queueEntries = await deleteInBatches(queued.docs.map((doc) => doc.ref));
+
+  // mail/ docs carry the researcher's contactEmail in their `to` field and are
+  // otherwise keyed by an autoId, so datapipe.owner == uid (an automatic
+  // single-field index -- see mail.ts's MailMeta) is the only way to find
+  // them. Deleting these is why account deletion must not leave an address
+  // behind: an undelivered or already-processed mail document is still a
+  // record of where DataPipe last tried to reach this person.
+  const queuedMail = await db
+    .collection(MAIL_COLLECTION)
+    .where("datapipe.owner", "==", uid)
+    .get();
+  counts.mailDocuments = await deleteInBatches(
+    queuedMail.docs.map((doc) => doc.ref)
+  );
+
+  // contactEmailVerifications/{uid} holds a hash of the researcher's
+  // in-flight verification code (functions/src/mail.ts's sibling, the
+  // server-only collection the plan describes at §2.2). Doc id is the uid
+  // itself, so this is a direct lookup, not a query.
+  const verificationRef = db.collection("contactEmailVerifications").doc(uid);
+  if ((await verificationRef.get()).exists) {
+    await verificationRef.delete();
+    counts.contactEmailVerification = 1;
+  }
 
   // Last: the user document holds connectedAccounts, i.e. the storage
   // provider credentials. If an earlier step throws, the researcher still
