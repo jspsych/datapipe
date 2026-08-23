@@ -120,7 +120,7 @@ beforeEach(() => {
 describe("NewExperimentPage — OSF is closed to new experiments", () => {
   it("2. offers no OSF option and no OSF form, even for a researcher with a live OSF connection", () => {
     useDocumentData.mockReturnValue([
-      { refreshToken: "osf-refresh-token", usingPersonalToken: false },
+      { contactEmail: "researcher@example.edu", refreshToken: "osf-refresh-token", usingPersonalToken: false },
       false,
       undefined,
     ]);
@@ -139,7 +139,7 @@ describe("NewExperimentPage — OSF is closed to new experiments", () => {
 
   it("2b. defaults to the first registered storage provider instead of OSF", () => {
     useDocumentData.mockReturnValue([
-      { connectedAccounts: { gdrive: true } },
+      { contactEmail: "researcher@example.edu", connectedAccounts: { gdrive: true } },
       false,
       undefined,
     ]);
@@ -165,6 +165,7 @@ describe("NewExperimentPage — Google Drive provider selector", () => {
   it("3. selecting Google Drive with no connection shows a connect CTA, no title-only submit", async () => {
     useDocumentData.mockReturnValue([
       {
+        contactEmail: "researcher@example.edu",
         refreshToken: "osf-refresh-token",
         connectedAccounts: {},
       },
@@ -190,6 +191,7 @@ describe("NewExperimentPage — Google Drive provider selector", () => {
   it("4. selecting Google Drive while connected shows only the title field + create button", async () => {
     useDocumentData.mockReturnValue([
       {
+        contactEmail: "researcher@example.edu",
         refreshToken: "osf-refresh-token",
         connectedAccounts: { gdrive: true },
       },
@@ -213,6 +215,7 @@ describe("NewExperimentPage — Google Drive provider selector", () => {
   it("5. gdrive submit calls /api/createexperiment and navigates to /admin/<id> on success", async () => {
     useDocumentData.mockReturnValue([
       {
+        contactEmail: "researcher@example.edu",
         refreshToken: "osf-refresh-token",
         connectedAccounts: { gdrive: true },
       },
@@ -261,6 +264,7 @@ describe("NewExperimentPage — Google Drive provider selector", () => {
   it("6. gdrive submit failure renders an error message and does not navigate", async () => {
     useDocumentData.mockReturnValue([
       {
+        contactEmail: "researcher@example.edu",
         refreshToken: "osf-refresh-token",
         connectedAccounts: { gdrive: true },
       },
@@ -317,7 +321,7 @@ describe("NewExperimentPage — Dataverse provider (provider-generic rendering)"
 
   it("the provider selector offers Dataverse", () => {
     useDocumentData.mockReturnValue([
-      { refreshToken: "osf-refresh-token", connectedAccounts: {} },
+      { contactEmail: "researcher@example.edu", refreshToken: "osf-refresh-token", connectedAccounts: {} },
       false,
       undefined,
     ]);
@@ -329,7 +333,7 @@ describe("NewExperimentPage — Dataverse provider (provider-generic rendering)"
 
   it("selecting Dataverse with no connection shows the connect CTA and no create form", async () => {
     useDocumentData.mockReturnValue([
-      { refreshToken: "osf-refresh-token", connectedAccounts: {} },
+      { contactEmail: "researcher@example.edu", refreshToken: "osf-refresh-token", connectedAccounts: {} },
       false,
       undefined,
     ]);
@@ -352,6 +356,7 @@ describe("NewExperimentPage — Dataverse provider (provider-generic rendering)"
   it("selecting a CONNECTED Dataverse renders the declared fields alongside Title", async () => {
     useDocumentData.mockReturnValue([
       {
+        contactEmail: "researcher@example.edu",
         refreshToken: "osf-refresh-token",
         connectedAccounts: { dataverse: true },
       },
@@ -374,6 +379,7 @@ describe("NewExperimentPage — Dataverse provider (provider-generic rendering)"
   it("submitting with a required field blank does NOT call the API", async () => {
     useDocumentData.mockReturnValue([
       {
+        contactEmail: "researcher@example.edu",
         refreshToken: "osf-refresh-token",
         connectedAccounts: { dataverse: true },
       },
@@ -412,6 +418,7 @@ describe("NewExperimentPage — Dataverse provider (provider-generic rendering)"
   it("a full submit calls /api/createexperiment with researcherInput carrying exactly the five declared fields, and navigates on success", async () => {
     useDocumentData.mockReturnValue([
       {
+        contactEmail: "researcher@example.edu",
         refreshToken: "osf-refresh-token",
         connectedAccounts: { dataverse: true },
       },
@@ -469,6 +476,7 @@ describe("NewExperimentPage — Dataverse provider (provider-generic rendering)"
     // otherwise a Drive folder id rides along on a Dataverse request.
     useDocumentData.mockReturnValue([
       {
+        contactEmail: "researcher@example.edu",
         refreshToken: "osf-refresh-token",
         connectedAccounts: { dataverse: true, gdrive: true },
       },
@@ -521,6 +529,7 @@ describe("NewExperimentPage — Dataverse provider (provider-generic rendering)"
   it("switching provider away and back clears the entered values (no stale carry-over)", async () => {
     useDocumentData.mockReturnValue([
       {
+        contactEmail: "researcher@example.edu",
         refreshToken: "osf-refresh-token",
         connectedAccounts: { dataverse: true, gdrive: true },
       },
@@ -548,7 +557,7 @@ describe("NewExperimentPage — Dataverse provider (provider-generic rendering)"
 describe("NewExperimentPage — provider setup warnings (Dataverse)", () => {
   it("selecting a connected Dataverse shows a warning returned by /api/providersetupwarnings", async () => {
     useDocumentData.mockReturnValue([
-      { refreshToken: "osf-refresh-token", connectedAccounts: { dataverse: true } },
+      { contactEmail: "researcher@example.edu", refreshToken: "osf-refresh-token", connectedAccounts: { dataverse: true } },
       false,
       undefined,
     ]);
@@ -580,7 +589,7 @@ describe("NewExperimentPage — provider setup warnings (Dataverse)", () => {
 
   it("an empty warnings array shows nothing", async () => {
     useDocumentData.mockReturnValue([
-      { refreshToken: "osf-refresh-token", connectedAccounts: { dataverse: true } },
+      { contactEmail: "researcher@example.edu", refreshToken: "osf-refresh-token", connectedAccounts: { dataverse: true } },
       false,
       undefined,
     ]);
@@ -607,7 +616,7 @@ describe("NewExperimentPage — provider setup warnings (Dataverse)", () => {
 
   it("a failed warnings fetch is silent -- the form still renders and submission is not blocked", async () => {
     useDocumentData.mockReturnValue([
-      { refreshToken: "osf-refresh-token", connectedAccounts: { dataverse: true } },
+      { contactEmail: "researcher@example.edu", refreshToken: "osf-refresh-token", connectedAccounts: { dataverse: true } },
       false,
       undefined,
     ]);

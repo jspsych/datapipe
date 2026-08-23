@@ -80,6 +80,16 @@ describe("purgeUserData", () => {
       .collection("uploadQueue")
       .doc(queueDocId)
       .set({ owner: uid, experimentID, status: "pending" });
+    const mailRef = db.collection("mail").doc();
+    await mailRef.set({
+      to: ["purge@example.com"],
+      message: { subject: "s", text: "t" },
+      datapipe: { kind: "upload-failure", owner: uid, experimentID },
+    });
+    await db
+      .collection("contactEmailVerifications")
+      .doc(uid)
+      .set({ emailHash: "h", codeHash: "h", expiresAt: Date.now(), attempts: 0, sentAt: Date.now() });
 
     const counts = await purgeUserData(uid);
 
@@ -91,6 +101,8 @@ describe("purgeUserData", () => {
       queueEntries: 1,
       pendingFiles: 1,
       userDocument: 1,
+      mailDocuments: 1,
+      contactEmailVerification: 1,
     });
 
     expect(await exists(db.collection("users").doc(uid))).toBe(false);
@@ -104,11 +116,34 @@ describe("purgeUserData", () => {
     expect(await exists(db.collection("uploadQueue").doc(queueDocId))).toBe(
       false
     );
+    expect(await exists(mailRef)).toBe(false);
+    expect(
+      await exists(db.collection("contactEmailVerifications").doc(uid))
+    ).toBe(false);
 
     const [pending] = await bucket.getFiles({
       prefix: `pending-data/${experimentID}/`,
     });
     expect(pending).toHaveLength(0);
+  });
+
+  // A user who never set a contact email, or never had a verification
+  // in flight, has neither document -- purging must not error or find
+  // phantom counts.
+  it("purges clean when there are no mail docs or verification doc", async () => {
+    const uid = makeUid();
+    const experimentID = `exp-${randomUUID()}`;
+    await seedExperiment(uid, experimentID);
+    await db
+      .collection("users")
+      .doc(uid)
+      .set({ uid, email: "no-mail@example.com", experiments: [experimentID] });
+
+    const counts = await purgeUserData(uid);
+
+    expect(counts.mailDocuments).toBe(0);
+    expect(counts.contactEmailVerification).toBe(0);
+    expect(counts.userDocument).toBe(1);
   });
 
   // The regression that left a live experiment behind in datapipe-test: the
@@ -171,6 +206,18 @@ describe("purgeUserData", () => {
       .collection("users")
       .doc(uid)
       .set({ uid, email: "twice@example.com", experiments: [experimentID] });
+    await db
+      .collection("mail")
+      .doc()
+      .set({
+        to: ["twice@example.com"],
+        message: { subject: "s", text: "t" },
+        datapipe: { kind: "upload-failure", owner: uid },
+      });
+    await db
+      .collection("contactEmailVerifications")
+      .doc(uid)
+      .set({ emailHash: "h", codeHash: "h", expiresAt: Date.now(), attempts: 0, sentAt: Date.now() });
 
     await purgeUserData(uid);
     const second = await purgeUserData(uid);
@@ -183,6 +230,8 @@ describe("purgeUserData", () => {
       queueEntries: 0,
       pendingFiles: 0,
       userDocument: 0,
+      mailDocuments: 0,
+      contactEmailVerification: 0,
     });
   });
 
@@ -203,6 +252,24 @@ describe("purgeUserData", () => {
     strays.push(db.collection("experiments").doc(bystanderExp));
     strays.push(db.collection("metadata").doc(bystanderExp));
     strays.push(db.collection("logs").doc(bystanderExp));
+    const bystanderMailRef = db.collection("mail").doc();
+    await bystanderMailRef.set({
+      to: ["bystander@example.com"],
+      message: { subject: "s", text: "t" },
+      datapipe: { kind: "upload-failure", owner: bystander },
+    });
+    strays.push(bystanderMailRef);
+    const bystanderVerificationRef = db
+      .collection("contactEmailVerifications")
+      .doc(bystander);
+    await bystanderVerificationRef.set({
+      emailHash: "h",
+      codeHash: "h",
+      expiresAt: Date.now(),
+      attempts: 0,
+      sentAt: Date.now(),
+    });
+    strays.push(bystanderVerificationRef);
 
     await purgeUserData(victim);
 
@@ -210,6 +277,8 @@ describe("purgeUserData", () => {
       true
     );
     expect(await exists(bystanderUserRef)).toBe(true);
+    expect(await exists(bystanderMailRef)).toBe(true);
+    expect(await exists(bystanderVerificationRef)).toBe(true);
     const [pending] = await bucket.getFiles({
       prefix: `pending-data/${bystanderExp}/`,
     });
