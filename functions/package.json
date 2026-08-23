@@ -37,5 +37,19 @@
     "firebase-functions-test": "^3.4.1",
     "typescript": "^5.9.3"
   },
+  "overrides": {
+    "gaxios": {
+      "uuid": "^11.1.1"
+    },
+    "google-gax": {
+      "uuid": "^11.1.1"
+    },
+    "teeny-request": {
+      "uuid": "^11.1.1"
+    },
+    "firebase-functions-test": {
+      "ts-deepmerge": "^8.0.0"
+    }
+  },
   "private": true
 }
