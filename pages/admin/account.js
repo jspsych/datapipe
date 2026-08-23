@@ -7,6 +7,7 @@ import { useState, useContext } from "react";
 import SelectAuth from "../../components/account/SelectAuth";
 import LinkedAccounts from "../../components/account/LinkedAccounts";
 import ProviderConnections from "../../components/account/ProviderConnections";
+import ContactEmail from "../../components/account/ContactEmail";
 import { UserContext } from "../../lib/context";
 import { useRouter } from "next/router";
 import NextLink from "next/link";
@@ -92,7 +93,16 @@ export default function AccountPage() {
     ".";
 
   return (
-    <AuthCheck fallbackRoute={deleting ? "/admin/deleted-account" : null}>
+    <AuthCheck
+      fallbackRoute={deleting ? "/admin/deleted-account" : null}
+      // /admin/account is the one route AuthCheck's contact-email gate
+      // (components/ContactEmailGate.js) must never wall off -- blocking
+      // it would put the account deletion control below behind the very
+      // wall a researcher who declines to give an address needs to get
+      // past. This page renders the same contact-email section itself,
+      // just below, so there is no dead end.
+      requireContactEmail={false}
+    >
       <VStack gap={0} w="100%" maxW="560px" align="stretch">
         <Box mb={10}>
           <Heading>Account settings</Heading>
@@ -121,13 +131,26 @@ export default function AccountPage() {
         {/* Spacing carries the grouping -- no separators. DESIGN.md §4:
             mt={10} between routine sections, mt={16} before the Danger Zone,
             so the break before the irreversible section is the one break
-            that reads as different. */}
+            that reads as different.
+
+            Pinned above Sign-in methods (plan §2.3): this is the one route
+            the contact-email gate never walls off, so its unfilled state
+            has to be reachable from here, and reachable first. */}
         <SettingsSection
-          title="Sign-in methods"
-          description="How you sign in to DataPipe. Add a second method so you keep access if you lose one."
+          title="Contact email"
+          description="Where DataPipe reaches you if your data stops arriving. Never shown to participants."
         >
-          <LinkedAccounts />
+          <ContactEmail data={data} />
         </SettingsSection>
+
+        <Box mt={10}>
+          <SettingsSection
+            title="Sign-in methods"
+            description="How you sign in to DataPipe. Add a second method so you keep access if you lose one."
+          >
+            <LinkedAccounts />
+          </SettingsSection>
+        </Box>
 
         <Box mt={10}>
           <SettingsSection
