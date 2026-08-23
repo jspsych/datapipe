@@ -480,3 +480,437 @@ describe('/experiments — provider-migration generalization (step 7a)', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// P0 of the contact-email + upload-failure-notification work.
+//
+// Two independent rule changes, plus the collections that are protected by
+// having NO rule at all:
+//
+//   users/{uid}   -- the contactEmail group becomes client-writable, but
+//                    contactEmailVerified only ever as false.
+//   experiments/{id} -- uploadFailure joins serverManagedFieldsUntouched().
+//   contactEmailVerifications/{uid}, mail/{id} -- unmatched, default-denied.
+//
+// Every test below uses a uid/docId of its own. Nothing in this suite is
+// cleaned up between tests, so reusing 'user123' would mean asserting against
+// whatever an earlier test left on that document.
+// ---------------------------------------------------------------------------
+describe('contact email (P0)', () => {
+  // The slim shape ensureUserDocument writes, before any contact fields.
+  function slimUser(uid, overrides = {}) {
+    return { uid, email: 'researcher@example.edu', experiments: [], ...overrides };
+  }
+
+  // Seed shape for the UPDATE tests, and the reason it is not slimUser:
+  // isAccountCreation() tests the SHAPE of request.resource.data, not whether
+  // the document already exists. On an update, request.resource.data is the
+  // merged document -- so any update to a document whose whole merged shape
+  // still fits the creation whitelist is permitted by isAccountCreation(),
+  // whatever it touches. (That is pre-existing behaviour, not something this
+  // change introduced.) connectedAccounts is outside the whitelist and sits on
+  // real migrated user documents, so seeding it here forces every assertion
+  // below to be decided by isContactEmailUpdate() -- which is the rule under
+  // test. Without it, several of these would pass or fail for the wrong reason.
+  function existingUser(uid, overrides = {}) {
+    return slimUser(uid, {
+      connectedAccounts: { gdrive: { authMethod: 'oauth2' } },
+      ...overrides,
+    });
+  }
+
+  describe('account creation', () => {
+    it('ALLOWS the seeded shape carrying the contactEmail group', async () => {
+      const uid = 'ce-create-seeded';
+      const ctx = testEnv.authenticatedContext(uid);
+
+      await assertSucceeds(setDoc(doc(ctx.firestore(), `users/${uid}`), slimUser(uid, {
+        contactEmail: 'researcher@example.edu',
+        contactEmailVerified: false,
+        contactEmailUpdatedAt: 1700000000000,
+        contactEmailSource: 'auth',
+      })));
+    });
+
+    it('ALLOWS the slim shape with no contact fields at all (ORCID signup)', async () => {
+      // contactEmail is NOT in hasAll() -- an account with no address to seed
+      // must still be creatable; it meets the gate on its first /admin load.
+      const uid = 'ce-create-slim';
+      const ctx = testEnv.authenticatedContext(uid);
+
+      await assertSucceeds(
+        setDoc(doc(ctx.firestore(), `users/${uid}`), slimUser(uid, { email: '' }))
+      );
+    });
+
+    it('DENIES a creation that self-certifies contactEmailVerified: true', async () => {
+      // The whole point of the field: only the server may ever set it true.
+      const uid = 'ce-create-verified';
+      const ctx = testEnv.authenticatedContext(uid);
+
+      await assertFails(setDoc(doc(ctx.firestore(), `users/${uid}`), slimUser(uid, {
+        contactEmail: 'researcher@example.edu',
+        contactEmailVerified: true,
+      })));
+    });
+
+    it('DENIES a creation carrying an unlisted key alongside the contact group', async () => {
+      // hasOnly() gained four keys, not a general amnesty.
+      const uid = 'ce-create-extra-key';
+      const ctx = testEnv.authenticatedContext(uid);
+
+      await assertFails(setDoc(doc(ctx.firestore(), `users/${uid}`), slimUser(uid, {
+        contactEmail: 'researcher@example.edu',
+        connectedAccounts: { gdrive: { authMethod: 'oauth2' } },
+      })));
+    });
+  });
+
+  describe('contactEmail updates', () => {
+    it('ALLOWS the four-key update the gate writes', async () => {
+      const uid = 'ce-update-ok';
+      await seedDB({ [`users/${uid}`]: existingUser(uid, { contactEmail: '', contactEmailVerified: false }) });
+
+      const ctx = testEnv.authenticatedContext(uid);
+      await assertSucceeds(updateDoc(doc(ctx.firestore(), `users/${uid}`), {
+        contactEmail: 'lab-data@university.edu',
+        contactEmailVerified: false,
+        contactEmailUpdatedAt: 1700000000000,
+        contactEmailSource: 'user',
+      }));
+    });
+
+    it('ALLOWS a first-ever address on a document that has no contactEmailVerified field', async () => {
+      // The `in` guard in contactEmailNotSelfCertified(). Reading a missing
+      // key would otherwise error and deny a perfectly legitimate write --
+      // every pre-feature user document is in exactly this state.
+      const uid = 'ce-update-no-flag-field';
+      await seedDB({ [`users/${uid}`]: existingUser(uid) });
+
+      const ctx = testEnv.authenticatedContext(uid);
+      await assertSucceeds(updateDoc(doc(ctx.firestore(), `users/${uid}`), {
+        contactEmail: 'first@example.edu',
+        contactEmailUpdatedAt: 1700000000000,
+        contactEmailSource: 'user',
+      }));
+    });
+
+    it('ALLOWS changing the address while flipping verified back to false', async () => {
+      // The intended flow off a confirmed address: a new address is by
+      // definition unconfirmed, and the client is the one that says so.
+      const uid = 'ce-update-reverify';
+      await seedDB({
+        [`users/${uid}`]: existingUser(uid, {
+          contactEmail: 'old@example.edu',
+          contactEmailVerified: true,
+        }),
+      });
+
+      const ctx = testEnv.authenticatedContext(uid);
+      await assertSucceeds(updateDoc(doc(ctx.firestore(), `users/${uid}`), {
+        contactEmail: 'new@example.edu',
+        contactEmailVerified: false,
+        contactEmailUpdatedAt: 1700000000001,
+        contactEmailSource: 'user',
+      }));
+    });
+
+    it('DENIES setting contactEmailVerified: true', async () => {
+      const uid = 'ce-update-selfcertify';
+      await seedDB({
+        [`users/${uid}`]: existingUser(uid, {
+          contactEmail: 'researcher@example.edu',
+          contactEmailVerified: false,
+        }),
+      });
+
+      const ctx = testEnv.authenticatedContext(uid);
+      await assertFails(updateDoc(doc(ctx.firestore(), `users/${uid}`), {
+        contactEmailVerified: true,
+      }));
+    });
+
+    it('DENIES changing the address while leaving an existing verified: true standing', async () => {
+      // The post-state test, not the diff test. request.resource.data is the
+      // MERGED document on an update, so a write that touches only
+      // contactEmail on an already-verified account would carry `true`
+      // forward against an address nobody has confirmed.
+      const uid = 'ce-update-carryover';
+      await seedDB({
+        [`users/${uid}`]: existingUser(uid, {
+          contactEmail: 'old@example.edu',
+          contactEmailVerified: true,
+        }),
+      });
+
+      const ctx = testEnv.authenticatedContext(uid);
+      await assertFails(updateDoc(doc(ctx.firestore(), `users/${uid}`), {
+        contactEmail: 'new@example.edu',
+        contactEmailUpdatedAt: 1700000000002,
+      }));
+    });
+
+    it('DENIES touching contactEmail and experiments in one operation', async () => {
+      // One narrow shape per intent: a contact-email save must not be a
+      // vehicle for anything else on the document.
+      const uid = 'ce-update-plus-experiments';
+      await seedDB({ [`users/${uid}`]: existingUser(uid, { experiments: ['exp1'] }) });
+
+      const ctx = testEnv.authenticatedContext(uid);
+      await assertFails(updateDoc(doc(ctx.firestore(), `users/${uid}`), {
+        contactEmail: 'researcher@example.edu',
+        contactEmailVerified: false,
+        experiments: ['exp1', 'exp2'],
+      }));
+    });
+
+    it('DENIES an address longer than 254 characters', async () => {
+      const uid = 'ce-update-too-long';
+      await seedDB({ [`users/${uid}`]: existingUser(uid) });
+
+      const ctx = testEnv.authenticatedContext(uid);
+      await assertFails(updateDoc(doc(ctx.firestore(), `users/${uid}`), {
+        contactEmail: `${'a'.repeat(250)}@example.edu`,
+        contactEmailVerified: false,
+      }));
+    });
+
+    it('DENIES an empty contactEmail', async () => {
+      const uid = 'ce-update-empty';
+      await seedDB({ [`users/${uid}`]: existingUser(uid, { contactEmail: 'researcher@example.edu' }) });
+
+      const ctx = testEnv.authenticatedContext(uid);
+      await assertFails(updateDoc(doc(ctx.firestore(), `users/${uid}`), {
+        contactEmail: '',
+        contactEmailVerified: false,
+      }));
+    });
+
+    it('DENIES a non-string contactEmail', async () => {
+      const uid = 'ce-update-nonstring';
+      await seedDB({ [`users/${uid}`]: existingUser(uid) });
+
+      const ctx = testEnv.authenticatedContext(uid);
+      await assertFails(updateDoc(doc(ctx.firestore(), `users/${uid}`), {
+        contactEmail: 12345,
+        contactEmailVerified: false,
+      }));
+    });
+
+    it('DENIES writing another user\'s contact email', async () => {
+      const uid = 'ce-update-victim';
+      await seedDB({ [`users/${uid}`]: existingUser(uid) });
+
+      const attacker = testEnv.authenticatedContext('ce-update-attacker');
+      await assertFails(updateDoc(doc(attacker.firestore(), `users/${uid}`), {
+        contactEmail: 'attacker@example.com',
+        contactEmailVerified: false,
+      }));
+    });
+  });
+
+  // The three shapes that existed before this change must keep working
+  // exactly as they did. isContactEmailUpdate() is a fourth alternative in the
+  // same disjunction, and a fourth alternative is the easiest place in a rules
+  // file to accidentally narrow the other three.
+  describe('legacy write shapes still work (regression)', () => {
+    it('ALLOWS the OSF-era account-creation shape', async () => {
+      const uid = 'ce-legacy-create';
+      const ctx = testEnv.authenticatedContext(uid);
+
+      await assertSucceeds(setDoc(doc(ctx.firestore(), `users/${uid}`), {
+        uid,
+        email: 'researcher@example.edu',
+        experiments: [],
+        osfToken: '',
+        osfTokenValid: false,
+        usingPersonalToken: false,
+        createdAt: 1700000000000,
+      }));
+    });
+
+    it('ALLOWS a usingPersonalToken-only update', async () => {
+      const uid = 'ce-legacy-token-method';
+      await seedDB({ [`users/${uid}`]: existingUser(uid, { usingPersonalToken: false }) });
+
+      const ctx = testEnv.authenticatedContext(uid);
+      await assertSucceeds(
+        updateDoc(doc(ctx.firestore(), `users/${uid}`), { usingPersonalToken: true })
+      );
+    });
+
+    it('ALLOWS an experiments-only update', async () => {
+      const uid = 'ce-legacy-experiments';
+      await seedDB({ [`users/${uid}`]: existingUser(uid, { experiments: ['exp1'] }) });
+
+      const ctx = testEnv.authenticatedContext(uid);
+      await assertSucceeds(
+        updateDoc(doc(ctx.firestore(), `users/${uid}`), { experiments: ['exp1', 'exp2'] })
+      );
+    });
+  });
+
+  // No rule matches either collection, so Firestore default-denies them. These
+  // tests exist because that protection is invisible in the rules file: the
+  // verification code hash MUST NOT be reachable by the person being verified,
+  // and `allow read` on users/{uid} hands the owner their whole document --
+  // which is precisely why the hash lives in its own collection instead.
+  describe('server-only collections are unreachable from any client', () => {
+    it('DENIES the owner reading their own contactEmailVerifications document', async () => {
+      const uid = 'ce-verif-owner';
+      await seedDB({
+        [`contactEmailVerifications/${uid}`]: {
+          emailHash: 'deadbeef',
+          codeHash: 'cafebabe',
+          expiresAt: 1700000000000,
+          attempts: 0,
+          sentAt: 1699999999999,
+        },
+      });
+
+      const ctx = testEnv.authenticatedContext(uid);
+      await assertFails(getDoc(doc(ctx.firestore(), `contactEmailVerifications/${uid}`)));
+    });
+
+    it('DENIES the owner writing their own contactEmailVerifications document', async () => {
+      // Writable would be as bad as readable: a client could install a code
+      // hash it knows and then "verify" any address it likes.
+      const uid = 'ce-verif-owner-write';
+      const ctx = testEnv.authenticatedContext(uid);
+
+      await assertFails(setDoc(doc(ctx.firestore(), `contactEmailVerifications/${uid}`), {
+        codeHash: 'known-to-the-client',
+        attempts: 0,
+      }));
+    });
+
+    it('DENIES reading another user\'s contactEmailVerifications document', async () => {
+      await seedDB({
+        'contactEmailVerifications/ce-verif-victim': { codeHash: 'cafebabe', attempts: 0 },
+      });
+
+      const ctx = testEnv.authenticatedContext('ce-verif-snooper');
+      await assertFails(
+        getDoc(doc(ctx.firestore(), 'contactEmailVerifications/ce-verif-victim'))
+      );
+    });
+
+    it('DENIES clients reading or writing the mail collection', async () => {
+      // mail documents hold researchers' addresses and the message bodies the
+      // Trigger Email extension will send.
+      await seedDB({
+        'mail/ce-mail-doc': {
+          to: ['researcher@example.edu'],
+          message: { subject: 'x', text: 'y' },
+          datapipe: { kind: 'upload-failure', owner: 'ce-mail-owner' },
+        },
+      });
+
+      const ctx = testEnv.authenticatedContext('ce-mail-owner');
+      await assertFails(getDoc(doc(ctx.firestore(), 'mail/ce-mail-doc')));
+      await assertFails(getDocs(collection(ctx.firestore(), 'mail')));
+      await assertFails(setDoc(doc(ctx.firestore(), 'mail/ce-mail-forged'), {
+        to: ['someone-else@example.com'],
+        message: { subject: 'x', text: 'y' },
+      }));
+    });
+  });
+});
+
+// experiments/{id}.uploadFailure -- the notifier's armed flag. Written only by
+// the Admin SDK (functions/src/upload-failure-notify.ts), which bypasses these
+// rules; what is being tested here is that the CLIENT SDK path cannot touch
+// it. A researcher able to clear notifiedAt would re-arm the notifier and get
+// mailed once per failed FILE -- twenty mails from one participant
+// submission -- which is the exact failure mode the feature exists to prevent.
+describe('/experiments — uploadFailure is server-managed (P0)', () => {
+  function experimentFields(overrides = {}) {
+    return {
+      active: true,
+      activeBase64: false,
+      activeConditionAssignment: false,
+      id: overrides.id,
+      owner: overrides.owner,
+      title: 'Test experiment',
+      sessions: 0,
+      nConditions: 1,
+      currentCondition: 0,
+      useValidation: true,
+      allowJSON: true,
+      allowCSV: true,
+      requiredFields: [],
+      maxSessions: 1,
+      limitSessions: false,
+      storageProvider: 'gdrive',
+      providerContainer: { provider: 'gdrive', folderId: 'folder-abc' },
+      ...overrides,
+    };
+  }
+
+  it('DENIES a client update that writes uploadFailure', async () => {
+    const docId = 'exp-uploadfailure-forge';
+    await seedDB({
+      [`experiments/${docId}`]: experimentFields({ id: docId, owner: 'uf-user' }),
+    });
+
+    const ctx = testEnv.authenticatedContext('uf-user');
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), `experiments/${docId}`), {
+        uploadFailure: { notifiedAt: null, failureCount: 0 },
+      })
+    );
+  });
+
+  it('DENIES a client update that clears uploadFailure.notifiedAt', async () => {
+    // The re-arm attack, written the way a client actually would: a dotted
+    // field path. affectedKeys() reports the TOP-LEVEL key, so this is caught
+    // by the same list entry.
+    const docId = 'exp-uploadfailure-rearm';
+    await seedDB({
+      [`experiments/${docId}`]: experimentFields({
+        id: docId,
+        owner: 'uf-user',
+        uploadFailure: { notifiedAt: new Date(), failureCount: 3 },
+      }),
+    });
+
+    const ctx = testEnv.authenticatedContext('uf-user');
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), `experiments/${docId}`), {
+        'uploadFailure.notifiedAt': null,
+      })
+    );
+  });
+
+  it('DENIES a create that arrives already carrying uploadFailure', async () => {
+    const docId = 'exp-uploadfailure-create';
+    const ctx = testEnv.authenticatedContext('uf-user');
+
+    await assertFails(
+      setDoc(doc(ctx.firestore(), `experiments/${docId}`), experimentFields({
+        id: docId,
+        owner: 'uf-user',
+        uploadFailure: { notifiedAt: null },
+      }))
+    );
+  });
+
+  it('ALLOWS ordinary edits on an experiment that HAS uploadFailure', async () => {
+    // Regression guard for the rule change itself: the dashboard's writers
+    // (ExperimentActive.js, ExperimentValidation.js) are narrow merge writes,
+    // so the presence of a protected field must not make them fail.
+    const docId = 'exp-uploadfailure-ordinary-edit';
+    await seedDB({
+      [`experiments/${docId}`]: experimentFields({
+        id: docId,
+        owner: 'uf-user',
+        uploadFailure: { notifiedAt: new Date(), failureCount: 3 },
+      }),
+    });
+
+    const ctx = testEnv.authenticatedContext('uf-user');
+    await assertSucceeds(
+      updateDoc(doc(ctx.firestore(), `experiments/${docId}`), { active: false })
+    );
+  });
+});
