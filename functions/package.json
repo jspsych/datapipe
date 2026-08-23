@@ -18,6 +18,7 @@
   "main": "lib/index.js",
   "type": "module",
   "dependencies": {
+    "@aws-sdk/client-sesv2": "3.1116.0",
     "@jspsych/metadata": "file:metadata",
     "archiver": "^7.0.1",
     "cors": "^2.8.5",

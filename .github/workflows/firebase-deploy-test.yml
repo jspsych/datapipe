@@ -71,6 +71,19 @@ jobs:
           # redirect uri and ZENODO_ENV are non-secret and live in
           # functions/.env.datapipe-test.
           echo "ZENODO_CLIENT_SECRET=${{ secrets.TEST_ZENODO_CLIENT_SECRET }}" >> .env
+          # Amazon SES for the deployed test site (functions/src/mail-delivery.ts).
+          # Leave these three repo secrets UNSET to keep the test site from
+          # mailing real people: the onmailcreated trigger then records a
+          # terminal MailConfigMissingError on each mail document and sends
+          # nothing, which is visible rather than silent. Set them only against
+          # an SES account still in the sandbox, whose verified identities are
+          # addresses you own. See docs/deploy-contact-email.md §2.
+          echo "SES_REGION=${{ secrets.TEST_SES_REGION }}" >> .env
+          echo "SES_ACCESS_KEY_ID=${{ secrets.TEST_SES_ACCESS_KEY_ID }}" >> .env
+          echo "SES_SECRET_ACCESS_KEY=${{ secrets.TEST_SES_SECRET_ACCESS_KEY }}" >> .env
+          # Not secret, so literals here, the same way REDIRECT_URI above is.
+          echo "MAIL_FROM=DataPipe <notifications@datapipe-test.web.app>" >> .env
+          echo "MAIL_REPLY_TO=jdeleeuw@vassar.edu" >> .env
       - name: Install dependencies and build functions
         working-directory: functions
         run: |
