@@ -49,7 +49,17 @@ export default function Navbar() {
   const hydrated = useHydrated();
   const showUser = hydrated ? user : null;
   const router = useRouter();
-  const current = (href) => (router.pathname === href ? "page" : undefined);
+  const current = (href) => {
+    // Documentation covers the whole /docs/* tree, so its nav item stays
+    // highlighted on every page in that section, not just the index --
+    // an exact match here would drop the highlight the instant a reader
+    // clicks into /docs/experiments or any other subpage.
+    const isActive =
+      href === "/docs"
+        ? router.pathname.startsWith("/docs")
+        : router.pathname === href;
+    return isActive ? "page" : undefined;
+  };
 
   return (
     <Box
@@ -106,17 +116,16 @@ export default function Navbar() {
             <Link color="fg" aria-current={current("/getting-started")} asChild>
               <NextLink href="/getting-started">Getting Started</NextLink>
             </Link>
-            <Link color="fg" aria-current={current("/api-docs")} asChild>
-              <NextLink href="/api-docs">API Docs</NextLink>
+            <Link color="fg" aria-current={current("/docs")} asChild>
+              <NextLink href="/docs">Documentation</NextLink>
             </Link>
-            <Link color="fg" aria-current={current("/faq")} asChild>
-              <NextLink href="/faq">FAQ</NextLink>
+            {/* My Experiments is always rendered, including signed out --
+                pages/admin/index.js wraps its content in AuthCheck, which
+                renders the sign-in form in place and returns here after, so
+                there is no dead end for a signed-out visitor. */}
+            <Link color="fg" aria-current={current("/admin")} asChild>
+              <NextLink href="/admin">My Experiments</NextLink>
             </Link>
-            {showUser && (
-              <Link color="fg" aria-current={current("/admin")} asChild>
-                <NextLink href="/admin">My Experiments</NextLink>
-              </Link>
-            )}
           </HStack>
         </HStack>
         {/* gap={4}, not gap={8} plus an extra mr={4} on the first button.
@@ -237,11 +246,22 @@ export default function Navbar() {
                 >
                   <NextLink href="/getting-started">Getting Started</NextLink>
                 </Menu.Item>
-                <Menu.Item value="api-docs" color="fg" py="3" px="3" _hover={{ bg: "bg.muted" }} asChild>
-                  <NextLink href="/api-docs">API Docs</NextLink>
+                <Menu.Item value="docs" color="fg" py="3" px="3" _hover={{ bg: "bg.muted" }} asChild>
+                  <NextLink href="/docs">Documentation</NextLink>
                 </Menu.Item>
-                <Menu.Item value="faq" color="fg" py="3" px="3" _hover={{ bg: "bg.muted" }} asChild>
-                  <NextLink href="/faq">FAQ</NextLink>
+                {/* My Experiments is always rendered, including signed out --
+                    see the desktop nav comment above. Kept outside the
+                    showUser block below, which still gates New Experiment
+                    and Settings. */}
+                <Menu.Item
+                  value="experiments"
+                  color="fg"
+                  py="3"
+                  px="3"
+                  _hover={{ bg: "bg.muted" }}
+                  asChild
+                >
+                  <NextLink href="/admin">My Experiments</NextLink>
                 </Menu.Item>
                 {/* The desktop Account menu only exists for signed-in
                     users, so this shared mobile/overflow menu is the only
@@ -257,16 +277,6 @@ export default function Navbar() {
                 )}
                 {showUser && (
                   <>
-                    <Menu.Item
-                      value="experiments"
-                      color="fg"
-                      py="3"
-                      px="3"
-                      _hover={{ bg: "bg.muted" }}
-                      asChild
-                    >
-                      <NextLink href="/admin">My Experiments</NextLink>
-                    </Menu.Item>
                     <Menu.Item
                       value="new-experiment"
                       color="fg"

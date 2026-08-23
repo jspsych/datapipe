@@ -12,6 +12,7 @@ import {
 import { ChevronDown, ChevronRight, Shield } from "lucide-react";
 import { useState } from "react";
 import { osfSunsetLabel } from "../lib/osf-sunset";
+import GuidanceLine from "../components/ui/GuidanceLine";
 
 // Which Zenodo this deployment points at -- "" on production, "sandbox." on
 // the test site. Same reasoning as lib/provider-config.js: the test
@@ -314,6 +315,10 @@ export default function GettingStarted() {
           or deposition for you and opens the experiment dashboard, which
           links straight to it.
         </Text>
+        <GuidanceLine href="/docs/experiments" linkText="Creating an experiment">
+          The dashboard this opens is where you get the experiment ID, watch
+          sessions arrive, and change any setting later.
+        </GuidanceLine>
       </StepCard>
 
       <StepCard number={4} title="Configure the experiment">
@@ -339,8 +344,8 @@ export default function GettingStarted() {
               Psych-DS
             </Link>
             , updated after each session. See{" "}
-            <Link href="/faq#item-11" color="brandOrange.fg">how it works</Link>
-            {" "}in the FAQ.
+            <Link href="/docs/experiments/metadata" color="brandOrange.fg">how it works</Link>
+            {" "}in the docs.
           </FeatureItem>
         </Stack>
         <Callout>
@@ -349,6 +354,10 @@ export default function GettingStarted() {
           — validation and session limits reduce the risk of unwanted
           submissions.
         </Callout>
+        <GuidanceLine href="/docs/experiments#switches" linkText="The four switches">
+          Each of these settings has its own page, with the fine print on
+          conditions, validation and session limits.
+        </GuidanceLine>
       </StepCard>
 
       <StepCard number={5} title="Add code to your experiment">
@@ -369,6 +378,13 @@ export default function GettingStarted() {
           select your experiment, and copy the code from the{" "}
           <strong>Code Samples</strong> panel.
         </Text>
+        <GuidanceLine
+          href="/docs/experiments/sending-data"
+          linkText="Sending data from your experiment"
+        >
+          The same snippets, plus what each response means and the 32 MB
+          request limit.
+        </GuidanceLine>
       </StepCard>
 
       <StepCard number={6} title="Publish your experiment online">
@@ -443,18 +459,25 @@ export default function GettingStarted() {
       <Box mt={8}>
         <StepCard number={8} title="When data collection ends">
         <Text>
-          When your study is finished, <strong>finalize</strong> the
-          experiment from its dashboard. DataPipe merges every remaining data
-          file into a single archive on your storage provider and stops
-          accepting new submissions, which makes the dataset easier to share
-          and cite. Finalizing cannot be undone, so do it only when you are
-          certain no more data is coming.
+          When your study is finished on <strong>Zenodo</strong>,{" "}
+          <strong>finalize</strong> the experiment from its dashboard. DataPipe
+          merges every remaining data file into a single archive and stops
+          accepting new submissions, which keeps the deposition under
+          Zenodo&apos;s file limit and makes the dataset easier to share and
+          cite. Finalizing cannot be undone, so do it only when you are
+          certain no more data is coming. Google Drive and Dataverse
+          don&apos;t have that file-count ceiling, so there is nothing to
+          finalize there — just stop sending data when you&apos;re done.
         </Text>
         <Text color="fg.muted" fontSize="sm">
           On Zenodo, finalizing prepares the deposition but does not publish
           it. Publishing the record, and with it issuing the DOI, stays your
           decision and happens on Zenodo itself.
         </Text>
+        <GuidanceLine href="/docs/data/finalizing" linkText="Finishing a study">
+          What finalizing does, which providers support it, and what happens
+          to any uploads still queued when you finalize.
+        </GuidanceLine>
         </StepCard>
       </Box>
     </Stack>

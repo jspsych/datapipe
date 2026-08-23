@@ -412,7 +412,7 @@ export default function Home() {
               <Text as="figcaption" fontSize="sm" color="band.fg.subtle" mt={3}>
                 The code is the same whichever storage provider you chose.
                 Every endpoint and error code is in the{" "}
-                <ProseLink href="/api-docs" ground="band">
+                <ProseLink href="/docs/api" ground="band">
                   API reference
                 </ProseLink>
                 .
@@ -577,8 +577,8 @@ export default function Home() {
             </Button>
             <Text fontSize="sm" color="band.fg.subtle" maxW="70ch" pt={2}>
               The{" "}
-              <ProseLink href="/faq" ground="band">
-                FAQ
+              <ProseLink href="/docs" ground="band">
+                documentation
               </ProseLink>{" "}
               covers what DataPipe stores, what it costs to run, and what happens
               when an upload fails.
@@ -596,7 +596,7 @@ export default function Home() {
                 : "DataPipe is winding down its support for OSF."}{" "}
               Data already there stays in your OSF account, and DataPipe never
               removes it. See{" "}
-              <ProseLink href="/faq#item-0b" ground="band">
+              <ProseLink href="/docs/providers/osf" ground="band">
                 how to move to another provider
               </ProseLink>
               .
