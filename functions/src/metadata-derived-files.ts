@@ -28,13 +28,19 @@ export interface DerivedFileSource extends ExtractionResult {
  * Researcher-supplied folder prefixes (e.g. "condition-A/abc.json") are
  * flattened into the Psych-DS layout: the CLI converts whole directories into
  * a flat data/ folder, and DataPipe matches it, so the path is encoded into a
- * single filename rather than nested. Encoding (instead of discarding) the
- * prefix keeps two submissions with the same leaf name in different
- * subfolders from colliding at data/raw/<leaf> (and keeps the derived main
- * CSV/sidecar stems, which follow the same encoded name, collision-free too).
+ * single filename rather than nested. The encoding is percent-escaping
+ * restricted to exactly "%", "/" and "\" ("%25", "%2F", "%5C"), which makes
+ * it injective: no two distinct submitted names can flatten to the same raw
+ * path or collision-cache claim. (The previous separator->"-" collapse let
+ * "condition-A/data.json" shadow "condition-A-data.json", so the second
+ * valid submission was rejected as a duplicate.) Names containing none of
+ * the three characters -- the overwhelming majority -- pass through
+ * unchanged. Derived CSV/sidecar stems built from this name additionally go
+ * through the library's lossy toPsychDSValue sanitiser; the raw path and
+ * its collision-cache claim are the duplicate guard, not the derived names.
  */
 function flattenName(dataFilename: string): string {
-  return dataFilename.replace(/[/\\]+/g, '-');
+  return dataFilename.replace(/[%/\\]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
 }
 
 /**
