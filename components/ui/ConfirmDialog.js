@@ -63,8 +63,16 @@ export default function ConfirmDialog({
     }
   };
 
+  // While the confirm request is in flight, Escape/backdrop closes are
+  // ignored -- otherwise the operation keeps running with its progress and
+  // error surface gone. The success path closes via the prop directly.
+  const handleOpenChange = (details) => {
+    if (isPending) return;
+    onOpenChange(details);
+  };
+
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+    <Dialog.Root open={open} onOpenChange={handleOpenChange}>
       <Dialog.Backdrop />
       <Dialog.Positioner>
         <Dialog.Content

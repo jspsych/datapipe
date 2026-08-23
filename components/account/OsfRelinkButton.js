@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button } from "@chakra-ui/react";
 import { OsfIcon } from "../OsfIcon";
+import FormErrorAlert from "../ui/FormErrorAlert";
 
 // Re-runs the OSF authorization to restore WRITE access for an experiment
 // that is still collecting. This is the storage grant, not sign-in: it takes
@@ -13,9 +14,11 @@ import { OsfIcon } from "../OsfIcon";
 // in-flight study whose token lapsed during the wind-down.
 export default function OsfRelinkButton({ children, ...buttonProps }) {
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const handleClick = async () => {
     setIsLoading(true);
+    setError("");
     try {
       const stateRes = await fetch(process.env.NEXT_PUBLIC_GENERATE_STATE, {
         method: "POST",
@@ -40,19 +43,23 @@ export default function OsfRelinkButton({ children, ...buttonProps }) {
       window.location.href = url.toString();
     } catch (err) {
       console.error("Failed to initiate OSF authorization:", err);
+      setError("Could not start OSF authorization. Please try again.");
       setIsLoading(false);
     }
   };
 
   return (
-    <Button
-      variant="outline"
-      size="md"
-      loading={isLoading}
-      onClick={handleClick}
-      {...buttonProps}
-    >
-      <OsfIcon /> {children}
-    </Button>
+    <>
+      <Button
+        variant="outline"
+        size="md"
+        loading={isLoading}
+        onClick={handleClick}
+        {...buttonProps}
+      >
+        <OsfIcon /> {children}
+      </Button>
+      <FormErrorAlert>{error}</FormErrorAlert>
+    </>
   );
 }

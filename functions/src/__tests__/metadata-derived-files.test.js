@@ -34,12 +34,25 @@ describe('rawDataPath', () => {
   });
 
   it('encodes researcher subfolders into the flattened name', () => {
-    expect(rawDataPath('condition-A/abc123.json')).toBe('data/raw/condition-A-abc123.json');
-    expect(rawDataPath('a/b/abc123.json')).toBe('data/raw/a-b-abc123.json');
+    expect(rawDataPath('condition-A/abc123.json')).toBe('data/raw/condition-A%2Fabc123.json');
+    expect(rawDataPath('a/b/abc123.json')).toBe('data/raw/a%2Fb%2Fabc123.json');
+  });
+
+  it('keeps names without separators or "%" byte-identical', () => {
+    expect(rawDataPath('my-file_2.json')).toBe('data/raw/my-file_2.json');
   });
 
   it('keeps two same-leaf-name submissions from different subfolders collision-free', () => {
     expect(rawDataPath('condition-A/data.json')).not.toBe(rawDataPath('condition-B/data.json'));
+  });
+
+  it('keeps a prefixed name distinct from its flattened look-alike', () => {
+    expect(rawDataPath('condition-A/data.json')).not.toBe(rawDataPath('condition-A-data.json'));
+  });
+
+  it('escapes the escape marker itself, so pre-encoded names stay distinct', () => {
+    expect(rawDataPath('50%.json')).toBe('data/raw/50%25.json');
+    expect(rawDataPath('a%2Fb.json')).not.toBe(rawDataPath('a/b.json'));
   });
 });
 

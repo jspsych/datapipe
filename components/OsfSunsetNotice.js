@@ -21,9 +21,9 @@ export default function OsfSunsetNotice({ scope = "experiment" }) {
   return (
     <Box
       w="100%"
-      bg="orange.900"
+      bg="brandOrange.subtle"
       border="1px solid"
-      borderColor="orange.500"
+      borderColor="brandOrange.border"
       borderRadius="md"
       px={4}
       py={3}
@@ -37,7 +37,7 @@ export default function OsfSunsetNotice({ scope = "experiment" }) {
         {deadline ? ` and will stop writing to it after ${deadline}` : ""}. Data
         already on OSF is unaffected and stays in your OSF account. To keep
         collecting, connect another storage provider in{" "}
-        <ChakraLink asChild color="brandOrange.300">
+        <ChakraLink asChild color="brandOrange.fg" textDecoration="underline">
           <Link href="/admin/account">Account Settings</Link>
         </ChakraLink>{" "}
         and create a new experiment there.

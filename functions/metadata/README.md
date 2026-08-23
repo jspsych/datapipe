@@ -2,8 +2,9 @@
 
 This directory is a **built, committed copy** of `@jspsych/metadata`, produced by
 `functions/scripts/sync-metadata.mjs`. `functions/package.json` references it as
-`"file:metadata"` and `functions/src` imports `../metadata/dist/index.js` directly, so
-deploys need no metadata build step.
+`"file:metadata"` and `functions/src` imports it through the `@jspsych/metadata`
+package name (never `../metadata/dist/` paths directly), so deploys need no
+metadata build step.
 
 ## Why vendored instead of an npm dependency?
 The version published to npm lags the fixes on the upstream `main` branch (nested
