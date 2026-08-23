@@ -105,7 +105,8 @@ export default function ConnectingAndReconnectingPage() {
 
       <DocsSection id="dataverse" title="Dataverse">
         <Text maxW="70ch">
-          Dataverse opens a short form instead of a redirect. It needs the full
+          For Dataverse, clicking Connect opens a short form instead of handing
+          you to another site. It needs the full
           address of your institution&apos;s installation — for example,{" "}
           <Code>https://dataverse.harvard.edu</Code> — and an API token, which
           you create under the{" "}
