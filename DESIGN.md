@@ -161,11 +161,11 @@ authoritative over the ramp, not the other way round.
 | Bar + chevron 1, dark bg | `#F2F5F1` | 15.06 on `#1C1F22`. Not `fg` — the mark keeps its own paper white |
 | Chevron 2 (echo) | `#8BC34A` | **Mark only.** Identical in both modes by design |
 
-**The navbar is mode-aware, not a permanent dark slab.** In light mode it is a light
-bar (`bg` + `border`-bottom) and the mark/wordmark render via `logo.mark`
-(`#2E7D32` light / `#F2F5F1` dark — the mark's own colors, deliberately not `fg`).
-The logo handoff specifies both grounds; keeping the bar dark on a light page would
-read as an unconverted region, not a brand device.
+**The navbar renders on the dark ground only** (light mode is retired, §2). The bar
+keeps its `bg` + `border`-bottom semantics and the mark/wordmark render via
+`logo.mark`, resolving to `#F2F5F1` — the mark's own paper white, deliberately not
+`fg`. The logo handoff still specifies both grounds; the light-bg values document
+the mark itself (README badges, external use), not any shipped surface.
 
 **Mode-invariant `code.*` tokens** carry the code-specimen "device" (landing terminal
 mock, `CodeBlock`, `CodeHints`): `code.bg = gray.950 #111111` (17.57:1 against the
@@ -187,67 +187,22 @@ its own. It is never text, never a fill, never a border, never a status hue.
 
 ## 2. Mode strategy
 
-**Preference is three-way: `system` / `light` / `dark`.** Stored by `next-themes` in
-`localStorage` under `datapipe-color-mode`, applied as a class on `<html>`
-(`attribute="class"`), read by Chakra v3's `_light` / `_dark` token conditions.
-`next-themes`' inline script must run before paint so there is no flash. Device-local:
-no server round-trip, no Firestore field.
+**Dark is the product's only mode** (owner decision, 2026-08-23). A three-way
+System/Light/Dark control shipped briefly once the token migration completed, and
+was retired: the light rendering never looked right, and a twice-a-year control was
+not worth carrying UI surface and a second design target for every future change.
+`pages/_app.js` pins `forcedTheme="dark"` — forced, not merely defaulted, so a
+Light/System preference stored in `localStorage` while the toggle existed cannot
+resurrect the retired mode. `components/ThemeSelect.js` and the `COLOR_MODE_TOGGLE`
+flag (`lib/feature-flags.js`) are deleted; `git log` has the full migration history
+if the decision is ever revisited.
 
-```jsx
-// pages/_app.js
-<ThemeProvider attribute="class" defaultTheme="dark"
-               enableSystem={false} storageKey="datapipe-color-mode"
-               disableTransitionOnChange>
-  <ChakraProvider value={system}>…</ChakraProvider>
-</ThemeProvider>
-```
-
-**Default: `dark`, with `enableSystem={false}`, until the conversion completes.**
-Justification: roughly 40 `color="white"`, 16 `bg="greyBackground"`, 17 `whiteAlpha.*`
-and 4 `bg="black"` are spread across 17 files, plus `globalCss` and `globals.css`
-force the body dark unconditionally. Honoring the OS preference before those are
-converted means a light-preferring researcher gets white-on-white navigation on the
-page they were *blocked into* — a worse outcome than a dark theme they didn't choose.
-Flip to `defaultTheme="system"` + `enableSystem` as the final step of Phase 3.
-
-**Toggle placement:** a three-item radio group ("System / Light / Dark") inside the
-existing navbar **Account menu**, above Settings. Not a floating sun/moon icon — this
-is a twice-a-year tool and an unlabeled icon violates "assume no recall". Signed-out
-visitors get the same control from the mobile/overflow menu.
-
-### Migration phases
-
-**Phase 1 — token foundation.** Diverge every `_light`/`_dark` pair in `lib/theme.js`
-(today all 30+ semantic tokens set both sides identically). Delete `globalCss.body`,
-`globalCss.label`, `globalCss.input`. Move `html, body` color/background out of
-`globals.css` into the theme. Every new component from this point consumes semantic
-tokens only.
-
-**Phase 2 — page-by-page conversion.** Ranked by damage:
-
-| # | File | What breaks |
-|---|---|---|
-| 1 | `pages/index.js` | ~53 hits: a ~40-literal syntax-highlight array, `bg="gray.950/900/800"` terminal chrome, `bg="black"` section |
-| 2 | `components/Navbar.js` | 17× `color="white"`, 9× `bg="greyBackground"`, 2× `borderColor="white"`, 4× `whiteAlpha.300` |
-| 3 | `pages/getting-started.js` | `bg="black"`, `color="white"`, 7× `gray.400` |
-| 4 | `pages/admin/index.js` | 2× `bg="black"`, dialog `bg="greyBackground" color="white"` |
-| 5 | `components/dashboard/CodeHints.js` | 4× `greyBackground`/`white`, 7× `gray.400` |
-| 6 | `pages/oauth2/{connect,callback}.js` | `color="white"`, `bg="red.800"`, 3× `colorPalette="blue"` |
-| 7 | `components/Footer.js` | `bg="greyBackground"`, 4× `gray.300`, `borderColor="white"` |
-| 8 | `pages/admin/[experiment_id].js` | 4× `whiteAlpha.200` separators, `blue.500` link |
-| 9 | `dashboard/{Title,ExperimentInfo}.js`, `admin/account.js`, `account/*` dialogs | `color="white"`, `whiteAlpha.*` separators |
-| 10 | `{CodeBlock,CopyButton,SignInForm}.js`, `{signup,reset-password,api-docs}.js` | `color="white"`, `bg="gray.800"` |
-
-Already clean, leave alone: `contact.js`, `redirect.js`, `admin/deleted-account.js`,
-`dashboard/ErrorPanel.js`, `AuthCheck.js`, `Loader.js`, `TestEnvironmentWarning.js`,
-`auth/AuthProviderButtons.js`, `account/OsfRelinkButton.js`. Third-party brand SVGs
-keep their literal hexes — including `AuthProviderIcons.js:35` `fill="#FFF"`, which is
-the ORCID glyph *inside* the brand's `#A6CE39` circle, not on the page ground: it is
-correct in both modes and must **not** get a `currentColor` "fix". `styles/Home.module.css` is imported
-nowhere; delete it rather than migrate it.
-
-**Phase 3 — ship the toggle.** Only after Phase 2 clears. Light mode must never
-render a half-converted page. Then flip the default to `system`.
+**What survives the retirement.** The token conversion the toggle motivated is kept
+and remains mandatory: every component consumes semantic tokens (`fg`, `bg.panel`,
+`brandOrange.subtle`, …), never raw color literals. The `_light` branches in
+`lib/theme.js` are inert under forced dark and stay in place — they cost nothing,
+keep Chakra's token shape idiomatic, and are the escape hatch if this is revisited.
+Judge every new color choice against the dark surfaces only.
 
 ---
 
