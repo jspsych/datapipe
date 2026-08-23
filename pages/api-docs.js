@@ -32,9 +32,9 @@ function ParamTable({ children }) {
     <Table.Root variant="outline">
       <Table.Header>
         <Table.Row>
-          <Table.ColumnHeader color="white">Field</Table.ColumnHeader>
-          <Table.ColumnHeader color="white">Type</Table.ColumnHeader>
-          <Table.ColumnHeader color="white">Description</Table.ColumnHeader>
+          <Table.ColumnHeader color="fg">Field</Table.ColumnHeader>
+          <Table.ColumnHeader color="fg">Type</Table.ColumnHeader>
+          <Table.ColumnHeader color="fg">Description</Table.ColumnHeader>
         </Table.Row>
       </Table.Header>
       <Table.Body>
@@ -48,7 +48,7 @@ function Param({ name, type, children }) {
   return (
     <Table.Row>
       <Table.Cell><Code>{name}</Code></Table.Cell>
-      <Table.Cell><Text fontSize="sm" color="gray.400">{type}</Text></Table.Cell>
+      <Table.Cell><Text fontSize="sm" color="fg.muted">{type}</Text></Table.Cell>
       <Table.Cell>{children}</Table.Cell>
     </Table.Row>
   );
@@ -58,7 +58,7 @@ function ErrorRow({ code, status, children }) {
   return (
     <Table.Row>
       <Table.Cell><Code>{code}</Code></Table.Cell>
-      <Table.Cell><Text fontSize="sm" color="gray.400">{status}</Text></Table.Cell>
+      <Table.Cell><Text fontSize="sm" color="fg.muted">{status}</Text></Table.Cell>
       <Table.Cell>{children}</Table.Cell>
     </Table.Row>
   );
@@ -111,7 +111,7 @@ export default function ApiDocs() {
           </Param>
         </ParamTable>
         <Box>
-          <Text fontSize="sm" color="gray.400" mb={2}>Example request body</Text>
+          <Text fontSize="sm" color="fg.muted" mb={2}>Example request body</Text>
           <CodeBlock>
             {`{
   "experimentID": "abc123",
@@ -162,7 +162,7 @@ export default function ApiDocs() {
           </Param>
         </ParamTable>
         <Box>
-          <Text fontSize="sm" color="gray.400" mb={2}>Example response</Text>
+          <Text fontSize="sm" color="fg.muted" mb={2}>Example response</Text>
           <CodeBlock>
             {`{
   "condition": 2
@@ -187,8 +187,8 @@ export default function ApiDocs() {
         <Table.Root variant="outline">
           <Table.Header>
             <Table.Row>
-              <Table.ColumnHeader color="white">Status</Table.ColumnHeader>
-              <Table.ColumnHeader color="white">Meaning</Table.ColumnHeader>
+              <Table.ColumnHeader color="fg">Status</Table.ColumnHeader>
+              <Table.ColumnHeader color="fg">Meaning</Table.ColumnHeader>
             </Table.Row>
           </Table.Header>
           <Table.Body>
@@ -230,7 +230,7 @@ export default function ApiDocs() {
         <Heading as="h3" size="sm" mt={4}>
           Error codes
         </Heading>
-        <Text fontSize="sm" color="gray.400">
+        <Text fontSize="sm" color="fg.muted">
           Codes beginning <Code>OSF_</Code> are historical names kept for
           backward compatibility. <Code>OSF_FILE_EXISTS</Code>,{" "}
           <Code>OSF_UPLOAD_ERROR</Code> and <Code>OSF_UPLOAD_EXCEPTION</Code>{" "}
@@ -241,9 +241,9 @@ export default function ApiDocs() {
         <Table.Root variant="outline">
           <Table.Header>
             <Table.Row>
-              <Table.ColumnHeader color="white">Error code</Table.ColumnHeader>
-              <Table.ColumnHeader color="white">Status</Table.ColumnHeader>
-              <Table.ColumnHeader color="white">Meaning</Table.ColumnHeader>
+              <Table.ColumnHeader color="fg">Error code</Table.ColumnHeader>
+              <Table.ColumnHeader color="fg">Status</Table.ColumnHeader>
+              <Table.ColumnHeader color="fg">Meaning</Table.ColumnHeader>
             </Table.Row>
           </Table.Header>
           <Table.Body>
