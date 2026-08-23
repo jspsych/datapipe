@@ -183,6 +183,19 @@ export default function SendingDataPage() {
           and setting the <Code>Content-Encoding: gzip</Code> header. The server
           will decompress the body automatically.
         </Text>
+        <Text maxW="70ch">
+          A request that is still over 32 MB never reaches DataPipe&apos;s own
+          code — the hosting infrastructure rejects it before any endpoint runs.
+          There is no DataPipe error response and nothing in your experiment
+          dashboard to explain it; your <Code>fetch</Code> call gets back a
+          bare <Code>500 Internal Error</Code> (or a plain network failure,
+          depending on the client), and unlike a queued{" "}
+          <Code>202</Code>, the data is not held anywhere for retry. If
+          participants are hitting this, the fix is to shrink the payload —
+          split large recordings into smaller files, lower a sampling rate, or
+          send data more often instead of once at the end — not to retry the
+          same request.
+        </Text>
       </DocsSection>
 
       <DocsSection id="what-the-response-means" title="What the response means">
