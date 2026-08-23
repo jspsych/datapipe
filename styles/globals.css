@@ -77,3 +77,65 @@ pre::-webkit-scrollbar-thumb:hover {
   text-align: center;
   font-size: 1rem;
 }
+
+/* Logo "emit": on hover or keyboard focus of the navbar lockup, the |>
+   mark's chevrons re-fire out of the bar -- the pipe passing data, which
+   is the product. Chevron geometry lives on LogoMark's 104-unit grid and
+   CSS px on SVG children map to user units (transform-box: view-box), so
+   -22px pulls each chevron back to the bar's face at any rendered size.
+   Pure motion, no fade: LogoMark clips the chevron group to the region
+   right of the bar, so at translateX(-88px) both chevrons are genuinely
+   hidden "inside" the pipe and slide out through the clip edge. -88 (not
+   the minimal -76) buys the green echo's apex 9 grid units of margin
+   past the clip edge -- at -76 it sat 1 unit in, and subpixel
+   antialiasing leaked a green sliver on the first frame. Both travel the
+   same 88 units over the same 450ms (ease-out) at a 150ms
+   phase offset, so the trailing chevron never catches the leader. Order
+   is owner-ratified: the green echo fires FIRST (it lives furthest from
+   the bar) and the dark chevron comes out behind it.
+   Timing is owner-ratified, deliberately slower than DESIGN.md §7's
+   150-200ms ladder (that ladder is for state feedback; at 200ms this
+   read as a flicker). `backwards` fill holds the delayed echo hidden
+   until its turn. Hover-out removes the animation -- instant rest state
+   -- and re-hovering replays it. */
+@keyframes dp-logo-emit {
+  from {
+    transform: translateX(-88px);
+  }
+  to {
+    transform: none;
+  }
+}
+
+.dp-logo-chevron-1,
+.dp-logo-chevron-2 {
+  transform-box: view-box;
+}
+
+/* Both chevrons carry a delay + `backwards` fill: on hover they vanish
+   behind the bar INSTANTLY (fill applies the from-state through the
+   delay), the pipe holds visibly empty for 120ms, then the green fires
+   and the dark follows 150ms later. Without the green's hold, the
+   decelerate curve covers ~half its travel in the first ~50ms and the
+   green never perceptibly disappears -- it read as snapping its left
+   edge to the pipe rather than emerging from inside it. */
+.dp-logo-link:hover .dp-logo-chevron-2,
+.dp-logo-link:focus-visible .dp-logo-chevron-2 {
+  animation: dp-logo-emit 450ms cubic-bezier(0, 0, 0.2, 1) 120ms backwards;
+}
+
+.dp-logo-link:hover .dp-logo-chevron-1,
+.dp-logo-link:focus-visible .dp-logo-chevron-1 {
+  animation: dp-logo-emit 450ms cubic-bezier(0, 0, 0.2, 1) 270ms backwards;
+}
+
+/* DESIGN.md §7: every animation needs a reduced-motion story. The mark
+   simply stays at rest -- the hover state loses nothing functional. */
+@media (prefers-reduced-motion: reduce) {
+  .dp-logo-link:hover .dp-logo-chevron-1,
+  .dp-logo-link:focus-visible .dp-logo-chevron-1,
+  .dp-logo-link:hover .dp-logo-chevron-2,
+  .dp-logo-link:focus-visible .dp-logo-chevron-2 {
+    animation: none;
+  }
+}
