@@ -67,9 +67,17 @@ export default function Navbar() {
         w={"100%"}
         color={"fg"}
       >
-        <HStack gap={4} alignItems={"center"} pe={"2"}>
+        {/* The 48px that separates the wordmark from the first nav link is
+            now a `gap` on this row. It used to be `pr={10}` on the logo's own
+            Box, which is inside the <NextLink> -- so 40px of empty nav bar
+            was part of the home link's click target. Gap owns sibling
+            spacing; padding owns hit area. */}
+        <HStack gap={{ base: 4, md: 12 }} alignItems={"center"}>
           <NextLink href="/" className="dp-logo-link">
-            <Box display={"flex"} alignItems={"center"} gap={2.5} pr={10}>
+            {/* 2.5 is off the §4 ladder and stays: this is the optical gap
+                inside the logo lockup (mark to wordmark), not layout
+                spacing between components. */}
+            <Box display={"flex"} alignItems={"center"} gap={2.5}>
               {/* The mark and wordmark render in the logo's own colors, not
                   the page `fg` -- DESIGN.md §1 "Logo" / "The navbar is
                   mode-aware": `logo.mark` resolves #2E7D32 light / #F2F5F1
@@ -111,7 +119,13 @@ export default function Navbar() {
             )}
           </HStack>
         </HStack>
-        <HStack display={{ base: "none", md: "flex" }} gap={8}>
+        {/* gap={4}, not gap={8} plus an extra mr={4} on the first button.
+            The account cluster is ONE group (Sign In + Sign Up, or New
+            Experiment + Account); the nav links to its left are separate
+            destinations at gap={8}. Tighter inside the group than between
+            groups is the grouping cue -- 48px between two halves of a
+            button pair was reading as two unrelated controls. */}
+        <HStack display={{ base: "none", md: "flex" }} gap={4}>
           {!showUser && (
             <>
               <Button
@@ -119,7 +133,6 @@ export default function Navbar() {
                 variant={"ghost"}
                 color="fg"
                 size={"sm"}
-                mr={4}
                 _hover={{ bg: "bg.muted" }}
               >
                 <NextLink href="/signin">Sign In</NextLink>
@@ -155,6 +168,11 @@ export default function Navbar() {
                     Account
                   </Button>
                 </Menu.Trigger>
+                {/* Menu items are py="3" throughout both menus (here and in
+                    the mobile menu below): 12px + the ~20px line box is a
+                    44px row. At py="2" they were 36px, and on the mobile
+                    menu -- where every route on the site is a menu item --
+                    that is nine crowded targets in a column. */}
                 <Menu.Positioner>
                   <Menu.Content bg="bg.panel" borderWidth="1px" borderColor="border" p="2">
                     {COLOR_MODE_TOGGLE && (
@@ -166,7 +184,7 @@ export default function Navbar() {
                     <Menu.Item
                       value="settings"
                       color="fg"
-                      py="2"
+                      py="3"
                       px="3"
                       _hover={{ bg: "bg.muted" }}
                       asChild
@@ -177,7 +195,7 @@ export default function Navbar() {
                     <Menu.Item
                       value="signout"
                       color="fg"
-                      py="2"
+                      py="3"
                       px="3"
                       _hover={{ bg: "bg.muted" }}
                       onClick={() => auth.signOut()}
@@ -193,10 +211,13 @@ export default function Navbar() {
         <HStack display={{ base: "flex", md: "none" }} gap={8}>
           <Menu.Root>
             <Menu.Trigger asChild>
+              {/* `minW={0}` collapsed the only navigation control on mobile
+                  to its icon box. 11 = 44px, the minimum touch target. */}
               <IconButton
                 color="fg"
                 cursor={"pointer"}
-                minW={0}
+                minW={"11"}
+                minH={"11"}
                 variant="ghost"
                 aria-label="Menu"
                 _hover={{ bg: "bg.muted" }}
@@ -209,17 +230,17 @@ export default function Navbar() {
                 <Menu.Item
                   value="getting-started"
                   color="fg"
-                  py="2"
+                  py="3"
                   px="3"
                   _hover={{ bg: "bg.muted" }}
                   asChild
                 >
                   <NextLink href="/getting-started">Getting Started</NextLink>
                 </Menu.Item>
-                <Menu.Item value="api-docs" color="fg" py="2" px="3" _hover={{ bg: "bg.muted" }} asChild>
+                <Menu.Item value="api-docs" color="fg" py="3" px="3" _hover={{ bg: "bg.muted" }} asChild>
                   <NextLink href="/api-docs">API Docs</NextLink>
                 </Menu.Item>
-                <Menu.Item value="faq" color="fg" py="2" px="3" _hover={{ bg: "bg.muted" }} asChild>
+                <Menu.Item value="faq" color="fg" py="3" px="3" _hover={{ bg: "bg.muted" }} asChild>
                   <NextLink href="/faq">FAQ</NextLink>
                 </Menu.Item>
                 {/* The desktop Account menu only exists for signed-in
@@ -239,7 +260,7 @@ export default function Navbar() {
                     <Menu.Item
                       value="experiments"
                       color="fg"
-                      py="2"
+                      py="3"
                       px="3"
                       _hover={{ bg: "bg.muted" }}
                       asChild
@@ -249,7 +270,7 @@ export default function Navbar() {
                     <Menu.Item
                       value="new-experiment"
                       color="fg"
-                      py="2"
+                      py="3"
                       px="3"
                       _hover={{ bg: "bg.muted" }}
                       asChild
@@ -265,7 +286,7 @@ export default function Navbar() {
                     <Menu.Item
                       value="settings"
                       color="fg"
-                      py="2"
+                      py="3"
                       px="3"
                       _hover={{ bg: "bg.muted" }}
                       asChild
@@ -279,10 +300,10 @@ export default function Navbar() {
                   <>
                     {/* Matches the desktop order (Sign In, then Sign Up) --
                         the previous markup reversed them on mobile only. */}
-                    <Menu.Item value="signin" color="fg" py="2" px="3" _hover={{ bg: "bg.muted" }} asChild>
+                    <Menu.Item value="signin" color="fg" py="3" px="3" _hover={{ bg: "bg.muted" }} asChild>
                       <NextLink href="/signin">Sign In</NextLink>
                     </Menu.Item>
-                    <Menu.Item value="signup" color="fg" py="2" px="3" _hover={{ bg: "bg.muted" }} asChild>
+                    <Menu.Item value="signup" color="fg" py="3" px="3" _hover={{ bg: "bg.muted" }} asChild>
                       <NextLink href="/signup">Sign Up</NextLink>
                     </Menu.Item>
                   </>
@@ -291,7 +312,7 @@ export default function Navbar() {
                   <Menu.Item
                     value="signout"
                     color="fg"
-                    py="2"
+                    py="3"
                     px="3"
                     _hover={{ bg: "bg.muted" }}
                     onClick={() => auth.signOut()}

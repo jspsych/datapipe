@@ -50,7 +50,7 @@ export default function AccountPage() {
 
   if (loading) {
     return (
-      <Center py={16}>
+      <Center w="100%" py={8}>
         <Spinner size="lg" color="brandGreen.solid" />
       </Center>
     );
@@ -93,10 +93,10 @@ export default function AccountPage() {
 
   return (
     <AuthCheck fallbackRoute={deleting ? "/admin/deleted-account" : null}>
-      <VStack gap={0} w="100%" maxW="560px" px={4} align="stretch">
+      <VStack gap={0} w="100%" maxW="560px" align="stretch">
         <Box mb={10}>
           <Heading>Account settings</Heading>
-          <Text fontSize="sm" color="fg.muted" mt={1}>
+          <Text fontSize="sm" color="fg.muted" mt={2}>
             {accountIdentity}
           </Text>
           {/* /admin/new sends researchers here mid-creation with ?next= so

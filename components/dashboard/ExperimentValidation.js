@@ -129,7 +129,7 @@ export default function ExperimentValidation({ data }) {
                 setValidationSettings(values);
               }}
             >
-              <Stack gap={5} direction="row">
+              <Stack gap={6} direction="row">
                 <Checkbox.Root value="json" colorPalette="brandGreen">
                   <Checkbox.HiddenInput />
                   <Checkbox.Control>

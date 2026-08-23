@@ -34,7 +34,7 @@ export default function AdminPage({}) {
           settings column, 1100px for dashboard and marketing pages. This was
           960px, one of three different widths across the three dashboard
           routes (960 / 540 / 1200). */}
-      <VStack gap={8} w="100%" maxW="1100px" px={4} align="stretch">
+      <VStack gap={8} w="100%" maxW="1100px" align="stretch">
         <AddSignInMethodBanner />
         <ExperimentList />
       </VStack>
@@ -191,7 +191,7 @@ function ExperimentItem({ exp }) {
           <ChakraLink asChild color="fg" fontSize="lg" fontWeight="semibold">
             <Link href={`/admin/${exp.id}`}>{exp.title}</Link>
           </ChakraLink>
-          <HStack gap={[2, 4]} flexWrap="wrap" rowGap={1}>
+          <HStack gap={[2, 4]} flexWrap="wrap" rowGap={2}>
             {/* One status per row, stated in words. "Data / Base64 /
                 Conditions / Metadata" were feature NAMES, not statuses --
                 whether each was on lived in the dot's hue. */}

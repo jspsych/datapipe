@@ -264,7 +264,7 @@ export default function SettingsRow({
           </Switch.Root>
         </HStack>
 
-        {description && <GuidanceLine mt={1}>{description}</GuidanceLine>}
+        {description && <GuidanceLine mt={2}>{description}</GuidanceLine>}
 
         <SaveStatus saved={saved} error={error} savedLabel={savedLabel} />
 

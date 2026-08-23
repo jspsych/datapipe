@@ -46,7 +46,7 @@ export default function CodeHints({ expId }) {
               color="fg"
               borderWidth="1px"
               borderColor="border"
-              p="1"
+              p="2"
             >
               <Menu.Item
                 value="jspsych"

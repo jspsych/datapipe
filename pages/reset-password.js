@@ -125,7 +125,9 @@ export default function ResetPassword() {
       w="100%"
       maxW="560px"
       mx="auto"
-      px={4}
+      // No px here: this Card.Root padding sat INSIDE the card border and
+      // added to Card.Body's p={8}, making the card 48px horizontally and
+      // 32px vertically. The page gutter belongs to _app.js.
       variant="unstyled"
       bg="bg.panel"
       borderWidth="1px"
@@ -196,11 +198,13 @@ export default function ResetPassword() {
                 <Field.ErrorText>{emailFieldError}</Field.ErrorText>
               </Field.Root>
 
+              {/* mt={2} over gap={4}: submit is the end of the form. */}
               <Button
                 type="submit"
                 colorPalette="brandGreen"
                 loading={isSubmitting}
                 loadingText="Sending link…"
+                mt={2}
               >
                 Send reset link
               </Button>
@@ -249,6 +253,7 @@ export default function ResetPassword() {
                 colorPalette="brandGreen"
                 loading={isSubmitting}
                 loadingText="Setting password…"
+                mt={2}
               >
                 Set new password
               </Button>

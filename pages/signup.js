@@ -148,7 +148,9 @@ export default function SignUpPage() {
       w="100%"
       maxW="560px"
       mx="auto"
-      px={4}
+      // No px here: this Card.Root padding sat INSIDE the card border and
+      // added to Card.Body's p={8}, making the card 48px horizontally and
+      // 32px vertically. The page gutter belongs to _app.js.
       variant="unstyled"
       bg="bg.panel"
       borderWidth="1px"
@@ -157,7 +159,7 @@ export default function SignUpPage() {
     >
       <Card.Body p={8}>
         <VStack gap={6} as="form" onSubmit={onSubmit} noValidate>
-          <VStack gap={1} textAlign="center">
+          <VStack gap={2} textAlign="center">
             <Heading as="h1" fontSize="2xl" fontWeight="700" color="fg">
               Create an account
             </Heading>
@@ -234,6 +236,8 @@ export default function SignUpPage() {
               <Field.ErrorText>{fieldErrors.password}</Field.ErrorText>
             </Field.Root>
 
+            {/* mt={2} against the stack's gap={4}: the submit is the end of
+                the form, not another field in it. */}
             <Button
               type="submit"
               colorPalette="brandGreen"
@@ -241,6 +245,7 @@ export default function SignUpPage() {
               loadingText="Creating account…"
               w="full"
               size="lg"
+              mt={2}
             >
               Create account
             </Button>

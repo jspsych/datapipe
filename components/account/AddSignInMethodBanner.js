@@ -50,7 +50,7 @@ export default function AddSignInMethodBanner() {
     >
       <VStack align="stretch" gap={4}>
         <Box>
-          <Text fontWeight="semibold" mb={1}>
+          <Text fontWeight="semibold" mb={2}>
             Add a way to sign in
           </Text>
           <Text fontSize="sm" color="fg.muted">

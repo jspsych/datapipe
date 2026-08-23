@@ -55,7 +55,7 @@ export default function EmptyState({ title, body, action, secondary }) {
       borderWidth="1px"
       borderColor="border"
       borderRadius="md"
-      px={[5, 8]}
+      px={[6, 8]}
       py={[6, 8]}
     >
       <Stack gap={4} align="flex-start" maxW="60ch">

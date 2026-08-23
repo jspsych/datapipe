@@ -88,7 +88,7 @@ export default function StatusIndicator({ status, label, size = 16 }) {
   const color = STATUS_COLORS[status] || STATUS_COLORS.neutral;
 
   return (
-    <HStack gap={1.5} display="inline-flex" alignItems="center">
+    <HStack gap={2} display="inline-flex" alignItems="center">
       <Icon aria-hidden="true" size={size} color={color} />
       <Text fontSize="sm" color="fg">
         {label}

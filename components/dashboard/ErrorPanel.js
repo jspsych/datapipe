@@ -69,7 +69,7 @@ export default function ErrorPanel({ errors }) {
     <Alert.Root status="error" colorPalette="brandRed" variant="subtle">
       <Alert.Indicator />
       <Box flex="1" minW={0}>
-        <Alert.Title mb={1}>
+        <Alert.Title mb={2}>
           {all.length === 1
             ? "One submission to this experiment was rejected."
             : `${all.length} submissions to this experiment were rejected.`}
@@ -122,12 +122,12 @@ export default function ErrorPanel({ errors }) {
                               "This submission was rejected, but DataPipe did not record why."}
                           </Text>
                           {error?.detail && error?.message && (
-                            <Text fontSize="sm" color="fg.muted" mt={1}>
+                            <Text fontSize="sm" color="fg.muted" mt={2}>
                               {error.detail}
                             </Text>
                           )}
                           {error?.error && (
-                            <Text fontSize="xs" color="fg.muted" mt={1}>
+                            <Text fontSize="xs" color="fg.muted" mt={2}>
                               Code: {error.error}
                             </Text>
                           )}

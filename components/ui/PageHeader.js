@@ -72,7 +72,7 @@ export default function PageHeader({
           color="fg.muted"
           display="inline-flex"
           alignItems="center"
-          gap={1.5}
+          gap={2}
           mb={3}
           _hover={{ color: "fg", textDecoration: "underline" }}
         >

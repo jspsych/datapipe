@@ -100,7 +100,7 @@ function ExperimentPageDashboard({ experiment_id }) {
 
   if (loading) {
     return (
-      <Center w="100%" py={16}>
+      <Center w="100%" py={8}>
         <Spinner color="brandGreen.solid" size="xl" />
       </Center>
     );
@@ -117,7 +117,7 @@ function ExperimentPageDashboard({ experiment_id }) {
   const notFound = !!snapshot && !snapshot.exists();
   if (error || notFound) {
     return (
-      <VStack w="100%" maxW="1100px" px={4} align="stretch">
+      <VStack w="100%" maxW="1100px" gap={6} align="stretch">
         <PageHeader
           title={notFound ? "Experiment not found" : "Could not load this experiment"}
           backHref="/admin"
@@ -141,7 +141,6 @@ function ExperimentPageDashboard({ experiment_id }) {
       w="100%"
       // 1100px, DESIGN.md §4's dashboard measure. Was an unexplained 1200.
       maxW="1100px"
-      px={4}
       gap={0}
     >
       <PageHeader
@@ -177,12 +176,12 @@ function ExperimentPageDashboard({ experiment_id }) {
       </HStack>
 
       {queueError && (
-        <Box mb={6}>
+        <Box mb={4}>
           <StatusIndicator
             status="warning"
             label="DataPipe could not check for queued uploads."
           />
-          <GuidanceLine mt={1}>
+          <GuidanceLine mt={2}>
             Files may be waiting to reach your storage provider without this
             page being able to show them. Reload to try again.
           </GuidanceLine>
@@ -190,22 +189,25 @@ function ExperimentPageDashboard({ experiment_id }) {
       )}
 
       {showResolved && (
-        <Box w="100%" mb={6}>
+        <Box w="100%" mb={4}>
           <UploadsResolvedNotice />
         </Box>
       )}
       {uploadError && queueEntries.length === 0 && !showResolved && (
-        <Box w="100%" mb={6}>
+        <Box w="100%" mb={4}>
           <ErrorPanel errors={errorLog} />
         </Box>
       )}
       {queueEntries.length > 0 && (
-        <Box w="100%" mb={6}>
+        <Box w="100%" mb={4}>
           <QueuePanel entries={queueEntries} experimentId={experiment_id} />
         </Box>
       )}
 
-      <Flex w="100%" gap={10} wrap="wrap" alignItems="flex-start">
+      {/* The notices above are one group of alerts (mb={4} between them);
+          this mt lifts the body away from that group instead of leaving it
+          the same 24px the notices used between themselves. */}
+      <Flex w="100%" mt={6} gap={10} wrap="wrap" alignItems="flex-start">
         <VStack flex="1" minW="300px" gap={0} align="stretch">
           <ExperimentInfo data={data} />
 

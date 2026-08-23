@@ -1,4 +1,5 @@
 import {
+  Box,
   Button,
   Card,
   Input,
@@ -77,7 +78,9 @@ export default function SignInForm({ routeAfterSignIn }) {
       w="100%"
       maxW="560px"
       mx="auto"
-      px={4}
+      // No px here: this Card.Root padding sat INSIDE the card border and
+      // added to Card.Body's p={8}, making the card 48px horizontally and
+      // 32px vertically. The page gutter belongs to _app.js.
       variant="unstyled"
       bg="bg.panel"
       borderWidth="1px"
@@ -86,7 +89,7 @@ export default function SignInForm({ routeAfterSignIn }) {
     >
       <Card.Body p={8}>
         <VStack gap={6} as="form" onSubmit={handleSubmit} noValidate>
-          <VStack gap={1} textAlign="center">
+          <VStack gap={2} textAlign="center">
             <Heading as="h1" fontSize="2xl" fontWeight="700" color="fg">
               Sign in
             </Heading>
@@ -153,6 +156,9 @@ export default function SignInForm({ routeAfterSignIn }) {
               <Field.ErrorText>{fieldErrors.password}</Field.ErrorText>
             </Field.Root>
 
+            {/* mt={2} on top of the stack's gap={4} = 24px. Email, password
+                and the submit button were all exactly 16px apart, so the
+                primary action read as a third form field. */}
             <Button
               type="submit"
               colorPalette="brandGreen"
@@ -160,6 +166,7 @@ export default function SignInForm({ routeAfterSignIn }) {
               loadingText="Signing in…"
               w="full"
               size="lg"
+              mt={2}
             >
               Sign in
             </Button>
@@ -172,13 +179,16 @@ export default function SignInForm({ routeAfterSignIn }) {
                 dashboard banner without losing their uid (and with it, their
                 experiments). Remove this in the same release that removes the
                 signup branch of functions/src/oauth2-callback.ts, not before. */}
-            <SignInWithOSF />
+            <Box w="full" mt={4}>
+              <SignInWithOSF />
+            </Box>
 
             <Link
               asChild
               fontSize="sm"
               color="brandGreen.fg"
               textDecoration="underline"
+              mt={2}
             >
               <NextLink href="/reset-password">Forgot password?</NextLink>
             </Link>
