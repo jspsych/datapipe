@@ -375,7 +375,7 @@ ship.
 - **`EmptyState`** — a heading, one sentence of what goes here and why, and the single
   primary action. Text only: no illustration, no mascot, no emoji.
 - **`GuidanceLine`** — the standard help line under a section heading: `sm`/`fg.muted`,
-  consequence before mechanism, with an inline link to `/getting-started` or `/faq`
+  consequence before mechanism, with an inline link to `/getting-started` or `/docs`
   where one exists. Shown at zero-state as well as one-state.
 
 ---

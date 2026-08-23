@@ -12,7 +12,7 @@ import NextLink from "next/link";
  *
  * Voice rules this component exists to make cheap (PRODUCT.md Principle 2,
  * "consequence before mechanism"): say what happens to the researcher's data
- * first, name the machinery second, and link to /getting-started or /faq when
+ * first, name the machinery second, and link to /getting-started or /docs when
  * there is somewhere to send them. Shown at zero-state as well as one-state --
  * the six-month researcher needs it more than the first-timer does.
  *
