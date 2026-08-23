@@ -16,7 +16,6 @@ import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import TestEnvironmentWarning from "../components/TestEnvironmentWarning";
 import CodeSpecimen from "../components/home/CodeSpecimen";
-import ArrivalsPanel from "../components/home/ArrivalsPanel";
 import BandMark from "../components/home/BandMark";
 import { osfSunsetLabel } from "../lib/osf-sunset";
 
@@ -32,8 +31,8 @@ import { osfSunsetLabel } from "../lib/osf-sunset";
 //
 // Three grounds, alternating, so no two adjacent sections share one:
 //
-//   1. band.bg   deep green #1B5E20, full-bleed   hero + the three steps
-//   2. bg        the page                          the proof (code devices)
+//   1. band.bg   deep green #1B5E20, full-bleed   hero: type + the code device
+//   2. bg        the page                          the three steps
 //   3. band.bg.soft  green-tinted neutral          what DataPipe does
 //   4. band.bg   deep green again                  the closing door
 //
@@ -47,9 +46,19 @@ import { osfSunsetLabel } from "../lib/osf-sunset";
 // TYPE SCALE. DESIGN.md §3's fixed four-role scale (page title 24px max) is
 // a PRODUCT-register rule for pages a researcher reads twice a year. The
 // landing page is the one surface where a visitor's first impression is the
-// deliverable, so the hero headline runs on a fluid clamp to 5.5rem with
-// -0.045em tracking -- a ~3.7x jump over the deck and 700 against 400. That
-// departure is scoped to this file and does not travel into the app.
+// deliverable, so the hero headline runs on a fluid clamp with -0.045em
+// tracking -- a 2.5x jump over the deck and 700 against 400. That departure
+// is scoped to this file and does not travel into the app.
+//
+// The cap is 3.75rem (60px), down from 5.5rem (88px) when the headline had
+// the full 1100px column to itself. The hero is now two columns and the type
+// only gets 1.2 of 2.2 flex units: 1100 - 48 (gutter) = 1052, so the left
+// column is 574px at lg and above (the container is maxW-bound, so 1280 and
+// 1440 give the identical 574). At 700 weight with -0.045em the system stack
+// averages ~0.47em per glyph, so 60px buys ~20 characters a line and the
+// 48-character headline balances onto three; 88px would buy ~14 and force
+// five. A headline that wraps five times beside a code panel is not a bigger
+// hero, it is a narrower one.
 //
 // SPACING. Same shape of departure, declared rather than smuggled: §4's
 // 2/3/4/6/8/12/16 ladder tops out at 64px, which is a correct section break
@@ -186,11 +195,16 @@ function ProseLink({ href, external, ground = "page", children }) {
   );
 }
 
-// A step on the deep band. The numeral is display-scale (clamp to 2.5rem,
-// 700) in band.accent -- brandGreen.200 at 4.79:1, which clears the body
+// A step, on the page ground. The numeral is display-scale (clamp to 2.5rem,
+// 700) in brandGreen.fg -- 4.77:1 light / 8.23:1 dark, which clears the body
 // floor outright, so it needs no large-text allowance to be legal. Baseline
 // alignment against the step text is what makes the size jump read as
 // hierarchy rather than as two unrelated blocks.
+//
+// These numerals used to be band.accent (brandGreen.200) because the steps
+// used to be the band's second beat. They are not: brandGreen.200 is 1.53:1
+// on the light page. Green on the page ground is `brandGreen.fg`, which is
+// the app-wide default and the only green that is legal in both modes here.
 function StepItem({ number, children }) {
   return (
     <HStack gap={[4, 5]} align="baseline">
@@ -199,7 +213,7 @@ function StepItem({ number, children }) {
         fontWeight="700"
         letterSpacing="-0.03em"
         lineHeight="1"
-        color="band.accent"
+        color="brandGreen.fg"
         flexShrink={0}
         minW="1.6ch"
         textAlign="right"
@@ -207,8 +221,8 @@ function StepItem({ number, children }) {
         {number}
       </Text>
       {/* The three steps are the argument for the product, not a hint under a
-          field: body size, band body color (5.85:1). */}
-      <Text fontSize={["md", "lg"]} color="band.fg.muted" lineHeight="tall">
+          field: body size, page body color (9.72:1 light / 11.20:1 dark). */}
+      <Text fontSize={["md", "lg"]} color="fg.muted" lineHeight="tall">
         {children}
       </Text>
     </HStack>
@@ -264,171 +278,189 @@ export default function Home() {
   return (
     <Box w="100%">
       {/* ── Ground 1: the deep green band, full-bleed ───────────────────
-          It carries the headline AND the three steps, as one long
-          single-subject region rather than two thin stripes. Type only: the
-          code device cannot live here. code.bg #111111 is 1.07:1 against
-          #1B5E20 and its #18181b chrome strip is 1.00:1, so the specimen
-          would dissolve into the ground -- which is why the proof gets its
-          own section on the page below, where its gray.500 seam reads 4.50:1
-          light / 3.43:1 dark exactly as DESIGN.md §1 intends. */}
-      <Box bg="band.bg" position="relative" overflow="hidden">
-        <BandMark />
+          Two columns: the type on the left, the code device on the right,
+          both inside the band. The specimen is the first thing on the page
+          that shows the actual product, so it belongs where the claim is
+          made, not in a section the reader has to scroll to.
+
+          THE EDGE PROBLEM, AND ITS NUMBER. The device is mode-invariant and
+          near-black: code.bg #111111 is 2.40:1 against band.bg #1B5E20 and
+          the #18181b chrome strip is 2.25:1. Fill alone therefore cannot
+          define it here, and its usual gray.500 seam is 1.63:1 on green --
+          an object with no edge. On this ground the device takes
+          `band.border` (brandGreen.200 #A5D6A7) instead: 4.79:1 against the
+          band, 11.49:1 against code.bg. Computed and rejected: gray.400
+          (code.fg.muted) at 3.07:1 clears the non-text floor by 2% and is
+          the device's own muted TEXT color, so a hairline of it reads as
+          internal chrome leaking outward rather than a boundary. The mint is
+          the same value the secondary CTA outlines itself with two columns
+          over, so the hero's two objects share one edge language.
+
+          Why the device is fully on the band rather than straddling its
+          bottom edge: no single border value can clear 3:1 against both
+          #1B5E20 and the light page. The band needs L >= 0.3503, the light
+          page needs L <= 0.2757. A straddling device would have to change
+          its edge color halfway down two rounded corners.
+
+          BandMark moved to the closing band. The mark is cropped at the
+          band's right edge at xl+, which is exactly where the device now
+          sits; an opaque panel over it left a sliver, not an ornament. */}
+      <Box bg="band.bg">
         <Box
           px={[4, 8, 12]}
           pt={[16, 20, 24]}
           pb={[16, 20, 24]}
           maxW="1100px"
           mx="auto"
-          position="relative"
-          zIndex={1}
         >
-          <VStack gap={6} align="start" maxW="720px">
-            {/* The scale IS the hero moment. 700 against the deck's 400,
-                -0.045em, and text-wrap: balance so the ragged edge is a
-                decision rather than a leftover. Light type on a dark ground
-                reads lighter than it measures, so the line-height is looser
-                than a 5.5rem headline would otherwise take. */}
-            <Heading
-              as="h1"
-              fontSize="clamp(2.25rem, 7.2vw, 5.5rem)"
-              fontWeight="700"
-              letterSpacing="-0.045em"
-              lineHeight="1.05"
-              textWrap="balance"
-              color="band.fg"
-            >
-              Experiment data, straight to storage you control.
-            </Heading>
-            <Text
-              fontSize="clamp(1.125rem, 2.2vw, 1.5rem)"
-              color="band.fg.muted"
-              lineHeight="1.55"
-              maxW="60ch"
-            >
-              DataPipe is a free, open-source service that sends data from any
-              online experiment to your own Google Drive, Dataverse, or Zenodo
-              account as each participant finishes. No server to set up,
-              nothing to download by hand.
-            </Text>
-            {/* This line is the trust claim and must not restate the two above
-                it. "The account stays yours" was the third sentence in a row
-                saying the same thing; the permission scope and the exit are
-                new information, and both are checkable. Scope is stated as
-                what DataPipe asks for, not as what a provider forbids -- a
-                Dataverse API token carries the researcher's full privileges,
-                so "it cannot read or delete anything" would be false there
-                (PRODUCT.md principle 5). */}
-            <Text fontSize={["md", "lg"]} color="band.fg" lineHeight="tall" maxW="60ch">
-              DataPipe only ever asks your storage provider for permission to
-              add files. You can disconnect it at any time.
-            </Text>
-            {/* TODO(owner): retention claim -- needs a decision on what DataPipe
-                retains and for how long */}
-            <HStack gap={4} pt={4} flexWrap="wrap">
-              {/* asChild, not <Link><Button> -- that rendered <a><button></a>:
-                  invalid HTML, two tab stops for one control, and a focus ring
-                  on the element that is not focused. */}
-              <Button asChild size="lg" css={BAND_PRIMARY}>
-                <NextLink href={primaryHref}>
-                  {primaryLabel} <ArrowRight size={18} />
-                </NextLink>
-              </Button>
-              {/* One primary action per screen (DESIGN.md §5). The secondary
-                  is an outline in the band's own border color, because the
-                  neutral gray it would otherwise take is 1.2:1 here. */}
-              <Button asChild size="lg" variant="outline" css={BAND_SECONDARY}>
-                {/* Names the page it opens, in the same words faq.js and the
-                    closing band use for it. "How it works" described a concept
-                    page; the destination is a step-by-step setup guide. */}
-                <NextLink href="/getting-started">
-                  Read the getting started guide
-                </NextLink>
-              </Button>
-            </HStack>
-            <Text fontSize="sm" color="band.fg.subtle" pt={2}>
-              Built by the{" "}
-              <ProseLink href="https://www.jspsych.org" ground="band" external>
-                jsPsych
-              </ProseLink>{" "}
-              team
-            </Text>
-          </VStack>
-
-          {/* Second beat of the same band. The gap is the section break --
-              inside one ground, spacing is exactly the right grouping device
-              (DESIGN.md §4); it is between grounds that it was not enough. */}
+          {/* Row at `lg` (992px), not `md` (768px). At md the container is
+              672px wide and the type column would be 366px -- a 60px
+              headline in 366px wraps five times. At lg it is 574px and wraps
+              three. Below lg the two columns stack in DOM order, so the
+              headline is still the first thing read and the device follows
+              the CTAs. */}
           <Stack
-            direction={["column", "column", "row"]}
-            gap={[8, 8, 16]}
-            mt={[20, 24, 32]}
+            direction={{ base: "column", lg: "row" }}
+            gap={12}
+            align="start"
           >
-            <Box flex="1">
-              <SectionHeading color="band.fg">
-                Three steps to start collecting data
-              </SectionHeading>
-            </Box>
-            <VStack align="start" gap={[6, 8]} flex="1.5" maxW="70ch">
-              {/* One imperative verb per step, in the order the researcher
-                  performs them, matching getting-started.js steps 2, 3+5 and 7
-                  and the labels they will actually click. "your study" is gone:
-                  this page now says "a DataPipe experiment" for the record and
-                  "your experiment" for the thing participants run. */}
-              <StepItem number="1">
-                Connect a storage provider — Google Drive, Dataverse, or Zenodo
-                — to your DataPipe account.
-              </StepItem>
-              <StepItem number="2">
-                Create a DataPipe experiment, then add a few lines of code to
-                the experiment your participants run so it sends data to
-                DataPipe.
-              </StepItem>
-              <StepItem number="3">
-                Enable data collection and run your experiment. Each
-                participant&apos;s data lands in your Drive folder, Dataverse
-                dataset, or Zenodo deposition as they finish.
-              </StepItem>
+            <VStack gap={6} align="start" flex="1.2" minW={0} w="100%">
+              {/* The scale IS the hero moment. 700 against the deck's 400,
+                  -0.045em, and text-wrap: balance so the ragged edge is a
+                  decision rather than a leftover. Light type on a dark ground
+                  reads lighter than it measures, so the line-height is looser
+                  than a 60px headline would otherwise take. The cap is sized
+                  to the two-column measure -- see TYPE SCALE at the top. */}
+              <Heading
+                as="h1"
+                fontSize="clamp(2.25rem, 7.2vw, 3.75rem)"
+                fontWeight="700"
+                letterSpacing="-0.045em"
+                lineHeight="1.05"
+                textWrap="balance"
+                color="band.fg"
+              >
+                Experiment data, straight to storage you control.
+              </Heading>
+              <Text
+                fontSize="clamp(1.125rem, 2.2vw, 1.5rem)"
+                color="band.fg.muted"
+                lineHeight="1.55"
+                maxW="60ch"
+              >
+                DataPipe is a free, open-source service that sends data from any
+                online experiment to your own Google Drive, Dataverse, or Zenodo
+                account as each participant finishes. No server to set up,
+                nothing to download by hand.
+              </Text>
+              {/* This line is the trust claim and must not restate the two above
+                  it. "The account stays yours" was the third sentence in a row
+                  saying the same thing; the permission scope and the exit are
+                  new information, and both are checkable. Scope is stated as
+                  what DataPipe asks for, not as what a provider forbids -- a
+                  Dataverse API token carries the researcher's full privileges,
+                  so "it cannot read or delete anything" would be false there
+                  (PRODUCT.md principle 5). */}
+              <Text fontSize={["md", "lg"]} color="band.fg" lineHeight="tall" maxW="60ch">
+                DataPipe only ever asks your storage provider for permission to
+                add files. You can disconnect it at any time.
+              </Text>
+              {/* TODO(owner): retention claim -- needs a decision on what DataPipe
+                  retains and for how long */}
+              <HStack gap={4} pt={4} flexWrap="wrap">
+                {/* asChild, not <Link><Button> -- that rendered <a><button></a>:
+                    invalid HTML, two tab stops for one control, and a focus ring
+                    on the element that is not focused. */}
+                <Button asChild size="lg" css={BAND_PRIMARY}>
+                  <NextLink href={primaryHref}>
+                    {primaryLabel} <ArrowRight size={18} />
+                  </NextLink>
+                </Button>
+                {/* One primary action per screen (DESIGN.md §5). The secondary
+                    is an outline in the band's own border color, because the
+                    neutral gray it would otherwise take is 1.2:1 here. */}
+                <Button asChild size="lg" variant="outline" css={BAND_SECONDARY}>
+                  {/* Names the page it opens, in the same words faq.js and the
+                      closing band use for it. "How it works" described a concept
+                      page; the destination is a step-by-step setup guide. */}
+                  <NextLink href="/getting-started">
+                    Read the getting started guide
+                  </NextLink>
+                </Button>
+              </HStack>
+              <Text fontSize="sm" color="band.fg.subtle" pt={2}>
+                Built by the{" "}
+                <ProseLink href="https://www.jspsych.org" ground="band" external>
+                  jsPsych
+                </ProseLink>{" "}
+                team
+              </Text>
             </VStack>
+
+            {/* The right column. `flex="1"` against the type column's 1.2
+                gives 478px at lg and above, and the widest line either
+                snippet renders is 38 monospace characters -- ~360px with the
+                device's own padding, so nothing here scrolls sideways at the
+                measure it was designed for. `minW={0}` because a flex child
+                containing a <pre> will otherwise refuse to shrink below its
+                content width and push the type column off its own measure. */}
+            <Box as="figure" m={0} flex="1" minW={0} w="100%">
+              <CodeSpecimen />
+              {/* Fine print on the band is band.fg.subtle (brandGreen.200,
+                  4.79:1); the link inside it takes the band's white (7.87:1)
+                  and keeps the underline that marks every link on this page. */}
+              <Text as="figcaption" fontSize="sm" color="band.fg.subtle" mt={3}>
+                The code is the same whichever storage provider you chose.
+                Every endpoint and error code is in the{" "}
+                <ProseLink href="/api-docs" ground="band">
+                  API reference
+                </ProseLink>
+                .
+              </Text>
+            </Box>
           </Stack>
         </Box>
       </Box>
 
-      {/* ── Ground 2: the page itself, carrying the proof ───────────────
-          What you send, then what you get, read left to right. These two
-          devices are the only place on the page where the reader sees the
-          actual product, and they are mode-invariant by design, so they get
-          the mode-aware page ground to sit against rather than a band that
-          would erase them. The figcaptions are the only labels the section
-          needs; a heading over two self-describing figures would be a caption
-          for a caption. */}
+      {/* ── Ground 2: the page itself, carrying the three steps ─────────
+          The steps used to be the band's second beat, behind the hero. With
+          the code device in the hero the band is full, and the steps are a
+          different subject from the claim above them -- they get their own
+          ground rather than a longer stripe of green. This is also what
+          keeps the page's own `bg` in the rotation: without it the rhythm
+          collapses to band -> soft -> band and the page never shows its own
+          surface. No copy changes; the numerals and body re-point to the
+          page's colors in StepItem. */}
       <Box px={[4, 8, 12]} py={[16, 20, 24]}>
         <Stack
           direction={["column", "column", "row"]}
-          gap={[10, 10, 12]}
+          gap={[8, 8, 16]}
           maxW="1100px"
           mx="auto"
-          align="start"
         >
-          <Box as="figure" m={0} flex="1" w="100%" minW={0}>
-            <CodeSpecimen />
-            <Text as="figcaption" fontSize="sm" color="fg.muted" mt={3}>
-              The code is the same whichever storage provider you chose. Every
-              endpoint and error code is in the{" "}
-              <ProseLink href="/api-docs">API reference</ProseLink>.
-            </Text>
+          <Box flex="1">
+            <SectionHeading>Three steps to start collecting data</SectionHeading>
           </Box>
-          <Box as="figure" m={0} flex="1" w="100%" minW={0}>
-            <ArrivalsPanel />
-            {/* "Illustration." named the genre without saying why it mattered.
-                The reader's question is whether these are real arrivals, so the
-                caption answers that first. "the ... you connected" was also
-                wrong: a researcher connects a provider, and DataPipe creates
-                the folder, dataset or deposition. */}
-            <Text as="figcaption" fontSize="sm" color="fg.muted" mt={3}>
-              Example, not live data. Each participant&apos;s data arrives as
-              its own file in your Drive folder, Dataverse dataset, or Zenodo
-              deposition.
-            </Text>
-          </Box>
+          <VStack align="start" gap={[6, 8]} flex="1.5" maxW="70ch">
+            {/* One imperative verb per step, in the order the researcher
+                performs them, matching getting-started.js steps 2, 3+5 and 7
+                and the labels they will actually click. "your study" is gone:
+                this page now says "a DataPipe experiment" for the record and
+                "your experiment" for the thing participants run. */}
+            <StepItem number="1">
+              Connect a storage provider — Google Drive, Dataverse, or Zenodo —
+              to your DataPipe account.
+            </StepItem>
+            <StepItem number="2">
+              Create a DataPipe experiment, then add a few lines of code to the
+              experiment your participants run so it sends data to DataPipe.
+            </StepItem>
+            <StepItem number="3">
+              Enable data collection and run your experiment. Each
+              participant&apos;s data lands in your Drive folder, Dataverse
+              dataset, or Zenodo deposition as they finish.
+            </StepItem>
+          </VStack>
         </Stack>
       </Box>
 
@@ -502,60 +534,75 @@ export default function Home() {
           Same action as the hero, not a second competing one, and the same
           ground -- the green opens the page and closes it, which is what
           makes it read as the brand's color rather than as decoration on one
-          section. */}
-      <Box bg="band.bg" px={[4, 8, 12]} py={[16, 20, 24]}>
-        <VStack maxW="1100px" mx="auto" align="start" gap={6}>
-          <SectionHeading color="band.fg" maxW="20ch">
-            Set up your first experiment
-          </SectionHeading>
-          <Text
-            maxW="70ch"
-            fontSize={["md", "lg"]}
-            color="band.fg.muted"
-            lineHeight="tall"
-          >
-            {/* Recaps the three steps in the same three verbs they use above --
-                connect, create, add -- rather than a fourth wording of the same
-                sequence. */}
-            Connect a storage provider, create an experiment, and add a few
-            lines of code. The{" "}
-            <ProseLink href="/getting-started" ground="band">
-              getting started guide
-            </ProseLink>{" "}
-            walks through all of it, end to end.
-          </Text>
-          <Button asChild size="lg" css={BAND_PRIMARY} mt={2}>
-            <NextLink href={primaryHref}>
-              {primaryLabel} <ArrowRight size={18} />
-            </NextLink>
-          </Button>
-          <Text fontSize="sm" color="band.fg.subtle" maxW="70ch" pt={2}>
-            The{" "}
-            <ProseLink href="/faq" ground="band">
-              FAQ
-            </ProseLink>{" "}
-            covers what DataPipe stores, what it costs to run, and what happens
-            when an upload fails.
-          </Text>
-          {/* The cause sentence is faq.js item-0b's opening, verbatim, and it
-              earns its space here: without it the notice reads as DataPipe
-              retreating rather than OSF closing a feature. The dated sentence
-              is already identical to the one getting-started.js builds. Link
-              text says where it goes, not "what to do next". */}
-          <Text fontSize="sm" color="band.fg.subtle" maxW="70ch">
-            Already collecting on OSF? OSF is shutting down its projects
-            feature.{" "}
-            {osfDeadline
-              ? `DataPipe will stop writing to OSF after ${osfDeadline}.`
-              : "DataPipe is winding down its support for OSF."}{" "}
-            Data already there stays in your OSF account, and DataPipe never
-            removes it. See{" "}
-            <ProseLink href="/faq#item-0b" ground="band">
-              how to move to another provider
-            </ProseLink>
-            .
-          </Text>
-        </VStack>
+          section.
+
+          This band now carries the cropped |> mark, which used to sit in the
+          hero. The hero's right half is the code device, and an opaque
+          near-black panel over the mark left a 90px sliver of it against the
+          viewport edge. This band is type-only and its widest measure is
+          70ch, so the mark gets the clearance BandMark's own comment
+          computes. It still appears exactly once on the site. */}
+      <Box bg="band.bg" position="relative" overflow="hidden">
+        <BandMark />
+        <Box
+          px={[4, 8, 12]}
+          py={[16, 20, 24]}
+          position="relative"
+          zIndex={1}
+        >
+          <VStack maxW="1100px" mx="auto" align="start" gap={6}>
+            <SectionHeading color="band.fg" maxW="20ch">
+              Set up your first experiment
+            </SectionHeading>
+            <Text
+              maxW="70ch"
+              fontSize={["md", "lg"]}
+              color="band.fg.muted"
+              lineHeight="tall"
+            >
+              {/* Recaps the three steps in the same three verbs they use above --
+                  connect, create, add -- rather than a fourth wording of the same
+                  sequence. */}
+              Connect a storage provider, create an experiment, and add a few
+              lines of code. The{" "}
+              <ProseLink href="/getting-started" ground="band">
+                getting started guide
+              </ProseLink>{" "}
+              walks through all of it, end to end.
+            </Text>
+            <Button asChild size="lg" css={BAND_PRIMARY} mt={2}>
+              <NextLink href={primaryHref}>
+                {primaryLabel} <ArrowRight size={18} />
+              </NextLink>
+            </Button>
+            <Text fontSize="sm" color="band.fg.subtle" maxW="70ch" pt={2}>
+              The{" "}
+              <ProseLink href="/faq" ground="band">
+                FAQ
+              </ProseLink>{" "}
+              covers what DataPipe stores, what it costs to run, and what happens
+              when an upload fails.
+            </Text>
+            {/* The cause sentence is faq.js item-0b's opening, verbatim, and it
+                earns its space here: without it the notice reads as DataPipe
+                retreating rather than OSF closing a feature. The dated sentence
+                is already identical to the one getting-started.js builds. Link
+                text says where it goes, not "what to do next". */}
+            <Text fontSize="sm" color="band.fg.subtle" maxW="70ch">
+              Already collecting on OSF? OSF is shutting down its projects
+              feature.{" "}
+              {osfDeadline
+                ? `DataPipe will stop writing to OSF after ${osfDeadline}.`
+                : "DataPipe is winding down its support for OSF."}{" "}
+              Data already there stays in your OSF account, and DataPipe never
+              removes it. See{" "}
+              <ProseLink href="/faq#item-0b" ground="band">
+                how to move to another provider
+              </ProseLink>
+              .
+            </Text>
+          </VStack>
+        </Box>
       </Box>
     </Box>
   );
