@@ -10,6 +10,9 @@ import { scheduledTokenRefresh } from "./scheduled-token-refresh.js";
 import { scheduledUploadRetry } from "./scheduled-upload-retry.js";
 import { scheduledPendingRecovery } from "./scheduled-pending-recovery.js";
 import { onExperimentGrew, onUploadQueueChanged } from "./compaction-triggers.js";
+// A SECOND trigger on uploadQueue/{docId}, deliberately not folded into
+// onUploadQueueChanged above -- see the header of upload-failure-notify.ts.
+import { onUploadFailure } from "./upload-failure-notify.js";
 import { apiQueueStatus } from "./api-queue-status.js";
 import { generateOAuthState } from "./generate-oauth-state.js";
 import { connectProvider, connectStaticTokenProvider, disconnectProvider } from "./connect-provider.js";
@@ -38,6 +41,7 @@ export {
   scheduledPendingRecovery as scheduledpendingrecovery,
   onExperimentGrew as onexperimentgrew,
   onUploadQueueChanged as onuploadqueuechanged,
+  onUploadFailure as onuploadfailure,
   apiQueueStatus as apiqueuestatus,
   generateOAuthState as generateoauthstate,
   connectProvider as connectprovider,
