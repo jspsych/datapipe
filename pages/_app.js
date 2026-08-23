@@ -12,7 +12,6 @@ import { useAuthState } from "react-firebase-hooks/auth";
 import { system } from "../lib/theme";
 import Head from "next/head";
 import TestEnvironmentWarning from "../components/TestEnvironmentWarning";
-import { COLOR_MODE_TOGGLE } from "../lib/feature-flags";
 
 function MyApp({ Component, pageProps }) {
   const [user, loading, error] = useAuthState(auth);
@@ -63,12 +62,15 @@ function MyApp({ Component, pageProps }) {
     </Box>
   ));
 
+  // Dark is DataPipe's only mode (DESIGN.md §2). forcedTheme, not just
+  // defaultTheme: visitors who picked Light/System while the toggle existed
+  // still have that choice in localStorage, and it must not resurrect a
+  // retired mode.
   return (
     <ThemeProvider
       attribute="class"
-      defaultTheme={COLOR_MODE_TOGGLE ? "system" : "dark"}
-      enableSystem={COLOR_MODE_TOGGLE}
-      storageKey="datapipe-color-mode"
+      defaultTheme="dark"
+      forcedTheme="dark"
       disableTransitionOnChange
     >
       <ChakraProvider value={system}>
