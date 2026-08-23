@@ -23,6 +23,54 @@
 // recoverPendingUploads(prefix) exist for. Provoking real trigger deliveries
 // out of the emulator would make every assertion a poll with a timeout, and
 // would make the concurrency test below impossible to write at all.
+//
+// ---------------------------------------------------------------------------
+// CI RUNS THIS SUITE WITH A LIVE COMPETING TRIGGER. READ BEFORE TIGHTENING.
+// ---------------------------------------------------------------------------
+//
+// Locally these tests run against a bare Firestore emulator, so the only thing
+// that ever calls handleQueueWrite is the test itself. In CI (node.js.yml) the
+// whole run is wrapped in `firebase emulators:exec`, which loads the FUNCTIONS
+// emulator too -- so the real deployed `onuploadfailure` is live and fires on
+// every uploadQueue write these fixtures make, concurrently with the direct
+// calls below.
+//
+// That is not a defect in the harness. It is the production topology, and the
+// state machine is built to survive exactly this (the 20-way race test is the
+// same property in miniature: double execution is idempotent for everything
+// that matters). But it does change what a test is entitled to assert:
+//
+//   * A test that WRITES an uploadQueue document has a second, unordered
+//     actor. Where the trigger getting there first changes only WHO did the
+//     work, the direct call's RETURN VALUE stops being deterministic --
+//     "cleared" vs "noop" on a drain -- while the END STATE does not. Those
+//     tests assert the invariants the state machine actually guarantees
+//     (final uploadFailure state, exact mail-collection count) and accept the
+//     outcome from a benign set.
+//
+//   * A test that writes NO uploadQueue document cannot be raced at all: the
+//     trigger has nothing to fire on, and this suite's writes to
+//     experiments/{id} and users/{uid} reach no notification code. Those tests
+//     keep strict outcome assertions, and each one says so.
+//
+// Two fixtures below are also deliberately shaped to keep the live trigger's
+// concurrent invocation a provable no-op rather than a competing writer. Those
+// are marked; changing them reintroduces a CI-only flake that does not
+// reproduce locally.
+//
+// failureCount under double execution: an event processed by BOTH the trigger
+// and a direct call is counted twice -- they are independent invocations with
+// independent transactions, and the increment is a field transform which
+// (correctly) does not collapse across them. No test here drives the same
+// event twice: every direct call uses a synthesized in-memory payload whose
+// docId never corresponds to a real fixture write. Where a fixture write is
+// ITSELF a failure event, the live trigger adds a count of its own, so those
+// tests assert no exact failureCount. Nothing needs to be race-aware beyond
+// that, because the transaction serializes correctly -- no increment is ever
+// lost, only legitimately repeated.
+//
+// Do not "fix" a loosened assertion back to a strict one, and do not loosen a
+// strict one, without first deciding which of the two groups it is in.
 
 import { initializeApp, getApp } from "firebase-admin/app";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
@@ -135,6 +183,21 @@ async function uploadFailureState(experimentID) {
   return snap.exists ? snap.data().uploadFailure : undefined;
 }
 
+// On a drain, "cleared" (this call did it) and "noop" (the live CI trigger
+// beat us to it, so there was nothing left to clear) are the same outcome seen
+// from two sides. Neither is a failure; what must hold either way is the end
+// state, asserted separately. See the header.
+const BENIGN_DRAIN_OUTCOMES = ["cleared", "noop"];
+
+// The invariant a drain guarantees, whoever performed it. lastNotifiedAt is
+// checked by the caller, because only the caller knows what it should still be.
+function expectEpisodeClosed(state) {
+  expect(state.notifiedAt).toBeNull();
+  expect(state.firstFailureAt).toBeNull();
+  expect(state.failureCount).toBe(0);
+  expect(state.suppressedReason).toBeNull();
+}
+
 async function mailFor(experimentID) {
   const snap = await db
     .collection("mail")
@@ -143,6 +206,12 @@ async function mailFor(experimentID) {
   return snap.docs.map((d) => d.data());
 }
 
+// In CI these deletes fire the live trigger too: every uploadQueue delete is a
+// drain candidate. Harmless, and deliberately so -- the experiment document is
+// deleted in the SAME batch, so the invocation finds it gone and returns
+// before writing anything. clearIfDrained never creates a document, so cleanup
+// cannot resurrect one. Experiment ids are per-test UUIDs, so a late delivery
+// can never touch the next test's fixtures either.
 afterEach(async () => {
   const batch = db.batch();
   for (const experimentID of created.experiments) {
@@ -168,6 +237,9 @@ afterEach(async () => {
 // 1-3. The send predicate fires on failures DataPipe has already tried to fix
 // ---------------------------------------------------------------------------
 
+// NO uploadQueue WRITES ANYWHERE IN THIS BLOCK, so the live CI trigger has
+// nothing to fire on and cannot reach any of this work first. Outcome
+// assertions and exact failureCounts are therefore strict and stay strict.
 describe("first failure", () => {
   test("a first retry failure mails the owner exactly once and arms the flag", async () => {
     const owner = await seedOwner();
@@ -245,6 +317,10 @@ describe("first failure", () => {
 // 4. The regression that justifies the whole predicate
 // ---------------------------------------------------------------------------
 
+// Also free of uploadQueue writes: every case here is a synthesized payload
+// for an event that never happened to a real document. Strict throughout --
+// and the "wrote nothing at all" assertions are only meaningful BECAUSE
+// nothing else could have written either.
 describe("non-failures stay silent", () => {
   test("a compaction hold is not a failure: no mail, and no uploadFailure written at all", async () => {
     // compaction-gate.ts diverts writes into the queue on purpose, and the
@@ -335,6 +411,13 @@ describe("drain", () => {
 
     // The entry that just landed, already `completed`, so the drain query
     // (pending/processing/failed) does not see it.
+    //
+    // RACED IN CI, BENIGNLY: this write is itself a drain candidate, so the
+    // live onuploadfailure trigger performs the very same drain concurrently.
+    // Whichever gets there first, the other finds no open episode and returns
+    // "noop" -- which is why the outcome is checked against a set and the real
+    // assertions are on the state. (This was an observed CI-only failure:
+    // expected "cleared", received "noop".)
     await seedQueueDoc(experimentID, owner, { status: "completed" });
 
     const outcome = await handleQueueWrite(
@@ -343,15 +426,17 @@ describe("drain", () => {
       "doc-done"
     );
 
-    expect(outcome).toBe("cleared");
+    expect(BENIGN_DRAIN_OUTCOMES).toContain(outcome);
+
     const state = await uploadFailureState(experimentID);
-    expect(state.notifiedAt).toBeNull();
-    expect(state.firstFailureAt).toBeNull();
-    expect(state.failureCount).toBe(0);
-    expect(state.suppressedReason).toBeNull();
+    expectEpisodeClosed(state);
     // The flap backstop. Cleared here, a queue that broke every hour would
-    // mail every hour.
+    // mail every hour. Neither actor writes lastNotifiedAt on a drain, so this
+    // is exact regardless of who won.
     expect(state.lastNotifiedAt.toMillis()).toBe(armed.lastNotifiedAt.toMillis());
+    // Exact, and not weakened: a drain never mails, so no amount of concurrent
+    // draining can add one.
+    expect(await mailFor(experimentID)).toHaveLength(1);
   });
 
   test("a delete can be the drain -- the cleanupOldEntries case", async () => {
@@ -363,14 +448,30 @@ describe("drain", () => {
     const experimentID = await seedExperiment({ owner });
     await armEpisode(experimentID, owner);
 
-    const { docId } = await seedQueueDoc(experimentID, owner, { status: "failed" });
+    // FIXTURE SHAPE IS LOAD-BEARING IN CI: `pending`, not `failed`.
+    //
+    // The status of the deleted entry is irrelevant to the code under test --
+    // isDrainCandidate returns true for ANY delete, and the drain query only
+    // looks at what REMAINS -- so a pending entry exercises the identical
+    // path. What a `failed` fixture would add is a hazard: CREATING a document
+    // with status "failed" is itself a terminal-failure event, so the live CI
+    // trigger would process it, and trigger delivery is unordered. That
+    // invocation landing AFTER the delete's drain would find the episode
+    // closed, hit the 24-hour floor (mail went out moments ago in armEpisode),
+    // and re-arm with suppressedReason "rate-limited" -- flipping notifiedAt
+    // back to non-null under a passing assertion. Creating it as `pending`
+    // with retryCount 0 makes that concurrent invocation a provable no-op:
+    // neither predicate matches, so it writes nothing at all.
+    const { docId } = await seedQueueDoc(experimentID, owner, { status: "pending" });
     const before = (await db.doc(`uploadQueue/${docId}`).get()).data();
     await db.doc(`uploadQueue/${docId}`).delete();
 
+    // The delete IS raced benignly, exactly as in the completion case above.
     const outcome = await handleQueueWrite(before, undefined, docId);
 
-    expect(outcome).toBe("cleared");
-    expect((await uploadFailureState(experimentID)).notifiedAt).toBeNull();
+    expect(BENIGN_DRAIN_OUTCOMES).toContain(outcome);
+    expectEpisodeClosed(await uploadFailureState(experimentID));
+    expect(await mailFor(experimentID)).toHaveLength(1);
   });
 
   test("a lingering failed entry keeps the queue non-empty", async () => {
@@ -381,8 +482,15 @@ describe("drain", () => {
     const experimentID = await seedExperiment({ owner });
     await armEpisode(experimentID, owner);
 
-    await seedQueueDoc(experimentID, owner, { status: "completed" });
+    // SEEDING ORDER IS LOAD-BEARING IN CI. The `failed` entry must exist
+    // BEFORE the `completed` one is written, because writing the completed
+    // entry is a drain candidate that the live trigger picks up: if it ran
+    // while the queue looked empty it would clear the flag for real, and the
+    // state assertion below would fail for a reason that has nothing to do
+    // with the behaviour under test. Written in this order, that concurrent
+    // invocation always sees the failed entry and correctly declines to clear.
     await seedQueueDoc(experimentID, owner, { status: "failed" });
+    await seedQueueDoc(experimentID, owner, { status: "completed" });
 
     const outcome = await handleQueueWrite(
       queuePayload(experimentID, owner, { status: "processing" }),
@@ -390,11 +498,19 @@ describe("drain", () => {
       "doc-done"
     );
 
+    // Strict, and safe: unlike the two tests above there is no benign winner
+    // here. The queue is non-empty for BOTH actors, so neither can clear, and
+    // "noop" is the only outcome either can return.
     expect(outcome).toBe("noop");
     expect((await uploadFailureState(experimentID)).notifiedAt).not.toBeNull();
+    // No exact failureCount: creating the `failed` fixture is itself a
+    // terminal-failure event, so the live CI trigger counts it once more than
+    // a local run does. That is the trigger working, not drift.
+    expect(await mailFor(experimentID)).toHaveLength(1);
   });
 
   test("a completion on an experiment with no episode costs no write", async () => {
+    // Strict: no uploadQueue document is written here, so nothing competes.
     const owner = await seedOwner();
     const experimentID = await seedExperiment({ owner });
 
@@ -422,7 +538,11 @@ describe("concurrency", () => {
     //
     // No uploadQueue documents are seeded: the FAILURE path reads the
     // experiment and the owner and nothing else, so writing twenty queue docs
-    // would slow the test without changing what it exercises.
+    // would slow the test without changing what it exercises -- and it is also
+    // what keeps this test strict under CI's live trigger, which has nothing
+    // to fire on. (This test already passes in CI, which is the same
+    // idempotency property from the other direction: double execution of a
+    // failure event mails once.)
     const owner = await seedOwner();
     const experimentID = await seedExperiment({ owner });
 
@@ -469,6 +589,12 @@ describe("rate limit", () => {
   }
 
   test("a queue that flaps clear->fail is silent until 24 hours have passed", async () => {
+    // Strict outcomes throughout: this test writes no uploadQueue document, so
+    // its drains and failures are entirely its own. That matters more here
+    // than elsewhere -- the sequence only means anything if each step is
+    // known to be the one that ran -- and it is also why the Date.now mock
+    // below is safe: there is no concurrent invocation to hand a shifted
+    // clock to.
     const owner = await seedOwner();
     const experimentID = await seedExperiment({ owner });
 
@@ -508,6 +634,11 @@ describe("rate limit", () => {
 // 10. Nobody to write to
 // ---------------------------------------------------------------------------
 
+// Strict, and safe for a second reason on top of "no uploadQueue writes": the
+// live trigger could not reach these branches first even if it did fire. Both
+// suppression outcomes are decided from the OWNER document, so a competing
+// invocation of the same event would reach the identical branch and produce
+// the identical state -- there is no benign winner to allow for.
 describe("no contact email", () => {
   test("arms the episode and records why, without sending anything", async () => {
     // The ORCID and OSF-era populations, until Feature 1's gate closes them

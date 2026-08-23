@@ -48,7 +48,12 @@ const admin = require('firebase-admin');
 const path = require('path');
 const os = require('os');
 
-const APPLY = process.argv.includes('--apply');
+// Two ways to apply, matching both conventions in this repo: the --apply
+// flag (local runs, per the deploy runbook) and DRY_RUN=false (the
+// run-migration.yml workflow, which signals via env like encrypt-tokens.cjs).
+// Either one applies; absent both, it's a dry run.
+const APPLY =
+  process.argv.includes('--apply') || process.env.DRY_RUN === 'false';
 const DRY_RUN = !APPLY;
 
 // ---------------------------------------------------------------------------
