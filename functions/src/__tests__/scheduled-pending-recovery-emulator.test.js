@@ -5,6 +5,8 @@
 process.env.FIRESTORE_EMULATOR_HOST = "localhost:8080";
 process.env.FIREBASE_STORAGE_EMULATOR_HOST = "localhost:9199";
 process.env.GCLOUD_PROJECT = "datapipe-test";
+// payload/token crypto: any 64-hex key works in tests
+process.env.TOKEN_ENCRYPTION_KEY ||= "aa".repeat(32);
 // app.js (imported transitively by the lib modules below) calls
 // initializeApp() with no args, which reads the default bucket from
 // FIREBASE_CONFIG — set it before those imports run so storage.bucket()

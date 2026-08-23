@@ -2,6 +2,20 @@
  * @jest-environment node
  */
 
+// Env self-sufficiency: this suite previously inherited FIREBASE_CONFIG /
+// GCLOUD_PROJECT from whichever suite ran earlier in the same jest worker --
+// which silently broke whenever file ordering shifted. Own header, same
+// values as upload-queue.test.js.
+process.env.GCLOUD_PROJECT = "datapipe-test";
+process.env.FIRESTORE_EMULATOR_HOST ||= "localhost:8080";
+process.env.FIREBASE_STORAGE_EMULATOR_HOST ||= "localhost:9199";
+// payload/token crypto: any 64-hex key works in tests
+process.env.TOKEN_ENCRYPTION_KEY ||= "aa".repeat(32);
+process.env.FIREBASE_CONFIG = JSON.stringify({
+  projectId: "datapipe-test",
+  storageBucket: "datapipe-test.appspot.com",
+});
+
 // RED-phase regression test for step 7a's scheduled-pending-recovery.ts audit
 // (scratchpad/step7a-create-endpoint-spec.md, case 10 of the test plan).
 //

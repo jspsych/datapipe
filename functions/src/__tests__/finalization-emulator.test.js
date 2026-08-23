@@ -33,6 +33,8 @@ const PSYCHDS_IGNORE_FILE = ".psychds-ignore";
 process.env.FIRESTORE_EMULATOR_HOST = "localhost:8080";
 process.env.FIREBASE_STORAGE_EMULATOR_HOST = "localhost:9199";
 process.env.GCLOUD_PROJECT = "datapipe-test";
+// payload/token crypto: any 64-hex key works in tests
+process.env.TOKEN_ENCRYPTION_KEY ||= "aa".repeat(32);
 process.env.FIREBASE_CONFIG = JSON.stringify({
   projectId: "datapipe-test",
   storageBucket: "datapipe-test.appspot.com",

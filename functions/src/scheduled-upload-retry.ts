@@ -8,6 +8,7 @@ import { claimFilename, confirmClaim, CollisionCacheUnavailableError } from "./c
 import { ExperimentData, UserData } from "./interfaces.js";
 import { isFastRetry } from "./queue-upload.js";
 import { isCompactionInFlight, COMPACTION_HOLD_REASON } from "./compaction-gate.js";
+import { decryptPayload } from "./payload-crypto.js";
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_BACKOFF_MS = 24 * 60 * 60 * 1000; // 24 hours (slow tier cap, unchanged)
@@ -185,18 +186,30 @@ async function processQueueItem(queueDoc: FirebaseFirestore.QueryDocumentSnapsho
     return;
   }
 
-  // Read cached data from Cloud Storage
+  // Read cached data from Cloud Storage.
+  //
+  // decryptPayload passes an unmarked (pre-encryption) object through
+  // unchanged, so entries queued before encryption shipped keep working for
+  // their full 7-day retention. A MARKED object that will not authenticate --
+  // rotated key, damaged object -- throws PayloadDecryptionError from inside
+  // this try, which lands on the same terminal "Failed to read cached data"
+  // path as any other unreadable payload: status `failed`, NOT
+  // handleRetryFailure. That is deliberate on both counts. It is not silent
+  // (the researcher sees a failed row, and QueuePanel already has copy keyed
+  // to this reason), and it does not retry -- nothing about an undecryptable
+  // object gets better by attempting it four more times.
   let fileData: string | Buffer;
   try {
     const bucket = storage.bucket();
     const file = bucket.file(data.storagePath);
     const [contents] = await file.download();
+    const plaintext = decryptPayload(contents);
     if (data.dataType === "base64") {
-      const raw = contents.toString("utf-8");
+      const raw = plaintext.toString("utf-8");
       const split = raw.split(",");
       fileData = split.length > 1 ? Buffer.from(split[1], "base64") : Buffer.from(raw, "base64");
     } else {
-      fileData = contents.toString("utf-8");
+      fileData = plaintext.toString("utf-8");
     }
   } catch (e) {
     const detail = e instanceof Error ? e.message : "Unknown error";

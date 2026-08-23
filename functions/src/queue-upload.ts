@@ -1,6 +1,7 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { db, storage } from "./app.js";
 import { StorageProviderId, ContainerRef, ProviderErrorCode } from "./providers/types.js";
+import { encryptPayload, ENCRYPTED_CONTENT_TYPE } from "./payload-crypto.js";
 
 interface QueueUploadParams {
   experimentID: string;
@@ -135,7 +136,9 @@ export default async function queueUpload(params: QueueUploadParams): Promise<st
       const storagePath = `upload-queue/${docId}`;
       const bucket = storage.bucket();
       const file = bucket.file(storagePath);
-      await file.save(params.data, { contentType: "text/plain" });
+      await file.save(encryptPayload(params.data), {
+        contentType: ENCRYPTED_CONTENT_TYPE,
+      });
       // The read above is not atomic with this save: the retry worker could
       // claim (pending -> processing) or finish (-> completed/failed, which
       // deletes the storage object) the doc in between. Re-read to confirm.
@@ -151,11 +154,16 @@ export default async function queueUpload(params: QueueUploadParams): Promise<st
     }
   }
 
-  // Write data to Cloud Storage
+  // Write data to Cloud Storage, encrypted at rest (payload-crypto.ts). This
+  // object is the researcher's only copy of the submission until the retry
+  // worker lands it or it expires after 7 days, so it is exactly the thing the
+  // FAQ's encryption-at-rest claim is about.
   const storagePath = `upload-queue/${docId}`;
   const bucket = storage.bucket();
   const file = bucket.file(storagePath);
-  await file.save(params.data, { contentType: "text/plain" });
+  await file.save(encryptPayload(params.data), {
+    contentType: ENCRYPTED_CONTENT_TYPE,
+  });
 
   // Write metadata to Firestore. osfFilesLink/storageProvider/providerContainer
   // are included only when present — Firestore rejects undefined field
