@@ -80,9 +80,9 @@ export default function CreatingAnExperimentPage() {
           </List.Item>
         </List.Root>
         <Text maxW="70ch">
-          Click <strong>Create</strong>. DataPipe makes the folder, dataset, or
-          deposition for you and opens the experiment dashboard, which links
-          straight to it.
+          Click <strong>Create</strong>. DataPipe makes the Drive folder,
+          Dataverse dataset, or Zenodo deposition for you and opens the
+          experiment dashboard, which links straight to it.
         </Text>
         <Text maxW="70ch">
           A new DataPipe experiment is not accepting data yet. It starts with
@@ -111,11 +111,12 @@ export default function CreatingAnExperimentPage() {
           </List.Item>
           <List.Item>
             <Text as="span" fontWeight="semibold">
-              Experiment details
+              The details block
             </Text>{" "}
-            holds the <strong>experiment ID</strong> — the value your code
-            sends with every request — and a link that opens the folder,
-            dataset, or deposition in your own storage account.
+            below it holds the <strong>experiment ID</strong> — the value your
+            code sends with every request — and a link that opens the Drive
+            folder, Dataverse dataset, or Zenodo deposition in your own storage
+            account.
           </List.Item>
           <List.Item>
             <Text as="span" fontWeight="semibold">
@@ -136,11 +137,10 @@ export default function CreatingAnExperimentPage() {
           </List.Item>
           <List.Item>
             <Text as="span" fontWeight="semibold">
-              Queued uploads
+              The queued files panel
             </Text>{" "}
             appears only when a submission DataPipe accepted has not reached
-            your storage provider yet. An empty dashboard here is the normal
-            state.
+            your storage provider yet. Not seeing it is the normal state.
           </List.Item>
         </List.Root>
         <Text maxW="70ch">
@@ -150,7 +150,7 @@ export default function CreatingAnExperimentPage() {
           include rejected submissions or base64 file uploads.
         </Text>
         <GuidanceLine href="/docs/data/failures" linkText="When an upload fails">
-          Queued uploads are retried automatically and can be downloaded
+          A queued upload is retried automatically, and can be downloaded
           straight from the dashboard in the meantime.
         </GuidanceLine>
       </DocsSection>
@@ -160,10 +160,10 @@ export default function CreatingAnExperimentPage() {
           You can rename an experiment at any time from the pencil icon beside
           its title, and nothing about data collection changes: the experiment
           ID stays the same, so your code keeps working. The new name is used
-          inside DataPipe only. Your storage provider took its folder, dataset
-          or deposition name from the title when the experiment was created,
-          and it keeps that name — rename it there yourself if you want the two
-          to match.
+          inside DataPipe only. Your Drive folder, Dataverse dataset, or Zenodo
+          deposition took its name from the title when the experiment was
+          created, and keeps that name — rename it there yourself if you want
+          the two to match.
         </Text>
       </DocsSection>
 

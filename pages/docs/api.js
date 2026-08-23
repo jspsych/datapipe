@@ -48,7 +48,7 @@ export default function ApiReferencePage() {
           </Box>
           <Box as="li" mb={2}>
             <strong>60 seconds per request.</strong> Every <Code>/api/*</Code>{" "}
-            path runs behind a hosting rewrite with a hard 60-second ceiling. It
+            path runs behind a hosting layer with a hard 60-second ceiling. It
             is why <Code>/api/finalize</Code> returns immediately and does its
             work in the background rather than answering when the job is done.
           </Box>
@@ -64,10 +64,10 @@ export default function ApiReferencePage() {
         </Box>
         <GuidanceLine
           href="/docs/experiments/sending-data#request-size-limits"
-          linkText="Sending data from your experiment"
+          linkText="Request size limits"
         >
-          Compressing a request body yourself, and what the size limit means
-          in practice.
+          Compressing a request body yourself, and what the size limit means in
+          practice.
         </GuidanceLine>
       </DocsSection>
 
@@ -95,8 +95,8 @@ export default function ApiReferencePage() {
             </Param>
             <Param name="metadataOptions" type="object (optional)">
               Extra Psych-DS metadata to merge into this experiment&apos;s
-              dataset description. Ignored unless metadata production is
-              switched on for the experiment.
+              dataset description. Ignored unless metadata is switched on for
+              the experiment.
             </Param>
           </ParamTable>
         </Box>
@@ -171,10 +171,10 @@ export default function ApiReferencePage() {
         <Text maxW="70ch">
           All responses are JSON. On failure, the body carries an{" "}
           <Code>error</Code> code from the table below and a{" "}
-          <Code>message</Code> describing the problem. When metadata production
-          is enabled, write responses also include a{" "}
-          <Code>metadataMessage</Code> field reporting what happened to the
-          metadata file; it never affects whether the data itself was stored.
+          <Code>message</Code> describing the problem. When metadata is on,
+          write responses also include a <Code>metadataMessage</Code> field
+          reporting what happened to the metadata file; it never affects whether
+          the data itself was stored.
         </Text>
         <Box overflowX="auto" w="100%">
           <Table.Root variant="outline">
@@ -246,7 +246,7 @@ export default function ApiReferencePage() {
           The same applies to the <Code>message</Code> text: several messages
           still name OSF whatever provider an experiment actually uses — a
           queued upload reports &ldquo;Data received. OSF upload will be retried
-          automatically&rdquo; on Drive, Dataverse and Zenodo alike. Read
+          automatically&rdquo; on Google Drive, Dataverse, and Zenodo alike. Read
           &ldquo;OSF&rdquo; in a message as &ldquo;your storage
           provider&rdquo;, and match on the <Code>error</Code> code rather than
           the message when you are writing code.
@@ -350,9 +350,9 @@ export default function ApiReferencePage() {
           Queue status
         </EndpointHeading>
         <Text maxW="70ch">
-          List the uploads DataPipe is holding for an experiment, or download
-          them. This is the endpoint behind the queued files panel on the
-          dashboard, and it is the scriptable way to recover data that has not
+          List the queued uploads DataPipe is holding for an experiment, or
+          download them. This is the endpoint behind the queued files panel on
+          the dashboard, and the scriptable way to recover data that has not
           reached your storage provider.
         </Text>
         <Text maxW="70ch">
@@ -470,8 +470,8 @@ export default function ApiReferencePage() {
                   <Code>500</Code>
                 </Table.Cell>
                 <Table.Cell>
-                  A held file could not be read. Nothing has been deleted — try
-                  again, or fetch the files individually.
+                  A queued upload could not be read. Nothing has been deleted —
+                  try again, or fetch the files individually.
                 </Table.Cell>
               </Table.Row>
             </Table.Body>
@@ -484,9 +484,9 @@ export default function ApiReferencePage() {
           Finalize
         </EndpointHeading>
         <Text maxW="70ch">
-          Start finalization for an experiment: merge everything in its storage
-          into one archive and permanently stop accepting submissions. This is
-          the endpoint behind the Finalize control on the dashboard.
+          Start finalizing an experiment: merge everything in its storage into
+          one archive and permanently stop accepting submissions. This is the
+          endpoint behind the Finalize control on the dashboard.
         </Text>
         <Text maxW="70ch">
           Authenticated the same way as queue status —{" "}
@@ -544,8 +544,8 @@ export default function ApiReferencePage() {
                   <Code>400</Code>
                 </Table.Cell>
                 <Table.Cell>
-                  No <Code>experimentID</Code>, or the experiment predates
-                  provider containers and carries{" "}
+                  No <Code>experimentID</Code>, or the experiment predates the
+                  per-experiment storage DataPipe now creates and carries{" "}
                   <Code>{`{ "status": "not-eligible" }`}</Code> with a{" "}
                   <Code>detail</Code>.
                 </Table.Cell>
@@ -584,11 +584,10 @@ export default function ApiReferencePage() {
         </Box>
 
         <Heading as="h3" fontSize="md" fontWeight="600" color="fg" mt={2}>
-          Finalization statuses
+          Statuses the dashboard reports
         </Heading>
         <Text maxW="70ch">
-          The outcome lands on the experiment record and is what the dashboard
-          renders. The full vocabulary is:
+          The outcome lands on the experiment record. The full vocabulary is:
         </Text>
         <Box overflowX="auto" w="100%">
           <Table.Root variant="outline">
@@ -618,13 +617,13 @@ export default function ApiReferencePage() {
               </ErrorRow>
               <ErrorRow code="queued-uploads-pending" status="refused">
                 Uploads are still waiting to be stored, and they belong inside
-                the archive. Let the queue drain and try again.
+                the archive. Let the upload queue drain and try again.
               </ErrorRow>
               <ErrorRow code="nothing-to-archive" status="refused">
                 The experiment has never received any data.
               </ErrorRow>
               <ErrorRow code="leased-elsewhere" status="refused">
-                Another finalization or archive merge is already running for
+                Another finalizing pass or archive merge is already running for
                 this experiment. Try again shortly.
               </ErrorRow>
               <ErrorRow code="archive-too-large" status="refused">

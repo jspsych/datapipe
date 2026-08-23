@@ -40,10 +40,10 @@ export default function AboutDataPipePage() {
         <Text maxW="70ch">DataPipe is free to use.</Text>
         <Text maxW="70ch">
           The expensive parts of running an online experiment — hosting files
-          and storing data — are handled by services you already have access
-          to, like GitHub Pages for hosting and Google Drive, Dataverse, or
-          Zenodo for storage. DataPipe is a lightweight bridge between them,
-          which makes it inexpensive to operate.
+          and storing data — are handled by services you already have access to:
+          GitHub Pages for hosting, and Google Drive, Dataverse, or Zenodo for
+          storage. DataPipe is a lightweight bridge between them, which makes it
+          inexpensive to operate.
         </Text>
       </DocsSection>
 
@@ -57,17 +57,17 @@ export default function AboutDataPipePage() {
           >
             jsPsych Open Collective account
           </ProseLink>{" "}
-          has funding reserves to sustain the service, and we aim to keep costs
-          and available funds transparent so you can judge the service&apos;s
-          long-term viability. If you{" "}
+          has funding reserves to sustain the service, and we keep costs and
+          available funds public so you can judge the service&apos;s long-term
+          viability. A{" "}
           <ProseLink
             href="https://opencollective.com/jspsych#category-CONTRIBUTE"
             external
           >
-            donate a few dollars
-          </ProseLink>
-          , you will likely cover the lifetime cost of providing DataPipe to
-          you.
+            donation of a few dollars
+          </ProseLink>{" "}
+          covers roughly the lifetime cost of providing DataPipe to one
+          researcher.
         </Text>
       </DocsSection>
 
@@ -98,8 +98,9 @@ export default function AboutDataPipePage() {
             <Text as="span" fontWeight="semibold">
               Support availability.
             </Text>{" "}
-            DataPipe is not a commercial product with a dedicated support team.
-            However, the{" "}
+            DataPipe is not a commercial product, and has no dedicated support
+            team — the developers of jsPsych maintain it and answer what they
+            can. The{" "}
             <ProseLink href="https://github.com/jspsych/datapipe" external>
               source code is open
             </ProseLink>{" "}
@@ -110,11 +111,6 @@ export default function AboutDataPipePage() {
       </DocsSection>
 
       <DocsSection id="support" title="Support">
-        <Text maxW="70ch">
-          DataPipe is a free service provided by the developers of jsPsych. We
-          do not have a dedicated support team, but we do our best to respond to
-          questions and issues.
-        </Text>
         <Text maxW="70ch">
           If you have a question or a problem, first check the{" "}
           <ProseLink

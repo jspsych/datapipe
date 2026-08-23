@@ -39,7 +39,6 @@ export default function ConnectingAndReconnectingPage() {
 
       <DocsSection id="how-permission-works" title="How permission works">
         <Text maxW="70ch">
-          It depends on the provider.{" "}
           <Text as="span" fontWeight="semibold">
             Google Drive
           </Text>{" "}
@@ -59,8 +58,7 @@ export default function ConnectingAndReconnectingPage() {
           installation and paste into DataPipe. That gives you direct control,
           but nothing can renew it for you: when the token expires, data stops
           arriving until you create a new one and reconnect. Tokens are stored
-          encrypted either way, and you can disconnect a provider at any time
-          from your account settings.
+          encrypted either way.
         </Text>
         <Text maxW="70ch">
           You connect, reconnect and disconnect every provider from the{" "}
@@ -140,8 +138,8 @@ export default function ConnectingAndReconnectingPage() {
           created on that provider and reconnected to DataPipe&quot; — or with{" "}
           <Code>PROVIDER_NOT_CONNECTED</Code> if the connection was removed
           entirely. Data that arrives during a temporary provider failure is
-          held and retried; a credential that has lapsed is not something a
-          retry can fix.
+          queued and retried; a lapsed credential is not something a retry can
+          fix.
         </Text>
         <Text maxW="70ch" fontWeight="semibold">
           Google Drive and Zenodo renew themselves.
@@ -159,13 +157,13 @@ export default function ConnectingAndReconnectingPage() {
         <Text maxW="70ch">
           A Dataverse API token has no renewal mechanism, so it eventually
           expires — commonly a year after you create it — and only you can
-          replace it. DataPipe reads the expiry date from your installation
-          each time you create an experiment on Dataverse, and warns you on that
-          form when the token expires within 60 days, naming the date. It does
-          this because Dataverse does not surface the expiry anywhere in its own
-          interface. The date it reports comes from a message your installation
-          writes in its own local time, so treat it as accurate to about a day
-          and reconnect with room to spare.
+          replace it. DataPipe reads the expiry date from your installation each
+          time you create an experiment on Dataverse, and names the date on that
+          form when the token expires in the next 60 days. Dataverse does not
+          show the expiry anywhere in its own interface, which is why DataPipe
+          reports it. The date comes from a message your installation writes in
+          its own local time, so treat it as accurate to about a day and
+          reconnect with room to spare.
         </Text>
       </DocsSection>
 
@@ -188,16 +186,17 @@ export default function ConnectingAndReconnectingPage() {
           server address.
         </Text>
         <Text maxW="70ch">
-          Your experiments are unaffected. Each one keeps writing to the folder,
-          dataset or deposition it already has, and submissions that failed
-          while the credential was lapsed are retried automatically — as long
-          as they are still within the retry window.
+          Your experiments are unaffected. Each one keeps writing to the Drive
+          folder, Dataverse dataset, or Zenodo deposition it already has, and
+          submissions that failed while the credential was lapsed are retried
+          automatically — as long as they have not already used up their five
+          attempts, which takes about 31 hours from when they were queued.
         </Text>
         <Text maxW="70ch">
           If a one-click authorization does not come back — you left the tab
           sitting, or opened the link twice — start it again from the account
-          page. The link DataPipe hands to the provider works once and expires
-          after ten minutes.
+          page. The link DataPipe hands to the provider works once, and expires
+          ten minutes after it is created.
         </Text>
         <GuidanceLine
           href="/docs/data/failures"
@@ -210,17 +209,16 @@ export default function ConnectingAndReconnectingPage() {
 
       <DocsSection id="disconnecting" title="Disconnecting">
         <Text maxW="70ch">
-          You can connect more than one provider, and disconnect any of them
-          from the same screen. Disconnecting stops new data from reaching that
-          provider. It never removes data already stored there.
+          Disconnecting stops new data from reaching that provider. It never
+          removes data already stored there.
         </Text>
         <Text maxW="70ch">
-          Disconnecting removes only that provider&apos;s stored credential.
-          Your other connections, your experiments and everything already
-          written to your storage stay exactly as they are, and you can
-          reconnect at any time. Before disconnecting, DataPipe tells you how
-          many of your experiments are set up to send data to that provider,
-          including ones whose collection is currently paused.
+          All it deletes is that provider&apos;s stored credential. Your other
+          connections, your experiments, and everything already written to your
+          storage stay exactly as they are, and you can reconnect at any time.
+          Before you disconnect, DataPipe tells you how many of your experiments
+          send data to that provider, including ones whose collection is
+          currently paused.
         </Text>
         <Text maxW="70ch">
           A legacy OSF connection is the exception: it is not managed here, and

@@ -14,15 +14,10 @@ export default function WhenAnUploadFailsPage() {
 
       <Text maxW="70ch">
         <strong>Your file is not lost.</strong> If your storage provider is
-        temporarily unavailable or returns an error, DataPipe holds each
+        temporarily unavailable or returns an error, DataPipe queues each
         participant&apos;s data, retries the upload automatically, and lets you
-        download the file straight from your experiment dashboard at any time in
-        the meantime.
-      </Text>
-      <Text maxW="70ch" mt={4}>
-        Your experiment dashboard shows how many uploads are waiting to be
-        stored, and the queued files panel lists each one with its status, the
-        reason it has not landed yet, and how long DataPipe will keep it.
+        download the file from your experiment dashboard at any point in the
+        meantime.
       </Text>
 
       <DocsSection id="what-202-means" title="What a 202 means">
@@ -45,28 +40,30 @@ export default function WhenAnUploadFailsPage() {
         <Box as="ul" pl={5} listStyleType="disc" maxW="70ch">
           <Box as="li" mb={2}>
             <strong>The provider write failed.</strong> The most common case: an
-            outage, a rate limit, an expired credential, or a full record.
+            outage, a rate limit, an expired credential, or a Zenodo record that
+            is already full.
           </Box>
           <Box as="li" mb={2}>
-            <strong>DataPipe could not check the filename.</strong> Its record
-            of which filenames are already used could not be rebuilt — usually
-            because the container is missing or access was revoked. Rather than
+            <strong>DataPipe could not check the filename.</strong> Its filename
+            record — the list of names this experiment has already used — could
+            not be rebuilt, usually because your Drive folder, Dataverse dataset,
+            or Zenodo deposition is missing or access was revoked. Rather than
             risk overwriting existing data, the submission is queued.
           </Box>
           <Box as="li" mb={2}>
             <strong>That filename record was being rebuilt.</strong> Another
-            request held the rebuild lease, which lasts 60 seconds.
+            request was already rebuilding it, which takes at most 60 seconds.
           </Box>
           <Box as="li" mb={2}>
-            <strong>An archive merge was in progress.</strong> Compaction is
-            rearranging the record right now, so writes are held back rather
-            than rejected. These entries carry the code{" "}
-            <Code>CONTENTION</Code> and drain in about a minute.
+            <strong>An archive merge was in progress.</strong> A merge is
+            rearranging your Zenodo record, so writes are queued rather than
+            rejected. These entries carry the code <Code>CONTENTION</Code> and
+            drain in about a minute.
           </Box>
         </Box>
         <Text maxW="70ch">
-          A queued submission still counts toward your session limit — it is a
-          real session, just not stored yet.
+          A queued upload still counts toward your session limit — it is a real
+          session, just not stored yet.
         </Text>
       </DocsSection>
 
@@ -126,16 +123,16 @@ export default function WhenAnUploadFailsPage() {
           So an upload that keeps failing runs out of attempts{" "}
           <strong>about 31 hours</strong> after it was queued. The doubling is
           capped at 24 hours, and if your provider sends a{" "}
-          <Code>Retry-After</Code> header DataPipe honours it instead, clamped to
+          <Code>Retry-After</Code> header DataPipe honors it instead, clamped to
           the same 24 hours.
         </Text>
         <Text maxW="70ch">
           <strong>
             Running out of retries is not the same as losing the file.
           </strong>{" "}
-          DataPipe keeps the payload for seven days from the moment it was
-          queued, so a permanently failed upload stays downloadable from your
-          dashboard for roughly five and a half more days after the last attempt.
+          DataPipe keeps the file for seven days from the moment it was queued,
+          so a permanently failed upload stays downloadable from your dashboard
+          for roughly five and a half more days after the last attempt.
         </Text>
 
         <Heading as="h3" fontSize="md" fontWeight="600" color="fg" mt={2}>
@@ -147,11 +144,11 @@ export default function WhenAnUploadFailsPage() {
         </Text>
         <Box as="ul" pl={5} listStyleType="disc" maxW="70ch">
           <Box as="li" mb={2}>
-            <strong>Write contention</strong> (<Code>CONTENTION</Code>) — another
-            write to the same container is already in flight, which clears in
-            seconds. The first attempt is 60 seconds out and the waits are 2, 4,
-            8, 16 and 30 minutes, so all five attempts happen inside about 31
-            minutes.
+            <strong>Write contention</strong> (<Code>CONTENTION</Code>) —
+            another write to the same folder, dataset or deposition is already
+            in flight, which clears in seconds. The first attempt is 60 seconds
+            out and the waits are 2, 4, 8, 16 and 30 minutes, so all five
+            attempts happen inside about 31 minutes of queueing.
           </Box>
           <Box as="li" mb={2}>
             <strong>Expired credentials and provider blips</strong> (
@@ -159,7 +156,7 @@ export default function WhenAnUploadFailsPage() {
             be told apart from something that has already healed itself, so
             DataPipe takes one look after 60 seconds instead of waiting an hour.
             If that look fails it goes back to the hourly chain above, giving
-            five attempts across about 30 hours.
+            five attempts across about 30 hours from queueing.
           </Box>
         </Box>
         <Text maxW="70ch">
@@ -168,8 +165,8 @@ export default function WhenAnUploadFailsPage() {
         </Text>
         <Text maxW="70ch">
           One case costs nothing at all: if an archive merge is running on your
-          record when the retry comes due, the upload is rescheduled 60 seconds
-          later <strong>without using up an attempt</strong>.
+          Zenodo record when the retry comes due, the upload is rescheduled 60
+          seconds later <strong>without using up an attempt</strong>.
         </Text>
 
         <Heading as="h3" fontSize="md" fontWeight="600" color="fg" mt={2}>
@@ -216,7 +213,8 @@ export default function WhenAnUploadFailsPage() {
             wrong.
           </Box>
           <Box as="li" mb={2}>
-            <strong>Stored for</strong> — how much of the seven days is left.
+            <strong>Stored for</strong> — how much of the seven days since
+            queueing is left.
           </Box>
         </Box>
         <Text maxW="70ch">
@@ -236,16 +234,16 @@ export default function WhenAnUploadFailsPage() {
         <Text maxW="70ch">
           <strong>Download all as ZIP</strong> collects every queued, in-flight
           and failed file for the experiment into a single archive named after
-          the experiment ID. Use it as soon as you see a red status: it costs
-          nothing, and it means you hold a copy regardless of what the retries
-          do.
+          the experiment ID. Use it as soon as any file shows as failed: it
+          costs nothing, and it means you hold a copy regardless of what the
+          retries do.
         </Text>
         <Text maxW="70ch">
           If a download fails, nothing has been lost — DataPipe still holds the
           file for the rest of its seven days. Try the single-file buttons if
           the ZIP will not build.
         </Text>
-        <GuidanceLine href="/docs/api#queue-status" linkText="the API reference">
+        <GuidanceLine href="/docs/api#queue-status" linkText="Queue status">
           The endpoint behind these buttons is documented, if you want to
           script it.
         </GuidanceLine>
@@ -267,8 +265,9 @@ export default function WhenAnUploadFailsPage() {
         <Box as="ul" pl={5} listStyleType="disc" maxW="70ch">
           <Box as="li" mb={2}>
             <strong>The experiment was finalized while the upload was queued.</strong>{" "}
-            Finalizing seals the record permanently, so the file cannot be added
-            to it. The data is not lost — download it from the queue panel.
+            Finalizing seals your Zenodo record permanently, so the file cannot
+            be added to it. The data is not lost — download it from the queued
+            files panel.
           </Box>
           <Box as="li" mb={2}>
             <strong>The experiment or the owning account no longer exists.</strong>
@@ -286,7 +285,7 @@ export default function WhenAnUploadFailsPage() {
         </Text>
         <GuidanceLine
           href="/docs/providers/connecting#when-a-token-expires"
-          linkText="Connecting and reconnecting"
+          linkText="When a token expires"
         >
           Expired credentials, and how to restore them, are covered here.
         </GuidanceLine>

@@ -65,8 +65,8 @@ export default function SendingDataPage() {
         </Text>
         <CodeHints expId="YOUR_EXPERIMENT_ID" />
         <Text maxW="70ch">
-          The code is the same whichever storage provider you chose. Your
-          experiment sends data to DataPipe, and DataPipe handles the rest.
+          The code is the same whichever storage provider you chose — your
+          experiment never names a provider.
         </Text>
       </DocsSection>
 
@@ -82,8 +82,8 @@ export default function SendingDataPage() {
           Send whatever your experiment produces — the data string is stored
           byte for byte, under the filename you give it.
         </Text>
-        <GuidanceLine href="/docs/api#save-text-data" linkText="API reference">
-          Every field, response code and error code, for all three participant
+        <GuidanceLine href="/docs/api" linkText="API reference">
+          Every field, response code, and error code, for all three participant
           endpoints.
         </GuidanceLine>
       </DocsSection>
@@ -94,10 +94,9 @@ export default function SendingDataPage() {
           the second one is rejected with{" "}
           <Code>OSF_FILE_EXISTS</Code> and is not stored. That code name is
           historical — the rule applies on every storage provider. Generate a
-          fresh
-          random ID per participant and build the filename from it, as the
-          samples above do — do not use a counter your experiment maintains,
-          and do not reuse a name after a failed attempt.
+          fresh random ID per participant and build the filename from it, as the
+          samples above do. Do not use a counter your experiment maintains, and
+          do not reuse a name after a failed attempt.
         </Text>
         <GuidanceLine href="/docs/data/files" linkText="Filenames, archives and your storage">
           DataPipe, not your storage provider, is what enforces this — and what
@@ -112,14 +111,7 @@ export default function SendingDataPage() {
           decodes the string and stores the resulting file alongside the rest of
           your experiment&apos;s data. Each request sends one file at a time.
         </Text>
-        <Text maxW="70ch">
-          Validation is not currently supported for base64 data, so enabling
-          this feature carries additional risk. We recommend keeping it active
-          only while you are collecting data.
-        </Text>
-        <Text maxW="70ch">
-          Three things to know before you rely on it:
-        </Text>
+        <Text maxW="70ch">Three things to know before you rely on it:</Text>
         <List.Root maxW="70ch" gap={2} ps={6}>
           <List.Item>
             It has its own switch, which works independently of the other one.
@@ -131,8 +123,9 @@ export default function SendingDataPage() {
           </List.Item>
           <List.Item>
             Your validation rules do not apply to it. DataPipe checks only that
-            the string really is base64; it has no idea what the decoded file
-            contains, which is why the switch exists separately.
+            the string really is base64; it cannot tell what the decoded file
+            contains, which is why the switch exists separately and why it is
+            worth turning off outside active collection.
           </List.Item>
           <List.Item>
             It does not count toward your session limit, and it is not blocked
@@ -171,16 +164,16 @@ export default function SendingDataPage() {
           configuration.
         </Text>
         <Text maxW="70ch">
-          Compression is less effective for binary data sent via the base64
-          endpoint (e.g., video or audio recordings), because binary data does
-          not compress as well as text. If you need to send individual files
+          Compression is less effective for binary data sent to the base64
+          endpoint — video or audio recordings — because binary data does not
+          compress as well as text. If you need to send individual files
           larger than about 25 MB through the base64 endpoint, they may still
           exceed the limit even after compression.
         </Text>
         <Text maxW="70ch">
-          If you are sending data without the plugin (e.g., using fetch
-          directly), you can compress the request body yourself using the
-          browser&apos;s{" "}
+          If you are sending data without the plugin — calling{" "}
+          <Code>fetch</Code> yourself — you can compress the request body with
+          the browser&apos;s{" "}
           <ProseLink
             href="https://developer.mozilla.org/en-US/docs/Web/API/CompressionStream"
             external
@@ -230,7 +223,7 @@ export default function SendingDataPage() {
           your Psych-DS metadata; it never decides whether a submission is
           accepted.
         </Text>
-        <GuidanceLine href="/docs/api#responses" linkText="Response and error codes">
+        <GuidanceLine href="/docs/api#responses" linkText="Responses">
           The full status table, with every error code and what to do about it.
         </GuidanceLine>
       </DocsSection>

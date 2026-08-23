@@ -41,10 +41,9 @@ export default function ConditionAssignmentPage() {
 
       <DocsSection id="how-many-conditions" title="How many conditions">
         <Text maxW="70ch">
-          When enabled, DataPipe assigns condition numbers sequentially. It
-          returns a number from 0 to n−1, where n is the number of conditions
-          you configure. For example, with 3 conditions the sequence is 0, 1, 2,
-          0, 1, 2, and so on.
+          DataPipe hands each participant the next number in a fixed sequence:
+          0 to n−1, where n is the number of conditions you set. With 3
+          conditions the sequence is 0, 1, 2, 0, 1, 2, and so on.
         </Text>
         <Text maxW="70ch">
           <strong>Set the number when you turn the switch on.</strong> A new
@@ -67,7 +66,10 @@ export default function ConditionAssignmentPage() {
           can receive a number that is now out of range, and the one after that
           starts again at 0. Change n before you recruit, not during.
         </Text>
-        <GuidanceLine href="/docs/experiments/sending-data#jspsych" linkText="Sending data from your experiment">
+        <GuidanceLine
+          href="/docs/experiments/sending-data"
+          linkText="Sending data from your experiment"
+        >
           The code samples include a ready-made condition request for jsPsych
           and for plain JavaScript.
         </GuidanceLine>
@@ -80,7 +82,7 @@ export default function ConditionAssignmentPage() {
               It is not random assignment.
             </Text>{" "}
             The order is fixed and predictable. If your design needs
-            randomisation, randomise in your own experiment code and leave this
+            randomization, randomize in your own experiment code and leave this
             switch off.
           </List.Item>
           <List.Item>
@@ -129,7 +131,7 @@ export default function ConditionAssignmentPage() {
         <Text maxW="70ch">
           Because assignment is sequential, a factorial mapping stays balanced
           across complete runs of n participants, which is the main reason to
-          prefer it over randomising in your own code.
+          prefer it over randomizing in your own code.
         </Text>
       </DocsSection>
     </>

@@ -1,4 +1,4 @@
-import { Link as ChakraLink, List, Text } from "@chakra-ui/react";
+import { Box, Link as ChakraLink, List, Text } from "@chakra-ui/react";
 import NextLink from "next/link";
 import PageHeader from "../../components/ui/PageHeader";
 import GuidanceLine from "../../components/ui/GuidanceLine";
@@ -111,12 +111,14 @@ export default function AccountAndSecurityPage() {
       </DocsSection>
 
       <DocsSection id="deleting-your-account" title="Deleting your account">
-        <Text maxW="70ch">
-          Deleting your DataPipe account is permanent. It removes every
-          experiment you own and everything DataPipe holds about them, and there
-          is no way to recover them afterwards. It does not touch a single file
-          in your storage provider.
-        </Text>
+        <Box borderWidth="1px" borderColor="border" bg="bg.muted" rounded="md" p={4} maxW="70ch">
+          <Text fontSize="sm">
+            <strong>Deleting your DataPipe account is permanent.</strong> It
+            removes every experiment you own and everything DataPipe holds about
+            them, with no way to recover them afterwards. It does not touch a
+            single file in your storage provider.
+          </Text>
+        </Box>
         <Text maxW="70ch">
           You must have signed in within the last five minutes to delete an
           account. If it has been longer, DataPipe asks you to sign in again
@@ -134,12 +136,10 @@ export default function AccountAndSecurityPage() {
         </Text>
         <List.Root maxW="70ch" gap={2} ps={6}>
           <List.Item>
-            Every experiment you own, along with the record of which filenames
-            it has used.
+            Every experiment you own, along with its filename record.
           </List.Item>
           <List.Item>
-            Any submission still waiting to be uploaded, including files in the
-            queue you have not downloaded.
+            Every queued upload, including files you have not downloaded.
           </List.Item>
           <List.Item>
             The metadata and log documents belonging to those experiments.
@@ -154,7 +154,7 @@ export default function AccountAndSecurityPage() {
         </Text>
         <Text maxW="70ch">
           Nothing in your storage provider. Your Google Drive folders, Dataverse
-          datasets, Zenodo depositions and OSF components all stay exactly as
+          datasets, Zenodo depositions, and OSF components all stay exactly as
           they are, in your own account, with everything DataPipe wrote to them.
           Deleting a DataPipe account removes DataPipe&apos;s ability to write
           to them, not the data itself.

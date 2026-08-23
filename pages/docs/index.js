@@ -47,23 +47,22 @@ export default function DocsOverviewPage() {
 
       <DocsSection id="how-it-works" title="How it works">
         <Text maxW="70ch">
-          Follow our{" "}
-          <ProseLink href="/getting-started">getting started guide</ProseLink>.
-          In short: connect a storage provider — Google Drive, Dataverse, or
-          Zenodo — to your DataPipe account, create an experiment, and add a
-          few lines of code to your study to send data through DataPipe to that
-          provider. Google Drive and Zenodo connect in one click; Dataverse
-          asks for an API token from your institution&apos;s installation.
+          Connect a storage provider — Google Drive, Dataverse, or Zenodo — to
+          your DataPipe account, create an experiment, and add a few lines of
+          code to the experiment your participants run. Google Drive and Zenodo
+          connect in one click; Dataverse asks for an API token from your
+          institution&apos;s installation. The{" "}
+          <ProseLink href="/getting-started">getting started guide</ProseLink>{" "}
+          covers all of it, in order.
         </Text>
         <Text maxW="70ch">There are three moving parts:</Text>
         <List.Root maxW="70ch" gap={2} ps={6}>
           <List.Item>
             <Text as="span" fontWeight="semibold">
-              Your experiment
+              The experiment your participants run
             </Text>
-            , running wherever you host it, sends each participant&apos;s data
-            to a DataPipe endpoint with the experiment&apos;s ID and a
-            filename.
+            , hosted wherever you put it, sends each participant&apos;s data to
+            a DataPipe endpoint with the experiment ID and a filename.
           </List.Item>
           <List.Item>
             <Text as="span" fontWeight="semibold">
@@ -77,9 +76,9 @@ export default function DocsOverviewPage() {
             <Text as="span" fontWeight="semibold">
               Your storage provider
             </Text>{" "}
-            receives the file into your own account: a Google Drive folder, a
-            Dataverse dataset, or a Zenodo deposition that DataPipe created for
-            this experiment.
+            receives the file into your own account — the Drive folder,
+            Dataverse dataset, or Zenodo deposition DataPipe created for this
+            experiment.
           </List.Item>
         </List.Root>
         <GuidanceLine
@@ -96,10 +95,10 @@ export default function DocsOverviewPage() {
           It does not host your experiment.
         </Text>
         <Text maxW="70ch">
-          You need a separate service to host your experiment online (e.g.,
-          GitHub Pages, Netlify, or university hosting). DataPipe only handles
-          sending data to your storage provider, so you do not need to
-          configure any backend or server components yourself.
+          You need a separate service to put the experiment your participants
+          run online — GitHub Pages, Netlify, or your university&apos;s web
+          hosting. DataPipe only moves data to your storage provider, so you
+          never have to set up a server of your own.
         </Text>
         <Text maxW="70ch">
           <ProseLink href="https://pages.github.com/" external>
@@ -112,18 +111,18 @@ export default function DocsOverviewPage() {
           href="/getting-started"
           linkText="Getting started guide, step 6"
         >
-          The guide walks through publishing an experiment on GitHub Pages.
+          Publishing an experiment on GitHub Pages is walked through here.
         </GuidanceLine>
 
         <Text maxW="70ch" fontWeight="semibold" mt={4}>
           It does not keep your data.
         </Text>
         <Text maxW="70ch">
-          Under normal operation, DataPipe routes your data to the storage
-          provider you connected but does not keep a copy. The one exception is
-          an upload that fails: DataPipe holds that submission so it can retry
-          the upload, and you can download it from your experiment dashboard in
-          the meantime.
+          Under normal operation, DataPipe routes each participant&apos;s data
+          to the storage provider you connected but does not keep a copy. The
+          one exception is an upload that fails: DataPipe queues that
+          submission, retries it automatically, and lets you download it from
+          your experiment dashboard in the meantime.
         </Text>
         <GuidanceLine href="/docs/data" linkText="What DataPipe stores">
           The full account of what is held, for how long, and who can read it.
@@ -136,7 +135,7 @@ export default function DocsOverviewPage() {
           DataPipe never interprets, summarizes or scores what a participant
           submitted. The only thing it can add is Psych-DS metadata — a
           description of your dataset and its variables, written alongside the
-          data when you turn that feature on.
+          data when you turn metadata on.
         </Text>
         <GuidanceLine
           href="/docs/experiments/metadata"

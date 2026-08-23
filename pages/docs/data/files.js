@@ -27,13 +27,13 @@ export default function FilenamesArchivesAndYourStoragePage() {
             The check is DataPipe&apos;s, not your storage provider&apos;s.
           </strong>{" "}
           Most providers will happily accept the same name twice, each in its
-          own way, so DataPipe keeps its own record of the names an experiment
-          has used and consults that first.
+          own way, so DataPipe keeps its own filename record — the list of names
+          an experiment has used — and consults that first.
         </Text>
         <Text maxW="70ch">
-          The record does not contain your filenames. Each name is hashed with a
-          per-experiment secret and only the hash is stored, so the list of
-          names your participants&apos; files were given is not something
+          The filename record does not contain your filenames. Each name is
+          hashed with a per-experiment secret and only the hash is stored, so the
+          list of names your participants&apos; files were given is not something
           DataPipe holds. Entries last 90 days from the submission that created
           them.
         </Text>
@@ -47,20 +47,22 @@ export default function FilenamesArchivesAndYourStoragePage() {
           </Box>
           <Box as="li" mb={2}>
             <strong>The record is being rebuilt right now</strong> —{" "}
-            <Code>202</Code>. Another request holds the rebuild lease, which
-            lasts 60 seconds; the submission is queued and lands shortly after.
+            <Code>202</Code>. Another request is already rebuilding it, which
+            takes at most 60 seconds; the submission is queued and lands shortly
+            after.
           </Box>
           <Box as="li" mb={2}>
             <strong>The record cannot be rebuilt</strong> — <Code>202</Code>.
-            DataPipe could not list your container, usually because it was
-            deleted or access was revoked. Rather than risk overwriting real
-            data it queues the submission and retries.
+            DataPipe could not list your Drive folder, Dataverse dataset, or
+            Zenodo deposition, usually because it was deleted or access was
+            revoked. Rather than risk overwriting real data it queues the
+            submission and retries.
           </Box>
         </Box>
         <Text maxW="70ch">
-          A name reserved by a submission that never completed is released after
-          fifteen minutes, so an interrupted request does not block that name
-          forever.
+          A name reserved by a submission that never completed is released
+          fifteen minutes after that submission arrived, so an interrupted
+          request does not block the name forever.
         </Text>
       </DocsSection>
 
@@ -68,19 +70,22 @@ export default function FilenamesArchivesAndYourStoragePage() {
         id="dont-edit-your-storage-during-collection"
         title="Don't edit your storage during collection"
       >
+        <Box borderWidth="1px" borderColor="border" bg="bg.muted" rounded="md" p={4} maxW="70ch">
+          <Text fontSize="sm">
+            <strong>
+              Adding, renaming, or deleting files there yourself while an
+              experiment is collecting can cost you a participant&apos;s data.
+            </strong>{" "}
+            Download from your storage as much as you like; write to it only
+            once collection is finished.
+          </Text>
+        </Box>
         <Text maxW="70ch">
-          Please don&apos;t. While an experiment is active, treat its storage
-          location as belonging to DataPipe: let DataPipe write to it, and
-          download from it as much as you like, but avoid uploading, renaming,
-          or deleting files there yourself until collection is finished.
-        </Text>
-        <Text maxW="70ch">
-          DataPipe keeps its own record of which filenames it has already used,
-          so that a participant who submits twice cannot overwrite existing
-          data. Files that appear without DataPipe writing them are missing from
-          that record. Depending on the storage provider, the next submission
-          that happens to use the same name may then be silently renamed or may
-          overwrite what you added.
+          DataPipe keeps its own filename record so a participant who submits
+          twice cannot overwrite existing data. Files that appear without
+          DataPipe writing them are missing from that record, so the next
+          submission that happens to use the same name may be silently renamed,
+          or may overwrite what you added.
         </Text>
         <Text maxW="70ch">
           What that looks like differs by provider, and none of them is a clean
@@ -133,9 +138,9 @@ export default function FilenamesArchivesAndYourStoragePage() {
         </Box>
         <Text maxW="70ch">
           Files you added by hand do become visible to DataPipe eventually: if
-          its filename record ever has to be rebuilt from your container, it
-          reads whatever is there and adopts those names as taken. That is not
-          something you can trigger, so it is not a fix — it just means the
+          the filename record ever has to be rebuilt from your storage, it reads
+          whatever is there and adopts those names as taken. That is not
+          something you can trigger, so it is not a fix — it only means the
           window in which a hand-added file is invisible is bounded rather than
           permanent.
         </Text>
@@ -148,16 +153,18 @@ export default function FilenamesArchivesAndYourStoragePage() {
         </Text>
         <Text maxW="70ch">
           <strong>Slashes in a filename do not create folders.</strong> When
-          Psych-DS metadata is on, a name like{" "}
+          Psych-DS metadata — the optional description DataPipe writes alongside
+          your data — is on, a name like{" "}
           <Code>condition-A/abc.json</Code> is flattened with hyphens before the
           path is built, so it is stored at{" "}
           <Code>data/raw/condition-A-abc.json</Code>. The prefix is kept rather
-          than discarded, so two submissions with the same leaf name in
-          different pseudo-folders still do not collide.
+          than discarded, so two submissions that share a name after the last
+          slash still do not collide.
         </Text>
         <Text maxW="70ch">
-          <strong>Zenodo cannot store a slash at all.</strong> Its keyspace is
-          flat, so every remaining <Code>/</Code> becomes an underscore:{" "}
+          <strong>Zenodo cannot store a slash at all.</strong> It holds every
+          file under a flat name, with no folders, so every remaining{" "}
+          <Code>/</Code> becomes an underscore:{" "}
           <Code>data/raw/subject-1.json</Code> is stored as{" "}
           <Code>data_raw_subject-1.json</Code>. If you open a metadata-enabled
           Zenodo deposition mid-study and find a flat list of underscore names
@@ -168,9 +175,15 @@ export default function FilenamesArchivesAndYourStoragePage() {
         <Text maxW="70ch">
           One consequence on Google Drive: only the last segment of a slashed
           name is used, so <Code>condition-A/abc.json</Code> and{" "}
-          <Code>condition-B/abc.json</Code> are treated as the same name. Give
-          files distinct leaf names rather than distinct prefixes.
+          <Code>condition-B/abc.json</Code> are treated as the same name. Make
+          the part after the last slash distinct, not the prefix.
         </Text>
+        <GuidanceLine
+          href="/docs/experiments/metadata"
+          linkText="Psych-DS metadata"
+        >
+          What the metadata files contain, and how to turn them on.
+        </GuidanceLine>
       </DocsSection>
 
       <DocsSection
@@ -194,8 +207,8 @@ export default function FilenamesArchivesAndYourStoragePage() {
         </Text>
         <Text maxW="70ch">
           Two files are never archived:{" "}
-          <Code>dataset_description.json</Code>, which is your dataset&apos;s
-          Psych-DS descriptor and should stay visible on the record, and{" "}
+          <Code>dataset_description.json</Code>, which describes your dataset
+          and its variables and should stay visible on the record, and{" "}
           <Code>.psychds-ignore</Code>, which is rewritten on every submission
           anyway.
         </Text>
@@ -208,16 +221,16 @@ export default function FilenamesArchivesAndYourStoragePage() {
         </Text>
         <Text maxW="70ch">
           There is no schedule for this — a merge is triggered by your record
-          growing, not by a timer, so it happens when it is needed rather than
-          up to an interval late. While a merge is running, submissions are{" "}
+          growing, not by a timer, so it runs the moment it is needed. While a
+          merge is running, submissions are{" "}
           <strong>queued rather than rejected</strong>: your participants still
           get a success response, and the queued files land about a minute
           later.
         </Text>
         <Text maxW="70ch">
-          The archives are ordinary zip files. Unzip one and you get the
-          Psych-DS tree back, complete with the{" "}
-          <Code>data/raw/</Code> paths that Zenodo itself cannot represent.
+          The archives are ordinary zip files. Unzip one and you get the folder
+          tree back, complete with the <Code>data/raw/</Code> paths that Zenodo
+          itself cannot represent.
           Zenodo also previews zip contents on the record page, so you can see
           what is in an archive without downloading it.
         </Text>
@@ -229,10 +242,10 @@ export default function FilenamesArchivesAndYourStoragePage() {
 
       <DocsSection id="file-count-limits" title="File count limits">
         <Text maxW="70ch">
-          On providers with a limit on how many files one project can hold —
+          On providers with a limit on how many files one record can hold —
           Zenodo allows 100 — DataPipe combines older sessions into archives to
           stay under it. Files added by hand count toward that limit, and can
-          fill the project faster than DataPipe expects.
+          fill the record faster than DataPipe expects.
         </Text>
         <Box as="ul" pl={5} listStyleType="disc" maxW="70ch">
           <Box as="li" mb={2}>
@@ -256,10 +269,9 @@ export default function FilenamesArchivesAndYourStoragePage() {
           <strong>If a Zenodo record does fill up completely</strong>, DataPipe
           needs one free slot to upload the archive that would relieve it. It
           takes that slot by temporarily removing{" "}
-          <Code>.psychds-ignore</Code> — a file whose contents are a fixed
-          constant — and writes it back afterwards. An experiment that is not
-          producing Psych-DS metadata has no such file to give up, so in that
-          case archiving stops and asks for a hand:{" "}
+          <Code>.psychds-ignore</Code> — a file whose contents never change —
+          and writes it back afterwards. An experiment with metadata off has no
+          such file to give up, so archiving stops and needs you:{" "}
           <strong>remove one file from the record yourself</strong> and it will
           proceed on the next submission.
         </Text>

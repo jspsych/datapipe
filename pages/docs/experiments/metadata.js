@@ -49,29 +49,25 @@ export default function PsychDsMetadataPage() {
     <>
       <PageHeader
         title="Psych-DS metadata"
-        purpose="Turn on Psych-DS metadata production and know what it writes, where it comes from, and what it does not affect."
+        purpose="Turn on Psych-DS metadata and know what it writes, where it comes from, and what it does not affect."
       />
 
       <DocsSection id="what-gets-written" title="What gets written">
         <Text maxW="70ch">
-          When enabled, DataPipe generates a dataset_description.json file
-          alongside your data that describes the dataset and its variables
-          according to the Psych-DS specification. The file is updated
-          automatically as new sessions are uploaded.
-        </Text>
-        <Text maxW="70ch">
-          Metadata production is recommended when you plan to share or publish
-          your data because it makes the dataset easier to understand and reuse.
-          You can enable it from your experiment dashboard, or read the{" "}
+          With metadata on, DataPipe writes a{" "}
+          <Code>dataset_description.json</Code> alongside your data describing
+          the dataset and every variable in it, in the{" "}
           <ProseLink href="https://psychds-docs.readthedocs.io/en/latest/" external>
-            Psych-DS documentation
+            Psych-DS
           </ProseLink>{" "}
-          to learn more.
+          format, and rewrites it after each session. Turn it on from your
+          experiment dashboard when you plan to share or publish your data: it
+          makes the dataset easier for someone else to read and reuse.
         </Text>
         <Text maxW="70ch">
-          Turning it on changes where your files land. Instead of one file per
-          session at the top of your folder, dataset or deposition, each session
-          produces:
+          Turning it on also changes where your files land. Instead of one file
+          per session at the top of your Drive folder, Dataverse dataset, or
+          Zenodo deposition, each session produces:
         </Text>
         <List.Root maxW="70ch" gap={3} ps={6}>
           <LayoutRow path="data/raw/<your filename>">
@@ -88,19 +84,19 @@ export default function PsychDsMetadataPage() {
             table stays flat.
           </LayoutRow>
           <LayoutRow path="dataset_description.json">
-            At the top of the container: the description of the dataset and
-            every variable in it, rewritten after each session.
+            At the top level: the description of the dataset and every variable
+            in it, rewritten after each session.
           </LayoutRow>
           <LayoutRow path=".psychds-ignore">
-            At the top of the container: tells Psych-DS validators to skip{" "}
+            At the top level: tells Psych-DS validators to skip{" "}
             <Code>data/raw/</Code>, which holds your originals rather than
             Psych-DS tables.
           </LayoutRow>
         </List.Root>
         <Text maxW="70ch">
           With metadata off, none of this happens: each submission is stored at
-          the top of the container under the filename you sent, and no other
-          files are created.
+          the top level under the filename you sent, and no other files are
+          created.
         </Text>
         <GuidanceLine href="/docs/data/files" linkText="Filenames, archives and your storage">
           Zenodo cannot store folders, so a Zenodo record shows these paths
@@ -229,8 +225,8 @@ export default function PsychDsMetadataPage() {
           There is one case where metadata does affect the response. If DataPipe
           cannot produce metadata from a submission at all, that request comes
           back as a <Code>400</Code> with <Code>METADATA_ERROR</Code>. The usual
-          cause is a payload that parses as JSON but is not an array of trials —
-          metadata production needs the trial array jsPsych produces. Anything
+          cause is a submission that parses as JSON but is not an array of
+          trials — metadata needs the trial array jsPsych produces. Anything
           that does not parse as JSON is treated as CSV instead.
         </Text>
         <Text maxW="70ch">

@@ -83,8 +83,9 @@ export default function MovingOffOsfPage() {
         <Text maxW="70ch">
           To keep collecting, connect Google Drive, Dataverse, or Zenodo in your{" "}
           <ProseLink href="/admin/account">account settings</ProseLink>, create
-          a new experiment on that provider, and point your study at the new
-          experiment ID. Your existing data does not move, so it is worth
+          a new experiment on that provider, and point the experiment your
+          participants run at the new experiment ID. Your existing data does not
+          move, so it is worth
           finishing a study on OSF if you are close to done rather than
           switching mid-collection.
         </Text>

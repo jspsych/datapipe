@@ -41,12 +41,10 @@ export default function ValidationAndSessionLimitsPage() {
 
       <DocsSection id="how-validation-works" title="How validation works">
         <Text maxW="70ch">
-          When enabled, DataPipe checks incoming data before sending it on to
-          your storage provider. You can validate that files are well-formed
-          JSON or CSV, and you can specify a list of required columns or fields
-          that must be present. For JSON arrays (like jsPsych output), DataPipe
-          checks whether the required fields appear in at least one object
-          across the array.
+          Validation checks each submission before DataPipe sends it to your
+          storage provider, and rejects anything that does not match the rules
+          you set. You can require a file to be well-formed JSON or CSV, and you
+          can list columns or fields it must contain.
         </Text>
         <Text maxW="70ch">
           <strong>Validation is on for every new experiment</strong>, with JSON
@@ -107,22 +105,23 @@ export default function ValidationAndSessionLimitsPage() {
       </DocsSection>
 
       <DocsSection id="rejected-data-is-gone" title="Rejected data is gone">
+        <Box borderWidth="1px" borderColor="border" bg="bg.muted" rounded="md" p={4} maxW="70ch">
+          <Text fontSize="sm">
+            <strong>Rejected data cannot be recovered.</strong> An invalid file
+            never reaches your storage provider, never enters the upload queue,
+            and never appears on your dashboard. There is nothing anywhere to
+            restore it from, and the participant has already moved on.
+          </Text>
+        </Box>
         <Text maxW="70ch">
-          Invalid files are rejected and never sent to your storage provider.
-          Rejected data cannot be recovered. This feature is designed to block
-          malicious submissions, not to catch errors in legitimate data.
+          The check runs before DataPipe takes its own copy of the submission,
+          which is why nothing survives it. Validation exists to block malicious
+          submissions, not to catch mistakes in legitimate data.
         </Text>
         <Text maxW="70ch">
-          &ldquo;Cannot be recovered&rdquo; is literal: the check runs before
-          DataPipe takes its own copy of the submission, so a rejected file
-          reaches neither your provider, nor the upload queue, nor the download
-          links on your dashboard. There is nothing anywhere to restore it from,
-          and the participant has already moved on.
-        </Text>
-        <Text maxW="70ch">
-          The practical consequence is that validation rules are worth setting
-          deliberately and testing once, end to end, with your real experiment —
-          before the first participant, not after.
+          So set your validation rules deliberately, and test them once, end to
+          end, with your real experiment — before the first participant, not
+          after.
         </Text>
       </DocsSection>
 
@@ -132,10 +131,10 @@ export default function ValidationAndSessionLimitsPage() {
       >
         <Text maxW="70ch">
           Unchecking both <strong>Allow JSON</strong> and{" "}
-          <strong>Allow CSV</strong> while validation is on stops your
-          experiment collecting data entirely. There is no format left that a
-          submission could be valid in, so every one of them is rejected with{" "}
-          <Code>INVALID_DATA</Code> and destroyed.
+          <strong>Allow CSV</strong> while validation is on{" "}
+          <strong>stops your experiment collecting data entirely</strong>. There
+          is no format left that a submission could be valid in, so every one of
+          them is rejected with <Code>INVALID_DATA</Code> and destroyed.
         </Text>
         <Text maxW="70ch">
           Nothing in the dashboard prevents this combination, and nothing about
@@ -158,7 +157,7 @@ export default function ValidationAndSessionLimitsPage() {
         <List.Root maxW="70ch" gap={3} ps={6}>
           <List.Item>
             <Text as="span" fontWeight="semibold">
-              A queued submission still counts.
+              A queued upload still counts.
             </Text>{" "}
             If DataPipe accepted the data but has not delivered it to your
             provider yet, it has already used one of your sessions. The count
@@ -194,7 +193,7 @@ export default function ValidationAndSessionLimitsPage() {
         </List.Root>
         <Text maxW="70ch">
           Because of the last two points, treat the limit as a guard rail rather
-          than as a payment gate. If exactly n complete datasets matter, check
+          than as an exact quota. If exactly n complete datasets matter, check
           the count on your dashboard before you close recruitment.
         </Text>
       </DocsSection>

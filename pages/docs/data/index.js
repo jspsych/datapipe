@@ -28,35 +28,34 @@ export default function WhatDataPipeStoresPage() {
         </Text>
         <Text maxW="70ch">
           The other exception is when an upload fails — because your provider is
-          briefly unavailable, or rate-limits us, or a name check cannot be
-          completed. In that case DataPipe keeps the submission so it can retry
-          the upload automatically, and so you can download it yourself from the
-          dashboard in the meantime.
+          briefly unavailable, or rate-limits DataPipe, or a name check cannot
+          be completed. In that case DataPipe keeps the submission so it can
+          retry the upload automatically, and so you can download it yourself
+          from the dashboard in the meantime.
         </Text>
         <Text maxW="70ch">
-          Held copies are encrypted at rest with AES-256-GCM, live in a private
-          storage bucket that no browser or client can read, and are deleted
-          within seven days.
+          A queued upload is encrypted at rest with AES-256-GCM, lives in a
+          private storage bucket no browser or client can read, and is deleted
+          seven days after it was queued.
         </Text>
         <GuidanceLine
           href="/docs/data/failures"
           linkText="When an upload fails"
         >
-          Retries, the queue panel and downloading a held file are covered
-          here.
+          Retries, the queued files panel, and downloading a queued upload are
+          covered here.
         </GuidanceLine>
       </DocsSection>
 
       <DocsSection id="who-can-see-it" title="Who can see it">
         <Text maxW="70ch">
-          DataPipe does not store or log your data. Once data reaches your
-          storage provider, visibility is governed entirely by that
-          provider&apos;s own sharing settings. A Google Drive folder is private
-          until you share it. A Zenodo deposition stays a private draft until
-          you publish it. A Dataverse dataset stays a draft until you publish
-          it, and its access is then set by your installation&apos;s policies.
-          In every case DataPipe changes nothing about who can see your data —
-          you do.
+          Your storage provider&apos;s own sharing settings decide, and DataPipe
+          changes none of them. A Google Drive folder is private until you share
+          it. A Zenodo deposition stays a private draft until you publish it. A
+          Dataverse dataset stays a draft until you publish it, and its access is
+          then set by your installation&apos;s policies. DataPipe never reads
+          your data and never writes any of it to a log, so the only person who
+          changes who can see your data is you.
         </Text>
       </DocsSection>
 
@@ -107,7 +106,8 @@ export default function WhatDataPipeStoresPage() {
       <DocsSection id="retention" title="Retention">
         <Text maxW="70ch">
           The only copy of your data DataPipe keeps for any length of time is a
-          queued upload — one that could not reach your storage provider yet.
+          queued upload — a submission that could not reach your storage
+          provider yet.
         </Text>
         <Text maxW="70ch">
           <strong>
@@ -123,8 +123,8 @@ export default function WhatDataPipeStoresPage() {
         <Text maxW="70ch">
           The copy written before each provider write is deleted as soon as the
           submission is handled. Anything left behind by an interrupted request
-          is picked up within about fifteen minutes and moved into the same
-          seven-day queue.
+          is picked up within about fifteen minutes and moved into the upload
+          queue, where the seven-day clock starts.
         </Text>
         <Text maxW="70ch">
           Your experiment&apos;s configuration, its session count and its log
@@ -133,7 +133,7 @@ export default function WhatDataPipeStoresPage() {
         </Text>
         <GuidanceLine
           href="/docs/account#deleting-your-account"
-          linkText="Account and security"
+          linkText="Deleting your account"
         >
           What account deletion removes, and what it leaves alone.
         </GuidanceLine>

@@ -94,7 +94,7 @@ export default function ChoosingAProviderPage() {
     <>
       <PageHeader
         title="Choosing a provider"
-        purpose="Compare Google Drive, Dataverse and Zenodo, and see what each one does with your files once data starts arriving."
+        purpose="Compare Google Drive, Dataverse, and Zenodo, and see what each one does with your files once data starts arriving."
       />
 
       <DocsSection id="comparison" title="Comparing the providers">
@@ -163,10 +163,11 @@ export default function ChoosingAProviderPage() {
         </Text>
         <Text maxW="70ch">
           What an experiment cannot do is change provider once it exists. Each
-          experiment writes to the one folder, dataset or deposition DataPipe
-          created for it. To collect the same study somewhere else, create a
-          new experiment on the other provider and point your study at the new
-          experiment ID — data already collected stays where it is.
+          experiment writes to the one Drive folder, Dataverse dataset, or
+          Zenodo deposition DataPipe created for it. To collect the same study
+          somewhere else, create a new experiment on the other provider and
+          point the experiment your participants run at the new experiment ID —
+          data already collected stays where it is.
         </Text>
       </DocsSection>
 
@@ -202,11 +203,11 @@ export default function ChoosingAProviderPage() {
           </Text>
           <Text fontSize="sm" color="fg.muted">
             Drive allows two files with the same name in the same folder and
-            never reports a conflict, so DataPipe&apos;s own record of used
-            filenames is the only thing preventing a duplicate. Drive stores
-            the file under the last part of its name, which means two
-            submissions that differ only in their folder prefix count as the
-            same name.
+            never reports a conflict, so DataPipe&apos;s filename record — its
+            own list of the names an experiment has used — is the only thing
+            preventing a duplicate. Drive stores the file under the last part
+            of its name, so two submissions that differ only in their folder
+            prefix count as the same name.
           </Text>
         </BehaviorRow>
 
@@ -218,7 +219,7 @@ export default function ChoosingAProviderPage() {
           <Text fontSize="sm" color="fg.muted">
             Dataverse accepts one write to a dataset at a time. When two
             participants submit at the same moment, the second write is
-            refused, and DataPipe holds that submission and retries it about a
+            refused, so DataPipe queues that submission and retries it about a
             minute later rather than failing it.
           </Text>
           <Text fontSize="sm" color="fg.muted">
@@ -250,11 +251,11 @@ export default function ChoosingAProviderPage() {
             record, and no DOI is minted until you publish.
           </Text>
           <Text fontSize="sm" color="fg.muted">
-            A Zenodo record holds at most 100 files and 50 GB. This is the only
-            file-count ceiling among the three providers, and it is why DataPipe
-            merges completed sessions into archives on Zenodo as collection goes
-            on, and why finishing a study by merging everything into a single
-            archive is available on Zenodo only.
+            A Zenodo record holds at most 100 files and 50 GB — the only
+            file-count ceiling among the three providers. It is why DataPipe
+            merges completed sessions into archives on Zenodo as collection
+            goes on, and why finalizing a study into one archive is a Zenodo
+            feature only.
           </Text>
           <Text fontSize="sm" color="fg.muted">
             Zenodo has no folders. A file named{" "}
@@ -270,8 +271,8 @@ export default function ChoosingAProviderPage() {
           </Text>
           <Text fontSize="sm" color="fg.muted">
             Writing a file that already exists on Zenodo replaces it, with no
-            error — DataPipe&apos;s record of used filenames is the only thing
-            standing between a repeated filename and a lost session.
+            error — DataPipe&apos;s filename record is the only thing standing
+            between a repeated filename and a lost session.
           </Text>
         </BehaviorRow>
 
