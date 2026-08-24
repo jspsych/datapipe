@@ -10,6 +10,7 @@ import { createProviderExperiment } from "../../lib/experiment-creation";
 import { pickDriveFolder } from "../../lib/google-picker";
 import { STORAGE_PROVIDERS } from "../../lib/provider-config";
 import { normalizeContactEmail } from "../../lib/contact-email";
+import { PROVIDER_ICONS } from "../../components/ProviderIcons";
 import {
   Button,
   Stack,
@@ -155,22 +156,60 @@ function NewExperimentForm() {
 
   const providerConnected = STORAGE_PROVIDERS[provider]?.isConnected(data);
 
-  // Seed the account-level prefills ONCE, when the user document first
-  // arrives. handleProviderChange seeds every later provider switch itself, so
-  // this only covers the initial render, where `data` is still undefined.
+  // Whether the researcher has picked a provider by hand (clicked a radio),
+  // as opposed to `provider` merely holding whatever this component's own
+  // defaulting logic put there. Read by the pre-selection effect below so a
+  // user's own choice -- even one made in the instant before the account
+  // snapshot resolves -- is never clobbered by it.
+  const userPickedProviderRef = useRef(false);
+
+  // Seed the account-level prefills, and pre-select a connected storage
+  // provider, ONCE, when the user document first arrives. handleProviderChange
+  // re-seeds every later provider switch itself, so this only covers the
+  // initial render, where `data` is still undefined.
+  //
+  // The pre-selection rule: with exactly one connected provider, preselect
+  // it; with several, preselect the first in the radio group's own
+  // left-to-right display order (Object.values(STORAGE_PROVIDERS) -- the same
+  // order the JSX below iterates to render the radios); with none connected,
+  // `provider` is left exactly as it already was (DEFAULT_PROVIDER) -- there
+  // is nothing connected to prefer, so this is a no-op over today's behavior.
+  // Never overrides a provider the researcher already picked by hand.
   //
   // Guarded by a ref rather than re-running on every `data` snapshot: this
   // page holds a live Firestore subscription, and any unrelated field changing
-  // on users/{uid} mid-form would otherwise push the stored address back over
-  // whatever the researcher had typed. `...prev` last for the same reason.
+  // on users/{uid} mid-form would otherwise push the stored address (or the
+  // pre-selected provider) back over whatever the researcher had already
+  // typed or chosen. `...prev` last for the same reason.
   const seededRef = useRef(false);
   useEffect(() => {
     if (seededRef.current || !data) return;
     seededRef.current = true;
-    setContainerValues((prev) => ({ ...seedContainerValues(provider, data), ...prev }));
+
+    // The provider whose container fields get seeded below: the one this
+    // effect is about to select, if it selects one, otherwise whatever
+    // `provider` already is. Computed rather than read back from state
+    // because setProvider below will not be reflected in `provider` until the
+    // next render, and seedContainerValues needs to seed the RIGHT provider's
+    // fields in this same pass.
+    let initialProvider = provider;
+    if (!userPickedProviderRef.current) {
+      const connected = Object.values(STORAGE_PROVIDERS).filter((p) =>
+        p.isConnected(data)
+      );
+      if (connected.length > 0) {
+        initialProvider = connected[0].id;
+        setProvider(initialProvider);
+      }
+    }
+    setContainerValues((prev) => ({
+      ...seedContainerValues(initialProvider, data),
+      ...prev,
+    }));
   }, [data, provider]);
 
   const handleProviderChange = (newProvider) => {
+    userPickedProviderRef.current = true;
     setProvider(newProvider);
     // Reset, then re-seed from the account for the NEW provider -- a bare {}
     // here would drop the prefilled contact email the moment someone switched
@@ -404,21 +443,34 @@ function NewExperimentForm() {
               Where should data be stored?
             </RadioGroup.Label>
             <HStack gap={6} flexWrap="wrap" mt={2}>
-              {Object.values(STORAGE_PROVIDERS).map((p) => (
-                <RadioGroup.Item key={p.id} value={p.id}>
-                  <RadioGroup.ItemHiddenInput />
-                  {/* ItemIndicator, NOT a bare ItemControl. `ItemControl` is
-                      an empty `aria-hidden` div: the recipe styles the ring
-                      on it but the mark itself lives in `& .dot`, which only
-                      Chakra's Radiomark renders -- and Radiomark is what
-                      ItemIndicator mounts, with the item's `checked` state
-                      passed in. With a bare ItemControl the selected provider
-                      showed as a filled disc with no radio dot, reading as a
-                      checkbox rather than a radio. */}
-                  <RadioGroup.ItemIndicator />
-                  <RadioGroup.ItemText>{p.name}</RadioGroup.ItemText>
-                </RadioGroup.Item>
-              ))}
+              {Object.values(STORAGE_PROVIDERS).map((p) => {
+                const Icon = PROVIDER_ICONS[p.id];
+                return (
+                  <RadioGroup.Item key={p.id} value={p.id}>
+                    <RadioGroup.ItemHiddenInput />
+                    {/* ItemIndicator, NOT a bare ItemControl. `ItemControl` is
+                        an empty `aria-hidden` div: the recipe styles the ring
+                        on it but the mark itself lives in `& .dot`, which only
+                        Chakra's Radiomark renders -- and Radiomark is what
+                        ItemIndicator mounts, with the item's `checked` state
+                        passed in. With a bare ItemControl the selected provider
+                        showed as a filled disc with no radio dot, reading as a
+                        checkbox rather than a radio. */}
+                    <RadioGroup.ItemIndicator />
+                    {/* The icon is aria-hidden (baked into each mark in
+                        components/ProviderIcons.js) and purely decorative --
+                        ItemText's own text is what gives the item its
+                        accessible name, unchanged from before this icon
+                        existed. */}
+                    <RadioGroup.ItemText>
+                      <HStack gap={1.5} display="inline-flex">
+                        {Icon && <Icon width="1.25em" height="1.25em" />}
+                        <Text as="span">{p.name}</Text>
+                      </HStack>
+                    </RadioGroup.ItemText>
+                  </RadioGroup.Item>
+                );
+              })}
             </HStack>
             <GuidanceLine mt={2}>
               Data goes straight from your participants to this account.

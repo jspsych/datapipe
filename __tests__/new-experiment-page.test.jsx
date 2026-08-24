@@ -106,6 +106,16 @@ async function selectProvider(labelMatcher) {
 const selectGoogleDrive = () => selectProvider(/Google Drive/i);
 const selectDataverse = () => selectProvider(/^Dataverse$/i);
 
+// Whether a provider's radio item is the one currently checked, without
+// clicking it -- used to assert pre-selection (selectProvider above always
+// clicks, which is exactly what pre-selection must NOT require).
+function isProviderChecked(labelMatcher) {
+  return (
+    screen.getByLabelText(labelMatcher).closest("label").getAttribute("data-state") ===
+    "checked"
+  );
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockGetIdToken.mockClear();
@@ -711,5 +721,110 @@ describe("NewExperimentPage — provider setup warnings (Dataverse)", () => {
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/admin/exp-warn-fail"));
 
     consoleErrorSpy.mockRestore();
+  });
+});
+
+describe("NewExperimentPage — storage provider pre-selection", () => {
+  it("pre-selects the sole connected provider, even though it is not the default (first) one", async () => {
+    // dataverse is neither gdrive (the DEFAULT_PROVIDER / first registered
+    // provider) nor connected alongside anything else -- if this passed
+    // because of the old unconditional default, it would be gdrive selected
+    // instead, and the Dataverse-only "Collection alias" field would not be
+    // showing.
+    useDocumentData.mockReturnValue([
+      { contactEmail: "researcher@example.edu", connectedAccounts: { dataverse: true } },
+      false,
+      undefined,
+    ]);
+
+    renderPage();
+
+    await waitFor(() => expect(isProviderChecked(/^Dataverse$/i)).toBe(true));
+    expect(screen.getByLabelText(/^Title$/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Collection alias/i)).toBeInTheDocument();
+  });
+
+  it("pre-selects the first connected provider in left-to-right display order when several are connected", async () => {
+    // Display order is gdrive, dataverse, zenodo (Object.values(STORAGE_
+    // PROVIDERS) -- the same order the radios are rendered in). gdrive is
+    // NOT connected here, so the first connected provider is dataverse, not
+    // zenodo, even though both are connected.
+    useDocumentData.mockReturnValue([
+      {
+        contactEmail: "researcher@example.edu",
+        connectedAccounts: { zenodo: true, dataverse: true },
+      },
+      false,
+      undefined,
+    ]);
+
+    renderPage();
+
+    await waitFor(() => expect(isProviderChecked(/^Dataverse$/i)).toBe(true));
+    expect(isProviderChecked(/^Zenodo$/i)).toBe(false);
+    // Collection alias is declared only on Dataverse's containerInputFields,
+    // so it renders exactly when Dataverse is the selected (not merely
+    // connected) provider.
+    expect(screen.getByLabelText(/Collection alias/i)).toBeInTheDocument();
+  });
+
+  it("leaves the default provider as-is when no provider is connected", async () => {
+    useDocumentData.mockReturnValue([
+      { contactEmail: "researcher@example.edu", connectedAccounts: {} },
+      false,
+      undefined,
+    ]);
+
+    renderPage();
+
+    // Nothing is connected, so there is nothing for the pre-selection rule to
+    // prefer -- this is a no-op, leaving the pre-existing DEFAULT_PROVIDER
+    // (gdrive, the first registered provider) selected, same as before this
+    // feature existed.
+    await waitFor(() => expect(isProviderChecked(/Google Drive/i)).toBe(true));
+    expect(
+      screen.getByRole("link", { name: /Connect Google Drive/i })
+    ).toBeInTheDocument();
+  });
+
+  it("does not override a provider the researcher already picked once the account document updates again", async () => {
+    // Nothing is connected yet -- the pre-selection effect is therefore a
+    // no-op on mount, same as the "none connected" case above -- and the
+    // account document carries a live Firestore subscription (see this
+    // page's own comment on the `seededRef` effect), so it can, and later
+    // does, emit again.
+    useDocumentData.mockReturnValue([
+      { contactEmail: "researcher@example.edu", connectedAccounts: {} },
+      false,
+      undefined,
+    ]);
+
+    const { rerender } = renderPage();
+    await selectDataverse();
+
+    // The subscription now reports gdrive as connected -- gdrive being both
+    // the sole connected provider AND first in display order is exactly the
+    // combination the pre-selection rule would otherwise prefer. It must not
+    // un-pick the researcher's own choice.
+    //
+    // Re-rendering the SAME element tree (rather than calling renderPage()
+    // again) is what makes this a re-render of the existing component --
+    // preserving its state and refs -- rather than a second component
+    // mounted alongside the first, matching how a real onSnapshot update
+    // reaches an already-mounted page.
+    useDocumentData.mockReturnValue([
+      { contactEmail: "researcher@example.edu", connectedAccounts: { gdrive: true } },
+      false,
+      undefined,
+    ]);
+
+    rerender(
+      <ChakraProvider value={system}>
+        <NewExperimentPage />
+      </ChakraProvider>
+    );
+
+    await waitFor(() => expect(isProviderChecked(/^Dataverse$/i)).toBe(true));
+    expect(isProviderChecked(/Google Drive/i)).toBe(false);
   });
 });
