@@ -5,11 +5,8 @@ import { useState } from "react";
 import { setDoc, doc } from "firebase/firestore";
 
 import { db } from "../../lib/firebase";
-import SettingsRow, {
-  SaveStatus,
-  SettingsRowGroup,
-  useTrackedSave,
-} from "../ui/SettingsRow";
+import SettingsRow, { SaveStatus, useTrackedSave } from "../ui/SettingsRow";
+import { SwitchTable } from "./SectionPanel";
 
 // Every writer below returns the setDoc promise UNCAUGHT. That is the point of
 // this file's rewrite: each one used to end in `catch (error) { }` -- seven
@@ -52,8 +49,13 @@ export default function ExperimentActive({ data }) {
       "previous limit -- check your connection and try again."
   );
 
+  // SwitchTable, not the bare SettingsRowGroup this used to be: four switches
+  // stacked on the page with nothing but `gap={4}` around them read as four
+  // unrelated controls, and each one's description ran straight into the next
+  // one's label. One bordered panel, one hairline-separated row per switch.
+  // See components/dashboard/SectionPanel.js.
   return (
-    <SettingsRowGroup>
+    <SwitchTable label="Data collection settings">
       <SettingsRow
         label="Accept new data"
         description="While this is on, your experiment ID accepts submissions from participants. Turning it off stops new submissions immediately; data you have already collected is not affected."
@@ -156,6 +158,6 @@ export default function ExperimentActive({ data }) {
           </Field.Root>
         )}
       </SettingsRow>
-    </SettingsRowGroup>
+    </SwitchTable>
   );
 }

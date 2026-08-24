@@ -1,16 +1,11 @@
-import {
-  Field,
-  Stack,
-  Textarea,
-  Checkbox,
-  CheckboxGroup,
-} from "@chakra-ui/react";
+import { Field, Stack, Textarea, Checkbox, CheckboxGroup } from "@chakra-ui/react";
 
 import { useEffect, useRef, useState } from "react";
 
 import { doc, setDoc } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 import SettingsRow, { SaveStatus, useTrackedSave } from "../ui/SettingsRow";
+import { SwitchTable } from "./SectionPanel";
 
 function writeExperiment(expId, fields) {
   return setDoc(doc(db, `experiments/${expId}`), fields, { merge: true });
@@ -105,8 +100,11 @@ export default function ExperimentValidation({ data }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [validationSettings, fieldsArray, data.id]);
 
+  // A one-row SwitchTable rather than a bare Stack, so this switch sits on the
+  // same bordered surface as the four in ExperimentActive instead of floating
+  // on the page beside them.
   return (
-    <Stack w="100%" gap={4}>
+    <SwitchTable>
       <SettingsRow
         label="Check submissions before storing them"
         description="Submissions that do not match the format you expect are rejected before they reach your storage provider, so malformed or unexpected data never lands in your dataset."
@@ -181,6 +179,6 @@ export default function ExperimentValidation({ data }) {
           </Stack>
         )}
       </SettingsRow>
-    </Stack>
+    </SwitchTable>
   );
 }
