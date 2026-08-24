@@ -49,8 +49,8 @@ export default function ConditionAssignmentPage() {
           <strong>Set the number when you turn the switch on.</strong> A new
           DataPipe experiment is created with one condition, and with one
           condition every participant is handed 0 and nothing ever advances. The
-          dashboard field will not go below 2, so a study that needs conditions
-          needs you to type the number in.
+          dashboard field will not go below 2, so a study with multiple
+          conditions requires you to type the number in.
         </Text>
         <Text maxW="70ch">
           Underneath, DataPipe keeps a single counter on the experiment. Each
