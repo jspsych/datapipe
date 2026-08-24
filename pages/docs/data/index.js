@@ -137,6 +137,10 @@ export default function WhatDataPipeStoresPage() {
         >
           What account deletion removes, and what it leaves alone.
         </GuidanceLine>
+        <GuidanceLine href="/privacy" linkText="Privacy & information for IRBs">
+          Everything on this page plus encryption, jurisdiction, and access,
+          written for an IRB protocol.
+        </GuidanceLine>
       </DocsSection>
     </>
   );
