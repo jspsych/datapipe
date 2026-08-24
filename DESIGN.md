@@ -279,6 +279,15 @@ cannot carry alone gets a bordered container (see `SettingsSection` danger varia
   interactive element including icon-only and link-styled controls. Default palette
   ring is `brandGreen.focusRing` (3.27:1 worst case light, 5.71:1 dark).
   `focusRing="none"` — currently on four `Navbar` links — is banned.
+  The ring is **keyboard-only**: it paints on `:focus-visible`, never on a bare
+  `:focus`. A mouse click already tells you what you clicked, so a ring that
+  outlives the click is visual noise — on the navbar and the docs sidebar it
+  reads as a stray light box stuck to the last item you touched. Chakra's stock
+  `link` recipe gets this wrong (it ships `focusRing`, which compiles to
+  `&:is(:focus, [data-focus])`, while every other recipe uses
+  `focusVisibleRing`), so `lib/theme.js` re-points the recipe. Suppressing the
+  pointer case is not the banned `focusRing="none"`: keyboard focus still draws
+  the identical ring, which is the whole point of the rule above.
 - **Semantic z-index scale.** `globals.css:54` has the app's only z-index, an
   arbitrary `1000`. Replace with theme tokens and use nothing else:
 
