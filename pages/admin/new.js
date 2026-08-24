@@ -464,7 +464,7 @@ function NewExperimentForm() {
                         existed. */}
                     <RadioGroup.ItemText>
                       <HStack gap={1.5} display="inline-flex">
-                        {Icon && <Icon width="1.25em" height="1.25em" />}
+                        {Icon && <Icon size="1.25em" />}
                         <Text as="span">{p.name}</Text>
                       </HStack>
                     </RadioGroup.ItemText>
