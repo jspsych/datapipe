@@ -539,6 +539,9 @@ describe("NewExperimentPage — Dataverse provider (provider-generic rendering)"
 
     renderPage();
     await selectDataverse();
+    // Types contactEmail "jane@example.edu" -- deliberately NOT the account's
+    // "researcher@example.edu" above, so the assertions below can tell "the
+    // typed value survived" apart from "the account seed came back".
     fillDataverseFields({ collectionAlias: "stale-lab" });
 
     expect(screen.getByLabelText(/Collection alias/i)).toHaveValue("stale-lab");
@@ -548,9 +551,51 @@ describe("NewExperimentPage — Dataverse provider (provider-generic rendering)"
 
     expect(screen.getByLabelText(/Collection alias/i)).toHaveValue("");
     expect(screen.getByLabelText(/Author name/i)).toHaveValue("");
-    expect(screen.getByLabelText(/Contact email/i)).toHaveValue("");
     expect(screen.getByLabelText(/Description/i)).toHaveValue("");
     expect(screen.getByLabelText(/Subject/i)).toHaveValue("");
+    // Contact email comes back to the ACCOUNT's address, not to empty and not
+    // to what was typed. The guarantee this test exists for is that nothing
+    // the researcher typed leaks across a provider switch, and that holds: the
+    // typed "jane@example.edu" is gone. What replaces it is the same seed a
+    // fresh load of the form would show, so clearing it to "" would make
+    // switching provider twice a worse starting state than never touching it.
+    expect(screen.getByLabelText(/Contact email/i)).toHaveValue(
+      "researcher@example.edu"
+    );
+  });
+
+  it("prefills contact email from the account, and lets a typed value override it", async () => {
+    useDocumentData.mockReturnValue([
+      {
+        contactEmail: "researcher@example.edu",
+        refreshToken: "osf-refresh-token",
+        connectedAccounts: { dataverse: true },
+      },
+      false,
+      undefined,
+    ]);
+
+    renderPage();
+    await selectDataverse();
+
+    // users/{uid}.contactEmail is mandatory and gated by ContactEmailGate, so
+    // it is always available here -- asking a researcher to retype it was pure
+    // duplication. Every other Dataverse field has no account-level
+    // counterpart yet and stays empty.
+    expect(screen.getByLabelText(/Contact email/i)).toHaveValue(
+      "researcher@example.edu"
+    );
+    expect(screen.getByLabelText(/Author name/i)).toHaveValue("");
+
+    // A seed, never a lock: Dataverse publishes datasetContact on the dataset,
+    // and the address a researcher wants public is not always the one DataPipe
+    // emails them at.
+    fireEvent.change(screen.getByLabelText(/Contact email/i), {
+      target: { value: "lab-inbox@example.edu" },
+    });
+    expect(screen.getByLabelText(/Contact email/i)).toHaveValue(
+      "lab-inbox@example.edu"
+    );
   });
 });
 
