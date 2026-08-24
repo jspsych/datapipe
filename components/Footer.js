@@ -83,7 +83,7 @@ export default function Footer() {
               footer is where that reader looks for it. */}
           <Text>
             <Link color="brandGreen.fg" textDecoration="underline" asChild>
-              <NextLink href="/privacy">Privacy</NextLink>
+              <NextLink href="/docs/privacy">Privacy</NextLink>
             </Link>
           </Text>
           <Stack align={"flex-start"}>

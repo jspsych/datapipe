@@ -9,7 +9,7 @@ import {
   Text,
 } from "@chakra-ui/react";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { DOCS_NAV, GETTING_STARTED_LINK, PRIVACY_LINK, findDocsPage } from "../../lib/docs-nav";
+import { DOCS_NAV, GETTING_STARTED_LINK, findDocsPage } from "../../lib/docs-nav";
 
 /**
  * DocsSidebar
@@ -97,20 +97,6 @@ function NavLinks({ currentHref, onNavigate }) {
           </Box>
         );
       })}
-
-      <Box mt={6}>
-        <ChakraLink
-          asChild
-          fontSize="md"
-          fontWeight="medium"
-          color="fg"
-          _hover={{ textDecoration: "underline" }}
-        >
-          <NextLink href={PRIVACY_LINK.href} onClick={onNavigate}>
-            {PRIVACY_LINK.label}
-          </NextLink>
-        </ChakraLink>
-      </Box>
     </Box>
   );
 }
@@ -161,7 +147,17 @@ export default function DocsSidebar() {
         </Collapsible.Root>
       </Box>
 
-      {/* Desktop: static, always-expanded, sticky alongside the content. */}
+      {/* Desktop: static, always-expanded, sticky alongside the content.
+          The nav renders at full height in the page flow -- no maxH, no
+          overflowY -- so the flex row (and therefore the page) is always at
+          least as tall as the nav, and the page scrollbar is the only
+          scrollbar. Sticky applies only when the viewport is tall enough to
+          show the whole nav below the top-6 offset; on shorter viewports the
+          nav goes static and scrolls with the page, because a pinned nav
+          taller than the viewport would leave its bottom links unreachable.
+          The 950px threshold is the measured nav height (905px) plus the
+          24px top offset and a little room below -- update it if the nav
+          grows materially. */}
       <Box
         as="aside"
         display={{ base: "none", md: "block" }}
@@ -170,8 +166,11 @@ export default function DocsSidebar() {
         position="sticky"
         top="6"
         alignSelf="flex-start"
-        maxH="calc(100vh - 2rem)"
-        overflowY="auto"
+        css={{
+          "@media (max-height: 950px)": {
+            position: "static",
+          },
+        }}
       >
         <NavLinks currentHref={router.pathname} />
       </Box>

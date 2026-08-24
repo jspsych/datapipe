@@ -7,8 +7,9 @@ import {
   Link as ChakraLink,
 } from "@chakra-ui/react";
 import NextLink from "next/link";
-import PageHeader from "../components/ui/PageHeader";
-import DocsSection from "../components/docs/DocsSection";
+import PageHeader from "../../components/ui/PageHeader";
+import DocsLayout from "../../components/docs/DocsLayout";
+import DocsSection from "../../components/docs/DocsSection";
 
 // DRAFT — GitHub issue #53 ("Add IRB-relevant information").
 //
@@ -31,9 +32,12 @@ import DocsSection from "../components/docs/DocsSection";
 //   drive.file scope .......... functions/src/providers/gdrive.ts
 //   https-only providers ...... functions/src/connect-provider.ts
 //
-// DESIGN.md: 560px single-subject column (§4, same measure contact.js uses,
-// ~70ch at the 16px body size), DocsSection for anchored h2s (§3), prose links
-// green with a persistent underline (§5).
+// Rendered as a normal /docs page: DocsLayout shell via getLayout (docs IA
+// plan §3.2), 70ch prose measure enforced per element like the rest of the
+// docs section, DocsSection for anchored h2s (§3), prose links green with a
+// persistent underline (§5). The page is listed in lib/docs-nav.js, so its
+// section ids below are contract-stable anchors checked by DocsLayout's
+// dev-only assertion.
 
 // Reviewers cite dated versions of a policy page, and researchers are told by
 // their own institutions to monitor a vendor's terms for changes. A date is
@@ -71,44 +75,45 @@ function ProseLink({ href, external, children }) {
 
 export default function PrivacyPage() {
   return (
-    <Stack w="100%" maxW="560px">
+    <>
       <PageHeader
         title="Privacy & information for IRBs"
         purpose="What DataPipe does with participant data, what it keeps, for how long, and who can reach it."
-        mb={4}
       />
 
-      <Text>
-        This page exists so that you can answer an IRB protocol question or an
-        institutional security questionnaire without having to read our source
-        code. It describes how the service works, what DataPipe does not do with
-        your data, and which certifications it does not have. If you need a
-        paragraph you can adapt for a protocol, there is one under{" "}
-        <ProseLink href="#for-your-irb">For your IRB protocol</ProseLink>.
-      </Text>
+      <Stack gap={4} maxW="70ch">
+        <Text>
+          This page exists so that you can answer an IRB protocol question or an
+          institutional security questionnaire without having to read our source
+          code. It describes how the service works, what DataPipe does not do
+          with your data, and which certifications it does not have. If you need
+          a paragraph you can adapt for a protocol, there is one under{" "}
+          <ProseLink href="#for-your-irb">For your IRB protocol</ProseLink>.
+        </Text>
 
-      <Text fontSize="sm" color="fg.muted">
-        Last updated {LAST_UPDATED}. DataPipe is under active development; the
-        full history of this page is{" "}
-        <ProseLink
-          href="https://github.com/jspsych/datapipe/commits/main/pages/privacy.js"
-          external
-        >
-          available on GitHub
-        </ProseLink>
-        .
-      </Text>
+        <Text fontSize="sm" color="fg.muted">
+          Last updated {LAST_UPDATED}. DataPipe is under active development; the
+          full history of this page is{" "}
+          <ProseLink
+            href="https://github.com/jspsych/datapipe/commits/main/pages/docs/privacy.js"
+            external
+          >
+            available on GitHub
+          </ProseLink>
+          .
+        </Text>
+      </Stack>
 
       <DocsSection id="what-datapipe-is" title="What DataPipe is">
-        <Text>
+        <Text maxW="70ch">
           DataPipe is a free, open-source service run by the developers of
           jsPsych. It moves data out of a participant&apos;s browser and into a
           storage account that you already control. It is a pipe, not an
           archive: your data lives in the storage account you connect, not in
           DataPipe.
         </Text>
-        <Text>A submission takes one path:</Text>
-        <List.Root as="ol" gap={2} ps={6}>
+        <Text maxW="70ch">A submission takes one path:</Text>
+        <List.Root as="ol" maxW="70ch" gap={2} ps={6}>
           <List.Item>
             The participant&apos;s browser sends the data over HTTPS to{" "}
             <Code>pipe.jspsych.org/api/data</Code>.
@@ -125,7 +130,7 @@ export default function PrivacyPage() {
             deposition), over HTTPS.
           </List.Item>
         </List.Root>
-        <Text>
+        <Text maxW="70ch">
           Under normal operation all of this happens in seconds, and DataPipe
           keeps no copy afterwards. The exceptions — a temporary copy held
           during the transfer, and a longer-lived copy when your provider is
@@ -134,25 +139,25 @@ export default function PrivacyPage() {
       </DocsSection>
 
       <DocsSection id="what-we-process" title="What DataPipe processes">
-        <Text>
+        <Text maxW="70ch">
           DataPipe receives whatever your experiment chooses to send. It has no
           way to know whether that content is identifiable, and it never sees
           your consent form, your protocol, or your recruitment materials.
           Deciding what leaves a participant&apos;s browser is entirely yours.
         </Text>
-        <Text>
+        <Text maxW="70ch">
           The server reads a submission for two reasons only: to run the
           validation rules you configured, and to generate Psych-DS metadata if
           you enabled it. No person reads a submission in the ordinary course of
           running the service, and no part of a submission is written to
           DataPipe&apos;s logs.
         </Text>
-        <Text>
+        <Text maxW="70ch">
           The condition-assignment feature (<Code>/api/condition</Code>)
           receives only an experiment ID. It returns a condition number and
           increments a counter; no participant data reaches it.
         </Text>
-        <Text>
+        <Text maxW="70ch">
           <strong>IP addresses.</strong> DataPipe&apos;s own code never reads,
           stores, or forwards a participant&apos;s IP address or browser user
           agent, and neither is written to your experiment log or sent to your
@@ -167,7 +172,7 @@ export default function PrivacyPage() {
       </DocsSection>
 
       <DocsSection id="what-we-store" title="What DataPipe stores">
-        <List.Root as="ol" gap={3} ps={6}>
+        <List.Root as="ol" maxW="70ch" gap={3} ps={6}>
           <List.Item>
             <Text as="span" fontWeight="semibold">
               A temporary copy of each submission.
@@ -228,7 +233,7 @@ export default function PrivacyPage() {
             and is deleted seven days after the email is sent.
           </List.Item>
         </List.Root>
-        <Text>
+        <Text maxW="70ch">
           For providers that limit how many files they will hold, DataPipe
           periodically merges older session files into a single archive inside
           your storage, and it can do the same on request when you finalize an
@@ -240,7 +245,7 @@ export default function PrivacyPage() {
       </DocsSection>
 
       <DocsSection id="retention" title="Retention and deletion">
-        <List.Root gap={2} ps={6}>
+        <List.Root maxW="70ch" gap={2} ps={6}>
           <List.Item>
             Temporary copy of a submission: deleted when the file reaches your
             provider. Anything left behind by an interrupted transfer is swept
@@ -261,27 +266,27 @@ export default function PrivacyPage() {
             delete your account.
           </List.Item>
         </List.Root>
-        <Text>
+        <Text maxW="70ch">
           Deleting your account removes all of the above in one pass —
           experiments, metadata documents, logs, queued submissions and their
           stored files, filename records, notification records, and the account
           itself. It removes nothing from your storage provider; your data stays
           where you sent it.
         </Text>
-        <Text>
+        <Text maxW="70ch">
           Deleting a single experiment removes its configuration, log, and
           metadata document. It likewise leaves your provider untouched.
         </Text>
       </DocsSection>
 
       <DocsSection id="encryption" title="Encryption">
-        <Text>
+        <Text maxW="70ch">
           <strong>In transit.</strong> Requests to <Code>pipe.jspsych.org</Code>{" "}
           are served over HTTPS. Every call DataPipe makes to a storage provider
           is over HTTPS, and DataPipe will not connect to a Dataverse server
           unless its address uses <Code>https</Code>.
         </Text>
-        <Text>
+        <Text maxW="70ch">
           <strong>At rest, by DataPipe.</strong> The two copies of participant
           data DataPipe ever holds — the temporary copy and a queued submission
           — are encrypted with AES-256-GCM before being written, using a key
@@ -289,7 +294,7 @@ export default function PrivacyPage() {
           — the tokens that let DataPipe write to your storage — are also
           encrypted with AES-256-GCM before being written to the database.
         </Text>
-        <Text>
+        <Text maxW="70ch">
           <strong>At rest, by the platform.</strong> DataPipe runs on Google
           Cloud, which encrypts stored data at rest by default underneath
           everything above. See{" "}
@@ -301,13 +306,13 @@ export default function PrivacyPage() {
           </ProseLink>
           .
         </Text>
-        <Text>
+        <Text maxW="70ch">
           <strong>Access rules.</strong> DataPipe&apos;s storage bucket refuses
           all direct access; only DataPipe&apos;s server code can reach it. In
           the database, an experiment, its log, its metadata, and its queued
           uploads can be read only by the account that owns the experiment.
         </Text>
-        <Text>
+        <Text maxW="70ch">
           This is transport encryption plus encryption at rest. It is not
           end-to-end encryption: the server necessarily reads each submission in
           order to validate it and pass it on.
@@ -318,13 +323,13 @@ export default function PrivacyPage() {
         id="who-can-access"
         title="Who operates DataPipe, and who can reach your data"
       >
-        <Text>
+        <Text maxW="70ch">
           DataPipe is operated by the developers of jsPsych and hosted on Google
           Cloud through Firebase. Google Cloud is DataPipe&apos;s infrastructure
           provider; DataPipe uses Amazon&apos;s email service (SES) to send
           notification email to researchers — never to participants.
         </Text>
-        <Text>
+        <Text maxW="70ch">
           <strong>
             A small number of project administrators have administrative access
             that can reach anything DataPipe stores
@@ -335,7 +340,7 @@ export default function PrivacyPage() {
           research, analysis, or any other purpose. We would rather state this
           plainly than claim we cannot see your data.
         </Text>
-        <Text>
+        <Text maxW="70ch">
           Once a file reaches your storage provider, DataPipe&apos;s access is
           only what you granted it. For Google Drive, DataPipe can only reach
           the files and folders it created or that you picked — not the rest of
@@ -343,7 +348,7 @@ export default function PrivacyPage() {
           revoke. For Zenodo, it uses the authorization you granted. You can
           disconnect any provider from your account settings at any time.
         </Text>
-        <Text>
+        <Text maxW="70ch">
           Who can <em>see</em> the data at rest is set by your provider, and
           DataPipe changes none of those settings: a Drive folder is private
           until you share it, a Zenodo deposition is a private draft until you
@@ -355,7 +360,7 @@ export default function PrivacyPage() {
         id="what-we-do-not-do"
         title="What DataPipe does not do with your data"
       >
-        <List.Root gap={2} ps={6}>
+        <List.Root maxW="70ch" gap={2} ps={6}>
           <List.Item>
             DataPipe does not sell, rent, license, or share participant data
             with any third party.
@@ -383,7 +388,7 @@ export default function PrivacyPage() {
         id="what-we-do-not-have"
         title="Certifications and agreements DataPipe does not have"
       >
-        <Text>
+        <Text maxW="70ch">
           Institutional security reviews frequently ask for these, so here is a
           direct answer. DataPipe is a small, free, academic service. It holds{" "}
           <strong>no</strong> independent security certification: no SOC 2, no
@@ -392,7 +397,7 @@ export default function PrivacyPage() {
           business associate agreement is available, so DataPipe should not be
           used for protected health information.
         </Text>
-        <Text>
+        <Text maxW="70ch">
           The underlying infrastructure carries its own certifications — see{" "}
           <ProseLink
             href="https://cloud.google.com/security/compliance/offerings"
@@ -402,7 +407,7 @@ export default function PrivacyPage() {
           </ProseLink>{" "}
           — but those belong to Google, not to DataPipe.
         </Text>
-        <Text>
+        <Text maxW="70ch">
           If your protocol involves participants in the EU or UK: you and your
           institution are typically the data controller for participant data,
           with DataPipe acting as a processor on your instructions; DataPipe is
@@ -413,11 +418,11 @@ export default function PrivacyPage() {
       </DocsSection>
 
       <DocsSection id="your-responsibilities" title="What is yours to decide">
-        <Text>
+        <Text maxW="70ch">
           DataPipe has no view into your study design, so several protections
           can only be applied by you.
         </Text>
-        <List.Root gap={3} ps={6}>
+        <List.Root maxW="70ch" gap={3} ps={6}>
           <List.Item>
             <Text as="span" fontWeight="semibold">
               What your experiment transmits.
@@ -451,7 +456,7 @@ export default function PrivacyPage() {
             that provider&apos;s sharing permissions, is yours alone.
           </List.Item>
         </List.Root>
-        <Text>
+        <Text maxW="70ch">
           Your storage provider has its own privacy policy, and it governs the
           data once it arrives:{" "}
           <ProseLink href="https://policies.google.com/privacy" external>
@@ -476,14 +481,14 @@ export default function PrivacyPage() {
       </DocsSection>
 
       <DocsSection id="jurisdiction" title="Where data is processed">
-        <Text>
+        <Text maxW="70ch">
           DataPipe runs on Google Cloud Platform through Firebase. Its servers
           run in Google Cloud&apos;s us-central1 region, and its database and
           storage bucket are in Google&apos;s US multi-region locations. All of
           it is inside the United States, and the service is operated from the
           United States.
         </Text>
-        <Text>
+        <Text maxW="70ch">
           Your data does not come to rest there. It is written straight through
           to the storage provider you chose, which may be in a different
           jurisdiction entirely — Zenodo is hosted by CERN in Switzerland, a
@@ -495,7 +500,7 @@ export default function PrivacyPage() {
       </DocsSection>
 
       <DocsSection id="incidents" title="Security incidents">
-        <Text>
+        <Text maxW="70ch">
           If you believe data handled by DataPipe has been exposed, or you have
           found a vulnerability, email Josh de Leeuw at jdeleeuw@vassar.edu
           rather than opening a public GitHub issue.
@@ -503,11 +508,12 @@ export default function PrivacyPage() {
       </DocsSection>
 
       <DocsSection id="for-your-irb" title="For your IRB protocol">
-        <Text>
+        <Text maxW="70ch">
           Adapt the paragraph below. Replace the bracketed parts, and delete
           anything that does not describe your study.
         </Text>
         <Box
+          maxW="70ch"
           bg="bg.subtle"
           borderWidth="1px"
           borderColor="border.subtle"
@@ -539,7 +545,7 @@ export default function PrivacyPage() {
       </DocsSection>
 
       <DocsSection id="questions" title="Questions">
-        <Text>
+        <Text maxW="70ch">
           If something here does not answer your reviewer&apos;s question, ask.
           Open an issue in the{" "}
           <ProseLink href="https://github.com/jspsych/datapipe/issues" external>
@@ -551,6 +557,10 @@ export default function PrivacyPage() {
           <ProseLink href="/docs/data">documentation</ProseLink>.
         </Text>
       </DocsSection>
-    </Stack>
+    </>
   );
 }
+
+PrivacyPage.getLayout = function getLayout(page) {
+  return <DocsLayout>{page}</DocsLayout>;
+};

@@ -17,6 +17,16 @@ const nextConfig = {
         destination: "/docs/api",
         permanent: true,
       },
+      // /privacy moved into the docs section as /docs/privacy. Its section
+      // anchor ids are unchanged, and browsers carry a URL fragment through a
+      // redirect whose Location has none, so deep links like
+      // /privacy#for-your-irb (pasted into IRB protocols) still land on the
+      // right heading -- no client-side shim needed here.
+      {
+        source: "/privacy",
+        destination: "/docs/privacy",
+        permanent: true,
+      },
     ];
   },
 }
