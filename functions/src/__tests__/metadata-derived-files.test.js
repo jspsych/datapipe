@@ -33,26 +33,117 @@ describe('rawDataPath', () => {
     expect(rawDataPath('abc123.json')).toBe('data/raw/abc123.json');
   });
 
-  it('encodes researcher subfolders into the flattened name', () => {
-    expect(rawDataPath('condition-A/abc123.json')).toBe('data/raw/condition-A%2Fabc123.json');
-    expect(rawDataPath('a/b/abc123.json')).toBe('data/raw/a%2Fb%2Fabc123.json');
+  // --- the untouched majority -------------------------------------------
+  //
+  // A name with no "/", "\" or "~" is passed through byte-for-byte. This is
+  // the case for effectively every real submission, and it is what keeps the
+  // stored filename recognisable to the researcher who chose it.
+
+  it.each([
+    'abc123.json',
+    'my-file_2.json',
+    'subject-01.csv',
+    '50%.json',
+    'a b (copy).json',
+    'ünïcödé.json',
+    '.hidden',
+    'no-extension',
+  ])('passes %s through byte-identical', (name) => {
+    expect(rawDataPath(name)).toBe(`data/raw/${name}`);
   });
 
-  it('keeps names without separators or "%" byte-identical', () => {
-    expect(rawDataPath('my-file_2.json')).toBe('data/raw/my-file_2.json');
+  // --- the flattened minority -------------------------------------------
+
+  it('collapses researcher subfolders to hyphens and appends a disambiguating hash', () => {
+    expect(rawDataPath('condition-A/abc123.json')).toBe('data/raw/condition-A-abc123~612613de.json');
+    expect(rawDataPath('a/b/abc123.json')).toBe('data/raw/a-b-abc123~65b435d0.json');
   });
+
+  it('inserts the hash before the extension, not after it', () => {
+    expect(rawDataPath('condition-A/data.json')).toMatch(/^data\/raw\/condition-A-data~[0-9a-f]{8}\.json$/);
+  });
+
+  it('appends the hash at the end when the name has no extension', () => {
+    expect(rawDataPath('nested/dir/archive')).toBe('data/raw/nested-dir-archive~c97f4ec2');
+  });
+
+  it('treats a leading dot as part of the name, not as an extension', () => {
+    // ".psychds-ignore"-shaped names have their dot at index 0; the hash must
+    // still land at the end rather than splitting the name in two.
+    expect(rawDataPath('dir/.hidden')).toMatch(/^data\/raw\/dir-\.hidden~[0-9a-f]{8}$/);
+  });
+
+  it('is deterministic across calls', () => {
+    expect(rawDataPath('condition-A/data.json')).toBe(rawDataPath('condition-A/data.json'));
+  });
+
+  it('normalises backslashes and repeated separators in the readable part', () => {
+    expect(rawDataPath('a\\b.json')).toMatch(/^data\/raw\/a-b~[0-9a-f]{8}\.json$/);
+    expect(rawDataPath('a//b.json')).toMatch(/^data\/raw\/a-b~[0-9a-f]{8}\.json$/);
+  });
+
+  // --- injectivity -------------------------------------------------------
+  //
+  // The property that matters: two DISTINCT submitted names must never reach
+  // the same raw path, because that path is the collision-cache claim and a
+  // shared claim means a legitimate submission is rejected as a duplicate.
 
   it('keeps two same-leaf-name submissions from different subfolders collision-free', () => {
     expect(rawDataPath('condition-A/data.json')).not.toBe(rawDataPath('condition-B/data.json'));
   });
 
   it('keeps a prefixed name distinct from its flattened look-alike', () => {
+    // The regression that motivated the hash: under a bare "/" -> "-"
+    // collapse these two produced the same path, so the second one to arrive
+    // was rejected as a duplicate. The look-alike carries no "~", the
+    // flattened name always does, so they can never meet.
     expect(rawDataPath('condition-A/data.json')).not.toBe(rawDataPath('condition-A-data.json'));
+    expect(rawDataPath('condition-A-data.json')).toBe('data/raw/condition-A-data.json');
   });
 
-  it('escapes the escape marker itself, so pre-encoded names stay distinct', () => {
-    expect(rawDataPath('50%.json')).toBe('data/raw/50%25.json');
-    expect(rawDataPath('a%2Fb.json')).not.toBe(rawDataPath('a/b.json'));
+  it('disambiguates separator variants that collapse to the same readable name', () => {
+    const variants = ['a/b.json', 'a\\b.json', 'a//b.json', 'a/\\b.json'];
+    expect(new Set(variants.map(rawDataPath)).size).toBe(variants.length);
+  });
+
+  it('disambiguates a submitted name that already contains the hash marker', () => {
+    // "a~b.json" contains no separator but does contain "~", so it takes the
+    // suffixed branch too -- otherwise it could pass through unchanged and
+    // land on some slashed name's flattened output.
+    expect(rawDataPath('a~b.json')).toBe('data/raw/a~b~fca59991.json');
+    expect(rawDataPath('a~b.json')).not.toBe(rawDataPath('a/b.json'));
+  });
+
+  it('never lets a passed-through name collide with a flattened one', () => {
+    // Structural guarantee, stated as a test: pass-through outputs contain no
+    // "~" and flattened outputs always contain one, so the two sets are
+    // disjoint by construction rather than by luck.
+    const passedThrough = ['condition-A-data.json', 'a-b.json', 'abc123.json', '50%.json'];
+    const flattened = ['condition-A/data.json', 'a/b.json', 'a\\b.json', 'x/abc123.json'];
+
+    for (const name of passedThrough) expect(rawDataPath(name)).not.toContain('~');
+    for (const name of flattened) expect(rawDataPath(name)).toContain('~');
+  });
+
+  it('maps a broad set of adversarial names to distinct paths', () => {
+    const names = [
+      'data.json',
+      'condition-A/data.json',
+      'condition-A-data.json',
+      'condition-B/data.json',
+      'a/b/data.json',
+      'a/b-data.json',
+      'a-b/data.json',
+      'a-b-data.json',
+      'a\\b\\data.json',
+      'a//b//data.json',
+      'a~b~data.json',
+      '50%.json',
+      '50%2F.json',
+      'data',
+      'dir/data',
+    ];
+    expect(new Set(names.map(rawDataPath)).size).toBe(names.length);
   });
 });
 
