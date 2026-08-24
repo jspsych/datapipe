@@ -84,7 +84,14 @@ export const createExperiment = onRequest({ cors: true }, async (req, res) => {
       researcherInput?: Record<string, unknown>;
     } = req.body || {};
 
-    if (!provider || !title || !uid) {
+    // Trimmed here, not just in the client. `title` becomes the name of a real
+    // folder/dataset/deposition in the researcher's account, and `!title` alone
+    // accepts " " (a non-empty string), which produced a container named with a
+    // single space and no way to rename it. The trimmed value is what gets
+    // stored AND what is sent to the provider, so the two never disagree.
+    const trimmedTitle = typeof title === "string" ? title.trim() : "";
+
+    if (!provider || !trimmedTitle || !uid) {
       res.status(400).json(MESSAGES.MISSING_PARAMETER);
       return;
     }
@@ -115,8 +122,8 @@ export const createExperiment = onRequest({ cors: true }, async (req, res) => {
     // here. `title` is always injected: every provider needs a human name
     // for its container, and gdrive's adapter reads it as `name`.
     const containerInput: Record<string, unknown> = {
-      name: title,
-      title,
+      name: trimmedTitle,
+      title: trimmedTitle,
       ...(researcherInput || {}),
     };
     // Legacy wire param: this predates the containerInput mechanism above.
@@ -184,7 +191,7 @@ export const createExperiment = onRequest({ cors: true }, async (req, res) => {
 
     const batch = db.batch();
     batch.set(experimentDocRef, {
-      title,
+      title: trimmedTitle,
       active: false,
       activeBase64: false,
       activeConditionAssignment: false,

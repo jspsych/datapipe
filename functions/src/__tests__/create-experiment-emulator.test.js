@@ -311,6 +311,42 @@ describe("6. createExperiment provider validation", () => {
     expect(status).toBe(400);
     expect((await experimentsForOwner(uid)).length).toBe(0);
   });
+
+  // `title` is the name of a real folder/dataset/deposition in the
+  // researcher's own account, and DataPipe has no rename path for any
+  // provider -- so a container created with a whitespace-only name is stuck
+  // with it. The old `!title` guard let " " through (a non-empty string), and
+  // so did the client's `providerTitle.length === 0`. Both now trim first.
+  it("returns 400 for a whitespace-only title and creates nothing", async () => {
+    const { uid, idToken } = await signUpEmulatorUser();
+    await seedGdriveUser(uid);
+
+    const { status } = await callCreateExperiment({ provider: "gdrive", title: "   ", idToken, uid });
+
+    expect(status).toBe(400);
+    expect((await experimentsForOwner(uid)).length).toBe(0);
+  });
+
+  // The trimmed value is what gets STORED and what is sent to the provider,
+  // so DataPipe's title and the Drive folder's name cannot disagree by a
+  // stray space the researcher never sees.
+  it("stores a padded title trimmed, and names the Drive folder with the same trimmed value", async () => {
+    const { uid, idToken } = await signUpEmulatorUser();
+    await seedGdriveUser(uid);
+    const title = `Case6 Padded ${randomUUID()}`;
+
+    const { status, body } = await callCreateExperiment({
+      provider: "gdrive",
+      title: `  ${title}  `,
+      idToken,
+      uid,
+    });
+
+    expect(status).toBe(200);
+    const experimentDoc = await db.collection("experiments").doc(body.experimentID).get();
+    expect(experimentDoc.data().title).toBe(title);
+    expect(mockDrive.getFolderId(title)).toBeTruthy();
+  });
 });
 
 describe("7. createExperiment with no connected gdrive account", () => {

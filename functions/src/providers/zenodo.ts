@@ -384,10 +384,40 @@ export const zenodoProvider: StorageProvider = {
       "Zenodo allows up to 100 files and 50 GB per record. DataPipe compacts completed sessions into archives to stay under the file limit.",
   },
 
+  // Unlike Dataverse's, these two required fields are DATAPIPE'S REQUIREMENT,
+  // not Zenodo's. POST /api/deposit/depositions accepts an incomplete draft --
+  // Zenodo only validates metadata at PUBLISH time, and DataPipe never
+  // publishes (nothing in this adapter calls the publish action; the
+  // deposition stays a draft the researcher finishes themselves). They are
+  // asked for up front deliberately: a deposition with no creator and no
+  // description cannot be published, and discovering that at the end of data
+  // collection is far worse than typing a sentence at the start.
+  //
+  // `creatorName` is labelled "Author name" to match Dataverse's `authorName`
+  // -- same question, same answer, one label. Zenodo's own term is in the
+  // helper text. See ContainerInputField in types.ts.
   containerInput: [
-    { name: "creatorName", label: "Creator name", required: true, placeholder: "Lastname, Firstname" },
-    { name: "description", label: "Description", required: true, inputType: "textarea" },
-    { name: "affiliation", label: "Affiliation", required: false, placeholder: "Your institution" },
+    {
+      name: "creatorName",
+      label: "Author name",
+      required: true,
+      placeholder: "Lastname, Firstname",
+      helperText: "Recorded as the deposition's creator. Zenodo needs one before you can publish.",
+    },
+    {
+      name: "description",
+      label: "Description",
+      required: true,
+      inputType: "textarea",
+      helperText: "Shown on the deposition page. A sentence about what the experiment collects is enough.",
+    },
+    {
+      name: "affiliation",
+      label: "Affiliation",
+      required: false,
+      placeholder: "Your institution",
+      helperText: "Listed next to the author name on the deposition.",
+    },
   ],
 
   // A method rather than a static object so env vars are read at CALL time,
