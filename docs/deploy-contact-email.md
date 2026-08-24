@@ -52,13 +52,14 @@ support email arrives. Deploy rules first.
 ### (a) Verify the sending domain, and publish its DKIM records
 
 In the SES console → **Verified identities** → *Create identity* → **Domain**,
-enter the sending domain (`pipe.jspsych.org`), and leave **Easy DKIM** on
+enter the sending domain (`jspsych.org` — the org domain, which covers every
+subdomain, so `pipe.jspsych.org` needs no separate identity), and leave **Easy DKIM** on
 (RSA_2048). SES then hands back **three CNAME records**:
 
 ```
-<token1>._domainkey.pipe.jspsych.org  CNAME  <token1>.dkim.amazonses.com
-<token2>._domainkey.pipe.jspsych.org  CNAME  <token2>.dkim.amazonses.com
-<token3>._domainkey.pipe.jspsych.org  CNAME  <token3>.dkim.amazonses.com
+<token1>._domainkey.jspsych.org  CNAME  <token1>.dkim.amazonses.com
+<token2>._domainkey.jspsych.org  CNAME  <token2>.dkim.amazonses.com
+<token3>._domainkey.jspsych.org  CNAME  <token3>.dkim.amazonses.com
 ```
 
 Publish all three in DNS. Verification usually completes within an hour;
@@ -66,7 +67,7 @@ the identity's status must read **Verified** before anything is sent.
 
 Two optional-but-recommended records while you have DNS open:
 
-- **A custom MAIL FROM domain** (e.g. `mail.pipe.jspsych.org`), which needs an
+- **A custom MAIL FROM domain** (e.g. `mail.jspsych.org`), which needs an
   MX record pointing at `feedback-smtp.<region>.amazonses.com` and a TXT
   record `"v=spf1 include:amazonses.com ~all"`. This is what makes SPF align
   with the From domain; without it, SES sends SPF-aligned to
@@ -121,10 +122,10 @@ access key. Keep it worth as little as possible:
       "Sid": "SendOnlyFromDataPipeIdentity",
       "Effect": "Allow",
       "Action": "ses:SendEmail",
-      "Resource": "arn:aws:ses:<region>:<account-id>:identity/pipe.jspsych.org",
+      "Resource": "arn:aws:ses:<region>:<account-id>:identity/jspsych.org",
       "Condition": {
         "StringEquals": {
-          "ses:FromAddress": "notifications@pipe.jspsych.org"
+          "ses:FromAddress": "datapipe-notifications@jspsych.org"
         }
       }
     }
@@ -151,8 +152,8 @@ entry and no extension config to keep in sync.
 | `SES_REGION` | yes (repo secret) | `PROD_SES_REGION` | `TEST_SES_REGION` |
 | `SES_ACCESS_KEY_ID` | yes (repo secret) | `PROD_SES_ACCESS_KEY_ID` | `TEST_SES_ACCESS_KEY_ID` |
 | `SES_SECRET_ACCESS_KEY` | yes (repo secret) | `PROD_SES_SECRET_ACCESS_KEY` | `TEST_SES_SECRET_ACCESS_KEY` |
-| `MAIL_FROM` | no — literal in the workflow | `DataPipe <notifications@pipe.jspsych.org>` | `DataPipe <notifications@datapipe-test.web.app>` |
-| `MAIL_REPLY_TO` | no — literal in the workflow | `jdeleeuw@vassar.edu` | `jdeleeuw@vassar.edu` |
+| `MAIL_FROM` | no — literal in the workflow | `DataPipe <datapipe-notifications@jspsych.org>` | `DataPipe <notifications@datapipe-test.web.app>` |
+| `MAIL_REPLY_TO` | no — literal in the workflow | `datapipe@jspsych.org` | `datapipe@jspsych.org` |
 
 So: **three new repo secrets per environment** (region, access key id, secret
 access key), six in total, named in the repo's existing
@@ -171,8 +172,8 @@ immediately after the `TOKEN_ENCRYPTION_KEY` line. `MAIL_FROM` and
 "What happens without configuration" below.
 
 `MAIL_FROM` must be an address on the SES-verified identity from (a), and it
-must match the `ses:FromAddress` condition in (c). `MAIL_REPLY_TO` is the
-contact address already used by `pages/contact.js`; it is optional (mail with
+must match the `ses:FromAddress` condition in (c). `MAIL_REPLY_TO` is a
+forwarding alias on `jspsych.org` that reaches the operating team; it is optional (mail with
 no Reply-To is deliverable, mail with a bad one is not).
 
 **What happens without configuration.** Missing or blank SES config is a

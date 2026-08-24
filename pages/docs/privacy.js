@@ -502,7 +502,7 @@ export default function PrivacyPage() {
       <DocsSection id="incidents" title="Security incidents">
         <Text maxW="70ch">
           If you believe data handled by DataPipe has been exposed, or you have
-          found a vulnerability, email Josh de Leeuw at jdeleeuw@vassar.edu
+          found a vulnerability, email the DataPipe team at datapipe@jspsych.org
           rather than opening a public GitHub issue.
         </Text>
       </DocsSection>

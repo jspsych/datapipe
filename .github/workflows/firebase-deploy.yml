@@ -70,8 +70,8 @@ jobs:
           echo "SES_SECRET_ACCESS_KEY=${{ secrets.PROD_SES_SECRET_ACCESS_KEY }}" >> .env
           # Not secret, so literals here, the same way REDIRECT_URI above is.
           # MAIL_FROM must be an address on the SES-verified sending domain.
-          echo "MAIL_FROM=DataPipe <notifications@pipe.jspsych.org>" >> .env
-          echo "MAIL_REPLY_TO=jdeleeuw@vassar.edu" >> .env
+          echo "MAIL_FROM=DataPipe <datapipe-notifications@jspsych.org>" >> .env
+          echo "MAIL_REPLY_TO=datapipe@jspsych.org" >> .env
       - name: Install dependencies and build functions
         working-directory: functions
         run: |

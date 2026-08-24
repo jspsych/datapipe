@@ -83,7 +83,7 @@ jobs:
           echo "SES_SECRET_ACCESS_KEY=${{ secrets.TEST_SES_SECRET_ACCESS_KEY }}" >> .env
           # Not secret, so literals here, the same way REDIRECT_URI above is.
           echo "MAIL_FROM=DataPipe <notifications@datapipe-test.web.app>" >> .env
-          echo "MAIL_REPLY_TO=jdeleeuw@vassar.edu" >> .env
+          echo "MAIL_REPLY_TO=datapipe@jspsych.org" >> .env
       - name: Install dependencies and build functions
         working-directory: functions
         run: |

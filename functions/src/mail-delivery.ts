@@ -154,7 +154,7 @@ export interface MailConfig {
   region: string;
   accessKeyId: string;
   secretAccessKey: string;
-  // "DataPipe <notifications@pipe.jspsych.org>" -- the extension's DEFAULT_FROM.
+  // "DataPipe <datapipe-notifications@jspsych.org>" -- the extension's DEFAULT_FROM.
   from: string;
   // The extension's DEFAULT_REPLY_TO. Optional: mail with no Reply-To is
   // deliverable, mail with a bad one is not.

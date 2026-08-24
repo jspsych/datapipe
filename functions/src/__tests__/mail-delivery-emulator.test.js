@@ -81,7 +81,7 @@ process.env.FIREBASE_CONFIG = JSON.stringify({
 // crypto-utils.ts convention), so setting it here reaches the compiled module
 // even though it is imported later. These are dummies: with a sender injected
 // nothing signs a request, and no value below is ever sent anywhere.
-const FROM = "DataPipe <notifications@pipe.jspsych.org>";
+const FROM = "DataPipe <datapipe-notifications@jspsych.org>";
 const REPLY_TO = "contact@jspsych.org";
 process.env.SES_REGION = "us-east-1";
 process.env.SES_ACCESS_KEY_ID = "AKIATESTTESTTESTTEST";

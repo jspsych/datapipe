@@ -26,8 +26,8 @@ export default function Contact() {
         you to post a new issue there.
       </Text>
       <Text>
-        If you need to contact us directly, you can email Josh de Leeuw at
-        jdeleeuw@vassar.edu.
+        If you need to contact us directly, you can email the DataPipe team at
+        datapipe@jspsych.org.
       </Text>
     </Stack>
   );
