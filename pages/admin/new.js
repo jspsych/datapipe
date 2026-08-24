@@ -10,7 +10,6 @@ import { createProviderExperiment } from "../../lib/experiment-creation";
 import { pickDriveFolder } from "../../lib/google-picker";
 import { STORAGE_PROVIDERS } from "../../lib/provider-config";
 import { normalizeContactEmail } from "../../lib/contact-email";
-import { PROVIDER_ICONS } from "../../components/ProviderIcons";
 import {
   Button,
   Stack,
@@ -444,7 +443,6 @@ function NewExperimentForm() {
             </RadioGroup.Label>
             <HStack gap={6} flexWrap="wrap" mt={2}>
               {Object.values(STORAGE_PROVIDERS).map((p) => {
-                const Icon = PROVIDER_ICONS[p.id];
                 return (
                   <RadioGroup.Item key={p.id} value={p.id}>
                     <RadioGroup.ItemHiddenInput />
@@ -457,17 +455,12 @@ function NewExperimentForm() {
                         showed as a filled disc with no radio dot, reading as a
                         checkbox rather than a radio. */}
                     <RadioGroup.ItemIndicator />
-                    {/* The icon is aria-hidden (baked into each mark in
-                        components/ProviderIcons.js) and purely decorative --
-                        ItemText's own text is what gives the item its
-                        accessible name, unchanged from before this icon
-                        existed. */}
-                    <RadioGroup.ItemText>
-                      <HStack gap={1.5} display="inline-flex">
-                        {Icon && <Icon size="1.25em" />}
-                        <Text as="span">{p.name}</Text>
-                      </HStack>
-                    </RadioGroup.ItemText>
+                    {/* Text only. Provider marks were tried here twice --
+                        hand-drawn glyphs, then the monochrome Simple Icons --
+                        and removed (owner decision, 2026-08-24): the
+                        Dataverse and Zenodo marks are not recognisable at
+                        this size and added nothing the name does not say. */}
+                    <RadioGroup.ItemText>{p.name}</RadioGroup.ItemText>
                   </RadioGroup.Item>
                 );
               })}
