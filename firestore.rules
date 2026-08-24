@@ -126,11 +126,40 @@ service cloud.firestore {
         return !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny(['finalized', 'finalizedAt', 'finalization', 'compaction', 'collisionCache', 'uploadFailure']);
       }
+      // metadataActive decides WHERE a submission is stored -- container root
+      // with it off, data/raw/<flattened name> with it on (uploadPathFor in
+      // functions/src/metadata-derived-files.ts) -- and therefore which
+      // namespace the collision cache claims in. Flipping it mid-collection
+      // strands every file already written at the old location and resets
+      // duplicate detection against them: a participant resubmitting a
+      // filename from before the flip is no longer recognised and gets a
+      // second file. On Drive, where the cache is the only duplicate gate,
+      // there is no provider-side conflict to catch that either.
+      //
+      // So it freezes at the FIRST SUBMISSION rather than at creation. Before
+      // any data exists none of the above is reachable and the researcher is
+      // free to correct the choice -- which is the case they actually hit,
+      // creating an experiment and fixing the setting before piloting.
+      // Experiments already mid-collection are covered by the same test with
+      // no migration: they have sessions, so they are already locked.
+      //
+      // `sessions` is the honest signal; `collisionCache` is the
+      // tamper-resistant one, since serverManagedFieldsUntouched() above
+      // forbids clients writing it at all. Either one being present means
+      // data has landed.
+      function hasCollectedData() {
+        return (('sessions' in resource.data) && resource.data.sessions is int && resource.data.sessions > 0) ||
+          ('collisionCache' in resource.data);
+      }
+      function metadataChoiceRespected() {
+        return !hasCollectedData() ||
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['metadataActive']);
+      }
       // UPDATE shape: legacy-tolerant. An experiment created before the
       // provider-migration schema carries the OSF triple and no
       // storageProvider, and must stay editable through the OSF wind-down.
       function verifyFields() {
-        return baseFields() && serverManagedFieldsUntouched() &&
+        return baseFields() && serverManagedFieldsUntouched() && metadataChoiceRespected() &&
           (('storageProvider' in request.resource.data)
             ? request.resource.data.keys().hasAll(['storageProvider', 'providerContainer'])
             : request.resource.data.keys().hasAll(['osfRepo', 'osfComponent', 'osfFilesLink']));
