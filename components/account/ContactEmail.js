@@ -269,7 +269,7 @@ export default function ContactEmail({ data }) {
     <VStack gap={3} align="stretch">
       <HStack justifyContent="space-between" w="100%" flexWrap="wrap" gap={3}>
         <VStack align="start" gap={1}>
-          <Text fontSize="lg">
+          <Text fontSize="md" fontWeight="medium">
             {hasEmail ? currentEmail : "No address on file"}
           </Text>
           {hasEmail &&

@@ -35,7 +35,7 @@ export default function OAuthTokenStatus({ data }) {
     <VStack gap={4} w="100%" align="stretch">
       <HStack justifyContent="space-between" w="100%" flexWrap="wrap" gap={3}>
         <HStack>
-          <Text fontSize="lg" fontWeight="medium">
+          <Text fontSize="md" fontWeight="medium">
             Connected to OSF account
           </Text>
           {/* The status word used to live inside a hover Tooltip, which made

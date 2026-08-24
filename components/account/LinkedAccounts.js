@@ -1,5 +1,6 @@
 import { useContext, useEffect, useState } from "react";
 import {
+  Alert,
   HStack,
   VStack,
   Text,
@@ -52,6 +53,13 @@ export default function LinkedAccounts() {
   const [afterAction, setAfterAction] = useState(null);
   const [pendingId, setPendingId] = useState(null);
   const [error, setError] = useState("");
+  // Name of the method just linked, or null to hide the banner. Plain
+  // component state, not anything URL-derived: linkWithPopup and
+  // linkWithCredential (AddPasswordRow below) both resolve in-page with no
+  // redirect, so there is no query param to read or clear here -- a refresh
+  // simply remounts with this back at null, which already satisfies "must
+  // not reappear on refresh".
+  const [linkedAlert, setLinkedAlert] = useState(null);
 
   const handleLink = async (entry) => {
     setPendingId(entry.id);
@@ -65,6 +73,7 @@ export default function LinkedAccounts() {
         uid: credential.user.uid,
         ids: linkedProviderIds(credential.user),
       });
+      setLinkedAlert(entry.name);
     } catch (err) {
       if (!isCancelledAuthError(err?.code)) {
         setError(messageForAuthError(err?.code, entry.name, "link"));
@@ -97,6 +106,36 @@ export default function LinkedAccounts() {
   return (
     <VStack gap={3} w="100%" align="stretch">
       <FormErrorAlert>{error}</FormErrorAlert>
+
+      {/* colorPalette="brandGreen" + variant="outline" is deliberate, not the
+          Alert default. `status="success"` alone maps to Chakra's stock
+          `green` colorPalette (DESIGN.md §5: "one green, not two" -- the
+          brand's #2E7D32 and stock green.500 are visibly different hues), and
+          the default `variant="subtle"` paints colorPalette.fg on
+          colorPalette.subtle, which DESIGN.md's brandGreen section calls out
+          by name as 3.91:1 in dark mode -- under the body-text floor and
+          "not approved for body text". `variant="outline"` instead colors
+          the text with brandGreen.fg directly on the page's own background
+          (no subtle fill), which is the pairing DESIGN.md's ratio table
+          already clears (6.71:1 dark / 5.13:1 light on `bg.panel`). */}
+      {linkedAlert && (
+        <Alert.Root
+          status="success"
+          colorPalette="brandGreen"
+          variant="outline"
+          borderRadius="md"
+          role="status"
+          aria-live="polite"
+        >
+          <Alert.Indicator />
+          <Alert.Title flex="1">{linkedAlert} sign-in added.</Alert.Title>
+          <CloseButton
+            size="sm"
+            aria-label="Dismiss"
+            onClick={() => setLinkedAlert(null)}
+          />
+        </Alert.Root>
+      )}
 
       {/* Zero linked methods is not "nothing to say" -- it is the OSF-only
           population, reachable by the sign-in flow that is being removed and
@@ -131,7 +170,12 @@ export default function LinkedAccounts() {
             <HStack justifyContent="space-between" w="100%" flexWrap="wrap" gap={3}>
               <HStack>
                 {Icon && <Icon />}
-                <Text fontSize="lg">{entry.name}</Text>
+                {/* fontSize="md"/medium (16px/500): a step below
+                    SettingsSection's 18px/600 heading, not level with it --
+                    see SettingsSection.js's comment for the full rationale. */}
+                <Text fontSize="md" fontWeight="medium">
+                  {entry.name}
+                </Text>
                 {linked && <StatusIndicator status="ok" label="Linked" />}
               </HStack>
 
@@ -176,7 +220,9 @@ export default function LinkedAccounts() {
         // "Enabled" badge -- saying the same thing twice in two visual
         // languages, neither of which matched the other sections.
         <HStack justifyContent="space-between" w="100%">
-          <Text fontSize="lg">Email and password</Text>
+          <Text fontSize="md" fontWeight="medium">
+            Email and password
+          </Text>
           <StatusIndicator status="ok" label="Enabled" />
         </HStack>
       ) : (
@@ -187,7 +233,11 @@ export default function LinkedAccounts() {
         // a password to, so render nothing rather than a button that can
         // only fail.
         user.email && (
-          <AddPasswordRow user={user} setAfterAction={setAfterAction} />
+          <AddPasswordRow
+            user={user}
+            setAfterAction={setAfterAction}
+            onLinked={setLinkedAlert}
+          />
         )
       )}
     </VStack>
@@ -199,7 +249,7 @@ export default function LinkedAccounts() {
 // file for them (there is nowhere else on this page to type a different one,
 // and EmailAuthProvider.credential needs a real address to attach the
 // password to).
-function AddPasswordRow({ user, setAfterAction }) {
+function AddPasswordRow({ user, setAfterAction, onLinked }) {
   const [open, setOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [password, setPassword] = useState("");
@@ -240,6 +290,7 @@ function AddPasswordRow({ user, setAfterAction }) {
         uid: result.user.uid,
         ids: linkedProviderIds(result.user),
       });
+      onLinked("Email and password");
       setOpen(false);
     } catch (err) {
       setError(messageForAuthError(err?.code, "password", "setPassword"));
@@ -250,7 +301,9 @@ function AddPasswordRow({ user, setAfterAction }) {
 
   return (
     <HStack justifyContent="space-between" w="100%">
-      <Text fontSize="lg">Email and password</Text>
+      <Text fontSize="md" fontWeight="medium">
+        Email and password
+      </Text>
       <Button colorPalette="brandGreen" size="sm" onClick={() => setOpen(true)}>
         Add password
       </Button>

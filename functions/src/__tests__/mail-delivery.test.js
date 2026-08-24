@@ -62,7 +62,7 @@ const CONFIG = {
   region: "us-east-1",
   accessKeyId: "AKIAEXAMPLE",
   secretAccessKey: "secret",
-  from: "DataPipe <notifications@pipe.jspsych.org>",
+  from: "DataPipe <datapipe-notifications@jspsych.org>",
   replyTo: "contact@jspsych.org",
 };
 
@@ -89,7 +89,7 @@ describe("buildSendEmailInput", () => {
     const input = buildSendEmailInput(mailDoc(), CONFIG);
 
     expect(input.FromEmailAddress).toBe(
-      "DataPipe <notifications@pipe.jspsych.org>"
+      "DataPipe <datapipe-notifications@jspsych.org>"
     );
     expect(input.Destination.ToAddresses).toEqual(["researcher@example.edu"]);
     expect(input.ReplyToAddresses).toEqual(["contact@jspsych.org"]);
@@ -391,7 +391,7 @@ describe("configuration", () => {
     SES_REGION: "us-east-1",
     SES_ACCESS_KEY_ID: "AKIAEXAMPLE",
     SES_SECRET_ACCESS_KEY: "secret",
-    MAIL_FROM: "DataPipe <notifications@pipe.jspsych.org>",
+    MAIL_FROM: "DataPipe <datapipe-notifications@jspsych.org>",
     MAIL_REPLY_TO: "contact@jspsych.org",
   };
 

@@ -20,6 +20,12 @@ env:
   NEXT_PUBLIC_GENERATE_STATE: "https://datapipe-test.web.app/api/generateoauthstate"
   NEXT_PUBLIC_BASE_URL: "https://datapipe-test.web.app"
   NEXT_PUBLIC_OSF_ENV: ""
+  # Frontend-only: drives the TestEnvironmentWarning banner gate (see
+  # components/TestEnvironmentWarning.js). Distinct from NEXT_PUBLIC_OSF_ENV
+  # above, which is being retired as OSF is deprecated and was left "" here
+  # -- that meant the banner stopped rendering on this site once OSF_ENV
+  # went empty. Not echoed into functions/.env; functions has no use for it.
+  NEXT_PUBLIC_DEPLOY_ENV: "test"
   # sandbox.zenodo.org. Without this the TEST site creates real
   # depositions on the live Zenodo using the researcher's real account.
   NEXT_PUBLIC_ZENODO_ENV: "sandbox."
@@ -82,8 +88,13 @@ jobs:
           echo "SES_ACCESS_KEY_ID=${{ secrets.TEST_SES_ACCESS_KEY_ID }}" >> .env
           echo "SES_SECRET_ACCESS_KEY=${{ secrets.TEST_SES_SECRET_ACCESS_KEY }}" >> .env
           # Not secret, so literals here, the same way REDIRECT_URI above is.
-          echo "MAIL_FROM=DataPipe <notifications@datapipe-test.web.app>" >> .env
-          echo "MAIL_REPLY_TO=jdeleeuw@vassar.edu" >> .env
+          # Same sender as production: SES verifies the DOMAIN (jspsych.org),
+          # not the deployment, and datapipe-test.web.app is not a verified
+          # identity -- sending from it was rejected outright, which is why
+          # contact-email codes never arrived on the test site. Only the
+          # display name differs, so test mail is recognisable in an inbox.
+          echo "MAIL_FROM=DataPipe (test) <datapipe-notifications@jspsych.org>" >> .env
+          echo "MAIL_REPLY_TO=datapipe@jspsych.org" >> .env
       - name: Install dependencies and build functions
         working-directory: functions
         run: |

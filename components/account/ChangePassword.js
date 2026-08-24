@@ -85,7 +85,9 @@ export default function ChangePassword() {
 
   return (
     <HStack justifyContent="space-between" w="100%" flexWrap="wrap" gap={3}>
-      <Text fontSize={"lg"}>Password</Text>
+      <Text fontSize="md" fontWeight="medium">
+        Password
+      </Text>
       <HStack>
         {submitStatus === "success" && (
           <StatusIndicator status="ok" label="Success" />

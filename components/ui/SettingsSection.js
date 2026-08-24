@@ -71,9 +71,17 @@ export default function SettingsSection({
 
   const content = (
     <>
+      {/* size="lg" -- textStyle "lg" is 18px, per DESIGN.md §3's "Section
+          heading: lg (18px)/600". This used to be size="md" (16px), which
+          rendered SMALLER than the fontSize="lg" (18px) row/provider names
+          inside every section body (ProviderConnections.js, LinkedAccounts.js,
+          DeleteAccount.js, ...) -- the section heading read as less important
+          than its own contents. Those row labels have been brought down to
+          fontSize="md"/medium so the hierarchy actually nests: 18px/600
+          heading > 16px/500 row label > 14px/400 helper text. */}
       <Heading
         as="h2"
-        size="md"
+        size="lg"
         fontWeight="semibold"
         color={isDanger ? "brandRed.fg" : "fg"}
         mb={description ? 2 : 4}

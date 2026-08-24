@@ -67,8 +67,13 @@ describe("oauth2/connect callback page", () => {
       idToken: "id-token-123",
     });
 
+    // `?connected=gdrive` is the signal ProviderConnections.js
+    // (components/account/ProviderConnections.js) reads to show its "Linked
+    // Google Drive successfully." banner -- this page unmounts entirely on
+    // the redirect round trip, so a query param on the destination URL is
+    // the only way that information survives the trip.
     await waitFor(() =>
-      expect(mockPush).toHaveBeenCalledWith("/admin/account")
+      expect(mockPush).toHaveBeenCalledWith("/admin/account?connected=gdrive")
     );
   });
 

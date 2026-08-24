@@ -53,11 +53,16 @@ function MyApp({ Component, pageProps }) {
       </Flex>
       <Footer />
       {
-        /* A `!== ""` guard renders whenever the var is UNDEFINED
-           (`undefined !== ""` is true), so an unset var in a deploy would
-           have shipped this banner to production. Truthiness check instead --
-           TestEnvironmentWarning itself repeats the check as a second guard. */
-        !!process.env.NEXT_PUBLIC_OSF_ENV && <TestEnvironmentWarning />
+        /* Truthy AND not "production": NEXT_PUBLIC_DEPLOY_ENV is unset
+           (falsy) in production deploys, and this second `!== "production"`
+           check means an accidental truthy value there still wouldn't ship
+           the banner. TestEnvironmentWarning itself repeats both checks as
+           a second guard, so it stays safe to mount from any other call
+           site too. */
+        !!process.env.NEXT_PUBLIC_DEPLOY_ENV &&
+          process.env.NEXT_PUBLIC_DEPLOY_ENV !== "production" && (
+            <TestEnvironmentWarning />
+          )
       }
     </Box>
   ));

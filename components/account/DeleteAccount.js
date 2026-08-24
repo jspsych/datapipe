@@ -59,7 +59,14 @@ export default function DeleteAccount({ setDeleting }) {
   return (
     <VStack w="100%" align="stretch" gap={3}>
       <HStack justifyContent="space-between" w="100%" flexWrap="wrap" gap={3}>
-        <Text fontSize={"lg"}>Delete DataPipe account</Text>
+        {/* fontSize="md"/medium (16px/500), matching every other row label
+            on the page -- see SettingsSection.js's comment. The danger
+            variant's red border and heading tint already carry "this
+            section plays by different rules"; the row itself does not
+            also need to out-size the section heading above it. */}
+        <Text fontSize="md" fontWeight="medium">
+          Delete DataPipe account
+        </Text>
         {/* The one red control on the page. Everything else that changes a
             connection is reversible and wears neutral outline, so red still
             means "this cannot be undone" when it appears here. */}
