@@ -3,11 +3,13 @@ import { useContext } from "react";
 import { UserContext } from "../lib/context";
 import {
   Box,
+  Code,
   VStack,
   HStack,
   Heading,
   Text,
   Button,
+  SimpleGrid,
   Stack,
   Link,
 } from "@chakra-ui/react";
@@ -17,31 +19,70 @@ import Footer from "../components/Footer";
 import TestEnvironmentWarning from "../components/TestEnvironmentWarning";
 import CodeSpecimen from "../components/home/CodeSpecimen";
 import BandMark from "../components/home/BandMark";
+import { ConnectIcon, CreateIcon, CollectIcon } from "../components/home/StepIcons";
 import { osfSunsetLabel } from "../lib/osf-sunset";
 
 // ─────────────────────────────────────────────────────────────────────────
 // REGISTER NOTE. This page is BRAND register; the rest of DataPipe is
 // product register. PRODUCT.md's personality (trustworthy, plain, unfussy)
 // and its anti-references (SaaS growth UI, playful consumer) still bind --
-// what changes here is scale and ground, not voice. There are no gradients,
-// no glass, no neon, no hero metrics, no eyebrows, no scroll-triggered
-// reveals, and no entrance animation of any kind (DESIGN.md §7 bans
-// orchestrated page loads outright). The whole budget goes to one decision:
-// the brand green gets real surface area.
+// what changes here is scale, not voice. There are no gradients, no glass,
+// no neon, no hero metrics, no eyebrows, no scroll-triggered reveals, and no
+// entrance animation of any kind (DESIGN.md §7 bans orchestrated page loads
+// outright).
 //
-// Three grounds, alternating, so no two adjacent sections share one:
+// GREEN BUDGET (owner feedback, 2026-08-24: "very green ... it really pops
+// out at you and is very bright"). The previous pass gave the brand green
+// real surface area: two full-bleed #1B5E20 bands top and bottom, a
+// green-tinted third ground between them, display-scale green numerals, and
+// a mint seam on the code device. That is four large green regions on one
+// screen, and at that dosage the green stops reading as the primary action
+// color -- the one thing it has to mean app-wide (DESIGN.md §5) -- and
+// starts reading as the page's wallpaper. When everything is the accent,
+// the CTA is not.
 //
-//   1. band.bg   deep green #1B5E20, full-bleed   hero: type + the code device
-//   2. bg        the page                          the three steps
-//   3. band.bg.soft  green-tinted neutral          what DataPipe does
-//   4. band.bg   deep green again                  the closing door
+// So the green is now rationed to three places, all of them small and all of
+// them meaningful:
 //
-// This reverses the previous pass's "no bands at all" call. That call was
-// right that an arbitrary #000 band (1.27:1 against the page, unsalvageable
-// in light mode) had to go, and wrong that whitespace alone could carry the
-// grouping: it left the page reading as one undifferentiated column.
-// Every ratio behind the three grounds is computed in the `band.*` block at
-// the end of lib/theme.js semanticTokens.colors.
+//   * the hero CTA -- brandGreen.solid, the same solid green button the rest
+//     of the app uses for its one primary action per screen
+//   * the closing section's ground -- the ONE full-bleed `band.bg` left
+//     (owner decision after the first pass: the door at the end keeps the
+//     brand ground; the hero and the middle grounds stay neutral). Its CTA
+//     is the white-on-green BAND_PRIMARY chip.
+//   * prose links on the page ground -- brandGreen.fg + persistent underline,
+//     the app-wide link treatment
+//   * the three 24px step icons -- brandGreen.fg
+//
+// Everything the green used to do STRUCTURALLY is now done by neutrals:
+// grounds alternate `bg` / `bg.subtle`, regions are bounded by `border` and
+// `border.subtle` hairlines, and every piece of type is `fg` / `fg.muted`.
+// That is DESIGN.md §1's own instruction -- "panels must carry a border,
+// never rely on the fill alone" -- applied at section scale.
+//
+// GROUNDS, alternating so no two adjacent sections share one. All neutral,
+// all from the §1 surface table, dark-mode values given (§2: dark is the
+// only shipped mode, judge against it):
+//
+//   1. bg         #1C1F22   hero: type + the code device
+//   2. bg.subtle  #16191B   the three steps
+//   3. bg         #1C1F22   what DataPipe does (three bordered cards)
+//   4. bg.subtle  #16191B   the closing door
+//
+// THE SEAM IS 1.07:1 (computed, both modes), which is exactly the
+// page<->panel separation DESIGN.md §1 calls deliberate and then immediately
+// says cannot define an edge on its own. So the fill is never asked to. Each
+// ground change also carries a `border.subtle` hairline (#3F4449, 1.80:1 on
+// bg.subtle), ~96px of vertical air, and a change of internal structure --
+// two columns, then icon rows, then a card grid, then a single column. Four
+// devices, not one.
+//
+// `border.subtle` rather than `border` (gray.500, 3.43:1) for those
+// hairlines: DESIGN.md assigns `border` to "panel edges -- anything WCAG
+// 1.4.11 covers", and a decorative ground transition on a marketing page is
+// not a UI-component boundary, so 1.4.11 does not bind. Three full-bleed
+// gray.500 rules across a landing page read as table chrome; the softer
+// hairline reads as a seam, which is what it is.
 //
 // TYPE SCALE. DESIGN.md §3's fixed four-role scale (page title 24px max) is
 // a PRODUCT-register rule for pages a researcher reads twice a year. The
@@ -51,7 +92,7 @@ import { osfSunsetLabel } from "../lib/osf-sunset";
 // is scoped to this file and does not travel into the app.
 //
 // The cap is 3.75rem (60px), down from 5.5rem (88px) when the headline had
-// the full 1100px column to itself. The hero is now two columns and the type
+// the full 1100px column to itself. The hero is two columns and the type
 // only gets 1.2 of 2.2 flex units: 1100 - 48 (gutter) = 1052, so the left
 // column is 574px at lg and above (the container is maxW-bound, so 1280 and
 // 1440 give the identical 574). At 700 weight with -0.045em the system stack
@@ -62,89 +103,45 @@ import { osfSunsetLabel } from "../lib/osf-sunset";
 //
 // SPACING. Same shape of departure, declared rather than smuggled: §4's
 // 2/3/4/6/8/12/16 ladder tops out at 64px, which is a correct section break
-// on a settings page and a cramped one on a full-bleed brand band. This file
-// continues the same 4px base upward -- 20 (80px), 24 (96px), 32 (128px) --
-// and uses nothing between those steps. Every gap inside a section still
-// comes off the §4 ladder unchanged.
+// on a settings page and a cramped one on a full-bleed brand section. This
+// file continues the same 4px base upward -- 20 (80px), 24 (96px) -- and
+// uses nothing between those steps. Every gap inside a section still comes
+// off the §4 ladder unchanged.
 // ─────────────────────────────────────────────────────────────────────────
 
-// Motion, shared by both band CTAs. DESIGN.md §7: 160ms, ease-out
+// Motion on the two CTAs. DESIGN.md §7: 160ms, ease-out
 // (cubic-bezier(0, 0, 0.2, 1)), state feedback only.
 //
-// The reduced-motion story is the two custom properties. Under
-// `prefers-reduced-motion: reduce` they collapse to 0px and the transitions
-// are dropped, so the hover state still changes -- fill, border, color, all
-// of which carry the affordance on their own -- but nothing translates and
-// nothing eases. Written as properties rather than a nested condition so the
-// media query holds plain declarations and cannot depend on how the style
-// engine orders nested at-rules.
-const CTA_MOTION = {
-  "--dp-lift": "-2px",
+// WHAT USED TO BE HERE AND WHY IT IS GONE. Both hero buttons lifted 2px on
+// hover (`transform: translateY(-2px)`), and the secondary also grew a 1px
+// inset shadow. Owner feedback: the lift reads as the button jumping away
+// from the cursor. It also fails §7 on its own terms -- motion is for state
+// change, feedback, loading or reveal, and a button that moves does not tell
+// you anything the color change has not already told you, so the translate
+// was decoration wearing feedback's clothes. The buttons now change color
+// only (the recipes' own `_hover`), which is the whole affordance.
+//
+// The one movement left is the arrow, which is not decoration: it points at
+// the destination and moves toward it. Its reduced-motion story is the
+// custom property -- under `prefers-reduced-motion: reduce` `--dp-nudge`
+// collapses to 0px and the transition is dropped, so the hover state still
+// changes color and nothing translates. Written as a property rather than a
+// nested condition so the media query holds plain declarations and cannot
+// depend on how the style engine orders nested at-rules.
+const CTA_ARROW = {
   "--dp-nudge": "3px",
-  transitionProperty: "background-color, border-color, color, box-shadow, transform",
-  transitionDuration: "160ms",
-  transitionTimingFunction: "cubic-bezier(0, 0, 0.2, 1)",
   "& svg": {
     transitionProperty: "transform",
     transitionDuration: "160ms",
     transitionTimingFunction: "cubic-bezier(0, 0, 0.2, 1)",
   },
-  "@media (prefers-reduced-motion: reduce)": {
-    "--dp-lift": "0px",
-    "--dp-nudge": "0px",
-    transitionProperty: "none",
-    "& svg": { transitionProperty: "none" },
-  },
-};
-
-// The band is mode-invariant, so its focus ring has to be too -- the app
-// default ring (brandGreen.700 #388E3C) measures 1.91:1 on #1B5E20 and is
-// simply not there. White is 7.87:1. Same argument the code device makes
-// for `code.fn` as its ring.
-const bandFocusRing = {
-  outline: "2px solid",
-  outlineColor: "band.focusRing",
-  outlineOffset: "2px",
-};
-
-// The one primary action, on the one ground it ever appears on. A white chip
-// on the deep green: fill 7.87:1 against the band, label #1B5E20 on white
-// 7.87:1, and on hover the fill steps to brandGreen.50 #E8F5E9 where the same
-// label is 7.00:1. The arrow moves 3px in the direction the whole page is
-// about; that is the entire motion budget.
-const BAND_PRIMARY = {
-  ...CTA_MOTION,
-  bg: "band.solid",
-  color: "band.contrast",
   _hover: {
-    bg: "band.solid.hover",
-    color: "band.contrast",
-    transform: "translateY(var(--dp-lift))",
     "& svg": { transform: "translateX(var(--dp-nudge))" },
   },
-  _focusVisible: bandFocusRing,
-};
-
-// Secondary. DESIGN.md §5 says non-primary actions are outline or ghost "on
-// gray" -- gray.border is 1.2:1 on this ground, so the band substitutes its
-// own: brandGreen.200 #A5D6A7 at 4.79:1, comfortably past the 3:1 non-text
-// floor. Hover takes the edge from mint 1px to white 2px (4.79 -> 7.87, and
-// double the weight) via an inset shadow rather than a border-width change,
-// which would shift the label by a pixel.
-const BAND_SECONDARY = {
-  ...CTA_MOTION,
-  bg: "transparent",
-  color: "band.fg",
-  borderWidth: "1px",
-  borderColor: "band.border",
-  _hover: {
-    bg: "transparent",
-    color: "band.fg",
-    borderColor: "band.fg",
-    boxShadow: "inset 0 0 0 1px var(--chakra-colors-band-fg)",
-    transform: "translateY(var(--dp-lift))",
+  "@media (prefers-reduced-motion: reduce)": {
+    "--dp-nudge": "0px",
+    "& svg": { transitionProperty: "none" },
   },
-  _focusVisible: bandFocusRing,
 };
 
 // Prose links carry a PERSISTENT underline. styles/globals.css strips
@@ -153,27 +150,85 @@ const BAND_SECONDARY = {
 // 2.04:1 and dark brandGreen.300 vs gray.300 is 1.36:1, both under WCAG F73's
 // 3:1. The underline is what makes a link a link here; the color is secondary.
 //
-// Because the color is secondary, it is free to change with the ground, and
-// on two of this page's three grounds it has to:
+// Because the color is secondary, it is free to change with the ground, and on
+// the recessed ground it has to:
 //
-//   page  brandGreen.fg  4.77 light / 8.23 dark   (the app-wide default)
-//   band  white          7.87 on #1B5E20
-//   soft  fg             11.65 light / 12.03 dark
+//   page (bg)          brandGreen.fg  4.77 light / 8.23 dark  (the app default)
+//   subtle (bg.subtle) fg             14.31 light / 16.92 dark
 //
-// `soft` is the interesting one. brandGreen.fg on band.bg.soft is 3.61:1 in
-// light mode -- below the body floor -- which is the same failure DESIGN.md
-// §1 already documents for bg.subtle (4.43) and bg.muted (4.08) and answers
-// the same way: "a green label inside a recessed region uses fg, not
-// brandGreen.fg". The underline is untouched in every case, so nothing about
-// what marks a link changes; only its hue does.
+// brandGreen.fg on bg.subtle is 4.43:1 in light mode -- below the body floor --
+// which DESIGN.md §1 already documents and answers the same way: "a green label
+// inside a recessed or hover-filled region uses fg, not brandGreen.fg". The
+// underline is untouched in either case, so nothing about what marks a link
+// changes; only its hue does. It also happens to be the right call for the
+// green budget above: it keeps green links to the two sections that sit on the
+// page's own ground.
+//   band (band.bg)     white          7.87 on #1B5E20
 const LINK_GROUND = {
   page: "brandGreen.fg",
+  subtle: "fg",
   band: "band.fg",
-  soft: "fg",
+};
+
+// The closing section is the one deep green band left on the page (owner
+// decision, 2026-08-24: the hero and the tinted third ground stay neutral,
+// the closing "door" gets the brand ground back). It is mode-invariant, so
+// its focus ring has to be too -- the app default ring (brandGreen.700
+// #388E3C) measures 1.91:1 on #1B5E20 and is simply not there. White is
+// 7.87:1. Same argument the code device makes for `code.fn` as its ring.
+const bandFocusRing = {
+  outline: "2px solid",
+  outlineColor: "band.focusRing",
+  outlineOffset: "2px",
+};
+
+// The primary action on the band: a white chip on the deep green. Fill
+// 7.87:1 against the band, label #1B5E20 on white 7.87:1, and on hover the
+// fill steps to brandGreen.50 #E8F5E9 where the same label is 7.00:1. No
+// translate -- see CTA_ARROW; the arrow nudge is the whole motion budget.
+const BAND_PRIMARY = {
+  ...CTA_ARROW,
+  bg: "band.solid",
+  color: "band.contrast",
+  _hover: {
+    ...CTA_ARROW._hover,
+    bg: "band.solid.hover",
+    color: "band.contrast",
+  },
+  _focusVisible: bandFocusRing,
 };
 
 function ProseLink({ href, external, ground = "page", children }) {
   const style = {
+    // THE BROKEN UNDERLINE. Chakra v3's `link` recipe ships
+    // `display: inline-flex` (node_modules/@chakra-ui/react/dist/esm/theme/
+    // recipes/link.js:7) plus `gap: 1.5`. That makes the anchor a flex
+    // container, so its content is split into blockified flex items -- for
+    // "DataPipe paper in <em>Behavior Research Methods</em>" that is two of
+    // them, the text and the <em>, laid out as separate boxes with a 6px gap
+    // between them and each underlined on its own. One link, an underline
+    // that stops and restarts, and on this page the link is long enough to
+    // wrap as well.
+    //
+    // `display: inline` restores the normal inline box: one continuous
+    // underline across the whole phrase and across the line break. Nothing
+    // here needs flex -- no icon, no gap, just text.
+    //
+    // IT NEEDS `&&`. Chakra v3 serialises the recipe's base styles and this
+    // component's own styles into a single emitted class, and it emits the
+    // recipe block LAST -- confirmed in the dev server's
+    // `<style data-emotion>` output, where `.css-trvgvb{display:inline}` was
+    // followed by `.css-trvgvb{display:inline-flex}`. At equal specificity
+    // the later rule wins, so neither a `display="inline"` style prop nor a
+    // plain `css` prop can beat it. `&&` doubles the class selector
+    // (`.css-x.css-x`), which does. lib/theme.js records the same trick under
+    // its old `outlineOnDark` helper.
+    //
+    // Not solved by dropping Chakra's `Link` for a bare `<a>`: the link
+    // recipe is where lib/theme.js re-points the focus ring onto
+    // `:focus-visible` (DESIGN.md §5), and a plain anchor would opt this
+    // page's links out of that.
+    "&&": { display: "inline" },
     color: LINK_GROUND[ground],
     textDecoration: "underline",
     textUnderlineOffset: "2px",
@@ -182,56 +237,91 @@ function ProseLink({ href, external, ground = "page", children }) {
 
   if (external) {
     return (
-      <Link href={href} target="_blank" rel="noopener noreferrer" {...style}>
+      <Link href={href} target="_blank" rel="noopener noreferrer" css={style}>
         {children}
       </Link>
     );
   }
 
   return (
-    <Link asChild {...style}>
+    <Link asChild css={style}>
       <NextLink href={href}>{children}</NextLink>
     </Link>
   );
 }
 
-// A step, on the page ground. The numeral is display-scale (clamp to 2.5rem,
-// 700) in brandGreen.fg -- 4.77:1 light / 8.23:1 dark, which clears the body
-// floor outright, so it needs no large-text allowance to be legal. Baseline
-// alignment against the step text is what makes the size jump read as
-// hierarchy rather than as two unrelated blocks.
+// A step. Icon, a numbered verb label, and the sentence.
 //
-// These numerals used to be band.accent (brandGreen.200) because the steps
-// used to be the band's second beat. They are not: brandGreen.200 is 1.53:1
-// on the light page. Green on the page ground is `brandGreen.fg`, which is
-// the app-wide default and the only green that is legal in both modes here.
-function StepItem({ number, children }) {
+// THE ALIGNMENT BUG THIS REPLACES. The step used to be
+// `<HStack align="baseline">` with a display-scale numeral -- clamp to
+// 2.5rem/700 at `lineHeight="1"` -- beside `lg` body text at
+// `lineHeight="tall"`. Baseline alignment resolves to the largest baseline
+// offset in the row, which was the numeral's ~33.8px against the body text's
+// ~18.5px, so every line of body copy was pushed 15px down inside its own row
+// while the numeral stayed at the top. Against the section heading in the
+// left column (cap top ~7px) the whole right column read as if it had been
+// nudged down half a line -- which is exactly what the owner saw.
+//
+// The fix is geometric rather than a magic offset: the icon is 24px tall and
+// the label's line box is 16px x 1.5 = 24px, so `align="start"` puts two
+// boxes of identical height at the same top edge and the row is flush by
+// construction. The heading's own cap top lands within ~1px of the label's,
+// so the two columns start on the same line as well.
+//
+// The numeral moved into the label ("1. Connect") because a 40px green digit
+// was also one of the four large green regions the green budget above
+// retires -- and the verb it now sits beside is more useful than the digit
+// was on its own. The three verbs are the same three the closing section
+// recaps, and the same three the icons draw.
+function StepItem({ icon: Icon, number, title, children }) {
   return (
-    <HStack gap={[4, 5]} align="baseline">
-      <Text
-        fontSize="clamp(1.75rem, 3vw, 2.5rem)"
-        fontWeight="700"
-        letterSpacing="-0.03em"
-        lineHeight="1"
-        color="brandGreen.fg"
-        flexShrink={0}
-        minW="1.6ch"
-        textAlign="right"
-      >
-        {number}
-      </Text>
-      {/* The three steps are the argument for the product, not a hint under a
-          field: body size, page body color (9.72:1 light / 11.20:1 dark). */}
-      <Text fontSize={["md", "lg"]} color="fg.muted" lineHeight="tall">
-        {children}
-      </Text>
+    <HStack gap={4} align="start">
+      {/* `display: flex` on the wrapper, not a bare inline <svg>: an inline
+          svg sits on the text baseline and inherits the parent's line box,
+          which would reintroduce a few pixels of exactly the offset this
+          component exists to remove. */}
+      <Box display="flex" flexShrink={0} color="brandGreen.fg">
+        <Icon />
+      </Box>
+      <Box>
+        <Heading
+          as="h3"
+          fontSize="md"
+          fontWeight="600"
+          lineHeight="1.5"
+          color="fg"
+          mb={1}
+        >
+          {number}. {title}
+        </Heading>
+        {/* The three steps are the argument for the product, not a hint under
+            a field: body size, page body color (11.20:1 dark). */}
+        <Text color="fg.muted" lineHeight="tall">
+          {children}
+        </Text>
+      </Box>
     </HStack>
   );
 }
 
+// One of the three peer cards in "What DataPipe does". A real bordered panel
+// on `bg.panel` -- in dark mode that fill is identical to the page, so the
+// border IS the card (DESIGN.md §1: "panels must carry a border, never rely
+// on the fill alone to define an edge").
 function Feature({ title, children }) {
   return (
-    <VStack align="start" gap={2} flex="1" minW="200px">
+    <VStack
+      as="article"
+      align="start"
+      gap={2}
+      h="full"
+      bg="bg.panel"
+      borderWidth="1px"
+      borderColor="border"
+      rounded="lg"
+      // 24px on the §4 ladder. Not 5/20px -- that step is not on it.
+      p={6}
+    >
       <Heading as="h3" fontSize="lg" fontWeight="600">
         {title}
       </Heading>
@@ -277,42 +367,27 @@ export default function Home() {
 
   return (
     <Box w="100%">
-      {/* ── Ground 1: the deep green band, full-bleed ───────────────────
-          Two columns: the type on the left, the code device on the right,
-          both inside the band. The specimen is the first thing on the page
-          that shows the actual product, so it belongs where the claim is
-          made, not in a section the reader has to scroll to.
+      {/* ── Ground 1: the page's own surface ────────────────────────────
+          Two columns: the type on the left, the code device on the right.
+          The specimen is the first thing on the page that shows the actual
+          product, so it belongs where the claim is made, not in a section
+          the reader has to scroll to.
 
-          THE EDGE PROBLEM, AND ITS NUMBER. The device is mode-invariant and
-          near-black: code.bg #111111 is 2.40:1 against band.bg #1B5E20 and
-          the #18181b chrome strip is 2.25:1. Fill alone therefore cannot
-          define it here, and its usual gray.500 seam is 1.63:1 on green --
-          an object with no edge. On this ground the device takes
-          `band.border` (brandGreen.200 #A5D6A7) instead: 4.79:1 against the
-          band, 11.49:1 against code.bg. Computed and rejected: gray.400
-          (code.fg.muted) at 3.07:1 clears the non-text floor by 2% and is
-          the device's own muted TEXT color, so a hairline of it reads as
-          internal chrome leaking outward rather than a boundary. The mint is
-          the same value the secondary CTA outlines itself with two columns
-          over, so the hero's two objects share one edge language.
+          THE HERO IS NO LONGER A GREEN BAND. It was a full-bleed #1B5E20
+          stripe roughly 600px tall -- the single largest green object on the
+          site, and the reason the page read as "very green" before anyone
+          got to the CTA. On the page's own ground the headline is `fg`
+          (15.86:1 on #1C1F22) and the deck `fg.muted` (11.20:1), both
+          better numbers than the band's white-on-green 7.87:1, and the one
+          green thing above the fold is the button we actually want clicked.
 
-          Why the device is fully on the band rather than straddling its
-          bottom edge: no single border value can clear 3:1 against both
-          #1B5E20 and the light page. The band needs L >= 0.3503, the light
-          page needs L <= 0.2757. A straddling device would have to change
-          its edge color halfway down two rounded corners.
-
-          BandMark moved to the closing band. The mark is cropped at the
-          band's right edge at xl+, which is exactly where the device now
-          sits; an opaque panel over it left a sliver, not an ornament. */}
-      <Box bg="band.bg">
-        <Box
-          px={[4, 8, 12]}
-          pt={[16, 20, 24]}
-          pb={[16, 20, 24]}
-          maxW="1100px"
-          mx="auto"
-        >
+          A consequence worth recording: the code device gets its normal
+          `code.border` seam back (gray.500, 3.43:1 on the dark page). It had
+          been carrying `band.border` (mint) precisely because gray.500 is
+          1.63:1 on #1B5E20 -- see the note in CodeSpecimen.js, which the
+          green band forced and which this change undoes. */}
+      <Box px={[4, 8, 12]} pt={[16, 20, 24]} pb={[16, 20, 24]}>
+        <Box maxW="1100px" mx="auto">
           {/* Row at `lg` (992px), not `md` (768px). At md the container is
               672px wide and the type column would be 366px -- a 60px
               headline in 366px wraps five times. At lg it is 574px and wraps
@@ -327,10 +402,8 @@ export default function Home() {
             <VStack gap={6} align="start" flex="1.2" minW={0} w="100%">
               {/* The scale IS the hero moment. 700 against the deck's 400,
                   -0.045em, and text-wrap: balance so the ragged edge is a
-                  decision rather than a leftover. Light type on a dark ground
-                  reads lighter than it measures, so the line-height is looser
-                  than a 60px headline would otherwise take. The cap is sized
-                  to the two-column measure -- see TYPE SCALE at the top. */}
+                  decision rather than a leftover. The cap is sized to the
+                  two-column measure -- see TYPE SCALE at the top. */}
               <Heading
                 as="h1"
                 fontSize="clamp(2.25rem, 7.2vw, 3.75rem)"
@@ -338,13 +411,13 @@ export default function Home() {
                 letterSpacing="-0.045em"
                 lineHeight="1.05"
                 textWrap="balance"
-                color="band.fg"
+                color="fg"
               >
                 Experiment data, straight to storage you control.
               </Heading>
               <Text
                 fontSize="clamp(1.125rem, 2.2vw, 1.5rem)"
-                color="band.fg.muted"
+                color="fg.muted"
                 lineHeight="1.55"
                 maxW="60ch"
               >
@@ -361,7 +434,7 @@ export default function Home() {
                   Dataverse API token carries the researcher's full privileges,
                   so "it cannot read or delete anything" would be false there
                   (PRODUCT.md principle 5). */}
-              <Text fontSize={["md", "lg"]} color="band.fg" lineHeight="tall" maxW="60ch">
+              <Text fontSize={["md", "lg"]} color="fg" lineHeight="tall" maxW="60ch">
                 DataPipe only ever asks your storage provider for permission to
                 add files. You can disconnect it at any time.
               </Text>
@@ -370,27 +443,40 @@ export default function Home() {
               <HStack gap={4} pt={4} flexWrap="wrap">
                 {/* asChild, not <Link><Button> -- that rendered <a><button></a>:
                     invalid HTML, two tab stops for one control, and a focus ring
-                    on the element that is not focused. */}
-                <Button asChild size="lg" css={BAND_PRIMARY}>
+                    on the element that is not focused.
+
+                    The one primary action on the page, in the app's primary
+                    action color (DESIGN.md §5). On the dark page brandGreen.solid
+                    #4CAF50 is a 5.96:1 fill carrying #1C1F22 text at 5.96:1 --
+                    the bright chip reads as a control, which is the whole
+                    argument for spending the green here rather than on a band. */}
+                <Button
+                  asChild
+                  size="lg"
+                  colorPalette="brandGreen"
+                  css={CTA_ARROW}
+                >
                   <NextLink href={primaryHref}>
                     {primaryLabel} <ArrowRight size={18} />
                   </NextLink>
                 </Button>
-                {/* One primary action per screen (DESIGN.md §5). The secondary
-                    is an outline in the band's own border color, because the
-                    neutral gray it would otherwise take is 1.2:1 here. */}
-                <Button asChild size="lg" variant="outline" css={BAND_SECONDARY}>
+                {/* One primary action per screen (DESIGN.md §5): every other
+                    action is outline or ghost on gray. With the band gone this
+                    can finally be the stock neutral outline the rest of the app
+                    uses, instead of the bespoke mint outline the green ground
+                    forced (gray.border is 1.2:1 on #1B5E20). */}
+                <Button asChild size="lg" variant="outline">
                   {/* Names the page it opens, in the same words faq.js and the
-                      closing band use for it. "How it works" described a concept
-                      page; the destination is a step-by-step setup guide. */}
+                      closing section use for it. "How it works" described a
+                      concept page; the destination is a step-by-step guide. */}
                   <NextLink href="/getting-started">
                     Read the getting started guide
                   </NextLink>
                 </Button>
               </HStack>
-              <Text fontSize="sm" color="band.fg.subtle" pt={2}>
+              <Text fontSize="sm" color="fg.muted" pt={2}>
                 Built by the{" "}
-                <ProseLink href="https://www.jspsych.org" ground="band" external>
+                <ProseLink href="https://www.jspsych.org" external>
                   jsPsych
                 </ProseLink>{" "}
                 team
@@ -406,32 +492,31 @@ export default function Home() {
                 content width and push the type column off its own measure. */}
             <Box as="figure" m={0} flex="1" minW={0} w="100%">
               <CodeSpecimen />
-              {/* Fine print on the band is band.fg.subtle (brandGreen.200,
-                  4.79:1); the link inside it takes the band's white (7.87:1)
-                  and keeps the underline that marks every link on this page. */}
-              <Text as="figcaption" fontSize="sm" color="band.fg.subtle" mt={3}>
+              <Text as="figcaption" fontSize="sm" color="fg.muted" mt={3}>
                 The code is the same whichever storage provider you chose.
                 Every endpoint and error code is in the{" "}
-                <ProseLink href="/docs/api" ground="band">
-                  API reference
-                </ProseLink>
-                .
+                <ProseLink href="/docs/api">API reference</ProseLink>.
               </Text>
             </Box>
           </Stack>
         </Box>
       </Box>
 
-      {/* ── Ground 2: the page itself, carrying the three steps ─────────
-          The steps used to be the band's second beat, behind the hero. With
-          the code device in the hero the band is full, and the steps are a
-          different subject from the claim above them -- they get their own
-          ground rather than a longer stripe of green. This is also what
-          keeps the page's own `bg` in the rotation: without it the rhythm
-          collapses to band -> soft -> band and the page never shows its own
-          surface. No copy changes; the numerals and body re-point to the
-          page's colors in StepItem. */}
-      <Box px={[4, 8, 12]} py={[16, 20, 24]}>
+      {/* ── Ground 2: the recessed neutral, carrying the three steps ────
+          `bg.subtle` (#16191B) with a hairline top and bottom. The seam is
+          1.20:1 on its own, which is why it is never asked to work alone:
+          the hairline, ~96px of air on each side, and the switch from the
+          hero's two-column layout to a labelled icon list all mark the same
+          boundary. */}
+      <Box
+        as="section"
+        bg="bg.subtle"
+        borderTopWidth="1px"
+        borderBottomWidth="1px"
+        borderColor="border.subtle"
+        px={[4, 8, 12]}
+        py={[16, 20, 24]}
+      >
         <Stack
           direction={["column", "column", "row"]}
           gap={[8, 8, 16]}
@@ -444,18 +529,19 @@ export default function Home() {
           <VStack align="start" gap={[6, 8]} flex="1.5" maxW="70ch">
             {/* One imperative verb per step, in the order the researcher
                 performs them, matching getting-started.js steps 2, 3+5 and 7
-                and the labels they will actually click. "your study" is gone:
-                this page now says "a DataPipe experiment" for the record and
-                "your experiment" for the thing participants run. */}
-            <StepItem number="1">
+                and the labels they will actually click. The verb is now
+                rendered as the step's own label rather than living only in
+                the sentence, so the icon beside it is never the only thing
+                naming the step (DESIGN.md §5). */}
+            <StepItem icon={ConnectIcon} number="1" title="Connect">
               Connect a storage provider — Google Drive, Dataverse, or Zenodo —
               to your DataPipe account.
             </StepItem>
-            <StepItem number="2">
+            <StepItem icon={CreateIcon} number="2" title="Create">
               Create a DataPipe experiment, then add a few lines of code to the
               experiment your participants run so it sends data to DataPipe.
             </StepItem>
-            <StepItem number="3">
+            <StepItem icon={CollectIcon} number="3" title="Collect">
               Enable data collection and run your experiment. Each
               participant&apos;s data lands in your Drive folder, Dataverse
               dataset, or Zenodo deposition as they finish.
@@ -464,18 +550,30 @@ export default function Home() {
         </Stack>
       </Box>
 
-      {/* ── Ground 3: the tinted neutral ────────────────────────────────
-          A green-tinted ground rather than another gray, so the page's three
-          surfaces are one tonal family. 1.32:1 against the page in both
-          modes -- roughly 4x bg.subtle's 1.07, which is a recessed code-block
-          fill and was never a section ground. Green text is banned here
-          (3.61:1 light); the ProseLink below is on `soft`, so it renders in
-          `fg` and keeps its underline. */}
-      <Box bg="band.bg.soft" px={[4, 8, 12]} py={[16, 20, 24]}>
-        <Box maxW="1100px" mx="auto">
-          <SectionHeading mb={8}>What DataPipe does</SectionHeading>
+      {/* ── Ground 3: back to the page ──────────────────────────────────
+          LEAD PLUS THREE THIRDS, not a 2x2 of equals. The owner's note was
+          that one big card over three small ones reads awkward, and the two
+          fixes on the table were a 2x2 grid of four equal cards or a
+          full-width lead over three equal thirds. The content decides it:
+          "Born-open data collection" is not a fourth feature. It defines the
+          term the whole product is built on and it carries the citation ask,
+          so it is a different KIND of block from "CSV, JSON, and media
+          files". A 2x2 would assert that the four are peers, which would put
+          the citation request in a feature card and demote the idea that
+          justifies the product to one quarter of a grid.
 
-          <Box mb={[10, 10, 14]} maxW="70ch">
+          So the lead is made unmistakably a lead rather than a big card: no
+          border, no card fill, sitting at prose measure directly under the
+          section heading, with the three peers as bordered cards beneath it.
+          The grid gives them matching heights for free (grid items stretch),
+          which was the other half of the complaint -- three ragged-bottomed
+          columns of unequal text. */}
+      <Box as="section" px={[4, 8, 12]} py={[16, 20, 24]}>
+        <Box maxW="1100px" mx="auto">
+          <SectionHeading mb={6}>What DataPipe does</SectionHeading>
+
+          {/* 8 -> 12 on the §4 ladder. The old 10/14 were off it. */}
+          <Box mb={[8, 8, 12]} maxW="70ch">
             <Heading as="h3" fontSize="lg" fontWeight="600" mb={2}>
               Born-open data collection
             </Heading>
@@ -489,7 +587,6 @@ export default function Home() {
               is set out in the{" "}
               <ProseLink
                 href="https://doi.org/10.3758/s13428-023-02161-x"
-                ground="soft"
                 external
               >
                 DataPipe paper in <em>Behavior Research Methods</em>
@@ -498,15 +595,17 @@ export default function Home() {
             </Text>
           </Box>
 
-          {/* No icons above the cards. Database / Shield / Zap were decoration
-              at the same size as the headings they sat on, and one of them meant
-              nothing at all. */}
-          <Stack direction={["column", "column", "row"]} gap={[8, 8, 12]}>
+          {/* No icons above these cards. Database / Shield / Zap were
+              decoration at the same size as the headings they sat on, and one
+              of them meant nothing at all. The step icons two sections up earn
+              their place differently: each labels a numbered action in a
+              sequence, and each sits beside its own one-word verb. */}
+          <SimpleGrid columns={{ base: 1, md: 3 }} gap={[6, 6, 8]}>
             {/* Blurb rules for this audience: name the dashboard feature the
                 researcher will switch on, say what it does to their data, and
                 spend a clause explaining any term they may not own. "base64"
-                is now introduced by what it carries; "condition assignment" is
-                their own vocabulary and keeps its name. Required-field checks
+                is now introduced by what it carries; "Psych-DS" gets its own
+                clause because most researchers have not met it yet. Required-field checks
                 are part of data validation, so listing them as a third
                 separate safeguard was inaccurate. */}
             <Feature title="CSV, JSON, and media files">
@@ -520,36 +619,46 @@ export default function Home() {
               rejected before it reaches your storage. A session limit caps how
               many files DataPipe will accept.
             </Feature>
-            <Feature title="Condition assignment">
-              Ask DataPipe for the next condition and it counts through your
-              conditions in order — 0, 1, 2, back to 0 — so groups stay
-              balanced as participants arrive. You write no server code of your
-              own.
+            {/* Psych-DS replaced condition assignment here (owner request,
+                2026-08-24): it is the feature that makes the collected data
+                worth something to someone else, which is the point of the
+                born-open lead above it. Same blurb rules: name the switch on
+                the dashboard, say what it does to the data, spend a clause on
+                the term. Condition assignment is still documented at
+                /docs/api. */}
+            <Feature title="Psych-DS metadata">
+              Turn on metadata and DataPipe writes a{" "}
+              <Code>dataset_description.json</Code> alongside your data —
+              describing the dataset and every variable in it in the Psych-DS
+              format, a standard layout others can read and reuse — and keeps
+              it up to date after each session.
             </Feature>
-          </Stack>
+          </SimpleGrid>
         </Box>
       </Box>
 
-      {/* ── Ground 1 again: the door at the end ─────────────────────────
-          Same action as the hero, not a second competing one, and the same
-          ground -- the green opens the page and closes it, which is what
-          makes it read as the brand's color rather than as decoration on one
-          section.
+      {/* ── The door at the end: the page's one green band ───────────────
+          Same action as the hero, not a second competing one. The hero and
+          the two grounds between are neutral (see GREEN BUDGET above); the
+          closing section alone takes the deep green `band.bg` (#1B5E20,
+          mode-invariant -- every pairing is computed in lib/theme.js's
+          `band.*` block). One band at the end reads as the brand signing
+          off; the same band at both ends read as wallpaper.
 
-          This band now carries the cropped |> mark, which used to sit in the
-          hero. The hero's right half is the code device, and an opaque
-          near-black panel over the mark left a 90px sliver of it against the
-          viewport edge. This band is type-only and its widest measure is
-          70ch, so the mark gets the clearance BandMark's own comment
-          computes. It still appears exactly once on the site. */}
-      <Box bg="band.bg" position="relative" overflow="hidden">
+          No `border.subtle` seam here: bg.subtle -> #1B5E20 is 2.10:1, a
+          real edge on its own, and a gray hairline on a green fill would be
+          a third color at the join.
+
+          This section carries the cropped |> mark, drawn in `band.ornament`
+          (see BandMark.js). */}
+      <Box
+        as="section"
+        bg="band.bg"
+        position="relative"
+        overflow="hidden"
+      >
         <BandMark />
-        <Box
-          px={[4, 8, 12]}
-          py={[16, 20, 24]}
-          position="relative"
-          zIndex={1}
-        >
+        <Box px={[4, 8, 12]} py={[16, 20, 24]} position="relative" zIndex={1}>
           <VStack maxW="1100px" mx="auto" align="start" gap={6}>
             <SectionHeading color="band.fg" maxW="20ch">
               Set up your first experiment
@@ -614,11 +723,13 @@ Home.getLayout = function getLayout(page) {
       <Navbar />
       <Box flexGrow={1}>{page}</Box>
       <Footer />
-      {/* Truthy, not `!== ""`: NEXT_PUBLIC_OSF_ENV is undefined in production,
-          and `undefined !== ""` put a red "OSF Environment:" banner on the
-          public homepage. pages/_app.js:38 still has the original test and is
-          owned elsewhere. */}
-      {Boolean(process.env.NEXT_PUBLIC_OSF_ENV) && <TestEnvironmentWarning />}
+      {/* Same guard as pages/_app.js: NEXT_PUBLIC_DEPLOY_ENV truthy AND not
+          "production". The var is unset in production deploys, so the banner
+          only ships on the test site. */}
+      {!!process.env.NEXT_PUBLIC_DEPLOY_ENV &&
+        process.env.NEXT_PUBLIC_DEPLOY_ENV !== "production" && (
+          <TestEnvironmentWarning />
+        )}
     </Box>
   );
 };

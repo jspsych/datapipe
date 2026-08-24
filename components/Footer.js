@@ -36,8 +36,20 @@ export default function Footer() {
       borderColor="border.subtle"
     >
       {/* 1100px, not 6xl (1152px): DESIGN.md §4's dashboard/marketing measure,
-          so the footer row lines up with the content column above it. */}
-      <Container as={Stack} maxW="1100px" py={{ base: 8, md: 12 }}>
+          so the footer row lines up with the content column above it.
+
+          Asymmetric pt/pb, not py: pt keeps the same air the band always
+          had under its top border/edge (untouched per owner feedback); pb
+          is roughly halved. The bottom edge is the actual bottom of the
+          page, not a hand-off into another surface, so it doesn't need to
+          match the top -- the previous symmetric py just read as a lot of
+          dead space under the last row of links. */}
+      <Container
+        as={Stack}
+        maxW="1100px"
+        pt={{ base: 8, md: 12 }}
+        pb={{ base: 4, md: 6 }}
+      >
         <Stack
           direction={["column", "row"]}
           justifyContent={["flex-start", "space-between"]}
