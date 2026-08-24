@@ -14,6 +14,16 @@ const customJestConfig = {
   // if using TypeScript with a baseUrl set to the root directory then you need the below for alias' to work
   moduleDirectories: ['node_modules', '<rootDir>/'],
   testEnvironment: 'jest-environment-jsdom',
+  // Scratch directories that hold a full copy of the repo. `.claude/worktrees/`
+  // is where agent worktrees land; each one carries its own
+  // functions/metadata/package.json, and Jest's haste map refuses to resolve
+  // `@jspsych/metadata` when two packages claim the name -- every suite that
+  // imports it dies with "looked up in the Haste module map". `.firebase/` is
+  // the deploy staging copy and collides the same way on the root package
+  // name. Neither is a test root, and neither exists in CI (both untracked),
+  // so this only shows up locally -- which is exactly why it is worth pinning
+  // here rather than rediscovering it each time.
+  modulePathIgnorePatterns: ['<rootDir>/.claude/', '<rootDir>/.firebase/'],
 }
 
 // createJestConfig is exported this way to ensure that next/jest can load the Next.js config which is async

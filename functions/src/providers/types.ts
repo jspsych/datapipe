@@ -267,7 +267,8 @@ export interface StorageProvider {
   // many-to-one (Zenodo maps every run of slashes to a single "_"). It is
   // exact only over the paths DATAPIPE ITSELF writes, which is all it is ever
   // asked about: metadata-derived-files.ts flattens researcher subfolders with
-  // "-" BEFORE building a path, so a leaf never contains a slash and the only
+  // "-" (plus a "~<digest>" disambiguator) BEFORE building a path, so a leaf
+  // never contains a slash and the only
   // shapes that reach a provider are `data/raw/<leaf>`, `data/<stem>_data.csv`,
   // `dataset_description.json`, and `.psychds-ignore`. Callers pass
   // metadataActive so the reconstruction is skipped entirely for experiments

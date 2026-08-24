@@ -817,7 +817,8 @@ Google Drive provider is announced:
   Live keys stay flat and the compaction archive carries the real Psych-DS
   tree. What made (a) safe rather than merely cheapest is that the
   reconstruction turned out to be **exact, not heuristic**:
-  `metadata-derived-files.ts` flattens researcher subfolders with `-` *before*
+  `metadata-derived-files.ts` flattens researcher subfolders with `-` (plus a
+  `~<digest>` suffix disambiguating names that collapse alike) *before*
   building a path, so a leaf reaching a provider never contains a slash, and
   the only shapes DataPipe writes are `data/raw/<leaf>`,
   `data/<stem>_data.csv`, `dataset_description.json` and `.psychds-ignore`.
