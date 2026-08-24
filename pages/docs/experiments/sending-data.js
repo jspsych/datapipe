@@ -114,8 +114,9 @@ export default function SendingDataPage() {
         <Text maxW="70ch">Three things to know before you rely on it:</Text>
         <List.Root maxW="70ch" gap={2} ps={6}>
           <List.Item>
-            It has its own switch, which works independently of the other one.
-            Turn on <strong>Accept base64 file uploads</strong> on the
+            It has its own switch, which works independently of{" "}
+            <strong>Accept new data</strong>. Turn on{" "}
+            <strong>Accept base64 file uploads</strong> on the
             dashboard, or these requests are rejected with{" "}
             <Code>BASE64DATA_COLLECTION_NOT_ACTIVE</Code> — and equally, this
             switch keeps accepting files after you have turned off{" "}
@@ -180,7 +181,7 @@ export default function SendingDataPage() {
           >
             CompressionStream API
           </ProseLink>{" "}
-          and setting the <Code>Content-Encoding: gzip</Code> header. The server
+          and set the <Code>Content-Encoding: gzip</Code> header. The server
           will decompress the body automatically.
         </Text>
         <Text maxW="70ch">
@@ -200,8 +201,8 @@ export default function SendingDataPage() {
 
       <DocsSection id="what-the-response-means" title="What the response means">
         <Text maxW="70ch">
-          Every submission gets one of three answers, and only one of them means
-          you should do something about it.
+          In normal operation every submission gets one of three answers, and
+          only one of them means you should do something about it.
         </Text>
         <List.Root maxW="70ch" gap={3} ps={6}>
           <List.Item>

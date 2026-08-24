@@ -9,7 +9,7 @@ import {
   Text,
 } from "@chakra-ui/react";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { DOCS_NAV, GETTING_STARTED_LINK, findDocsPage } from "../../lib/docs-nav";
+import { DOCS_NAV, GETTING_STARTED_LINK, PRIVACY_LINK, findDocsPage } from "../../lib/docs-nav";
 
 /**
  * DocsSidebar
@@ -97,6 +97,20 @@ function NavLinks({ currentHref, onNavigate }) {
           </Box>
         );
       })}
+
+      <Box mt={6}>
+        <ChakraLink
+          asChild
+          fontSize="md"
+          fontWeight="medium"
+          color="fg"
+          _hover={{ textDecoration: "underline" }}
+        >
+          <NextLink href={PRIVACY_LINK.href} onClick={onNavigate}>
+            {PRIVACY_LINK.label}
+          </NextLink>
+        </ChakraLink>
+      </Box>
     </Box>
   );
 }

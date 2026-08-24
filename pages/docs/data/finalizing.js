@@ -21,7 +21,8 @@ export default function FinishingAStudyPage() {
         data is coming.
       </Text>
       <Text maxW="70ch" mt={4}>
-        Finalizing is optional. An experiment you stop using keeps its files
+        Finalizing is optional, and today it applies to Zenodo experiments
+        only. An experiment you stop using keeps its files
         exactly as they are; finalizing is for turning a finished collection
         into one tidy, citable object.
       </Text>
