@@ -109,15 +109,25 @@ export default function PsychDsMetadataPage() {
           You will not get subfolders inside your dataset, whatever filenames
           you send. If a filename contains a folder — say{" "}
           <Code>condition-A/abc.json</Code> — DataPipe replaces the slash with a
-          hyphen before building any path, so the file is stored as{" "}
-          <Code>data/raw/condition-A-abc.json</Code> and its derived tables
-          follow the same name.
+          hyphen and appends a short code before building any path, so the file
+          is stored as <Code>data/raw/condition-A-abc~a145753b.json</Code> and
+          its derived tables follow the same name.
         </Text>
         <Text maxW="70ch">
           This is deliberate: a Psych-DS dataset keeps a flat{" "}
-          <Code>data/</Code> folder, and encoding the prefix rather than
-          dropping it keeps two participants&apos; files from colliding when
+          <Code>data/</Code> folder, and keeping the prefix rather than
+          dropping it stops two participants&apos; files from colliding when
           they share a leaf name in different folders.
+        </Text>
+        <Text maxW="70ch">
+          The code after <Code>~</Code> is derived from the name you sent, so
+          it is stable — resend the same filename and you get the same stored
+          name. It exists because the hyphen alone is ambiguous:{" "}
+          <Code>condition-A/abc.json</Code> and <Code>condition-A-abc.json</Code>{" "}
+          are different submissions, and without the code they would flatten to
+          the same path and the second one would be rejected as a duplicate.
+          Filenames with no slash in them are stored exactly as you sent them
+          and never pick up a code.
         </Text>
       </DocsSection>
 
