@@ -306,6 +306,103 @@ describe('/experiments — provider-migration generalization (step 7a)', () => {
     });
   });
 
+  // metadataActive decides where a submission is stored (container root vs
+  // data/raw/) and which namespace the collision cache claims in, so flipping
+  // it mid-collection strands the files already written and resets duplicate
+  // detection against them. It freezes at the first submission -- not at
+  // creation, because before any data exists the choice is harmless and
+  // correcting it pre-pilot is the case researchers actually hit.
+  describe('3b. metadataActive freezes once data has been collected', () => {
+    function gdriveExp(docId, overrides = {}) {
+      return baseFields({
+        id: docId,
+        owner: 'user123',
+        storageProvider: 'gdrive',
+        providerContainer: { provider: 'gdrive', folderId: 'folder-abc' },
+        metadataActive: false,
+        ...overrides,
+      });
+    }
+
+    it('ALLOWS the owner to change it while the experiment has no data', async () => {
+      const docId = 'exp-meta-lock-fresh';
+      await seedDB({ [`experiments/${docId}`]: gdriveExp(docId, { sessions: 0 }) });
+
+      const user123 = testEnv.authenticatedContext('user123');
+      await assertSucceeds(
+        updateDoc(doc(user123.firestore(), `experiments/${docId}`), { metadataActive: true })
+      );
+    });
+
+    it('DENIES a change once sessions have been recorded', async () => {
+      const docId = 'exp-meta-lock-sessions';
+      await seedDB({ [`experiments/${docId}`]: gdriveExp(docId, { sessions: 3 }) });
+
+      const user123 = testEnv.authenticatedContext('user123');
+      await assertFails(
+        updateDoc(doc(user123.firestore(), `experiments/${docId}`), { metadataActive: true })
+      );
+    });
+
+    it('DENIES turning it OFF too, not just on', async () => {
+      const docId = 'exp-meta-lock-off';
+      await seedDB({
+        [`experiments/${docId}`]: gdriveExp(docId, { sessions: 3, metadataActive: true }),
+      });
+
+      const user123 = testEnv.authenticatedContext('user123');
+      await assertFails(
+        updateDoc(doc(user123.firestore(), `experiments/${docId}`), { metadataActive: false })
+      );
+    });
+
+    // collisionCache is server-managed and clients cannot write it, so it
+    // survives a client that zeroed its own sessions counter to get the
+    // setting back.
+    it('DENIES a change when collisionCache exists even if sessions reads 0', async () => {
+      const docId = 'exp-meta-lock-cache';
+      await seedDB({
+        [`experiments/${docId}`]: gdriveExp(docId, {
+          sessions: 0,
+          collisionCache: { salt: 'seeded-salt' },
+        }),
+      });
+
+      const user123 = testEnv.authenticatedContext('user123');
+      await assertFails(
+        updateDoc(doc(user123.firestore(), `experiments/${docId}`), { metadataActive: true })
+      );
+    });
+
+    // The lock is scoped to ONE field: a collecting experiment must stay
+    // otherwise editable (pausing collection, retitling, condition changes).
+    it('still ALLOWS other edits on a collecting experiment', async () => {
+      const docId = 'exp-meta-lock-others';
+      await seedDB({ [`experiments/${docId}`]: gdriveExp(docId, { sessions: 3 }) });
+
+      const user123 = testEnv.authenticatedContext('user123');
+      await assertSucceeds(
+        updateDoc(doc(user123.firestore(), `experiments/${docId}`), {
+          active: true,
+          title: 'Renamed mid-study',
+        })
+      );
+    });
+
+    // A no-op write that merely restates the current value changes nothing,
+    // so affectedKeys() never flags it -- worth pinning so a future rewrite
+    // does not start rejecting the dashboard's own idempotent merge writes.
+    it('ALLOWS a write that re-states the SAME value on a collecting experiment', async () => {
+      const docId = 'exp-meta-lock-noop';
+      await seedDB({ [`experiments/${docId}`]: gdriveExp(docId, { sessions: 3 }) });
+
+      const user123 = testEnv.authenticatedContext('user123');
+      await assertSucceeds(
+        updateDoc(doc(user123.firestore(), `experiments/${docId}`), { metadataActive: false })
+      );
+    });
+  });
+
   describe('4. /users hasOnly unchanged (regression guard)', () => {
     it('rejects account-creation writes that include connectedAccounts -- clients can never write it', async () => {
       const user123 = testEnv.authenticatedContext('user123');

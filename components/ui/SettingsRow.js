@@ -201,6 +201,12 @@ export default function SettingsRow({
   onSave,
   failureMessage,
   savedLabel,
+  // Renders the switch inert. For settings that become permanent rather than
+  // merely unavailable -- pass `description` to say WHY, because a control
+  // that is off with no explanation reads as broken (Nielsen 1). The server
+  // rule is the real gate; this only keeps the UI from offering a write that
+  // is going to be refused.
+  disabled = false,
   children,
 }) {
   if (process.env.NODE_ENV !== "production") {
@@ -228,6 +234,10 @@ export default function SettingsRow({
   }
 
   const handleChange = (next) => {
+    // Belt and braces with the `disabled` prop below: Chakra's disabled Switch
+    // already blocks pointer and keyboard activation, but a locked setting
+    // must not be writable by any route that reaches this handler.
+    if (disabled) return;
     const previous = value;
     setValue(next);
     if (onChange) onChange(next);
@@ -255,6 +265,7 @@ export default function SettingsRow({
             colorPalette="brandGreen"
             size="md"
             checked={value}
+            disabled={disabled}
             onCheckedChange={(e) => handleChange(e.checked)}
           >
             <Switch.HiddenInput />

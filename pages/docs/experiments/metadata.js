@@ -104,6 +104,31 @@ export default function PsychDsMetadataPage() {
         </GuidanceLine>
       </DocsSection>
 
+      <DocsSection
+        id="decide-before-you-collect"
+        title="Decide before you start collecting"
+      >
+        <Text maxW="70ch">
+          You can turn this setting on or off freely until the first submission
+          arrives. After that it is locked for the life of the experiment, and
+          the switch on your dashboard becomes read-only.
+        </Text>
+        <Text maxW="70ch">
+          The reason is that the setting decides <em>where</em> your files are
+          stored — at the top of your dataset with it off, under{" "}
+          <Code>data/raw/</Code> with it on. Changing it partway through would
+          leave the sessions you already collected in one place and every
+          session after it in another, and DataPipe&apos;s duplicate detection
+          would no longer recognise the earlier files — so a participant who
+          resubmitted a filename from before the change would get a second copy
+          rather than being caught as a repeat.
+        </Text>
+        <Text maxW="70ch">
+          If you need to change it after collecting data, create a new
+          experiment with the setting you want.
+        </Text>
+      </DocsSection>
+
       <DocsSection id="folder-names-are-flattened" title="Folder names are flattened">
         <Text maxW="70ch">
           You will not get subfolders inside your dataset, whatever filenames

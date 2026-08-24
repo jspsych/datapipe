@@ -17,11 +17,41 @@ function writeMetadataActive(expId, active) {
   );
 }
 
+// Whether this experiment has already collected data, and therefore whether
+// the metadata setting is frozen.
+//
+// The setting decides WHERE a submission is stored -- at the container root
+// with it off, under data/raw/ with it on (uploadPathFor in
+// functions/src/metadata-derived-files.ts) -- and which namespace the
+// duplicate-detection cache claims in. Flipping it mid-collection therefore
+// strands everything already written at the old location and resets duplicate
+// detection against it, so a participant resubmitting a filename from before
+// the flip gets a second file instead of being recognised. Before the first
+// submission none of that exists yet and the choice is free, which is why the
+// lock is "has data", not "was created".
+//
+// `sessions` is the honest signal. `collisionCache` is the tamper-resistant
+// one -- it is server-managed and firestore.rules forbids clients touching it
+// -- and covers an experiment whose sessions counter was somehow reset. The
+// matching server rule is the gate that actually enforces this; this function
+// only decides what the UI offers.
+function hasCollectedData(data) {
+  return (typeof data.sessions === "number" && data.sessions > 0) || !!data.collisionCache;
+}
+
 export default function MetadataControl({ data }) {
+  const locked = hasCollectedData(data);
+
   return (
     <SettingsRow
       label="Generate Psych-DS metadata"
       checked={data.metadataActive}
+      disabled={locked}
+      description={
+        locked
+          ? "Locked because this experiment has collected data. This setting decides where files are stored, so changing it now would separate new submissions from the ones you already have. Create a new experiment to collect with a different setting."
+          : undefined
+      }
       onSave={(next) => writeMetadataActive(data.id, next)}
       failureMessage="Could not change metadata production. The setting is unchanged -- check your connection and try again."
       badge={
