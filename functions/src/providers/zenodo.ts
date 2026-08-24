@@ -212,9 +212,14 @@ function toZenodoKey(name: string): string {
 //   .psychds-ignore            -> unchanged
 //
 // The leaf is safe to hand back untouched because metadata-derived-files.ts
-// flattens researcher-supplied subfolders with "-" BEFORE the path is built,
-// so a leaf reaching Zenodo never contains a slash and there is no second
-// separator left to guess at. The one remaining ambiguity -- a researcher
+// flattens researcher-supplied subfolders with "-" (plus a "~<digest>" suffix
+// that disambiguates names which collapse alike) BEFORE the path is built, so
+// a leaf reaching Zenodo never contains a slash and there is no second
+// separator left to guess at. That flattening is load-bearing for THIS
+// function, not just for the collision cache: if researcher subfolders ever
+// became real path segments, `data/raw/cond-A/x.json` would arrive as
+// `data_raw_cond-A_x.json` and the subfolder boundary would be
+// unrecoverable. The one remaining ambiguity -- a researcher
 // naming their own file `data_x.json` in an experiment that writes no slashed
 // paths at all -- is removed by the caller, not here: compaction only applies
 // this to metadataActive experiments (see archivePathsFor in compaction.ts).

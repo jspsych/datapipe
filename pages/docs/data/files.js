@@ -157,9 +157,13 @@ export default function FilenamesArchivesAndYourStoragePage() {
           your data — is on, a name like{" "}
           <Code>condition-A/abc.json</Code> is flattened with hyphens before the
           path is built, so it is stored at{" "}
-          <Code>data/raw/condition-A-abc.json</Code>. The prefix is kept rather
-          than discarded, so two submissions that share a name after the last
-          slash still do not collide.
+          <Code>data/raw/condition-A-abc~a145753b.json</Code>. The prefix is
+          kept rather than discarded, so two submissions that share a name after
+          the last slash still do not collide. The short code after{" "}
+          <Code>~</Code> is derived from the name you sent and is stable across
+          resubmissions; it keeps <Code>condition-A/abc.json</Code> distinct
+          from a file literally named <Code>condition-A-abc.json</Code>. Names
+          without a slash are stored exactly as sent and get no code.
         </Text>
         <Text maxW="70ch">
           <strong>Zenodo cannot store a slash at all.</strong> It holds every
@@ -173,10 +177,16 @@ export default function FilenamesArchivesAndYourStoragePage() {
           archives described below, where DataPipe controls the paths.
         </Text>
         <Text maxW="70ch">
-          One consequence on Google Drive: only the last segment of a slashed
-          name is used, so <Code>condition-A/abc.json</Code> and{" "}
-          <Code>condition-B/abc.json</Code> are treated as the same name. Make
-          the part after the last slash distinct, not the prefix.
+          <strong>One consequence on Google Drive, with metadata off.</strong>{" "}
+          Drive identifies a file by the last segment of its path, so{" "}
+          <Code>condition-A/abc.json</Code> and{" "}
+          <Code>condition-B/abc.json</Code> are treated as the same name and the
+          second submission is rejected as a duplicate. Make the part after the
+          last slash distinct, not the prefix. This does not apply when metadata
+          is on: the flattening described above removes your slashes before
+          Drive ever sees the name, so the two become{" "}
+          <Code>condition-A-abc~…json</Code> and{" "}
+          <Code>condition-B-abc~…json</Code> and stay distinct.
         </Text>
         <GuidanceLine
           href="/docs/experiments/metadata"

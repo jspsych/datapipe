@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import {
   deriveFallbackBase,
   buildPsychDSDataFiles,
@@ -28,19 +29,56 @@ export interface DerivedFileSource extends ExtractionResult {
  * Researcher-supplied folder prefixes (e.g. "condition-A/abc.json") are
  * flattened into the Psych-DS layout: the CLI converts whole directories into
  * a flat data/ folder, and DataPipe matches it, so the path is encoded into a
- * single filename rather than nested. The encoding is percent-escaping
- * restricted to exactly "%", "/" and "\" ("%25", "%2F", "%5C"), which makes
- * it injective: no two distinct submitted names can flatten to the same raw
- * path or collision-cache claim. (The previous separator->"-" collapse let
- * "condition-A/data.json" shadow "condition-A-data.json", so the second
- * valid submission was rejected as a duplicate.) Names containing none of
- * the three characters -- the overwhelming majority -- pass through
- * unchanged. Derived CSV/sidecar stems built from this name additionally go
- * through the library's lossy toPsychDSValue sanitiser; the raw path and
- * its collision-cache claim are the duplicate guard, not the derived names.
+ * single filename rather than nested. Flattening is DataPipe's job rather
+ * than the provider's because two of the four backends rewrite slashed names
+ * themselves -- Zenodo's keyspace is flat and silently renames, Drive stores
+ * by bare leaf -- and the collision cache matches names exactly, so a
+ * server-side rename we did not predict becomes a duplicate or an overwrite.
+ *
+ * Separators collapse to "-" and a short digest of the ORIGINAL name is
+ * appended before the extension: "condition-A/data.json" ->
+ * "condition-A-data~a8c61a73.json". Names containing no "/", "\" or "~" --
+ * effectively every real submission -- pass through byte-for-byte, so the
+ * stored file keeps the name the researcher chose.
+ *
+ * WHY THE DIGEST. The raw path doubles as the collision-cache claim, so two
+ * distinct submitted names reaching one path means a legitimate submission is
+ * rejected as a duplicate. A bare "/" -> "-" collapse is not injective: it let
+ * "condition-A/data.json" shadow "condition-A-data.json". The digest splits
+ * the output into two provably disjoint sets -- a passed-through name can
+ * never contain "~", a flattened one always does -- which closes that
+ * shadowing case by construction rather than by chance. Within the flattened
+ * set two names collide only if they collapse identically AND their digests
+ * match; that is a 2^-32 tail on an input set of names differing only in
+ * their separators, not a general birthday bound. A submitted name that
+ * already contains "~" takes the flattened branch for the same reason, so it
+ * cannot impersonate a flattened one.
+ *
+ * Derived CSV/sidecar stems built from this name additionally go through the
+ * library's lossy toPsychDSValue sanitiser; the raw path and its
+ * collision-cache claim are the duplicate guard, not the derived names.
  */
+const NEEDS_FLATTENING = /[/\\~]/;
+const DIGEST_LENGTH = 8;
+
 function flattenName(dataFilename: string): string {
-  return dataFilename.replace(/[%/\\]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  if (!NEEDS_FLATTENING.test(dataFilename)) return dataFilename;
+
+  const collapsed = dataFilename.replace(/[/\\]+/g, '-');
+  const digest = createHash('sha256')
+    .update(dataFilename, 'utf8')
+    .digest('hex')
+    .slice(0, DIGEST_LENGTH);
+
+  // The extension is read off the ORIGINAL leaf, not the collapsed string: a
+  // dotfile leaf ("dir/.hidden") has no extension, but collapsing moves its
+  // dot away from index 0 where a naive lastIndexOf would mistake it for one.
+  const leaf = dataFilename.split(/[/\\]/).pop() as string;
+  const dotIndex = leaf.lastIndexOf('.');
+  const extension = dotIndex <= 0 ? '' : leaf.slice(dotIndex);
+  const stem = extension ? collapsed.slice(0, collapsed.length - extension.length) : collapsed;
+
+  return `${stem}~${digest}${extension}`;
 }
 
 /**
