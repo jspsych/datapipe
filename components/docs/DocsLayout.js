@@ -93,7 +93,15 @@ export default function DocsLayout({ children }) {
         </Flex>
       </Box>
       <Footer />
-      {Boolean(process.env.NEXT_PUBLIC_OSF_ENV) && <TestEnvironmentWarning />}
+      {/* Same NEXT_PUBLIC_DEPLOY_ENV gate as pages/_app.js and pages/index.js
+          -- this layout bypasses _app.js's default <Center> (see the doc
+          comment above), so it repeats the check rather than inheriting
+          it. TestEnvironmentWarning itself repeats the check again as a
+          second guard. */}
+      {Boolean(process.env.NEXT_PUBLIC_DEPLOY_ENV) &&
+        process.env.NEXT_PUBLIC_DEPLOY_ENV !== "production" && (
+          <TestEnvironmentWarning />
+        )}
     </Box>
   );
 }

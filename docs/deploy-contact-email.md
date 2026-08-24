@@ -152,7 +152,7 @@ entry and no extension config to keep in sync.
 | `SES_REGION` | yes (repo secret) | `PROD_SES_REGION` | `TEST_SES_REGION` |
 | `SES_ACCESS_KEY_ID` | yes (repo secret) | `PROD_SES_ACCESS_KEY_ID` | `TEST_SES_ACCESS_KEY_ID` |
 | `SES_SECRET_ACCESS_KEY` | yes (repo secret) | `PROD_SES_SECRET_ACCESS_KEY` | `TEST_SES_SECRET_ACCESS_KEY` |
-| `MAIL_FROM` | no — literal in the workflow | `DataPipe <datapipe-notifications@jspsych.org>` | `DataPipe <notifications@datapipe-test.web.app>` |
+| `MAIL_FROM` | no — literal in the workflow | `DataPipe <datapipe-notifications@jspsych.org>` | `DataPipe (test) <datapipe-notifications@jspsych.org>` — same verified address, display name marks it as test |
 | `MAIL_REPLY_TO` | no — literal in the workflow | `datapipe@jspsych.org` | `datapipe@jspsych.org` |
 
 So: **three new repo secrets per environment** (region, access key id, secret
@@ -191,9 +191,13 @@ deployment sends is being dropped.
 
 - **`datapipe-test`**: leaving the three `TEST_SES_*` secrets unset is the safe
   default — the trigger records `MailConfigMissingError` and mails nobody, which
-  is visible rather than silent. If you do want the test site to send, point it
-  at an SES account still in the sandbox, whose verified identities are
-  addresses you own.
+  is visible rather than silent. If you do want the test site to send, the
+  `TEST_SES_*` credentials must belong to an SES account (or the production
+  one, with a separate IAM user) in which `jspsych.org` is a verified identity,
+  because the test `MAIL_FROM` is `datapipe-notifications@jspsych.org` too —
+  an address on `datapipe-test.web.app` can never be verified and was rejected
+  by SES. If that account is still in the SES sandbox it can only deliver
+  *to* verified recipient addresses as well.
 - **The emulator (and therefore CI)**: `onmailcreated` checks
   `FUNCTIONS_EMULATOR` and returns before doing anything at all — no read, no
   write, no send. Un-delivered mail in an emulator run is expected, exactly as
