@@ -155,6 +155,17 @@ export interface ContainerInputField {
   label: string;
   required: boolean;
   placeholder?: string;
+  // One line under the field saying what the provider does with this value.
+  // Presentational only -- the server never reads it -- but it lives here
+  // beside the label so the two cannot drift apart, and so a new adapter
+  // cannot declare a field the create form has no way to explain.
+  //
+  // Labels are DELIBERATELY UNIFIED ACROSS PROVIDERS where the concept is the
+  // same: Dataverse's `authorName` and Zenodo's `creatorName` are both
+  // labelled "Author name", because a researcher filling in this form is
+  // answering one question, not two. The provider's own term (Zenodo says
+  // "creator") belongs in helperText, not in the label.
+  helperText?: string;
   // "hidden" means the client supplies this through a bespoke UI (gdrive's
   // Google Picker) rather than a rendered text field.
   inputType?: "text" | "textarea" | "hidden";

@@ -1,15 +1,31 @@
 import { useState } from "react";
-import { Editable, IconButton, Flex, Stack } from "@chakra-ui/react";
+import { Editable, IconButton, Flex, Stack, Text } from "@chakra-ui/react";
 
 import { Check, X, Pencil } from "lucide-react";
 
 import { db } from "../../lib/firebase";
 import { doc, setDoc } from "firebase/firestore";
+import { STORAGE_PROVIDERS } from "../../lib/provider-config";
 import { SaveStatus, useTrackedSave } from "../ui/SettingsRow";
 
 export default function ExperimentTitle({ data }) {
   // Remount counter for the Editable. See handleCommit.
   const [resetKey, setResetKey] = useState(0);
+  // Whether the Editable is currently in edit mode, so the caveat below is
+  // shown only to someone actually renaming -- it is a footnote about the
+  // rename, not a standing fact about the experiment, and a permanent line of
+  // small print under the page's H1 would be exactly the wrong weight for it.
+  const [editing, setEditing] = useState(false);
+
+  // What a rename does NOT touch. `title` is fixed at creation for every
+  // provider: it named the Drive folder / Dataverse dataset / Zenodo
+  // deposition when createDataContainer ran, and no adapter implements a
+  // container rename, so this write moves DataPipe's title only and the two
+  // diverge permanently. The researcher gets told that here rather than
+  // discovering it in their storage account months later. Undefined for
+  // legacy OSF experiments (STORAGE_PROVIDERS has no osf entry), which simply
+  // show no caveat.
+  const containerLabel = STORAGE_PROVIDERS[data.storageProvider]?.containerLabel;
 
   const titleSave = useTrackedSave(
     "Could not rename this experiment. It is still called “" +
@@ -46,6 +62,7 @@ export default function ExperimentTitle({ data }) {
         fontWeight="bold"
         color="fg"
         onValueCommit={(details) => handleCommit(details.value)}
+        onEditChange={(details) => setEditing(details.edit)}
         as={Flex}
         align="center"
       >
@@ -87,6 +104,13 @@ export default function ExperimentTitle({ data }) {
           </Editable.CancelTrigger>
         </Editable.Control>
       </Editable.Root>
+
+      {editing && containerLabel && (
+        <Text fontSize="sm" color="fg.muted">
+          This renames the experiment in DataPipe only. Your{" "}
+          {containerLabel.toLowerCase()} keeps the name it was created with.
+        </Text>
+      )}
 
       <SaveStatus
         saved={titleSave.saved}

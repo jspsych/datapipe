@@ -1,7 +1,7 @@
 import AuthCheck from "../../components/AuthCheck";
 import { doc } from "firebase/firestore";
 import { db, auth } from "../../lib/firebase";
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { UserContext } from "../../lib/context";
 import { useDocumentData } from "react-firebase-hooks/firestore";
 import Link from "next/link";
@@ -9,6 +9,7 @@ import Router from "next/router";
 import { createProviderExperiment } from "../../lib/experiment-creation";
 import { pickDriveFolder } from "../../lib/google-picker";
 import { STORAGE_PROVIDERS } from "../../lib/provider-config";
+import { normalizeContactEmail } from "../../lib/contact-email";
 import {
   Button,
   Stack,
@@ -64,6 +65,54 @@ function writeDraftTitle(value) {
 // Existing OSF experiments keep collecting; see lib/osf-sunset.js.
 const DEFAULT_PROVIDER = Object.keys(STORAGE_PROVIDERS)[0];
 
+// One labelling rule for every field on this form: required fields carry a
+// bare label, optional ones say so. Before this the only field that admitted
+// to being optional was the Drive folder picker -- and it said so by
+// hardcoding "(optional)" into its label string -- so Subject and Affiliation
+// looked exactly as mandatory as Description, which really is required.
+function FieldLabel({ children, optional }) {
+  return (
+    <Field.Label>
+      {children}
+      {optional && (
+        <Text as="span" color="fg.muted" fontWeight="normal" ms={1}>
+          (optional)
+        </Text>
+      )}
+    </Field.Label>
+  );
+}
+
+// Account-level values that seed a provider field, so a researcher does not
+// retype what DataPipe already holds.
+//
+// Deliberately narrow. `contactEmail` is the only containerInput field with an
+// unambiguous account-level counterpart: users/{uid}.contactEmail is mandatory
+// and gated by ContactEmailGate (components/AuthCheck.js), so it is always
+// present by the time this form renders. Author name, collection alias and
+// affiliation are just as stable per researcher, but nothing stores them yet
+// -- putting them on the provider connection is the follow-up this map is
+// shaped to absorb.
+//
+// A seed is a starting value, never a lock: Dataverse publishes datasetContact
+// on the dataset, and the address a researcher wants public is not always the
+// one DataPipe emails them at, so the field stays editable.
+function prefillFor(fieldName, userDoc) {
+  if (fieldName === "contactEmail") {
+    return normalizeContactEmail(userDoc?.contactEmail) || "";
+  }
+  return "";
+}
+
+function seedContainerValues(providerId, userDoc) {
+  const seeded = {};
+  for (const field of STORAGE_PROVIDERS[providerId]?.containerInputFields || []) {
+    const value = prefillFor(field.name, userDoc);
+    if (value) seeded[field.name] = value;
+  }
+  return seeded;
+}
+
 export default function NewExperimentPage({}) {
   return (
     <AuthCheck>
@@ -106,9 +155,27 @@ function NewExperimentForm() {
 
   const providerConnected = STORAGE_PROVIDERS[provider]?.isConnected(data);
 
+  // Seed the account-level prefills ONCE, when the user document first
+  // arrives. handleProviderChange seeds every later provider switch itself, so
+  // this only covers the initial render, where `data` is still undefined.
+  //
+  // Guarded by a ref rather than re-running on every `data` snapshot: this
+  // page holds a live Firestore subscription, and any unrelated field changing
+  // on users/{uid} mid-form would otherwise push the stored address back over
+  // whatever the researcher had typed. `...prev` last for the same reason.
+  const seededRef = useRef(false);
+  useEffect(() => {
+    if (seededRef.current || !data) return;
+    seededRef.current = true;
+    setContainerValues((prev) => ({ ...seedContainerValues(provider, data), ...prev }));
+  }, [data, provider]);
+
   const handleProviderChange = (newProvider) => {
     setProvider(newProvider);
-    setContainerValues({});
+    // Reset, then re-seed from the account for the NEW provider -- a bare {}
+    // here would drop the prefilled contact email the moment someone switched
+    // provider and switched back.
+    setContainerValues(seedContainerValues(newProvider, data));
     setContainerFieldErrors({});
     // A picked Drive folder is meaningless to any other provider, and it is
     // sent as the top-level parentFolderId on submit -- without this reset,
@@ -173,7 +240,13 @@ function NewExperimentForm() {
     setProviderSubmitting(true);
     setProviderError(null);
 
-    if (providerTitle.length === 0) {
+    // Trimmed, not raw. This value becomes the name of a real folder/dataset/
+    // deposition in the researcher's own account, and a title of " " passed
+    // both this check (length 1) and the server's (`!title` is false for a
+    // space), creating a container named with a single space that DataPipe
+    // then offers no way to rename.
+    const trimmedTitle = providerTitle.trim();
+    if (trimmedTitle.length === 0) {
       setProviderTitleError(true);
       setProviderSubmitting(false);
       return;
@@ -201,19 +274,22 @@ function NewExperimentForm() {
     }
 
     // Send only the declared field names, and omit empty optional fields --
-    // never spread arbitrary containerValues state.
+    // never spread arbitrary containerValues state. Values are sent TRIMMED,
+    // matching the check above: a field validated on its trimmed value and
+    // then sent raw meant trailing whitespace reached provider metadata (a
+    // Dataverse author of "Smith, Jane " is what gets cited).
     const researcherInput = {};
     for (const field of fields) {
       const value = containerValues[field.name];
       if (value && value.trim().length > 0) {
-        researcherInput[field.name] = value;
+        researcherInput[field.name] = value.trim();
       }
     }
 
     try {
       const result = await createProviderExperiment(
         provider,
-        providerTitle,
+        trimmedTitle,
         selectedFolder?.id,
         researcherInput
       );
@@ -395,7 +471,7 @@ function NewExperimentForm() {
                 </Alert.Root>
               ))}
               <Field.Root invalid={providerTitleError}>
-                <Field.Label>Title</Field.Label>
+                <FieldLabel>Title</FieldLabel>
                 <Input
                   type="text"
                   value={providerTitle}
@@ -405,6 +481,14 @@ function NewExperimentForm() {
                     setProviderTitleError(false);
                   }}
                 />
+                {/* The one field on this form that names something in the
+                    researcher's OWN account, and it said only "Title". What it
+                    names differs per provider (folder / dataset / deposition)
+                    and it is fixed at creation, so the copy comes from the
+                    provider -- see containerTitleHelp in lib/provider-config.js. */}
+                <Field.HelperText>
+                  {STORAGE_PROVIDERS[provider]?.containerTitleHelp}
+                </Field.HelperText>
                 {/* `color="red.400"` dropped -- the Field recipe already owns
                     error text coloring, and the literal was a raw palette
                     step (DESIGN.md §8.5). */}
@@ -413,7 +497,7 @@ function NewExperimentForm() {
 
               {STORAGE_PROVIDERS[provider]?.containerInputFields.map((field) => (
                 <Field.Root key={field.name} invalid={!!containerFieldErrors[field.name]}>
-                  <Field.Label>{field.label}</Field.Label>
+                  <FieldLabel optional={!field.required}>{field.label}</FieldLabel>
                   {field.multiline ? (
                     <Textarea
                       value={containerValues[field.name] || ""}
@@ -432,6 +516,15 @@ function NewExperimentForm() {
                       }
                     />
                   )}
+                  {/* Every provider field now explains what the provider does
+                      with it. These asks are not arbitrary -- all four required
+                      Dataverse fields are ones Dataverse itself rejects a
+                      dataset without -- but the form gave no way to tell that
+                      from a field DataPipe invented, and "Collection alias"
+                      was explained only in /docs/experiments. */}
+                  {field.helperText && (
+                    <Field.HelperText>{field.helperText}</Field.HelperText>
+                  )}
                   <Field.ErrorText>This field is required</Field.ErrorText>
                 </Field.Root>
               ))}
@@ -442,7 +535,10 @@ function NewExperimentForm() {
                   belong in the containerInputFields render above. */}
               {provider === "gdrive" && (
                 <Field.Root>
-                  <Field.Label>Parent Drive Folder (optional)</Field.Label>
+                  {/* "(optional)" comes from FieldLabel now, not from a
+                      hardcoded label string, so this field marks itself
+                      optional the same way Subject and Affiliation do. */}
+                  <FieldLabel optional>Parent Drive folder</FieldLabel>
                   <HStack gap={3}>
                     {/* Neutral outline, not green. DESIGN.md §5: one primary
                         per screen, and on this form the primary is Create.

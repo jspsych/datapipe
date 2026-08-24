@@ -48,4 +48,38 @@ describe("provider containerInput conformance", () => {
       }
     }
   });
+
+  // The create form (pages/admin/new.js) renders one helper line per field
+  // saying what the provider does with the value. A field that declares no
+  // helperText renders as a bare labelled box -- which is how "Collection
+  // alias" shipped, explained nowhere but /docs/experiments. Hidden fields are
+  // exempt: they have no rendered field to explain (gdrive's parentId comes
+  // from the Google Picker, whose own copy lives in the page).
+  it("every rendered containerInput field explains itself", () => {
+    for (const id of listProviders()) {
+      for (const field of getProvider(id).containerInput) {
+        if (field.inputType === "hidden") continue;
+        expect(typeof field.helperText).toBe("string");
+        expect(field.helperText.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  // Two providers asking the same question must ask it in the same words.
+  // Dataverse's `authorName` and Zenodo's `creatorName` are the motivating
+  // case: they carry different wire names because the two APIs do, but a
+  // researcher filling in this form is answering one question, so they share
+  // the label "Author name". This pins that any field name meaning the same
+  // thing across providers keeps one label.
+  it("fields meaning the same thing share a label across providers", () => {
+    const labelsFor = (providerId, fieldName) =>
+      getProvider(providerId)
+        .containerInput.filter((f) => f.name === fieldName)
+        .map((f) => f.label);
+
+    expect(labelsFor("dataverse", "authorName")).toEqual(["Author name"]);
+    expect(labelsFor("zenodo", "creatorName")).toEqual(["Author name"]);
+    expect(labelsFor("dataverse", "description")).toEqual(["Description"]);
+    expect(labelsFor("zenodo", "description")).toEqual(["Description"]);
+  });
 });

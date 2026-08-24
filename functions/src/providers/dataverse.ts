@@ -288,12 +288,49 @@ export const dataverseProvider: StorageProvider = {
     quotaNote: "File size and storage limits are set by the researcher's hosting Dataverse installation",
   },
 
+  // Every required field here is required by DATAVERSE, not by DataPipe:
+  // collectionAlias is the POST path itself (/api/dataverses/{alias}/datasets)
+  // and has no possible default, while author, contact and description are
+  // required fields of the citation metadata block, which the server rejects
+  // a dataset without. `subject` is required by Dataverse too but is optional
+  // here because createDataContainer defaults it -- see the `subject` const.
   containerInput: [
-    { name: "collectionAlias", label: "Collection alias", required: true, placeholder: "my-lab" },
-    { name: "authorName", label: "Author name", required: true, placeholder: "Lastname, Firstname" },
-    { name: "contactEmail", label: "Contact email", required: true, placeholder: "you@example.edu" },
-    { name: "description", label: "Description", required: true, inputType: "textarea" },
-    { name: "subject", label: "Subject", required: false, placeholder: "Social Sciences" },
+    {
+      name: "collectionAlias",
+      label: "Collection alias",
+      required: true,
+      placeholder: "my-lab",
+      helperText:
+        "The short name in your collection's URL -- the my-lab in dataverse.harvard.edu/dataverse/my-lab.",
+    },
+    {
+      name: "authorName",
+      label: "Author name",
+      required: true,
+      placeholder: "Lastname, Firstname",
+      helperText: "Recorded as the dataset's author in its citation metadata.",
+    },
+    {
+      name: "contactEmail",
+      label: "Contact email",
+      required: true,
+      placeholder: "you@example.edu",
+      helperText: "Dataverse publishes this on the dataset as the contact for questions about the data.",
+    },
+    {
+      name: "description",
+      label: "Description",
+      required: true,
+      inputType: "textarea",
+      helperText: "Shown on the dataset page. A sentence about what the experiment collects is enough.",
+    },
+    {
+      name: "subject",
+      label: "Subject",
+      required: false,
+      placeholder: "Social Sciences",
+      helperText: "Dataverse requires one. Left blank, DataPipe sends Social Sciences.",
+    },
   ],
 
   async resolveToken(userData: UserData, _owner: string): Promise<TokenResult> {
