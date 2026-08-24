@@ -127,7 +127,7 @@ export default function DocsOverviewPage() {
         <GuidanceLine href="/docs/data" linkText="What DataPipe stores">
           The full account of what is held, for how long, and who can read it.
         </GuidanceLine>
-        <GuidanceLine href="/privacy" linkText="Privacy & information for IRBs">
+        <GuidanceLine href="/docs/privacy" linkText="Privacy & information for IRBs">
           The page to hand your IRB: architecture, encryption, retention, and
           jurisdiction in one place.
         </GuidanceLine>
