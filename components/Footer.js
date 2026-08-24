@@ -78,6 +78,14 @@ export default function Footer() {
               <NextLink href="/contact">Contact Us</NextLink>
             </Link>
           </Text>
+          {/* Researchers are sent here by an IRB or an institutional security
+              reviewer, i.e. by someone who is not already inside the docs. The
+              footer is where that reader looks for it. */}
+          <Text>
+            <Link color="brandGreen.fg" textDecoration="underline" asChild>
+              <NextLink href="/privacy">Privacy</NextLink>
+            </Link>
+          </Text>
           <Stack align={"flex-start"}>
             <Button
               asChild
