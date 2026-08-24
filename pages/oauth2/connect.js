@@ -142,7 +142,15 @@ function useProviderConnectCallback() {
         localStorage.removeItem("latestCSRFToken");
         localStorage.removeItem("providerConnectFlow");
 
-        push("/admin/account");
+        // `?connected=<providerId>` is the only way ProviderConnections.js
+        // (components/account/ProviderConnections.js) learns this redirect
+        // round trip actually succeeded -- this page unmounts entirely once
+        // the researcher leaves for the provider's consent screen, so
+        // nothing in React state survives the trip. ProviderConnections
+        // reads the param once, shows a dismissible "Linked <Provider>
+        // successfully." banner, and strips it via router.replace so a
+        // refresh never replays it.
+        push(`/admin/account?connected=${encodeURIComponent(provider)}`);
       } catch (err) {
         clearTimeout(watchdogId);
         console.error("Provider connect callback error:", err);

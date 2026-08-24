@@ -1,5 +1,6 @@
-import { useContext, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import {
+  Alert,
   VStack,
   HStack,
   Text,
@@ -7,8 +8,10 @@ import {
   Input,
   Field,
   Link as ChakraLink,
+  CloseButton,
 } from "@chakra-ui/react";
 import Link from "next/link";
+import { useRouter } from "next/router";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db, auth } from "../../lib/firebase";
 import { UserContext } from "../../lib/context";
@@ -32,8 +35,43 @@ const NETWORK_ERROR_MESSAGE =
 // a connected researcher saw every provider flash "Connect" before settling.
 export default function ProviderConnections({ data }) {
   const { user } = useContext(UserContext);
+  const router = useRouter();
 
   const [connectingId, setConnectingId] = useState(null);
+
+  // Name of the provider just linked/replaced, or null to hide the banner.
+  // Two routes set it: the static-token in-page flow below (handleTokenConnect,
+  // no navigation at all) and the OAuth2 redirect flow, which leaves this page
+  // entirely for the provider's consent screen and comes back through
+  // pages/oauth2/connect.js -- that page has no other way to tell this
+  // component "it worked" than a query param, so it pushes back here with
+  // `?connected=<providerId>`.
+  const [linkedAlert, setLinkedAlert] = useState(null);
+
+  // Reads that param once router.query has hydrated, then strips it via
+  // router.replace so a refresh (or a re-render) never replays the banner --
+  // only the CloseButton's dismiss and this one-time read control whether it
+  // shows. Deliberately narrow deps (isReady + the primitive query value, not
+  // `router` itself): `router` has no stable identity across renders, and
+  // depending on it here would re-run this on every render and fight the
+  // replace() below in a loop -- the same shape pages/oauth2/connect.js and
+  // pages/oauth2/callback.js document for their own OAuth-exchange effects.
+  useEffect(() => {
+    if (!router.isReady) return;
+    const raw = Array.isArray(router.query.connected)
+      ? router.query.connected[0]
+      : router.query.connected;
+    if (!raw) return;
+
+    const provider = STORAGE_PROVIDERS[raw];
+    if (provider) setLinkedAlert(provider.name);
+
+    const { connected: _connected, ...rest } = router.query;
+    router.replace({ pathname: router.pathname, query: rest }, undefined, {
+      shallow: true,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router.isReady, router.query.connected]);
 
   // Component-level failure surface for handleConnect, which has no dialog
   // of its own to show an error in (renders the same way LinkedAccounts.js
@@ -126,6 +164,7 @@ export default function ProviderConnections({ data }) {
       }
 
       closeTokenForm();
+      setLinkedAlert(STORAGE_PROVIDERS[providerId]?.name || null);
     } catch (err) {
       console.error("Failed to connect provider:", err);
       setFormError(NETWORK_ERROR_MESSAGE);
@@ -248,6 +287,36 @@ export default function ProviderConnections({ data }) {
     <VStack gap={3} w="100%" align="stretch">
       <FormErrorAlert>{error}</FormErrorAlert>
 
+      {/* colorPalette="brandGreen" + variant="outline", not the Alert
+          default: `status="success"` alone maps to Chakra's stock `green`
+          (DESIGN.md §5 -- "one green, not two"), and the default
+          `variant="subtle"` pairs colorPalette.fg on colorPalette.subtle,
+          which DESIGN.md's brandGreen section measures at 3.91:1 in dark
+          mode and marks "not approved for body text". `variant="outline"`
+          instead colors the text with brandGreen.fg directly against the
+          page background -- the pairing DESIGN.md's own ratio table already
+          clears (6.71:1 dark / 5.13:1 light on `bg.panel`). */}
+      {linkedAlert && (
+        <Alert.Root
+          status="success"
+          colorPalette="brandGreen"
+          variant="outline"
+          borderRadius="md"
+          role="status"
+          aria-live="polite"
+        >
+          <Alert.Indicator />
+          <Alert.Title flex="1">
+            Linked {linkedAlert} successfully.
+          </Alert.Title>
+          <CloseButton
+            size="sm"
+            aria-label="Dismiss"
+            onClick={() => setLinkedAlert(null)}
+          />
+        </Alert.Root>
+      )}
+
       {noneConnected && (
         <Text fontSize="sm" color="fg.muted">
           No storage connected yet — connect one to create your first
@@ -272,7 +341,13 @@ export default function ProviderConnections({ data }) {
             gap={3}
           >
             <HStack>
-              <Text fontSize="lg">{provider.name}</Text>
+              {/* fontSize="md"/medium (16px/500), not the former "lg" (18px):
+                  the row label must read as a step below SettingsSection's
+                  18px/600 heading, not level with or above it. See
+                  SettingsSection.js's comment for the full hierarchy. */}
+              <Text fontSize="md" fontWeight="medium">
+                {provider.name}
+              </Text>
               {connected && <StatusIndicator status="ok" label="Connected" />}
             </HStack>
             {connected ? (

@@ -16,6 +16,24 @@ jest.mock("../lib/context", () => ({
   }),
 }));
 
+// ProviderConnections reads router.query.connected (set by
+// pages/oauth2/connect.js on a successful redirect back from a provider's
+// consent screen) to show its "Linked <Provider> successfully." banner, and
+// calls router.replace to strip the param afterward. `mockRouterQuery` is
+// read live by the `useRouter` mock below, so a test sets it before
+// rendering rather than passing it as a prop -- this component has no such
+// prop, exactly like the real next/router hook it replaces.
+let mockRouterQuery = {};
+const mockRouterReplace = jest.fn();
+jest.mock("next/router", () => ({
+  useRouter: () => ({
+    isReady: true,
+    pathname: "/admin/account",
+    query: mockRouterQuery,
+    replace: (...args) => mockRouterReplace(...args),
+  }),
+}));
+
 const mockGetDocs = jest.fn(() =>
   Promise.resolve({ docs: [] })
 );
@@ -47,6 +65,7 @@ beforeEach(() => {
   mockGetIdToken.mockImplementation(() => Promise.resolve("id-token-123"));
   mockGetDocs.mockClear();
   mockGetDocs.mockResolvedValue({ docs: [] });
+  mockRouterQuery = {};
   global.fetch = jest.fn();
   localStorage.clear();
 
@@ -134,6 +153,63 @@ describe("ProviderConnections", () => {
       token: "tok-abc",
       serverUrl: "https://dataverse.harvard.edu",
     });
+  });
+
+  it("static-token provider: Save success shows a dismissible 'Linked ... successfully.' banner", async () => {
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ success: true, provider: "dataverse" }),
+    });
+
+    renderComponent();
+    fireEvent.click(screen.getByRole("button", { name: /^Connect Dataverse$/i }));
+    fireEvent.change(screen.getByLabelText(/Dataverse server URL/i), {
+      target: { value: "https://dataverse.harvard.edu" },
+    });
+    fireEvent.change(screen.getByLabelText(/API token/i), {
+      target: { value: "tok-abc" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Save Dataverse connection$/i })
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("Linked Dataverse successfully.")
+      ).toBeInTheDocument()
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /^Dismiss$/i }));
+    expect(
+      screen.queryByText("Linked Dataverse successfully.")
+    ).not.toBeInTheDocument();
+  });
+
+  it("OAuth2 redirect return: a `connected` query param shows the banner and is stripped via router.replace", async () => {
+    // Mirrors what pages/oauth2/connect.js does on a successful redirect
+    // round trip: it pushes back here with ?connected=<providerId> because
+    // it unmounts entirely (the researcher left for the provider's consent
+    // screen), so a query param is the only channel back to this component.
+    mockRouterQuery = { connected: "gdrive", next: "/admin/new" };
+
+    renderComponent();
+
+    expect(
+      screen.getByText("Linked Google Drive successfully.")
+    ).toBeInTheDocument();
+
+    // The param is stripped immediately so a refresh never replays the
+    // banner -- other params (e.g. `next`) are preserved.
+    expect(mockRouterReplace).toHaveBeenCalledWith(
+      { pathname: "/admin/account", query: { next: "/admin/new" } },
+      undefined,
+      { shallow: true }
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /^Dismiss$/i }));
+    expect(
+      screen.queryByText("Linked Google Drive successfully.")
+    ).not.toBeInTheDocument();
   });
 
   it("static-token provider: Save stays disabled until both fields are filled", async () => {

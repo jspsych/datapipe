@@ -93,7 +93,7 @@ export default function SelectAuth({ data }) {
             <VStack gap={2} w="100%" align="stretch">
                 <HStack justifyContent="space-between" w="100%" flexWrap="wrap" gap={3}>
                     <HStack>
-                        <Text fontSize="lg">OSF account</Text>
+                        <Text fontSize="md" fontWeight="medium">OSF account</Text>
                         {/* Same visible-label rule as every other status on
                             the page: a bare check or warning triangle says
                             nothing to a screen reader or a colorblind
@@ -126,7 +126,7 @@ export default function SelectAuth({ data }) {
         <VStack gap={2} w="100%" align="stretch">
             <HStack justifyContent="space-between" w="100%" flexWrap="wrap" gap={3}>
                 <HStack>
-                    <Text fontSize="lg">OSF token</Text>
+                    <Text fontSize="md" fontWeight="medium">OSF token</Text>
                     <StatusIndicator
                         status={hasValidPersonalToken ? "ok" : "warning"}
                         label={hasValidPersonalToken ? "Valid" : "No valid token"}
