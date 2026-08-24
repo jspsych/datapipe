@@ -177,16 +177,11 @@ export default function FilenamesArchivesAndYourStoragePage() {
           archives described below, where DataPipe controls the paths.
         </Text>
         <Text maxW="70ch">
-          <strong>One consequence on Google Drive, with metadata off.</strong>{" "}
-          Drive identifies a file by the last segment of its path, so{" "}
-          <Code>condition-A/abc.json</Code> and{" "}
-          <Code>condition-B/abc.json</Code> are treated as the same name and the
-          second submission is rejected as a duplicate. Make the part after the
-          last slash distinct, not the prefix. This does not apply when metadata
-          is on: the flattening described above removes your slashes before
-          Drive ever sees the name, so the two become{" "}
-          <Code>condition-A-abc~…json</Code> and{" "}
-          <Code>condition-B-abc~…json</Code> and stay distinct.
+          <strong>On Google Drive, slashes do create real folders</strong> when
+          metadata is off — <Code>condition-A/abc.json</Code> lands in a{" "}
+          <Code>condition-A</Code> folder. Two submissions that share a name
+          after the last slash but sit in different folders are different files
+          and both are kept.
         </Text>
         <GuidanceLine
           href="/docs/experiments/metadata"

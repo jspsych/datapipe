@@ -252,6 +252,7 @@ let buildArchive;
 let archivePathsFor;
 let claimDocId;
 let claimFilename;
+let CLAIM_NAMESPACE_VERSION;
 let zenodoProvider;
 
 beforeAll(async () => {
@@ -280,6 +281,7 @@ beforeAll(async () => {
   const cache = await import("../../lib/collision-cache.js");
   claimDocId = cache.claimDocId;
   claimFilename = cache.claimFilename;
+  CLAIM_NAMESPACE_VERSION = cache.CLAIM_NAMESPACE_VERSION;
 
   zenodoProvider = (await import("../../lib/providers/zenodo.js")).zenodoProvider;
 
@@ -372,6 +374,10 @@ async function seedExperiment({ sessionCount = SESSIONS, metadataActive = true, 
       collisionCache: {
         salt: SALT,
         warmUntil: Timestamp.fromMillis(Date.now() + 86400000),
+        // Stamped so the cache is warm in the CURRENT namespace. Without it
+        // the fixture reads as pre-versioning (namespace 1), goes cold, and
+        // every test here rehydrates against a provider it never set up.
+        namespaceVersion: CLAIM_NAMESPACE_VERSION,
       },
     });
 

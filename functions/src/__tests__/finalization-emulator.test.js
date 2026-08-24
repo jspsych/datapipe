@@ -214,6 +214,7 @@ let finalizeExperiment;
 let buildArchive;
 let archivePathsFor;
 let claimDocId;
+let CLAIM_NAMESPACE_VERSION;
 let zenodoProvider;
 let retryPendingUploads;
 
@@ -236,6 +237,7 @@ beforeAll(async () => {
   archivePathsFor = compaction.archivePathsFor;
 
   const cache = await import("../../lib/collision-cache.js");
+  CLAIM_NAMESPACE_VERSION = cache.CLAIM_NAMESPACE_VERSION;
   claimDocId = cache.claimDocId;
 
   zenodoProvider = (await import("../../lib/providers/zenodo.js")).zenodoProvider;
@@ -358,6 +360,7 @@ async function seedFinalizableExperiment({ metadataActive = true } = {}) {
       collisionCache: {
         salt: SALT,
         warmUntil: Timestamp.fromMillis(Date.now() + 86400000),
+        namespaceVersion: CLAIM_NAMESPACE_VERSION,
       },
     });
 
@@ -467,7 +470,11 @@ describe("F2. byte fidelity through the batch -> unzip -> rezip round trip", () 
         owner: OWNER_ID,
         storageProvider: "zenodo",
         providerContainer: containerFor(),
-        collisionCache: { salt: SALT, warmUntil: Timestamp.fromMillis(Date.now() + 86400000) },
+        collisionCache: {
+          salt: SALT,
+          warmUntil: Timestamp.fromMillis(Date.now() + 86400000),
+          namespaceVersion: CLAIM_NAMESPACE_VERSION,
+        },
       });
     const claims = db.collection("experiments").doc(experimentID).collection("filenameClaims");
     await claims.doc(claimDocId(SALT, "datapipe-batch-0001.zip")).set({
@@ -798,7 +805,11 @@ describe("F6. eligibility", () => {
         sessions: 0,
         storageProvider: "zenodo",
         providerContainer: containerFor(),
-        collisionCache: { salt: SALT, warmUntil: Timestamp.fromMillis(Date.now() + 86400000) },
+        collisionCache: {
+          salt: SALT,
+          warmUntil: Timestamp.fromMillis(Date.now() + 86400000),
+          namespaceVersion: CLAIM_NAMESPACE_VERSION,
+        },
       });
 
     const result = await finalizeExperiment(experimentID);

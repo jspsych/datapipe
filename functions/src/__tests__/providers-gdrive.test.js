@@ -44,6 +44,7 @@ jest.mock("node-fetch", () => ({
 
 import { gdriveProvider } from "../../lib/providers/gdrive.js";
 import { osfProvider } from "../../lib/providers/osf.js";
+import { claimNameFor } from "../../lib/providers/index.js";
 
 const API_BASE = "https://gdrive.mock.test";
 
@@ -524,13 +525,16 @@ describe("4. listFiles pagination", () => {
     const container = { provider: "gdrive", folderId: "folder-xyz" };
     const result = await gdriveProvider.listFiles(auth, container);
 
-    // Files from every level are concatenated, keyed by their own leaf name
-    // (not qualified by folder) so hashing `salt:name` matches a claim made
-    // on the raw leaf filename.
+    // Files from every level are concatenated, each QUALIFIED BY THE FOLDER
+    // PATH it was found under (relative to the container root), so hashing
+    // `salt:name` matches the claim a write makes -- storedNameFor is
+    // identity on this adapter. "c.csv" sits inside "subdir", so it comes
+    // back as "subdir/c.csv", not a bare leaf that would collide with any
+    // other c.csv elsewhere in the tree.
     expect(result).toEqual([
       { name: "a.csv", id: "f1" },
       { name: "b.csv", id: "f2" },
-      { name: "c.csv", id: "f3" },
+      { name: "subdir/c.csv", id: "f3" },
     ]);
 
     expect(mockFetch).toHaveBeenCalledTimes(3);
@@ -1042,16 +1046,34 @@ describe("9. the findOrCreateFolder race (spike gate H)", () => {
 });
 
 describe("storedNameFor (collision-cache namespace)", () => {
-  it("keeps only the leaf, matching what listFiles reports", () => {
-    expect(gdriveProvider.storedNameFor("data/raw/abc123.json")).toBe("abc123.json");
-    expect(gdriveProvider.storedNameFor("flat.json")).toBe("flat.json");
+  // gdrive declares no storedNameFor at all: it stores path prefixes as real
+  // nested folders and listFiles reports every file under its full
+  // container-relative path, so identity is already correct and omitting the
+  // hook is how the interface spells that (see StorageProvider.storedNameFor).
+  //
+  // It used to keep only the leaf, deliberately over-claiming so two folders
+  // could not hide a duplicate from a leaf-only listing. That cost more than
+  // it bought: Drive returns no NAME_CONFLICT, so the cache is the only
+  // duplicate gate, and the over-claim rejected legitimate submissions that
+  // differed only by folder.
+  it("is absent, so claimNameFor passes the path through unchanged", () => {
+    expect(gdriveProvider.storedNameFor).toBeUndefined();
+    expect(claimNameFor(gdriveProvider, "data/raw/abc123.json")).toBe("data/raw/abc123.json");
+    expect(claimNameFor(gdriveProvider, "condition-A/abc.json")).toBe("condition-A/abc.json");
+    expect(claimNameFor(gdriveProvider, "flat.json")).toBe("flat.json");
   });
 
-  // OSF is the opposite: it keeps the path as real nested folders AND answers
-  // a duplicate write with 409, so distinct paths stay distinct claims and
-  // collapsing them would falsely reject a second submission to a different
-  // subfolder.
-  it("is NOT what osf does -- osf keeps the whole path", () => {
+  // Two paths sharing a leaf must stay distinct claims -- the regression this
+  // adapter used to have.
+  it("keeps same-leaf files in different folders in separate claim namespaces", () => {
+    expect(claimNameFor(gdriveProvider, "condition-A/abc.json")).not.toBe(
+      claimNameFor(gdriveProvider, "condition-B/abc.json")
+    );
+  });
+
+  // OSF agrees, by a different route: it keeps the path as real nested folders
+  // AND answers a duplicate write with 409.
+  it("matches osf, which also keeps the whole path", () => {
     expect(osfProvider.storedNameFor("data/raw/abc123.json")).toBe("data/raw/abc123.json");
   });
 });

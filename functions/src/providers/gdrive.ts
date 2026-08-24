@@ -386,17 +386,16 @@ export const gdriveProvider: StorageProvider = {
     return { provider: "gdrive", folderId };
   },
 
-  // Drive stores a path prefix as real nested FOLDERS and the file itself
-  // under its bare leaf name, and listFiles below collects every file it finds
-  // under that leaf regardless of which folder it came from -- so the leaf is
-  // what the collision cache must hash. Two submissions whose paths differ
-  // only in their folder prefix therefore collide by design here; that is the
-  // pre-existing behavior listFiles was written for, and it is the safe
-  // direction, since Drive returns no NAME_CONFLICT for the cache to fall back
-  // on. See claimNameFor.
-  storedNameFor(filename: string): string {
-    return filename.split("/").pop() as string;
-  },
+  // No storedNameFor: Drive stores a path prefix as real nested FOLDERS, and
+  // listFiles below reports every file under its full path relative to the
+  // container root, so the name a write is claimed under is already the name
+  // the listing reports. Identity is correct, which is what omitting this
+  // means (see StorageProvider.storedNameFor).
+  //
+  // It used to return the bare leaf, deliberately over-claiming so that two
+  // folders could not hide a duplicate from a leaf-only listing. Now that the
+  // listing carries folder context the over-claim is pure loss -- it rejected
+  // legitimate submissions that differed only by folder. See listFiles.
 
   async writeSessionFile(
     auth: ResolvedAuth,
@@ -504,20 +503,32 @@ export const gdriveProvider: StorageProvider = {
     const gdriveContainer = container as GdriveContainerRef;
 
     // Recurses into subfolders (BFS) so collision-cache rehydration finds raw
-    // files now stored under nested Psych-DS paths (e.g. data/raw/). Every
-    // FILE entry is collected under its own leaf name — regardless of which
-    // folder it was found in — so hashing `salt:name` matches the claim made
-    // on the raw leaf filename. A failed listing at ANY level MUST throw
-    // (never return a partial/empty result): collision-cache rehydration
-    // treats the returned list as the complete set of existing filenames, and
-    // Drive has no 409 backstop — silently returning a partial list here
-    // would warm the cache incomplete and let duplicates through. The throw
-    // surfaces as CollisionCacheUnavailableError.
+    // files stored under nested Psych-DS paths (e.g. data/raw/). Every FILE
+    // entry is reported under its full path RELATIVE TO THE CONTAINER ROOT,
+    // matching what storedNameFor claims for the same write.
+    //
+    // This used to report the bare leaf instead, which over-claimed: on Drive
+    // the cache is the only duplicate gate (Drive never returns
+    // NAME_CONFLICT), so two submissions differing only in their folder --
+    // "condition-A/abc.json" and "condition-B/abc.json" with metadata OFF --
+    // hashed to one claim and the second participant's data was rejected as a
+    // duplicate. Metadata-ON experiments were unaffected, because
+    // metadata-derived-files.ts flattens researcher subfolders into the leaf
+    // before the path is built.
+    //
+    // A failed listing at ANY level MUST throw (never return a partial/empty
+    // result): collision-cache rehydration treats the returned list as the
+    // complete set of existing filenames, and Drive has no 409 backstop --
+    // silently returning a partial list here would warm the cache incomplete
+    // and let duplicates through. The throw surfaces as
+    // CollisionCacheUnavailableError.
     const results: FileRef[] = [];
-    const foldersToVisit: string[] = [gdriveContainer.folderId];
+    const foldersToVisit: { id: string; prefix: string }[] = [
+      { id: gdriveContainer.folderId, prefix: "" },
+    ];
 
     while (foldersToVisit.length > 0) {
-      const folderId = foldersToVisit.shift() as string;
+      const { id: folderId, prefix } = foldersToVisit.shift() as { id: string; prefix: string };
       const q = `'${folderId}' in parents and trashed=false`;
       let pageToken: string | undefined;
 
@@ -552,11 +563,12 @@ export const gdriveProvider: StorageProvider = {
         };
 
         for (const file of body.files || []) {
+          const path = prefix ? `${prefix}/${file.name}` : file.name;
           if (file.mimeType === FOLDER_MIME) {
-            foldersToVisit.push(file.id);
+            foldersToVisit.push({ id: file.id, prefix: path });
             continue;
           }
-          results.push({ id: file.id, name: file.name });
+          results.push({ id: file.id, name: path });
         }
 
         pageToken = body.nextPageToken;

@@ -11,6 +11,7 @@
 //   experiments/{id}.collisionCache: {
 //     salt: string,
 //     warmUntil: Timestamp,
+//     namespaceVersion?: number,   // absent === 1; see CLAIM_NAMESPACE_VERSION
 //     rehydratingUntil?: Timestamp,
 //   }
 //   experiments/{id}/filenameClaims/{sha256hex(salt + ":" + filename)}: {
@@ -31,6 +32,22 @@ import { FileRef } from "./providers/types.js";
 export const CLAIM_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
 export const STALE_PENDING_TAKEOVER_MS = 15 * 60 * 1000; // 15 minutes
 export const REHYDRATION_LEASE_MS = 60 * 1000; // 60 seconds
+
+// Identifies the NAMESPACE a cache's claim hashes were written in -- i.e. the
+// rule mapping a file to the name that gets hashed. Bump this whenever any
+// adapter changes what storedNameFor returns or what listFiles reports, and
+// every existing cache is treated as cold and rehydrates itself into the new
+// namespace on next use.
+//
+// Without it such a change is silently unsafe for up to CLAIM_TTL_MS: the
+// experiment doc still says warmUntil is in the future, so no rehydration is
+// triggered, while every lookup hashes a name in the new namespace and misses
+// the old claims. On a provider with no NAME_CONFLICT backstop (Drive) that
+// means duplicates written with nothing to catch them.
+//
+// v2: gdrive listFiles/storedNameFor moved from bare leaf to full
+// container-relative path.
+export const CLAIM_NAMESPACE_VERSION = 2;
 
 // Thrown when a cold cache needs to rehydrate but the caller-supplied
 // listFilesFn fails (e.g. container missing, access revoked). Callers must
@@ -78,8 +95,14 @@ async function ensureSalt(experimentID: string): Promise<string> {
 
 async function isCacheWarm(experimentID: string): Promise<boolean> {
   const snap = await experimentRef(experimentID).get();
-  const warmUntil = snap.data()?.collisionCache?.warmUntil as FirebaseFirestore.Timestamp | undefined;
-  return !!warmUntil && warmUntil.toMillis() > Date.now();
+  const cache = snap.data()?.collisionCache;
+  const warmUntil = cache?.warmUntil as FirebaseFirestore.Timestamp | undefined;
+  if (!warmUntil || warmUntil.toMillis() <= Date.now()) return false;
+  // A cache warmed under an older naming rule is COLD, however recent it is --
+  // its hashes are in a namespace nothing looks up any more. Caches written
+  // before versioning have no field at all, which is namespace 1.
+  const version = (cache?.namespaceVersion as number | undefined) ?? 1;
+  return version === CLAIM_NAMESPACE_VERSION;
 }
 
 // Rehydrates a cold cache: acquires a short lease, lists every file the
@@ -149,6 +172,9 @@ async function rehydrate(
   const warmUntil = Timestamp.fromMillis(Date.now() + CLAIM_TTL_MS);
   await expRef.update({
     "collisionCache.warmUntil": warmUntil,
+    // Stamped in the same write that marks the cache warm, so a cache can
+    // never be warm without recording which namespace it was warmed in.
+    "collisionCache.namespaceVersion": CLAIM_NAMESPACE_VERSION,
     "collisionCache.rehydratingUntil": FieldValue.delete(),
   });
 

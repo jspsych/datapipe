@@ -360,10 +360,30 @@ function createMockDriveServer() {
             });
             return id;
           },
-          // Leaf-name lookup (not full-path), matching how listFiles reports
-          // every file regardless of which folder it was found in.
+          // Leaf-name lookup. Ambiguous by construction when two folders hold
+          // the same leaf -- use getContentByPath for those.
           getContentByLeafName: (name) => {
             const file = Array.from(filesById.values()).find((f) => f.name === name && f.mimeType !== FOLDER_MIME);
+            return file ? file.content : null;
+          },
+          // Full-path lookup, walking real folders from the container root the
+          // way listFiles' recursion does. Needed wherever a test has two files
+          // that share a leaf in different folders, which is precisely the case
+          // a leaf-only lookup cannot distinguish.
+          getContentByPath: (rootFolderId, fullPath) => {
+            const segments = fullPath.split("/");
+            const leafName = segments.pop();
+            let parentId = rootFolderId;
+            for (const segment of segments) {
+              const folder = Array.from(filesById.values()).find(
+                (f) => f.name === segment && f.mimeType === FOLDER_MIME && f.parents.includes(parentId)
+              );
+              if (!folder) return null;
+              parentId = folder.id;
+            }
+            const file = Array.from(filesById.values()).find(
+              (f) => f.name === leafName && f.mimeType !== FOLDER_MIME && f.parents.includes(parentId)
+            );
             return file ? file.content : null;
           },
           reset: () => {
@@ -503,6 +523,58 @@ describe("13. gdrive experiment: duplicate filename is rejected without a second
   });
 });
 
+// The counterpart to 13: names that LOOK alike to a leaf-only view but are
+// genuinely different files. Drive is the only provider where this can lose
+// data silently -- it never returns NAME_CONFLICT, so the collision cache is
+// the sole duplicate gate, and a cache that over-claims has nothing behind it
+// to catch the mistake.
+//
+// Before listFiles reported container-relative paths, both submissions hashed
+// to the bare leaf "abc.json" and the second participant's data was rejected
+// as a duplicate that never existed. Only reachable with metadata OFF: with
+// it on, metadata-derived-files.ts folds the prefix into the leaf before the
+// path is ever built.
+describe("13b. gdrive experiment: two submissions differing only by folder prefix are not duplicates", () => {
+  it("both POSTs succeed and both files land under their own folder", async () => {
+    const experimentID = `gdrive-int13b-${randomUUID()}`;
+    const folderId = `folder-${randomUUID()}`;
+    const leaf = `shared-${randomUUID()}.json`;
+    await createGdriveExperiment(experimentID, folderId); // metadataActive: false
+
+    const first = await saveData({
+      experimentID,
+      data: sampleData,
+      filename: `condition-A/${leaf}`,
+    });
+    expect(first.status).toBe(201);
+
+    const second = await saveData({
+      experimentID,
+      data: sampleData,
+      filename: `condition-B/${leaf}`,
+    });
+    expect(second.status).toBe(201);
+
+    // Both really exist, each in its own folder -- not one overwritten by the
+    // other, and not one silently dropped.
+    expect(mockDrive.getContentByPath(folderId, `condition-A/${leaf}`)).not.toBeNull();
+    expect(mockDrive.getContentByPath(folderId, `condition-B/${leaf}`)).not.toBeNull();
+  });
+
+  it("still rejects a genuine repeat of the same full path", async () => {
+    const experimentID = `gdrive-int13c-${randomUUID()}`;
+    const folderId = `folder-${randomUUID()}`;
+    const filename = `condition-A/repeat-${randomUUID()}.json`;
+    await createGdriveExperiment(experimentID, folderId);
+
+    expect((await saveData({ experimentID, data: sampleData, filename })).status).toBe(201);
+
+    const second = await saveData({ experimentID, data: sampleData, filename });
+    expect(second.status).toBe(400);
+    expect(second.body).toEqual({ ...MESSAGES.OSF_FILE_EXISTS, metadataMessage: "" });
+  });
+});
+
 describe("14. metadata on gdrive", () => {
   it("first submission creates dataset_description.json via multipart and stores the ref; second submission media-PATCHes that ref'd id with no second create", async () => {
     const experimentID = `gdrive-int14-${randomUUID()}`;
@@ -613,8 +685,9 @@ describe("16. OSF experiment in the same run still works (legacy dispatch untouc
 // This is also the one place gdrive's rehydration test has to do MORE than
 // its Dataverse/Zenodo counterparts: the seeded file has to sit several real
 // folder levels deep (data/raw/<name>), because listFiles' recursion into
-// subfolders -- and its collapsing of every result down to the bare leaf
-// name, per storedNameFor -- is exactly the mechanism this test is meant to
+// subfolders -- and its reporting of each result under its full
+// container-relative path, which is what makes the rehydrated claim match the
+// one a write makes -- is exactly the mechanism this test is meant to
 // exercise. A file seeded flat at the folder root would not touch that path
 // at all.
 describe("17. cold collision cache rehydrates from a nested (data/raw/) folder listing", () => {
