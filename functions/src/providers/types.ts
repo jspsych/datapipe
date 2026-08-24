@@ -248,11 +248,16 @@ export interface StorageProvider {
   // the two sides silently disagreed. The cache hashes a name at claim time
   // and rehydrates a cold cache from listFiles, so the two MUST live in the
   // same namespace -- but adapters legitimately transform the requested path:
-  // Zenodo flattens slashes into "_", Drive stores only the leaf under a
-  // nested folder. A claim made on the raw leaf name therefore never matched
-  // a rehydrated one, and the providers that cannot return NAME_CONFLICT
-  // (Zenodo's PUT overwrites in place, Dataverse silently renames) had no
-  // backstop to catch what slipped through.
+  // Zenodo flattens slashes into "_". A claim made on the raw leaf name
+  // therefore never matched a rehydrated one, and the providers that cannot
+  // return NAME_CONFLICT (Zenodo's PUT overwrites in place, Dataverse
+  // silently renames) had no backstop to catch what slipped through.
+  //
+  // Note the symmetry runs BOTH ways: an adapter is free to make its
+  // listFiles report the full path instead of implementing this hook, which
+  // is what gdrive does. Prefer that where the provider has real folders --
+  // an over-claiming storedNameFor is lossy, and on a provider with no
+  // NAME_CONFLICT it silently rejects legitimate submissions.
   //
   // Any new adapter whose writeSessionFile does not store the requested path
   // verbatim MUST implement this. See claimNameFor in providers/index.ts.

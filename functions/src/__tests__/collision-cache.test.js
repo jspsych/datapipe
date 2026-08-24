@@ -23,6 +23,7 @@ import {
   CLAIM_TTL_MS,
   STALE_PENDING_TAKEOVER_MS,
   REHYDRATION_LEASE_MS,
+  CLAIM_NAMESPACE_VERSION,
   CollisionCacheUnavailableError,
 } from "../../lib/collision-cache.js";
 
@@ -74,13 +75,21 @@ async function createExperiment(experimentID, overrides = {}) {
 // Pre-warms the cache with a known salt and a future warmUntil so tests that
 // aren't *about* rehydration don't incidentally exercise it. Returns the salt
 // so callers can compute expected claim-doc hashes.
-async function warmExperiment(experimentID, { salt, warmUntilMs } = {}) {
+// Defaults to the CURRENT namespace, because "warm" in almost every test
+// means "genuinely usable". Pass namespaceVersion explicitly (or null, for
+// the pre-versioning shape) to build a cache that is warm by timestamp but
+// stale by namespace.
+async function warmExperiment(
+  experimentID,
+  { salt, warmUntilMs, namespaceVersion = CLAIM_NAMESPACE_VERSION } = {}
+) {
   const resolvedSalt = salt || randomUUID().replace(/-/g, "");
   const warmUntil = Timestamp.fromMillis(warmUntilMs ?? Date.now() + 24 * 60 * 60 * 1000);
-  await db
-    .collection("experiments")
-    .doc(experimentID)
-    .set({ collisionCache: { salt: resolvedSalt, warmUntil } }, { merge: true });
+  const collisionCache = { salt: resolvedSalt, warmUntil };
+  if (namespaceVersion !== null) {
+    collisionCache.namespaceVersion = namespaceVersion;
+  }
+  await db.collection("experiments").doc(experimentID).set({ collisionCache }, { merge: true });
   return resolvedSalt;
 }
 
@@ -425,6 +434,67 @@ describe("12. warm cache", () => {
     const result = await claimFilename(experimentID, "warm.csv", randomUUID(), listFilesFn);
 
     expect(result).toEqual({ claimed: true });
+    expect(listFilesFn).not.toHaveBeenCalled();
+  });
+});
+
+// A cache is only usable if its hashes are in the namespace the code will
+// look them up under. When an adapter changes what it claims or reports (see
+// CLAIM_NAMESPACE_VERSION), a cache warmed under the old rule holds hashes
+// nothing will ever match again -- so it has to read as COLD despite a
+// warmUntil far in the future, or every lookup misses in silence for up to
+// the 90-day TTL. On Drive, which has no NAME_CONFLICT backstop, that window
+// is duplicates written with nothing to catch them.
+describe("13. namespace versioning", () => {
+  it("treats a cache warmed under an older namespace as cold and rehydrates it", async () => {
+    const experimentID = freshExperimentId("ns-old");
+    await createExperiment(experimentID);
+    const salt = await warmExperiment(experimentID, {
+      namespaceVersion: CLAIM_NAMESPACE_VERSION - 1,
+    });
+    const listFilesFn = jest.fn().mockResolvedValue([{ name: "data/raw/existing.json" }]);
+
+    // Rehydration runs despite warmUntil being in the future...
+    const result = await claimFilename(experimentID, "fresh.json", randomUUID(), listFilesFn);
+    expect(listFilesFn).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ claimed: true });
+
+    // ...and the listing it pulled in is now claimable-against, in the new
+    // namespace, under the full path the adapter reports.
+    const dup = await claimFilename(
+      experimentID,
+      "data/raw/existing.json",
+      randomUUID(),
+      listFilesFn
+    );
+    expect(dup).toEqual({ claimed: false, reason: "duplicate" });
+
+    const after = await getExperimentData(experimentID);
+    expect(after.collisionCache.namespaceVersion).toBe(CLAIM_NAMESPACE_VERSION);
+    expect(after.collisionCache.salt).toBe(salt); // salt is never rotated
+  });
+
+  it("treats a pre-versioning cache (no namespaceVersion field) as namespace 1", async () => {
+    const experimentID = freshExperimentId("ns-absent");
+    await createExperiment(experimentID);
+    await warmExperiment(experimentID, { namespaceVersion: null });
+    const listFilesFn = jest.fn().mockResolvedValue([]);
+
+    await claimFilename(experimentID, "fresh.json", randomUUID(), listFilesFn);
+
+    expect(listFilesFn).toHaveBeenCalledTimes(1);
+    const after = await getExperimentData(experimentID);
+    expect(after.collisionCache.namespaceVersion).toBe(CLAIM_NAMESPACE_VERSION);
+  });
+
+  it("does not re-rehydrate a cache already warm in the current namespace", async () => {
+    const experimentID = freshExperimentId("ns-current");
+    await createExperiment(experimentID);
+    await warmExperiment(experimentID, { namespaceVersion: CLAIM_NAMESPACE_VERSION });
+    const listFilesFn = jest.fn().mockResolvedValue([]);
+
+    await claimFilename(experimentID, "fresh.json", randomUUID(), listFilesFn);
+
     expect(listFilesFn).not.toHaveBeenCalled();
   });
 });
