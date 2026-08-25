@@ -130,35 +130,24 @@ function FeatureItem({ name, children }) {
   );
 }
 
-// One storage provider, in the terms a researcher choosing between them
-// actually needs: whether it is the right fit, where the data physically ends
-// up, how they connect, and the limit that will eventually matter. The
-// decision sentence leads because that is the only line someone skimming for
-// "which one do I pick" needs to read. Plain rows rather than a comparison
-// table so it stays readable on a phone.
-function ProviderOption({ name, summary, landsIn, connect, limits }) {
+// One storage provider: what it is, where the files land, and the limit that
+// will eventually matter. Deliberately no "choose this if" steer -- which
+// trade-off matters is the researcher's call, and the limits are the only
+// part of it they cannot work out for themselves. Same shape as FeatureItem
+// above, so step 1 and step 4 read as one page; the bordered card this
+// replaced nested a boundary inside the StepCard's own for three short rows.
+function ProviderOption({ name, description, limits }) {
   return (
-    // Sole visual boundary of the row (WCAG 1.4.11 "panel edge"), so this
-    // uses `border` (gray.500, 4.50 light / 3.43 dark) rather than
-    // `border.subtle`, which DESIGN.md bans as a lone grouping device.
-    <Box borderWidth="1px" borderColor="border" borderRadius={8} p={4}>
-      <Text fontWeight="semibold" color="brandOrange.fg" mb={2}>
-        {name}
+    <Box>
+      <Text>
+        <Text as="span" fontWeight="semibold" color="brandOrange.fg">{name}</Text>
+        {" — "}{description}
       </Text>
-      <Text fontSize="sm" mb={3}>
-        {summary}
-      </Text>
-      <Stack gap={2}>
-        <Text fontSize="sm" color="fg.muted">
-          <Text as="span" fontWeight="semibold">Data lands in:</Text> {landsIn}
-        </Text>
-        <Text fontSize="sm" color="fg.muted">
-          <Text as="span" fontWeight="semibold">Connect with:</Text> {connect}
-        </Text>
-        <Text fontSize="sm" color="fg.muted">
+      {limits && (
+        <Text fontSize="sm" color="fg.muted" mt={1}>
           <Text as="span" fontWeight="semibold">Limits:</Text> {limits}
         </Text>
-      </Stack>
+      )}
     </Box>
   );
 }
@@ -204,23 +193,17 @@ export default function GettingStarted() {
         <Stack gap={3}>
           <ProviderOption
             name="Google Drive"
-            summary="Your own Google Drive. Choose this if you want the fewest steps and do not need a citable dataset."
-            landsIn="a folder in My Drive/DataPipe, or in a parent folder you pick."
-            connect="your Google account, in one click."
+            description="your own Google Drive. Data lands in a folder in My Drive/DataPipe, or in a parent folder you pick."
             limits="free Google accounts share 15 GB across Drive, Gmail, and Photos. Uploads stop once that is full."
           />
           <ProviderOption
             name="Dataverse"
-            summary="Institutional repositories run by universities and consortia — Harvard Dataverse, Borealis, DataverseNL, and others. Choose this if your institution or funder expects data to live there."
-            landsIn="a draft dataset, in a collection you name."
-            connect="an API token from your institution's installation."
+            description="institutional repositories run by universities and consortia — Harvard Dataverse, Borealis, DataverseNL, and others. Data lands in a draft dataset, in a collection you name."
             limits="your installation sets its own file size and storage limits. API tokens expire, often yearly, and DataPipe cannot renew them — data stops arriving until you reconnect."
           />
           <ProviderOption
             name="Zenodo"
-            summary="An open repository run by CERN that issues a DOI for every published record. Choose this if you want your data citable without an institutional repository."
-            landsIn="a deposition that stays private until you publish it."
-            connect="your Zenodo account, in one click."
+            description="an open repository run by CERN. Data lands in a deposition that stays private until you publish it, and publishing issues a DOI."
             limits="100 files and 50 GB per record. DataPipe merges completed sessions into archives so a long study stays under the file limit."
           />
         </Stack>

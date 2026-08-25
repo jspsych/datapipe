@@ -35,7 +35,7 @@ export const FAQ_REDIRECTS = {
   "item-10": "/docs/experiments/conditions",
   "item-11": "/docs/experiments/metadata",
   "item-12": "/docs/providers/connecting#how-permission-works",
-  "item-13": "/docs/about#citing",
+  "item-13": "/docs/citation",
 };
 
 export default function FAQRedirect() {
