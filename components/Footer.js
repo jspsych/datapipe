@@ -1,6 +1,7 @@
 import {
   Box,
   Container,
+  HStack,
   Link,
   Stack,
   Text,
@@ -10,6 +11,45 @@ import {
 import { OpenCollectiveIcon } from "./OpenCollectiveIcon";
 import { JsPsychIcon } from "./JsPsychIcon";
 import NextLink from "next/link";
+
+// The footer row is navigation, not prose: four standalone destinations in a
+// labelled cluster, with no body text around them for a link to hide inside.
+// That is the case DESIGN.md §5's persistent underline is written for -- "no
+// green/body text pair reaches the 3:1 color-difference floor, so color alone
+// can never mark a link" -- and it is why the Navbar's links are bare
+// `color="fg"` too. Four permanently underlined green fragments spread across
+// the band read as leftover markup rather than as a menu.
+//
+// So: `fg` against the band's `fg.muted` body text, which makes the links the
+// one bright thing in the row, and an underline on hover, where it confirms
+// what is under the cursor. Keyboard users get the theme's focus-visible ring
+// (lib/theme.js re-points the link recipe for exactly this), so there is no
+// `_focusVisible` underline to add here.
+function FooterLink({ href, external, children }) {
+  const style = {
+    color: "fg",
+    _hover: {
+      color: "brandGreen.fg",
+      textDecoration: "underline",
+      textUnderlineOffset: "3px",
+    },
+  };
+
+  if (external) {
+    return (
+      <Link {...style} href={href} target="_blank" rel="noopener noreferrer">
+        {children}
+        <VisuallyHidden> (opens in a new tab)</VisuallyHidden>
+      </Link>
+    );
+  }
+
+  return (
+    <Link {...style} asChild>
+      <NextLink href={href}>{children}</NextLink>
+    </Link>
+  );
+}
 
 export default function Footer() {
   return (
@@ -61,43 +101,23 @@ export default function Footer() {
             Created by the developers of jsPsych{" "}
             <JsPsychIcon width="2em" height="2em" style={{ display: "inline" }} />
           </Text>
-          <Text>
-            <Link
-              color="brandGreen.fg"
-              textDecoration="underline"
-              href={"https://github.com/jspsych/datapipe/issues/new"}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+          {/* One cluster, not four items spaced out across the band by the
+              parent's space-between. The grouping is what makes these read as
+              a menu -- and, with the <nav> label, what makes "navigation, not
+              prose" structural rather than a styling assertion. */}
+          <HStack as="nav" aria-label="Footer" gap={{ base: 4, md: 6 }} flexWrap="wrap">
+            <FooterLink external href="https://github.com/jspsych/datapipe/issues/new">
               Report an Issue
-              <VisuallyHidden> (opens in a new tab)</VisuallyHidden>
-            </Link>
-          </Text>
-          <Text>
-            <Link
-              color="brandGreen.fg"
-              textDecoration="underline"
-              href={"https://github.com/jspsych/datapipe"}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+            </FooterLink>
+            <FooterLink external href="https://github.com/jspsych/datapipe">
               GitHub
-              <VisuallyHidden> (opens in a new tab)</VisuallyHidden>
-            </Link>
-          </Text>
-          <Text>
-            <Link color="brandGreen.fg" textDecoration="underline" asChild>
-              <NextLink href="/contact">Contact Us</NextLink>
-            </Link>
-          </Text>
-          {/* Researchers are sent here by an IRB or an institutional security
-              reviewer, i.e. by someone who is not already inside the docs. The
-              footer is where that reader looks for it. */}
-          <Text>
-            <Link color="brandGreen.fg" textDecoration="underline" asChild>
-              <NextLink href="/docs/privacy">Privacy</NextLink>
-            </Link>
-          </Text>
+            </FooterLink>
+            <FooterLink href="/contact">Contact Us</FooterLink>
+            {/* Researchers are sent here by an IRB or an institutional security
+                reviewer, i.e. by someone who is not already inside the docs.
+                The footer is where that reader looks for it. */}
+            <FooterLink href="/docs/privacy">Privacy</FooterLink>
+          </HStack>
           <Stack align={"flex-start"}>
             <Button
               asChild

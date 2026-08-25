@@ -27,12 +27,15 @@ import PageHeader from "../../components/ui/PageHeader";
 import GuidanceLine from "../../components/ui/GuidanceLine";
 import FormErrorAlert from "../../components/ui/FormErrorAlert";
 
-// The title survives the round trip to account settings and back.
+// The title survives leaving this page and coming back.
 //
-// A new signup cannot create an experiment until a storage provider is
-// connected, so the most common path through this form is: type a title, be
-// told to connect a provider, leave, come back. Before this, the typed title
-// was simply gone, and the researcher had no sign they had been mid-task.
+// This was written for the connect round trip -- type a title, be told to
+// connect a provider, leave, come back -- but that path does not exist: the
+// title field is inside the `providerConnected` branch below, so a researcher
+// without a provider never has a title to lose. What it still covers is the
+// connected case: type a title, go look something up, return to a form that
+// has not thrown the work away.
+//
 // sessionStorage (not localStorage) so it is scoped to the tab and the visit.
 const DRAFT_TITLE_KEY = "datapipe:new-experiment-title";
 
@@ -474,18 +477,15 @@ function NewExperimentForm() {
           {!providerConnected && (
             <VStack gap={3} mt={4} align="flex-start">
               <GuidanceLine>
-                You cannot create an experiment until DataPipe has somewhere to
-                put its data. Connecting your{" "}
-                {STORAGE_PROVIDERS[provider]?.name} account takes a minute, and
-                the title you have typed here will still be waiting when you
-                come back.
+                Connect a {STORAGE_PROVIDERS[provider]?.name} account to create
+                an experiment.
               </GuidanceLine>
               <Button asChild variant="solid" colorPalette="brandGreen" size="md">
-                {/* `next` is a forward-compatible hint for account settings to
-                    offer a "return to creating your experiment" affordance.
-                    It is inert until that page reads it; the sessionStorage
-                    draft above is what actually saves the researcher's work
-                    today. */}
+                {/* `next` is a forward-compatible hint for account settings
+                    to offer a "return to creating your experiment" affordance.
+                    It is inert until that page reads it. Nothing is being
+                    preserved across this particular trip -- there is no title
+                    field on screen in this branch to preserve. */}
                 <Link href="/admin/account?next=/admin/new">
                   Connect {STORAGE_PROVIDERS[provider]?.name}
                 </Link>

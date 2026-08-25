@@ -1,4 +1,4 @@
-import { Box, Link as ChakraLink, List, Text } from "@chakra-ui/react";
+import { Link as ChakraLink, List, Text } from "@chakra-ui/react";
 import NextLink from "next/link";
 import PageHeader from "../../components/ui/PageHeader";
 import DocsLayout from "../../components/docs/DocsLayout";
@@ -33,7 +33,7 @@ export default function AboutDataPipePage() {
     <>
       <PageHeader
         title="About DataPipe"
-        purpose="What DataPipe costs, how it's funded, the risks of using it, and how to cite it."
+        purpose="What DataPipe costs, how it's funded, the risks of using it, and where to get help."
       />
 
       <DocsSection id="cost" title="Cost">
@@ -124,29 +124,10 @@ export default function AboutDataPipePage() {
           <ProseLink href="/contact">contact page</ProseLink> has an email
           address.
         </Text>
-      </DocsSection>
-
-      <DocsSection id="citing" title="Citing DataPipe">
         <Text maxW="70ch">
-          If you use DataPipe to collect data, please cite the following paper:
+          If what you need is the reference for the DataPipe paper, that moved
+          to <ProseLink href="/docs/citation">Citing DataPipe</ProseLink>.
         </Text>
-        <Box
-          maxW="70ch"
-          bg="bg.subtle"
-          borderWidth="1px"
-          borderColor="border.subtle"
-          p={4}
-          borderRadius="md"
-        >
-          <Text fontSize="sm">
-            de Leeuw, J. R. (2024). DataPipe: Born-open data collection for
-            online experiments. <em>Behavior Research Methods</em>, 56(3),
-            2499–2506.{" "}
-            <ProseLink href="https://doi.org/10.3758/s13428-023-02161-x" external>
-              https://doi.org/10.3758/s13428-023-02161-x
-            </ProseLink>
-          </Text>
-        </Box>
       </DocsSection>
     </>
   );

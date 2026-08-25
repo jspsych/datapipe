@@ -1,6 +1,6 @@
 import { Box, HStack, IconButton, Text } from "@chakra-ui/react";
 import { Check, Copy } from "lucide-react";
-import { useState } from "react";
+import useCopyToClipboard from "../lib/use-copy-to-clipboard";
 
 /**
  * CopyButton
@@ -17,29 +17,14 @@ import { useState } from "react";
  *   code.border gray.500 on #111111 ->  3.30:1 (outline; 3:1 floor, WCAG 1.4.11)
  *   code.bg.active gray.800         -> hover fill
  *
- * Two behavioral fixes alongside the color:
- *
- * - `navigator.clipboard.writeText` was called unawaited with no catch. It
- *   rejects on insecure origins and when clipboard permission is denied, so
- *   the button showed a checkmark for a copy that never happened.
- * - The only success signal was an icon swap. There is now a visible "Copied"
- *   label in an `aria-live="polite"` region, so the confirmation reaches
- *   people who are not watching a 16px glyph -- and a failure says what to do
- *   instead, rather than nothing.
+ * The behavior -- awaited write, a real error state, and a visible label in an
+ * `aria-live` region rather than a 16px glyph swap as the only confirmation --
+ * now lives in lib/use-copy-to-clipboard.js, shared with the citation page's
+ * page-surface copy button. The reasoning behind each of those three is in
+ * that file.
  */
 export default function CopyButton({ code }) {
-  const [state, setState] = useState("idle"); // idle | copied | error
-
-  const onCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(code);
-      setState("copied");
-      setTimeout(() => setState("idle"), 2000);
-    } catch (err) {
-      console.error("Copy failed:", err);
-      setState("error");
-    }
-  };
+  const { state, copy } = useCopyToClipboard();
 
   return (
     <HStack gap={2} align="center" flexShrink={0}>
@@ -62,7 +47,7 @@ export default function CopyButton({ code }) {
         color="code.fg"
         borderColor="code.border"
         _hover={{ bg: "code.bg.active", color: "code.fg.strong" }}
-        onClick={onCopy}
+        onClick={() => copy(code)}
       >
         {state === "copied" ? <Check /> : <Copy />}
       </IconButton>
