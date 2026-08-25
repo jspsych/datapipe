@@ -1,13 +1,15 @@
 import { useState, useEffect } from "react";
 import AuthCheck from "../../components/AuthCheck";
 import { useRouter } from "next/router";
-import { useDocumentData, useCollectionData } from "react-firebase-hooks/firestore";
+import {
+  useDocumentData,
+  useCollectionData,
+} from "react-firebase-hooks/firestore";
 import { db, auth } from "../../lib/firebase";
 import { doc, collection, query, where, orderBy } from "firebase/firestore";
 
 import {
   Spinner,
-  Flex,
   VStack,
   HStack,
   Heading,
@@ -25,13 +27,14 @@ import MetadataControl from "../../components/dashboard/MetadataControl";
 import FinalizeControl from "../../components/dashboard/FinalizeControl";
 import CodeHints from "../../components/dashboard/CodeHints";
 import ErrorPanel from "../../components/dashboard/ErrorPanel";
-import QueuePanel, { UploadsResolvedNotice } from "../../components/dashboard/QueuePanel";
+import QueuePanel, {
+  UploadsResolvedNotice,
+} from "../../components/dashboard/QueuePanel";
 
 import PageHeader from "../../components/ui/PageHeader";
 import SettingsSection from "../../components/ui/SettingsSection";
 import GuidanceLine from "../../components/ui/GuidanceLine";
 import StatusIndicator from "../../components/ui/StatusIndicator";
-import EmptyState from "../../components/ui/EmptyState";
 import SectionPanel from "../../components/dashboard/SectionPanel";
 
 export async function getServerSideProps() {
@@ -39,6 +42,17 @@ export async function getServerSideProps() {
 }
 
 const plural = (n, word) => `${n} ${word}${n !== 1 ? "s" : ""}`;
+
+// DESIGN.md §4's settings measure, the same one pages/admin/account.js uses.
+//
+// This page has two measures, and the step between them is the composition.
+// Reference content -- the details strip, the integration snippets -- spans
+// the full 1100px, because it is read across and the code genuinely needs the
+// width. Controls are capped here, because a SettingsRow puts its label at the
+// left edge and its switch at the right edge with the description running the
+// full width underneath: at 1100px that is a 140-character measure and a
+// 1100px journey from a label to the switch it belongs to.
+const CONTROL_MEASURE = "560px";
 
 export default function ExperimentPage() {
   const router = useRouter();
@@ -52,18 +66,21 @@ export default function ExperimentPage() {
 }
 
 function ExperimentPageDashboard({ experiment_id }) {
-  const experimentRef = experiment_id ? doc(db, `experiments/${experiment_id}`) : null;
+  const experimentRef = experiment_id
+    ? doc(db, `experiments/${experiment_id}`)
+    : null;
   const logsRef = experiment_id ? doc(db, `logs/${experiment_id}`) : null;
   const uid = auth.currentUser?.uid;
-  const queueRef = experiment_id && uid
-    ? query(
-        collection(db, "uploadQueue"),
-        where("experimentID", "==", experiment_id),
-        where("owner", "==", uid),
-        where("status", "in", ["pending", "processing", "failed"]),
-        orderBy("createdAt", "desc")
-      )
-    : null;
+  const queueRef =
+    experiment_id && uid
+      ? query(
+          collection(db, "uploadQueue"),
+          where("experimentID", "==", experiment_id),
+          where("owner", "==", uid),
+          where("status", "in", ["pending", "processing", "failed"]),
+          orderBy("createdAt", "desc")
+        )
+      : null;
   const [data, loading, error, snapshot] = useDocumentData(experimentRef);
   const logs = useDocumentData(logsRef)?.[0] || null;
   // The error slot used to be discarded here. This query needs a composite
@@ -73,7 +90,8 @@ function ExperimentPageDashboard({ experiment_id }) {
   // un-uploaded. A data-loss warning that silently disables itself is worse
   // than no warning at all -- PRODUCT.md Principle 5.
   const [, , queueError, queueSnapshot] = useCollectionData(queueRef);
-  const queueEntries = queueSnapshot?.docs.map(d => ({ id: d.id, ...d.data() })) || [];
+  const queueEntries =
+    queueSnapshot?.docs.map((d) => ({ id: d.id, ...d.data() })) || [];
 
   const uploadError = logs?.logError;
   const errorLog = logs?.errors;
@@ -130,7 +148,9 @@ function ExperimentPageDashboard({ experiment_id }) {
     return (
       <VStack w="100%" maxW="1100px" gap={6} align="stretch">
         <PageHeader
-          title={notFound ? "Experiment not found" : "Could not load this experiment"}
+          title={
+            notFound ? "Experiment not found" : "Could not load this experiment"
+          }
           backHref="/admin"
           backLabel="Back to experiments"
         />
@@ -156,7 +176,12 @@ function ExperimentPageDashboard({ experiment_id }) {
 
   return (
     <VStack
-      alignSelf="flex-start"
+      // `alignSelf="flex-start"` used to sit here. pages/_app.js centres main
+      // content with `alignItems="center"`, and this was the only page in the
+      // app that overrode it -- so on a wide window the 1100px page sat hard
+      // against the left edge with ~460px of dead space beside it, out of
+      // alignment with the navbar and footer, which are centred. `align`
+      // stays: that is the alignment of this stack's own children.
       align="flex-start"
       w="100%"
       // 1100px, DESIGN.md §4's dashboard measure. Was an unexplained 1200.
@@ -225,8 +250,8 @@ function ExperimentPageDashboard({ experiment_id }) {
                 label="DataPipe could not check for queued uploads."
               />
               <GuidanceLine mt={2}>
-                Files may be waiting to reach your storage provider without
-                this page being able to show them. Reload to try again.
+                Files may be waiting to reach your storage provider without this
+                page being able to show them. Reload to try again.
               </GuidanceLine>
             </SectionPanel>
           )}
@@ -241,139 +266,169 @@ function ExperimentPageDashboard({ experiment_id }) {
         </Stack>
       )}
 
-      <Flex w="100%" gap={10} wrap="wrap" alignItems="flex-start">
-        <VStack flex="1" minW="300px" gap={0} align="stretch">
-          {/* The ID / storage-link / session rows used to open the column with
-              no heading and no container: the first thing on the page after
-              the title was a set of loose label-value pairs. They are a
-              section like everything else now, on the same bordered panel. */}
-          <SettingsSection
-            title="Experiment details"
-            description="Where this experiment's data lands, and how much of it has arrived."
+      {/* One ordered column, not two piles.
+
+          The page used to be `<Flex>` with two `flex="1"` children, which at
+          maxW 1100 and gap 10 gives each column exactly 530px. Two things went
+          wrong with that. The integration snippets need ~920px including the
+          copy button and both sets of padding -- the longest line in
+          CodeHints is 92 rendered characters -- so ~40% of the page's primary
+          copy-paste artefact sat behind a horizontal scrollbar at every
+          viewport width. And the split was by category rather than by
+          measure, so five sections went left and one went right: the left
+          column ran ~1500px and the right ~740px, leaving 750-900px of empty
+          rail beside the settings, the metadata section and the danger zone.
+
+          The two columns could never both be satisfied here: 920 for the code
+          plus 560 for the controls plus a gutter is more than the page has.
+          So the columns are gone, and width is allocated per section by what
+          the section is -- full width for reference content, CONTROL_MEASURE
+          for controls. The order is the order of the work: what is this ->
+          how do I wire it up -> how do I configure it -> how do I end it. */}
+
+      {/* The ID / storage-link / session rows used to open a column with no
+          heading and no container: the first thing on the page after the
+          title was a set of loose label-value pairs. They are a section like
+          everything else now, and a horizontal strip rather than a vertical
+          list -- three short facts do not need 190px of height and never
+          needed a column of their own. */}
+      <SettingsSection
+        title="Experiment details"
+        description="Where this experiment's data lands, and how much of it has arrived."
+      >
+        <SectionPanel>
+          <ExperimentInfo data={data} />
+        </SectionPanel>
+      </SettingsSection>
+
+      {/* Promoted out of the right-hand column to full width, and up to
+          second position.
+
+          Width, because at 1100px the `pre` gets ~964px against the ~770px
+          the longest snippet line needs -- the horizontal scroll is simply
+          gone rather than reduced. Position, because on every experiment that
+          has never run, wiring up the snippet IS the job; it was previously
+          below the fold in the shorter of two columns.
+
+          The "No data yet" EmptyState that used to sit above this is folded
+          into the guidance line below. It stated a fact the header already
+          states twice ("0 completed sessions", "Accepting data"), and its
+          body copy told the researcher to "paste the code below" -- true in
+          the two-column layout, false the moment the columns wrapped and the
+          card landed ~1500px underneath the settings stack. */}
+      <Box mt={10} w="100%">
+        <SettingsSection title="Integration code">
+          <GuidanceLine
+            mb={4}
+            href="/getting-started"
+            linkText="Read the getting started guide"
           >
-            <SectionPanel>
-              <ExperimentInfo data={data} />
-            </SectionPanel>
+            {(data.sessions || 0) === 0
+              ? "Paste this into your experiment, then run one session yourself. If it arrives, your study is wired up correctly."
+              : "Paste this into your experiment to send its data to DataPipe."}
+          </GuidanceLine>
+          {/* The tabbed code block had no edge either -- on a page with a
+              second column beside it, the tab strip was the only thing
+              suggesting where this group started. */}
+          <SectionPanel>
+            <CodeHints expId={experiment_id} />
+          </SectionPanel>
+        </SettingsSection>
+      </Box>
+
+      {/* Controls, at the settings measure. Everything from here down is
+          something the researcher can change, which is why the measure
+          changes with it.
+
+          Four `<Separator borderColor="whiteAlpha.200">` rules used to divide
+          these sections. They composite to 1.26:1 -- not a weak separator, an
+          absent one -- and DESIGN.md §4 bans the value and commits to
+          spacing-only grouping between sections: mt={10} between routine
+          ones, mt={16} before anything irreversible. The five illegible
+          `xs`/uppercase/`gray.500` (3.43:1) eyebrows they sat under are gone
+          with them; SettingsSection renders a real <h2> in sentence case, and
+          every section now carries the one-line description this page has
+          never had.
+
+          What spacing alone could NOT carry is the grouping INSIDE a section
+          -- §4's own escape hatch, "grouping that spacing cannot carry alone
+          gets a bordered container". Each section body is a SectionPanel, and
+          the switches are hairline-separated rows inside one
+          (components/dashboard/SectionPanel.js). */}
+      <Box mt={10} w="100%" maxW={CONTROL_MEASURE}>
+        <SettingsSection
+          title="Data collection"
+          description="Turn this off to stop accepting new submissions. Data you have already collected is not affected."
+        >
+          <ExperimentActive data={data} />
+        </SettingsSection>
+
+        <Box mt={10}>
+          <SettingsSection
+            title="Validation"
+            description="Reject submissions that do not match the format you expect, before they reach your storage provider."
+          >
+            <ExperimentValidation data={data} />
           </SettingsSection>
+        </Box>
 
-          {/* Four `<Separator borderColor="whiteAlpha.200">` rules used to
-              divide these sections. They composite to 1.26:1 -- not a weak
-              separator, an absent one -- and DESIGN.md §4 bans the value and
-              commits to spacing-only grouping between sections: mt={10}
-              between routine ones, mt={16} before anything irreversible. The
-              five illegible `xs`/uppercase/`gray.500` (3.43:1) eyebrows they
-              sat under are gone with them; SettingsSection renders a real
-              <h2> in sentence case, and every section now carries the
-              one-line description this page has never had.
-
-              What spacing alone could NOT carry is the grouping INSIDE a
-              section -- §4's own escape hatch, "grouping that spacing cannot
-              carry alone gets a bordered container". Each section body is a
-              SectionPanel, and the switches are hairline-separated rows
-              inside one (components/dashboard/SectionPanel.js). */}
-          <Box mt={10}>
-            <SettingsSection
-              title="Data collection"
-              description="Turn this off to stop accepting new submissions. Data you have already collected is not affected."
-            >
-              <ExperimentActive data={data} />
-            </SettingsSection>
-          </Box>
-
-          <Box mt={10}>
-            <SettingsSection
-              title="Validation"
-              description="Reject submissions that do not match the format you expect, before they reach your storage provider."
-            >
-              <ExperimentValidation data={data} />
-            </SettingsSection>
-          </Box>
-
-          <Box mt={10}>
-            <SettingsSection title="Metadata">
-              {/* The Psych-DS explanation used to live inside a popover
-                  behind an icon-only "?" trigger -- meaning in a tooltip,
-                  DESIGN.md §8.3. It is the section's description now, and
-                  the link is brandGreen.fg (4.77:1 light / 6.71:1 dark)
-                  rather than the retired blue.500 (§5). */}
-              <GuidanceLine
-                mb={4}
-                href="https://psychds-docs.readthedocs.io/en/latest/"
-                linkText="Learn more about Psych-DS"
-                external
-              >
-                DataPipe can describe your data&apos;s columns -- their
-                descriptions, value ranges and levels -- in a standard
-                metadata file, so your dataset is easier for others to read
-                and reuse.
-              </GuidanceLine>
-              <MetadataControl data={data} />
-            </SettingsSection>
-          </Box>
-
-          {/* mt={16}, not mt={10}: the extra air is the signal that the next
-              section plays by different rules.
-
-              "Danger zone", not "Finalize", for parity with
-              pages/admin/account.js -- the same title, the same
-              variant="danger" container, so the one section on either page
-              that cannot be undone is recognisable as the same thing in both
-              places. Finalization becomes an <h3> INSIDE it: it is currently
-              the only irreversible action here, and naming it as one entry in
-              a zone rather than as the zone itself leaves room for the next
-              one (experiment deletion) without another rename. */}
-          <Box mt={16}>
-            <SettingsSection
-              title="Danger zone"
-              description="Actions here are permanent. Nothing in this section can be undone."
-              variant="danger"
-            >
-              <Stack gap={3} align="flex-start">
-                <Heading as="h3" size="sm" fontWeight="semibold" color="fg">
-                  Finalize
-                </Heading>
-                {/* Kept verbatim from the old section description. DESIGN.md
-                    §8.10: the confirmation dialog must not hold the only copy
-                    of the consequence, so it has to be stated here, before
-                    the button that opens it. */}
-                <GuidanceLine>
-                  Finalizing merges every file into a single archive on your
-                  storage provider, permanently deletes the loose files it was
-                  built from, and stops this experiment from accepting data
-                  forever. This cannot be undone.
-                </GuidanceLine>
-                <FinalizeControl data={data} experimentId={experiment_id} />
-              </Stack>
-            </SettingsSection>
-          </Box>
-        </VStack>
-
-        <VStack flex="1" minW="300px" align="stretch" gap={0}>
-          {(data.sessions || 0) === 0 && (
-            <Box mb={10}>
-              <EmptyState
-                title="No data yet"
-                body="Paste the code below into your experiment and run one session yourself. If it arrives, your study is wired up correctly."
-              />
-            </Box>
-          )}
-          <SettingsSection title="Integration code">
+        <Box mt={10}>
+          <SettingsSection title="Metadata">
+            {/* The Psych-DS explanation used to live inside a popover behind
+                an icon-only "?" trigger -- meaning in a tooltip, DESIGN.md
+                §8.3. It is the section's description now, and the link is
+                brandGreen.fg (4.77:1 light / 6.71:1 dark) rather than the
+                retired blue.500 (§5). */}
             <GuidanceLine
               mb={4}
-              href="/getting-started"
-              linkText="Read the getting started guide"
+              href="https://psychds-docs.readthedocs.io/en/latest/"
+              linkText="Learn more about Psych-DS"
+              external
             >
-              Paste this into your experiment to send its data to DataPipe.
+              DataPipe can describe your data&apos;s columns -- their
+              descriptions, value ranges and levels -- in a standard metadata
+              file, so your dataset is easier for others to read and reuse.
             </GuidanceLine>
-            {/* The tabbed code block had no edge either -- on a page with a
-                second column beside it, the tab strip was the only thing
-                suggesting where this group started. */}
-            <SectionPanel>
-              <CodeHints expId={experiment_id} />
-            </SectionPanel>
+            <MetadataControl data={data} />
           </SettingsSection>
-        </VStack>
-      </Flex>
+        </Box>
+
+        {/* mt={16}, not mt={10}: the extra air is the signal that the next
+            section plays by different rules.
+
+            "Danger zone", not "Finalize", for parity with
+            pages/admin/account.js -- the same title, the same
+            variant="danger" container, so the one section on either page that
+            cannot be undone is recognisable as the same thing in both places.
+            Finalization becomes an <h3> INSIDE it: it is currently the only
+            irreversible action here, and naming it as one entry in a zone
+            rather than as the zone itself leaves room for the next one
+            (experiment deletion) without another rename. */}
+        <Box mt={16}>
+          <SettingsSection
+            title="Danger zone"
+            description="Actions here are permanent. Nothing in this section can be undone."
+            variant="danger"
+          >
+            <Stack gap={3} align="flex-start">
+              <Heading as="h3" size="sm" fontWeight="semibold" color="fg">
+                Finalize
+              </Heading>
+              {/* Kept verbatim from the old section description. DESIGN.md
+                  §8.10: the confirmation dialog must not hold the only copy
+                  of the consequence, so it has to be stated here, before the
+                  button that opens it. */}
+              <GuidanceLine>
+                Finalizing merges every file into a single archive on your
+                storage provider, permanently deletes the loose files it was
+                built from, and stops this experiment from accepting data
+                forever. This cannot be undone.
+              </GuidanceLine>
+              <FinalizeControl data={data} experimentId={experiment_id} />
+            </Stack>
+          </SettingsSection>
+        </Box>
+      </Box>
     </VStack>
   );
 }
