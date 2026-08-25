@@ -8,6 +8,20 @@ on:
     branches: ["test"]
   workflow_dispatch:
 
+# Deploys to one Firebase project must not overlap. Two merges landing within
+# a few minutes of each other used to start two deploys at once; the second
+# one's update of the SSR function was rejected with a 409 ("unable to queue
+# the operation") because the first was still mid-flight, and the site kept
+# serving the previous build. Note that firebase deploy reports that failure
+# as a warning and still exits 0, so the collision does not show up as a red
+# check -- keeping deploys serialized is what prevents it, not the exit code.
+# cancel-in-progress stays false on purpose --
+# a deploy that is already updating functions should be allowed to finish,
+# not killed halfway through. Later runs queue behind it instead.
+concurrency:
+  group: deploy-test
+  cancel-in-progress: false
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   #FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}

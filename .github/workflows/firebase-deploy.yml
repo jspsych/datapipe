@@ -8,6 +8,14 @@ on:
     branches: ["main"]
   workflow_dispatch:
 
+# See the matching block in firebase-deploy-test.yml: concurrent deploys to the
+# same Firebase project collide on the SSR function update and leave the site
+# on the old build. Separate group from the test deploy -- they target
+# different projects and have no reason to queue behind each other.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   #FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
