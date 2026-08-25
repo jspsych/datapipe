@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Box, Field, HStack, Stack, Switch } from "@chakra-ui/react";
+import {
+  Box,
+  Field,
+  HStack,
+  Stack,
+  Switch,
+  VisuallyHidden,
+} from "@chakra-ui/react";
 import FormErrorAlert from "./FormErrorAlert";
 import GuidanceLine from "./GuidanceLine";
 import StatusIndicator from "./StatusIndicator";
@@ -44,6 +51,35 @@ import StatusIndicator from "./StatusIndicator";
  * cannot tell a saved toggle from an unsaved one at all today -- there is no
  * announcement of any kind.
  *
+ * ---------------------------------------------------------------------------
+ * Why the confirmation does not move the page
+ * ---------------------------------------------------------------------------
+ * The confirmation used to mount as a new block UNDER the row. Flipping the
+ * first switch in a four-row panel grew that row by a line and pushed the
+ * three rows below it down; three seconds later they sprang back. So the
+ * feedback for "your change landed" was the whole panel jumping -- and if the
+ * researcher had already reached for the next switch, the switch they were
+ * aiming at had moved. That is the WCAG 2.2 3.2.5-adjacent failure mode this
+ * split exists to remove, and it hurts most exactly when someone is setting
+ * up an experiment by running down the list of toggles.
+ *
+ * So the two outcomes now render in two different places:
+ *
+ *   SavedFlag  -- success. Sits INLINE in the row, immediately left of the
+ *                 control it is confirming, and is ALWAYS in the layout: the
+ *                 chip is rendered at full size whether or not the write has
+ *                 landed, and only `opacity` changes. Nothing reflows, ever,
+ *                 in either direction. Placing it beside the control also
+ *                 answers "which of these four rows saved?", which a message
+ *                 in the gap between two rows never quite did.
+ *   SaveError  -- failure. Stays a block under the row. It is a full sentence,
+ *                 it is not transient, and it SHOULD claim space and push
+ *                 things down: the researcher has to read it and act.
+ *
+ * A row with dependent controls uses the same pair one level down (the
+ * numeric fields in ExperimentActive, the validation detail block) so the
+ * confirmation always appears at the top right of whatever it saved.
+ *
  * No silent retry. A failed write stays failed and visible until the
  * researcher acts, because a retry that also fails silently is the original
  * bug with extra steps.
@@ -65,6 +101,12 @@ const DEFAULT_FAILURE_MESSAGE =
 // How long the transient "Saved" confirmation stays up. Long enough to be
 // noticed on a glance, short enough that it never reads as permanent state.
 const SAVED_VISIBLE_MS = 3000;
+
+// The visible text of the confirmation chip, on every row. Constant on
+// purpose: it is what makes the reserved width identical everywhere, and it
+// sits next to the control it refers to, so it does not need to name it. The
+// per-call-site `savedLabel` is the SPOKEN version, which does.
+const SAVED_TEXT = "Saved";
 
 /**
  * useTrackedSave
@@ -138,27 +180,73 @@ export function useTrackedSave(failureMessage = DEFAULT_FAILURE_MESSAGE) {
 }
 
 /**
- * SaveStatus
+ * SavedFlag
  *
- * The visible half of `useTrackedSave`. Renders the failure through the app's
- * one error surface (`FormErrorAlert`, which already carries `role="alert"`)
- * and the success through a `StatusIndicator` -- icon plus mandatory visible
- * text, never color alone (DESIGN.md §5).
+ * The success half of `useTrackedSave`: a small confirmation chip that lives
+ * NEXT TO the control it is confirming rather than under it.
  *
- * The wrapper is a `role="status"` `aria-live="polite"` region so a change in
- * either direction is announced without stealing focus.
+ * The chip is always rendered, at full size, and only its `opacity` moves.
+ * That is the whole point -- an element that mounts and unmounts is an element
+ * that reflows its neighbours twice per save (see the header comment). Because
+ * the visible text is the constant `SAVED_TEXT` rather than the caller's
+ * `savedLabel`, the reserved width is the same on every row, so the controls
+ * beside it line up.
+ *
+ * Accessibility: the chip is `aria-hidden`, because at `opacity: 0` it is
+ * still in the accessibility tree and would otherwise announce a stale
+ * "Saved". The announcement comes instead from the visually hidden
+ * `role="status"` live region beside it, which carries the caller's full
+ * `savedLabel` ("Data collection setting saved") -- a screen-reader user is
+ * not looking at which switch the chip is next to, so the announcement has to
+ * name the setting that the sighted layout is naming by position.
+ *
+ * Motion: 150ms `ease-out`, the only durations/easing DESIGN.md §7 allows, and
+ * it is dropped entirely under `prefers-reduced-motion: reduce` -- the chip
+ * still appears and still announces, it just cuts instead of fading.
+ *
+ * @param {boolean} saved - From `useTrackedSave`.
+ * @param {string} [savedLabel="Saved"] - What a screen reader hears. Name the
+ *   setting, not just the outcome.
  */
-export function SaveStatus({ saved, error, savedLabel = "Saved" }) {
-  if (!saved && !error) return null;
-
+export function SavedFlag({ saved, savedLabel = "Saved" }) {
   return (
-    <Box role="status" aria-live="polite" w="100%" mt={2}>
-      {error ? (
-        <FormErrorAlert>{error}</FormErrorAlert>
-      ) : (
-        <StatusIndicator status="ok" label={savedLabel} />
-      )}
+    // `lineHeight="1"` keeps the slot's box tight to the icon and the word,
+    // so a permanently-present but usually-invisible element cannot add
+    // leading to the row it sits in.
+    <Box flexShrink={0} lineHeight="1">
+      <Box
+        aria-hidden="true"
+        opacity={saved ? 1 : 0}
+        transition="opacity 150ms cubic-bezier(0, 0, 0.2, 1)"
+        _motionReduce={{ transition: "none" }}
+      >
+        <StatusIndicator status="ok" label={SAVED_TEXT} />
+      </Box>
+      <VisuallyHidden role="status" aria-live="polite">
+        {saved ? savedLabel : ""}
+      </VisuallyHidden>
     </Box>
+  );
+}
+
+/**
+ * SaveError
+ *
+ * The failure half. A block under the control, through the app's one error
+ * surface (`FormErrorAlert`, which already carries `role="alert"` and already
+ * renders nothing for a falsy message, so call sites need no guard).
+ *
+ * This one is deliberately NOT space-reserving. Reserving a blank slot the
+ * height of an unknown-length sentence would put a permanent hole in every
+ * row, and unlike the confirmation, an error is not transient -- it stays
+ * until the researcher does something about it, so it is allowed to take the
+ * room it needs.
+ */
+export function SaveError({ error }) {
+  return (
+    <FormErrorAlert mt={2} w="100%">
+      {error}
+    </FormErrorAlert>
   );
 }
 
@@ -261,23 +349,30 @@ export default function SettingsRow({
             </Field.Label>
             {badge}
           </HStack>
-          <Switch.Root
-            colorPalette="brandGreen"
-            size="md"
-            checked={value}
-            disabled={disabled}
-            onCheckedChange={(e) => handleChange(e.checked)}
-          >
-            <Switch.HiddenInput />
-            <Switch.Control>
-              <Switch.Thumb />
-            </Switch.Control>
-          </Switch.Root>
+          {/* The confirmation rides in the same group as the switch, on the
+              switch's left, so it reads as belonging to THIS row. It holds
+              its width whether or not it is showing, which is what keeps the
+              switch from sliding sideways when a save lands. */}
+          <HStack gap={3} alignItems="center" flexShrink={0}>
+            <SavedFlag saved={saved} savedLabel={savedLabel} />
+            <Switch.Root
+              colorPalette="brandGreen"
+              size="md"
+              checked={value}
+              disabled={disabled}
+              onCheckedChange={(e) => handleChange(e.checked)}
+            >
+              <Switch.HiddenInput />
+              <Switch.Control>
+                <Switch.Thumb />
+              </Switch.Control>
+            </Switch.Root>
+          </HStack>
         </HStack>
 
         {description && <GuidanceLine mt={2}>{description}</GuidanceLine>}
 
-        <SaveStatus saved={saved} error={error} savedLabel={savedLabel} />
+        <SaveError error={error} />
 
         {children && (
           <Box w="100%" mt={3}>

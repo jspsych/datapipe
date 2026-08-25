@@ -1,10 +1,21 @@
-import { Field, Stack, Textarea, Checkbox, CheckboxGroup } from "@chakra-ui/react";
+import {
+  Field,
+  HStack,
+  Stack,
+  Textarea,
+  Checkbox,
+  CheckboxGroup,
+} from "@chakra-ui/react";
 
 import { useEffect, useRef, useState } from "react";
 
 import { doc, setDoc } from "firebase/firestore";
 import { db } from "../../lib/firebase";
-import SettingsRow, { SaveStatus, useTrackedSave } from "../ui/SettingsRow";
+import SettingsRow, {
+  SaveError,
+  SavedFlag,
+  useTrackedSave,
+} from "../ui/SettingsRow";
 import { SwitchTable } from "./SectionPanel";
 
 function writeExperiment(expId, fields) {
@@ -121,29 +132,46 @@ export default function ExperimentValidation({ data }) {
                 checkboxes -- the form would show rules that are not in force
                 while claiming they had been restored, which is the same class
                 of lie the empty catches told. */}
-            <CheckboxGroup
-              value={validationSettings}
-              onValueChange={(values) => {
-                setValidationSettings(values);
-              }}
+            {/* One confirmation for the whole detail block -- the checkboxes
+                and the required-fields box are written by a single effect, so
+                a single flag is the honest granularity. It sits at the top
+                right of the block, holding its width, rather than mounting a
+                line under the textarea and shoving the section below down
+                every time a checkbox is ticked. */}
+            <HStack
+              justify="space-between"
+              alignItems="center"
+              w="100%"
+              gap={4}
             >
-              <Stack gap={6} direction="row">
-                <Checkbox.Root value="json" colorPalette="brandGreen">
-                  <Checkbox.HiddenInput />
-                  <Checkbox.Control>
-                    <Checkbox.Indicator />
-                  </Checkbox.Control>
-                  <Checkbox.Label>Allow JSON</Checkbox.Label>
-                </Checkbox.Root>
-                <Checkbox.Root value="csv" colorPalette="brandGreen">
-                  <Checkbox.HiddenInput />
-                  <Checkbox.Control>
-                    <Checkbox.Indicator />
-                  </Checkbox.Control>
-                  <Checkbox.Label>Allow CSV</Checkbox.Label>
-                </Checkbox.Root>
-              </Stack>
-            </CheckboxGroup>
+              <CheckboxGroup
+                value={validationSettings}
+                onValueChange={(values) => {
+                  setValidationSettings(values);
+                }}
+              >
+                <Stack gap={6} direction="row">
+                  <Checkbox.Root value="json" colorPalette="brandGreen">
+                    <Checkbox.HiddenInput />
+                    <Checkbox.Control>
+                      <Checkbox.Indicator />
+                    </Checkbox.Control>
+                    <Checkbox.Label>Allow JSON</Checkbox.Label>
+                  </Checkbox.Root>
+                  <Checkbox.Root value="csv" colorPalette="brandGreen">
+                    <Checkbox.HiddenInput />
+                    <Checkbox.Control>
+                      <Checkbox.Indicator />
+                    </Checkbox.Control>
+                    <Checkbox.Label>Allow CSV</Checkbox.Label>
+                  </Checkbox.Root>
+                </Stack>
+              </CheckboxGroup>
+              <SavedFlag
+                saved={detailSave.saved}
+                savedLabel="Validation rules saved"
+              />
+            </HStack>
             <Field.Root>
               <Field.Label>Required fields</Field.Label>
               <Textarea
@@ -175,7 +203,7 @@ export default function ExperimentValidation({ data }) {
                 must contain.
               </Field.HelperText>
             </Field.Root>
-            <SaveStatus saved={detailSave.saved} error={detailSave.error} />
+            <SaveError error={detailSave.error} />
           </Stack>
         )}
       </SettingsRow>
