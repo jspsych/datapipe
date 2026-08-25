@@ -1,12 +1,19 @@
 import { useState } from "react";
-import { Editable, IconButton, Flex, Stack, Text } from "@chakra-ui/react";
+import {
+  Editable,
+  HStack,
+  IconButton,
+  Flex,
+  Stack,
+  Text,
+} from "@chakra-ui/react";
 
 import { Check, X, Pencil } from "lucide-react";
 
 import { db } from "../../lib/firebase";
 import { doc, setDoc } from "firebase/firestore";
 import { STORAGE_PROVIDERS } from "../../lib/provider-config";
-import { SaveStatus, useTrackedSave } from "../ui/SettingsRow";
+import { SaveError, SavedFlag, useTrackedSave } from "../ui/SettingsRow";
 
 export default function ExperimentTitle({ data }) {
   // Remount counter for the Editable. See handleCommit.
@@ -54,56 +61,69 @@ export default function ExperimentTitle({ data }) {
 
   return (
     <Stack gap={0} w="100%">
-      <Editable.Root
-        key={`${data.title}-${resetKey}`}
-        textAlign="left"
-        defaultValue={data.title}
-        fontSize="2xl"
-        fontWeight="bold"
-        color="fg"
-        onValueCommit={(details) => handleCommit(details.value)}
-        onEditChange={(details) => setEditing(details.edit)}
-        as={Flex}
-        align="center"
-      >
-        <Editable.Preview mr={8} />
-        <Editable.Input size="lg" mr={8} />
-        <Editable.Control>
-          <Editable.EditTrigger asChild>
-            {/* All three triggers drop their literal `white` / `green.400` /
-                `red.400` + `whiteAlpha.300` props. The default gray outline
-                recipe is legible in both modes now (border gray.500: 4.50:1
-                light / 3.43:1 dark) and hover uses bg.muted. Cancel-editing
-                was `red.400`, which DESIGN.md §5 reserves for irreversible
-                destruction -- abandoning an edit is neither. Commit stays
-                green because it is the primary action inside this control,
-                and brandGreen is the app's one primary (§5). */}
-            <IconButton aria-label="Rename experiment" variant="outline" size="sm">
-              <Pencil />
-            </IconButton>
-          </Editable.EditTrigger>
-          <Editable.SubmitTrigger asChild>
-            <IconButton
-              aria-label="Save new name"
-              size="sm"
-              variant="outline"
-              colorPalette="brandGreen"
-            >
-              <Check />
-            </IconButton>
-          </Editable.SubmitTrigger>
-          <Editable.CancelTrigger asChild>
-            <IconButton
-              aria-label="Cancel renaming"
-              size="sm"
-              variant="outline"
-              colorPalette="gray"
-            >
-              <X />
-            </IconButton>
-          </Editable.CancelTrigger>
-        </Editable.Control>
-      </Editable.Root>
+      {/* The rename confirmation is the worst offender if it mounts below:
+          it sits under the page's H1, so a successful rename pushed the ENTIRE
+          page down a line and pulled it back up three seconds later. On this
+          row, right aligned, it holds its own width and moves nothing. */}
+      <HStack w="100%" gap={4} align="center">
+        <Editable.Root
+          flex="1"
+          minW={0}
+          key={`${data.title}-${resetKey}`}
+          textAlign="left"
+          defaultValue={data.title}
+          fontSize="2xl"
+          fontWeight="bold"
+          color="fg"
+          onValueCommit={(details) => handleCommit(details.value)}
+          onEditChange={(details) => setEditing(details.edit)}
+          as={Flex}
+          align="center"
+        >
+          <Editable.Preview mr={8} />
+          <Editable.Input size="lg" mr={8} />
+          <Editable.Control>
+            <Editable.EditTrigger asChild>
+              {/* All three triggers drop their literal `white` / `green.400` /
+                  `red.400` + `whiteAlpha.300` props. The default gray outline
+                  recipe is legible in both modes now (border gray.500: 4.50:1
+                  light / 3.43:1 dark) and hover uses bg.muted. Cancel-editing
+                  was `red.400`, which DESIGN.md §5 reserves for irreversible
+                  destruction -- abandoning an edit is neither. Commit stays
+                  green because it is the primary action inside this control,
+                  and brandGreen is the app's one primary (§5). */}
+              <IconButton
+                aria-label="Rename experiment"
+                variant="outline"
+                size="sm"
+              >
+                <Pencil />
+              </IconButton>
+            </Editable.EditTrigger>
+            <Editable.SubmitTrigger asChild>
+              <IconButton
+                aria-label="Save new name"
+                size="sm"
+                variant="outline"
+                colorPalette="brandGreen"
+              >
+                <Check />
+              </IconButton>
+            </Editable.SubmitTrigger>
+            <Editable.CancelTrigger asChild>
+              <IconButton
+                aria-label="Cancel renaming"
+                size="sm"
+                variant="outline"
+                colorPalette="gray"
+              >
+                <X />
+              </IconButton>
+            </Editable.CancelTrigger>
+          </Editable.Control>
+        </Editable.Root>
+        <SavedFlag saved={titleSave.saved} savedLabel="Name saved" />
+      </HStack>
 
       {editing && containerLabel && (
         <Text fontSize="sm" color="fg.muted">
@@ -112,11 +132,7 @@ export default function ExperimentTitle({ data }) {
         </Text>
       )}
 
-      <SaveStatus
-        saved={titleSave.saved}
-        error={titleSave.error}
-        savedLabel="Name saved"
-      />
+      <SaveError error={titleSave.error} />
     </Stack>
   );
 }

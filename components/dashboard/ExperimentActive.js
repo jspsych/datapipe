@@ -1,11 +1,15 @@
-import { Field, NumberInput } from "@chakra-ui/react";
+import { Field, HStack, NumberInput } from "@chakra-ui/react";
 
 import { useState } from "react";
 
 import { setDoc, doc } from "firebase/firestore";
 
 import { db } from "../../lib/firebase";
-import SettingsRow, { SaveStatus, useTrackedSave } from "../ui/SettingsRow";
+import SettingsRow, {
+  SaveError,
+  SavedFlag,
+  useTrackedSave,
+} from "../ui/SettingsRow";
 import { SwitchTable } from "./SectionPanel";
 
 // Every writer below returns the setDoc promise UNCAUGHT. That is the point of
@@ -85,7 +89,22 @@ export default function ExperimentActive({ data }) {
       >
         {conditionActive && (
           <Field.Root id="n-conditions">
-            <Field.Label>How many conditions?</Field.Label>
+            {/* Label and confirmation share one line, the confirmation right
+                aligned so it lands in the same column as the switches' own.
+                It reserves its width whether or not it is showing, so typing
+                in the field below never makes the label jump. */}
+            <HStack
+              justify="space-between"
+              alignItems="center"
+              w="100%"
+              gap={4}
+            >
+              <Field.Label>How many conditions?</Field.Label>
+              <SavedFlag
+                saved={nConditionsSave.saved}
+                savedLabel="Number of conditions saved"
+              />
+            </HStack>
             <NumberInput.Root
               value={String(nConditions)}
               min={2}
@@ -109,10 +128,7 @@ export default function ExperimentActive({ data }) {
                 <NumberInput.DecrementTrigger />
               </NumberInput.Control>
             </NumberInput.Root>
-            <SaveStatus
-              saved={nConditionsSave.saved}
-              error={nConditionsSave.error}
-            />
+            <SaveError error={nConditionsSave.error} />
           </Field.Root>
         )}
       </SettingsRow>
@@ -127,7 +143,18 @@ export default function ExperimentActive({ data }) {
       >
         {sessionLimitActive && (
           <Field.Root id="session-limit">
-            <Field.Label>How many total sessions?</Field.Label>
+            <HStack
+              justify="space-between"
+              alignItems="center"
+              w="100%"
+              gap={4}
+            >
+              <Field.Label>How many total sessions?</Field.Label>
+              <SavedFlag
+                saved={maxSessionsSave.saved}
+                savedLabel="Session limit saved"
+              />
+            </HStack>
             <NumberInput.Root
               value={String(maxSessions)}
               min={0}
@@ -151,10 +178,7 @@ export default function ExperimentActive({ data }) {
                 <NumberInput.DecrementTrigger />
               </NumberInput.Control>
             </NumberInput.Root>
-            <SaveStatus
-              saved={maxSessionsSave.saved}
-              error={maxSessionsSave.error}
-            />
+            <SaveError error={maxSessionsSave.error} />
           </Field.Root>
         )}
       </SettingsRow>
