@@ -205,6 +205,81 @@ describe("Experiment list — finalized indicator", () => {
   });
 });
 
+describe("Experiment list — storage provider", () => {
+  it("names the provider a current experiment is stored on", () => {
+    experimentList = [{ ...BASE_EXPERIMENT, storageProvider: "gdrive" }];
+    renderWithChakra(<AdminPage />);
+
+    expect(screen.getByText("Stored on Google Drive")).toBeInTheDocument();
+  });
+
+  it("names Zenodo and Dataverse experiments too", () => {
+    experimentList = [
+      { ...BASE_EXPERIMENT, id: "a", storageProvider: "zenodo" },
+      { ...BASE_EXPERIMENT, id: "b", storageProvider: "dataverse" },
+    ];
+    renderWithChakra(<AdminPage />);
+
+    expect(screen.getByText("Stored on Zenodo")).toBeInTheDocument();
+    expect(screen.getByText("Stored on Dataverse")).toBeInTheDocument();
+  });
+
+  it("names OSF for a legacy experiment with no storageProvider field", () => {
+    const legacy = { ...BASE_EXPERIMENT, osfRepo: "abc12", osfComponent: "def34" };
+    delete legacy.storageProvider;
+    experimentList = [legacy];
+    renderWithChakra(<AdminPage />);
+
+    expect(screen.getByText("Stored on OSF")).toBeInTheDocument();
+  });
+
+  it("says nothing rather than guessing when the provider is unrecognised", () => {
+    experimentList = [{ ...BASE_EXPERIMENT, storageProvider: "figshare" }];
+    renderWithChakra(<AdminPage />);
+
+    expect(screen.queryByText(/Stored on/)).not.toBeInTheDocument();
+  });
+});
+
+describe("Experiment page — the Finalize section is offered only where it works", () => {
+  it("offers finalizing on Zenodo, the one provider with a file-count cap", () => {
+    experimentDoc = { ...BASE_EXPERIMENT, storageProvider: "zenodo" };
+    renderWithChakra(<ExperimentPage />);
+
+    expect(screen.getByText("Danger zone")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /finalize/i })).toBeInTheDocument();
+  });
+
+  it("hides the whole Danger zone on Google Drive, which has no cap to relieve", () => {
+    experimentDoc = { ...BASE_EXPERIMENT, storageProvider: "gdrive" };
+    renderWithChakra(<ExperimentPage />);
+
+    // Offering an irreversible action that would only ever be refused is
+    // worse than not offering it -- and an empty Danger zone is its own kind
+    // of alarming, so the section goes with the button.
+    expect(screen.queryByText("Danger zone")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /finalize/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it("hides it on Dataverse for the same reason", () => {
+    experimentDoc = { ...BASE_EXPERIMENT, storageProvider: "dataverse" };
+    renderWithChakra(<ExperimentPage />);
+
+    expect(screen.queryByText("Danger zone")).not.toBeInTheDocument();
+  });
+
+  it("hides it on a legacy OSF experiment, which is absent from the provider map", () => {
+    const legacy = { ...BASE_EXPERIMENT, osfRepo: "abc12", osfComponent: "def34" };
+    delete legacy.storageProvider;
+    experimentDoc = legacy;
+    renderWithChakra(<ExperimentPage />);
+
+    expect(screen.queryByText("Danger zone")).not.toBeInTheDocument();
+  });
+});
+
 describe("Experiment page header — finalized indicator", () => {
   it("shows Accepting data for a live experiment", () => {
     experimentDoc = { ...BASE_EXPERIMENT };

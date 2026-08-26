@@ -86,11 +86,10 @@ export default function FinishingAStudyPage() {
           </Box>
         </Box>
         <Text maxW="70ch">
-          Clicking Finalize on an experiment that is not eligible does nothing
-          destructive — the dashboard reports{" "}
-          <em>&ldquo;This experiment can&apos;t be finalized&rdquo;</em> and
-          your files are untouched. On Google Drive and Dataverse, switching the
-          experiment off when you are done is the equivalent step.
+          The dashboard only offers finalizing where it applies: on Google
+          Drive, Dataverse and OSF experiments the Finalize section is not
+          shown at all, rather than offered and then refused. Switching the
+          experiment off when you are done is the equivalent step there.
         </Text>
         <GuidanceLine href="/docs/providers" linkText="Choosing a provider">
           The per-provider differences behind this are summarized here.

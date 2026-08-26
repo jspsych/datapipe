@@ -67,10 +67,18 @@ const STATUS_COPY = {
     describe: () =>
       "Another finalization or compaction pass is already in progress for this experiment. Try again shortly.",
   },
+  // The Finalize control is hidden for providers that cannot finalize (see
+  // pages/admin/[experiment_id].js), so reaching this at all means something
+  // unusual -- a legacy OSF experiment with no provider container, or a
+  // provider the frontend knows and the backend does not. Either way the
+  // researcher gets a sentence, not `detail`: that field carries strings like
+  // "provider has no file-count cap", which is an internal capability name
+  // and exactly what DESIGN.md 6 bans from an error surface.
   "not-eligible": {
     tone: "error",
     title: "This experiment can't be finalized.",
-    describe: (detail) => detail || "This experiment is not eligible for finalization.",
+    describe: () =>
+      "Finalizing is available on storage providers that limit how many files a record can hold, and this experiment's provider does not. Nothing was changed -- your files are exactly as they were. Switching the experiment off when you are done collecting is the equivalent step.",
   },
   failed: {
     tone: "error",

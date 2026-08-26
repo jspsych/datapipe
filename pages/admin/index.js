@@ -161,8 +161,21 @@ function featureSummary(exp) {
   return `${on.slice(0, -1).join(", ")} and ${on[on.length - 1]} on`;
 }
 
+// Which service actually holds this experiment's data. Worth a line on a list
+// of thirty studies: a lab mid-migration has experiments on two or three
+// providers at once, and nothing in a title says which. Legacy OSF
+// experiments are absent from STORAGE_PROVIDERS by design (they keep their
+// bespoke surfaces), so they are named separately rather than falling through
+// to nothing -- those are exactly the rows whose location matters most while
+// OSF is being retired.
+function providerName(exp) {
+  if (isLegacyOsfExperiment(exp)) return "OSF";
+  return STORAGE_PROVIDERS[exp.storageProvider]?.name ?? null;
+}
+
 function ExperimentItem({ exp }) {
   const features = featureSummary(exp);
+  const provider = providerName(exp);
 
   return (
     <Box
@@ -211,6 +224,15 @@ function ExperimentItem({ exp }) {
                 status={exp.active ? "ok" : "neutral"}
                 label={exp.active ? "Collecting data" : "Not collecting"}
               />
+            )}
+            {/* "Stored on X", not a bare "Zenodo". Every other item on this
+                line says what it is ("42 sessions", "base64 uploads on"); a
+                lone proper noun among them would be the only one the reader
+                has to work out. */}
+            {provider && (
+              <Text fontSize="sm" color="fg.muted">
+                Stored on {provider}
+              </Text>
             )}
             {exp.sessions > 0 && (
               <Text fontSize="sm" color="fg.muted">
