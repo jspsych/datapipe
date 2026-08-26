@@ -14,8 +14,6 @@ export const apiCondition = onRequest({ cors: true }, async (req, res) => {
     return;
   }
 
-  await writeLog(experimentID, "getCondition");
-
   const exp_doc_ref: DocumentReference<DocumentData> = db.collection("experiments").doc(experimentID);
   const exp_doc: DocumentSnapshot = await exp_doc_ref.get();
 
@@ -33,9 +31,16 @@ export const apiCondition = onRequest({ cors: true }, async (req, res) => {
     return;
   }
 
+  // Counted here, not before the read above: an experiment that does not
+  // exist has no owner, so a log document keyed by a garbage ID is one no
+  // researcher can ever read -- it only inflates the request count and hands
+  // anyone who can POST a way to create documents. See write-log.ts.
+  const logContext = { owner: exp_data.owner, storageProvider: exp_data.storageProvider };
+  await writeLog(experimentID, "getCondition", undefined, logContext);
+
   if (!exp_data.activeConditionAssignment) {
     res.status(400).json(MESSAGES.CONDITION_ASSIGNMENT_NOT_ACTIVE);
-    await writeLog(experimentID, "logError", MESSAGES.CONDITION_ASSIGNMENT_NOT_ACTIVE);
+    await writeLog(experimentID, "logError", MESSAGES.CONDITION_ASSIGNMENT_NOT_ACTIVE, logContext);
     return;
   }
 
@@ -59,7 +64,7 @@ export const apiCondition = onRequest({ cors: true }, async (req, res) => {
     });
   } catch (error) {
     res.status(400).json(MESSAGES.UNKNOWN_ERROR_GETTING_CONDITION);
-    await writeLog(experimentID, "logError", MESSAGES.UNKNOWN_ERROR_GETTING_CONDITION);
+    await writeLog(experimentID, "logError", MESSAGES.UNKNOWN_ERROR_GETTING_CONDITION, logContext);
     return;
   }
 

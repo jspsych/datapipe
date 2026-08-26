@@ -256,6 +256,61 @@ export interface ExperimentData {
     providerContainer?: ContainerRef;
   }
 
+  /**
+   * logs/{experimentID} — the per-experiment activity record. Written only by
+   * functions/src/write-log.ts (and seeded by create-experiment.ts); read by
+   * the experiment dashboard and by service-health queries.
+   *
+   * Every field is optional because a document written before this shape
+   * existed has almost none of them, and the backfill script only restores
+   * `owner`/`storageProvider`. Read defensively.
+   */
+  export interface ExperimentLog {
+    // Identity. `owner` is what firestore.rules checks; `storageProvider` is
+    // denormalized from the experiment so that per-provider failure rates are
+    // a query rather than a scan.
+    owner?: string;
+    storageProvider?: StorageProviderId;
+
+    // Request attempts, counted only for requests that reached a real
+    // experiment.
+    saveData?: number;
+    saveBase64Data?: number;
+    getCondition?: number;
+
+    // Outcomes. There is no ...Failed counter by design:
+    //   failed = saveData - saveDataSucceeded - saveDataQueued
+    saveDataSucceeded?: number;
+    saveDataQueued?: number;
+    saveBase64DataSucceeded?: number;
+    saveBase64DataQueued?: number;
+
+    // Errors: a total, a tally by api-messages.ts code, and the most recent
+    // MAX_ERROR_ENTRIES entries. `errors` is capped, so its length is NOT the
+    // total — `logError` is.
+    logError?: number;
+    errorsByCode?: Record<string, number>;
+    errors?: ExperimentLogError[];
+
+    // Activity window. `createdAt` is set once, when the experiment is
+    // created; `lastRequestAt` moves on every logged request.
+    createdAt?: FirebaseFirestore.Timestamp;
+    lastRequestAt?: FirebaseFirestore.Timestamp;
+  }
+
+  export interface ExperimentLogError {
+    // The api-messages.ts code, when the entry came from one. Absent on older
+    // entries and on entries that predate the code being carried.
+    error?: string;
+    message?: string;
+    detail?: string;
+    // A Timestamp on entries written after this change; a preformatted en-GB
+    // string on the ones already in the array when it landed. Consumers must
+    // handle both until the cap has rotated the old entries out.
+    time?: FirebaseFirestore.Timestamp | string;
+    [key: string]: unknown;
+  }
+
   export interface OSFFile{
     id: string;
     attributes: {

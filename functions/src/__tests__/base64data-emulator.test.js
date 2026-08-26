@@ -58,6 +58,14 @@ beforeAll(async () => {
     activeBase64: true,
     owner: "testuser",
   });
+  // api-base64.ts counts the attempt AFTER confirming the experiment exists
+  // (see write-log.ts), so the experiment this test counts against has to be
+  // seeded rather than left absent.
+  await db.collection("experiments").doc("base64-testlog").set({
+    activeBase64: false,
+    owner: "testuser",
+    storageProvider: "osf",
+  });
 });
 
 describe("apiData", () => {
@@ -89,6 +97,8 @@ describe("apiData", () => {
     });
     let doc = await waitForLog(db, "base64-testlog", "saveBase64Data", 1);
     expect(doc.data().saveBase64Data).toBe(1);
+    expect(doc.data().owner).toBe("testuser");
+    expect(doc.data().storageProvider).toBe("osf");
 
     await saveData({
       experimentID: "base64-testlog",

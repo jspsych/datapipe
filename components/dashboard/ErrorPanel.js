@@ -1,10 +1,47 @@
 import { Box, Accordion, Alert, Table, Text } from "@chakra-ui/react";
 
-// How many rows to render. `logs/{id}.errors` grows by `arrayUnion` and is
-// never trimmed, so a broken integration during piloting can produce thousands
-// of entries -- which this component used to render, all of them, unpaginated.
-// The recent ones are the only ones a researcher can act on.
+// How many rows to render. `logs/{id}.errors` is now capped at 50 by
+// write-log.ts (MAX_ERROR_ENTRIES), but the recent ones are still the only
+// ones a researcher can act on, and documents written before the cap landed
+// can hold thousands of entries that will not rotate out until fifty new ones
+// arrive.
 const MAX_ROWS = 20;
+
+/**
+ * `time` on an error entry comes in two shapes and both are live at once:
+ *
+ *  - A Firestore Timestamp, on everything written since write-log.ts started
+ *    storing a real one. Through the client SDK this arrives as a Timestamp
+ *    instance with .toDate(); through anything that serialized it in between
+ *    it can arrive as a plain `{seconds, nanoseconds}`.
+ *  - A preformatted en-GB string, on entries that were already in the array.
+ *    Those are displayed verbatim -- reparsing a formatted string to reformat
+ *    it would be guesswork.
+ *
+ * Returns null rather than throwing on anything else, because a malformed
+ * timestamp must not be the thing that white-screens the experiment page.
+ */
+function formatErrorTime(time) {
+  if (typeof time === "string") return time;
+  if (!time) return null;
+
+  let date = null;
+  if (typeof time.toDate === "function") {
+    date = time.toDate();
+  } else if (typeof time.seconds === "number") {
+    date = new Date(time.seconds * 1000);
+  } else if (time instanceof Date) {
+    date = time;
+  }
+  if (!date || Number.isNaN(date.getTime())) return null;
+
+  // Matches the format the old string entries were written in, so a table
+  // holding both does not read as two different kinds of record.
+  return new Intl.DateTimeFormat("en-GB", {
+    dateStyle: "short",
+    timeStyle: "long",
+  }).format(date);
+}
 
 /**
  * ErrorPanel — the record of submissions the API rejected for this experiment.
@@ -12,16 +49,16 @@ const MAX_ROWS = 20;
  * Three things were wrong with the previous version, all of them frontend:
  *
  * 1. IT COULD WHITE-SCREEN THE PAGE. It called `errors.map(...)` with no
- *    guard, while `functions/src/write-log.ts` writes `logError` (an
+ *    guard, while `functions/src/write-log.ts` wrote `logError` (an
  *    increment) and the `errors` array in TWO SEPARATE, NON-ATOMIC `set`
  *    calls. Between those two writes -- or permanently, if the second one
- *    fails -- the document has `logError > 0` and no `errors` field, and the
+ *    failed -- the document had `logError > 0` and no `errors` field, and the
  *    parent page renders this panel on `logError` alone. `undefined.map` then
  *    takes down the whole experiment page, including the integration code and
- *    the queued-upload recovery panel. The backend race is real and is filed
- *    separately; this component simply must not be the thing that breaks when
- *    it happens. Every read below is defensive: missing array, missing fields,
- *    non-object entries.
+ *    the queued-upload recovery panel. The backend race is fixed (both are
+ *    one transactional write now), but a document that reached the split
+ *    state before the fix still exists, so every read below stays defensive:
+ *    missing array, missing fields, non-object entries.
  *
  * 2. IT SHOWED MACHINE CODES. It rendered `error.error` -- literally the
  *    string "EXPERIMENT_NOT_FOUND" -- while `error.message` ("The experiment
@@ -47,10 +84,15 @@ const MAX_ROWS = 20;
  * roughly 3.5:1. brandRed is also DESIGN.md §5's irreversible-destruction hue,
  * which fits: these are submissions that were refused and are not coming back.
  *
- * @param {Array<object>|undefined} errors - The `logs/{id}.errors` array.
- *   Tolerates undefined, null, empty, and malformed entries.
+ * @param {Array<object>|undefined} errors - The `logs/{id}.errors` array, now
+ *   capped at the 50 most recent by the backend. Tolerates undefined, null,
+ *   empty, and malformed entries.
+ * @param {number|undefined} totalCount - `logs/{id}.logError`, the true
+ *   lifetime count. The `errors` array is capped, so its length understates
+ *   the total on any experiment that has been rejected more than fifty times.
+ *   Falls back to the array length when absent.
  */
-export default function ErrorPanel({ errors }) {
+export default function ErrorPanel({ errors, totalCount }) {
   // The guard that stops the non-atomic backend write from white-screening
   // the page. `logError > 0` with no `errors` array is a state the backend
   // can genuinely produce, and the honest render for it is nothing at all --
@@ -58,21 +100,26 @@ export default function ErrorPanel({ errors }) {
   const all = Array.isArray(errors) ? errors.filter(Boolean) : [];
   if (all.length === 0) return null;
 
-  // arrayUnion appends, so the tail is the most recent. `time` is written as
-  // a preformatted en-GB string by write-log.ts, not a Timestamp, so it is
-  // displayed rather than parsed -- reordering by it would be guesswork.
+  // Entries are appended, so the tail is the most recent. The array is not
+  // re-sorted by `time`: entries written before the Timestamp change carry a
+  // formatted string instead, and a mixed-type sort would scramble the order
+  // that insertion already gets right.
   const recent = all.slice(-MAX_ROWS).reverse();
-  const latest = recent[0];
-  const latestTime = typeof latest?.time === "string" ? latest.time : null;
+  const latestTime = formatErrorTime(recent[0]?.time);
+
+  // The headline counts every rejection ever recorded, which is `logError` --
+  // NOT the length of a capped array. Getting this wrong would tell a
+  // researcher with 300 rejections that they had 50.
+  const total = typeof totalCount === "number" && totalCount > 0 ? totalCount : all.length;
 
   return (
     <Alert.Root status="error" colorPalette="brandRed" variant="subtle">
       <Alert.Indicator />
       <Box flex="1" minW={0}>
         <Alert.Title mb={2}>
-          {all.length === 1
+          {total === 1
             ? "One submission to this experiment was rejected."
-            : `${all.length} submissions to this experiment were rejected.`}
+            : `${total} submissions to this experiment were rejected.`}
         </Alert.Title>
         <Text fontSize="sm" mb={4}>
           {latestTime
@@ -83,8 +130,8 @@ export default function ErrorPanel({ errors }) {
           <Accordion.Item value="error-logs">
             <Accordion.ItemTrigger>
               <Box as="span" flex="1" textAlign="left" fontSize="sm">
-                {all.length > MAX_ROWS
-                  ? `Show the ${MAX_ROWS} most recent of ${all.length}`
+                {total > MAX_ROWS
+                  ? `Show the ${MAX_ROWS} most recent of ${total}`
                   : "Show what was rejected"}
               </Box>
               <Accordion.ItemIndicator />
@@ -134,7 +181,7 @@ export default function ErrorPanel({ errors }) {
                         </Table.Cell>
                         <Table.Cell>
                           <Text fontSize="xs" color="fg.muted">
-                            {error?.time || "—"}
+                            {formatErrorTime(error?.time) || "—"}
                           </Text>
                         </Table.Cell>
                       </Table.Row>

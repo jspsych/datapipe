@@ -26,8 +26,6 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
     return;
   }
 
-  await writeLog(experimentID, "saveData");
-
   const exp_doc_ref: DocumentReference<DocumentData> = db.collection("experiments").doc(experimentID);
   const exp_doc: DocumentSnapshot = await exp_doc_ref.get();
 
@@ -46,6 +44,18 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
     return;
   }
 
+  // Identity for every log write below. Reading it costs nothing extra --
+  // exp_doc is already in hand -- and it is what makes logs/{id} readable by
+  // its owner at all (firestore.rules) and groupable by provider.
+  const logContext = { owner: exp_data.owner, storageProvider: exp_data.storageProvider };
+
+  // The attempt is counted HERE, after the experiment is known to exist,
+  // rather than at the top of the handler. Counting first meant every request
+  // carrying a mistyped or invented experiment ID created a log document that
+  // has no owner -- unreadable by anyone, and unbounded in number. See
+  // write-log.ts.
+  await writeLog(experimentID, "saveData", undefined, logContext);
+
   // Finalization is permanent (docs/finalization-spec.md): once an experiment
   // is finalized, every remaining file has been merged into one archive and
   // the originals deleted. A session accepted after that would sit outside
@@ -55,20 +65,20 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
   // off, and this message is the one that should surface either way.
   if (exp_data.finalized) {
     res.status(400).json(MESSAGES.EXPERIMENT_FINALIZED);
-    await writeLog(experimentID, "logError", MESSAGES.EXPERIMENT_FINALIZED);
+    await writeLog(experimentID, "logError", MESSAGES.EXPERIMENT_FINALIZED, logContext);
     return;
   }
 
   if (!exp_data.active) {
     res.status(400).json(MESSAGES.DATA_COLLECTION_NOT_ACTIVE);
-    await writeLog(experimentID, "logError", MESSAGES.DATA_COLLECTION_NOT_ACTIVE);
+    await writeLog(experimentID, "logError", MESSAGES.DATA_COLLECTION_NOT_ACTIVE, logContext);
     return;
   }
 
   if (exp_data.limitSessions) {
     if (exp_data.sessions >= exp_data.maxSessions) {
       res.status(400).json(MESSAGES.SESSION_LIMIT_REACHED);
-      await writeLog(experimentID, "logError", MESSAGES.SESSION_LIMIT_REACHED);
+      await writeLog(experimentID, "logError", MESSAGES.SESSION_LIMIT_REACHED, logContext);
       return;
     }
   }
@@ -89,7 +99,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
     }
     if (!valid) {
       res.status(400).json(MESSAGES.INVALID_DATA);
-      await writeLog(experimentID, "logError", MESSAGES.INVALID_DATA);
+      await writeLog(experimentID, "logError", MESSAGES.INVALID_DATA, logContext);
       return;
     }
   }
@@ -103,7 +113,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
   } catch (e) {
     const detail = e instanceof Error ? e.message : "Unknown error";
     res.status(500).json(MESSAGES.DATA_PERSIST_ERROR);
-    await writeLog(experimentID, "logError", {...MESSAGES.DATA_PERSIST_ERROR, detail});
+    await writeLog(experimentID, "logError", {...MESSAGES.DATA_PERSIST_ERROR, detail}, logContext);
     return;
   }
 
@@ -111,7 +121,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
 
   if (!user_doc.exists) {
     res.status(400).json(MESSAGES.INVALID_OWNER);
-    await writeLog(experimentID, "logError", MESSAGES.INVALID_OWNER);
+    await writeLog(experimentID, "logError", MESSAGES.INVALID_OWNER, logContext);
     return;
   }
 
@@ -119,7 +129,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
 
   if (!user_data) {
     res.status(400).json(MESSAGES.USER_DATA_NOT_FOUND);
-    await writeLog(experimentID, "logError", MESSAGES.USER_DATA_NOT_FOUND);
+    await writeLog(experimentID, "logError", MESSAGES.USER_DATA_NOT_FOUND, logContext);
     return;
   }
 
@@ -129,14 +139,14 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
   } catch (e) {
     const detail = e instanceof Error ? e.message : "Unknown error";
     res.status(500).json(MESSAGES.TOKEN_RESOLUTION_ERROR);
-    await writeLog(experimentID, "logError", {...MESSAGES.TOKEN_RESOLUTION_ERROR, detail});
+    await writeLog(experimentID, "logError", {...MESSAGES.TOKEN_RESOLUTION_ERROR, detail}, logContext);
     return;
   }
 
   if (!tokenResult.success) {
     const errorMessage = MESSAGES[tokenResult.error as keyof typeof MESSAGES] || MESSAGES.TOKEN_RESOLUTION_ERROR;
     res.status(400).json(errorMessage);
-    await writeLog(experimentID, "logError", {...errorMessage, detail: tokenResult.detail});
+    await writeLog(experimentID, "logError", {...errorMessage, detail: tokenResult.detail}, logContext);
     return;
   }
 
@@ -161,7 +171,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
       // participant's raw data never made it to OSF, so scheduled-pending-recovery
       // salvages it later instead of losing it outright.
       res.status(400).json(metadataResponse);
-      await writeLog(experimentID, "logError", {...MESSAGES.METADATA_ERROR, detail: metadataResponse.message});
+      await writeLog(experimentID, "logError", {...MESSAGES.METADATA_ERROR, detail: metadataResponse.message}, logContext);
       return;
     }
 
@@ -226,11 +236,17 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
         await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
         await cleanupPending(pendingPath); // queue-upload has its own copy
         res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
-        await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail: `Collision cache rehydration failed: ${detail}`});
+        // The submission is safe (queue-upload.ts holds an encrypted copy) but
+        // is not in the researcher's storage yet. Counted apart from both
+        // success and failure so that
+        //   failed = saveData - saveDataSucceeded - saveDataQueued
+        // holds exactly. See write-log.ts.
+        await writeLog(experimentID, "saveDataQueued", undefined, logContext);
+        await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail: `Collision cache rehydration failed: ${detail}`}, logContext);
         return;
       } catch {
         res.status(500).json({...MESSAGES.OSF_UPLOAD_EXCEPTION, metadataMessage});
-        await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail});
+        await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail}, logContext);
         return;
       }
     }
@@ -241,7 +257,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
     if (claimResult.reason === "duplicate") {
       await cleanupPending(pendingPath);
       res.status(400).json({...MESSAGES.OSF_FILE_EXISTS, metadataMessage});
-      await writeLog(experimentID, "logError", MESSAGES.OSF_FILE_EXISTS);
+      await writeLog(experimentID, "logError", MESSAGES.OSF_FILE_EXISTS, logContext);
       return;
     }
 
@@ -266,11 +282,12 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
       // is the identical hole.
       await queueDerivedFiles(derivedFiles, derivedTarget, "Collision cache rehydrating");
       res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail: "Collision cache rehydrating"});
+      await writeLog(experimentID, "saveDataQueued", undefined, logContext);
+      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail: "Collision cache rehydrating"}, logContext);
       return;
     } catch {
       res.status(500).json({...MESSAGES.OSF_UPLOAD_EXCEPTION, metadataMessage});
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail: "Collision cache rehydrating"});
+      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail: "Collision cache rehydrating"}, logContext);
       return;
     }
   }
@@ -307,6 +324,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
       // 44 loose raw sessions against 10 derived CSVs.
       await queueDerivedFiles(derivedFiles, derivedTarget, COMPACTION_HOLD_REASON, "CONTENTION");
       res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
+      await writeLog(experimentID, "saveDataQueued", undefined, logContext);
       return;
     } catch {
       res.status(500).json({...MESSAGES.OSF_UPLOAD_EXCEPTION, metadataMessage});
@@ -341,11 +359,12 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
       // OSF is unreachable, so queue the derived files alongside the raw data.
       await queueDerivedFiles(derivedFiles, derivedTarget, `Queued alongside data file: ${detail}`);
       res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail});
+      await writeLog(experimentID, "saveDataQueued", undefined, logContext);
+      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail}, logContext);
       return;
     } catch {
       res.status(500).json({...MESSAGES.OSF_UPLOAD_EXCEPTION, metadataMessage});
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail});
+      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail}, logContext);
       return;
     }
   }
@@ -359,11 +378,16 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
       // Logs are written BEFORE the response here (unlike other branches):
       // the disagreement entry is the dual-run's whole audit trail, and
       // responding first races observers of the log against the write.
-      await writeLog(experimentID, "logError", MESSAGES.OSF_FILE_EXISTS);
+      await writeLog(experimentID, "logError", MESSAGES.OSF_FILE_EXISTS, logContext);
       await writeLog(experimentID, "logError", {
+        // Carries an `error` code like every other entry so it lands in its
+        // own errorsByCode bucket instead of the UNCODED catch-all -- a
+        // dual-run disagreement is exactly the kind of thing worth counting
+        // per provider. The boolean stays for the existing audit trail.
+        error: "COLLISION_CACHE_DISAGREEMENT",
         collisionCacheDisagreement: true,
         direction: "cache-free-provider-conflict",
-      });
+      }, logContext);
       await cleanupPending(pendingPath);
       res.status(400).json({...MESSAGES.OSF_FILE_EXISTS, metadataMessage});
       return;
@@ -385,11 +409,12 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
       // same provider error code, since it's the same provider write path.
       await queueDerivedFiles(derivedFiles, derivedTarget, `Queued alongside data file: OSF error ${result.providerStatus}`, result.error);
       res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.providerStatus, osfStatusText: result.providerMessage});
+      await writeLog(experimentID, "saveDataQueued", undefined, logContext);
+      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.providerStatus, osfStatusText: result.providerMessage}, logContext);
       return;
     } catch {
       res.status(400).json({...MESSAGES.OSF_UPLOAD_ERROR, metadataMessage});
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.providerStatus, osfStatusText: result.providerMessage});
+      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.providerStatus, osfStatusText: result.providerMessage}, logContext);
       return;
     }
   }
@@ -397,6 +422,10 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
   // Successful write — confirm the claim (best-effort; a confirm failure
   // must not fail a request that already succeeded against the provider).
   await confirmClaim(experimentID, claimName, claimToken);
+
+  // The participant's file is in the researcher's storage. This is the only
+  // place in this handler that is true.
+  await writeLog(experimentID, "saveDataSucceeded", undefined, logContext);
 
   await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
 

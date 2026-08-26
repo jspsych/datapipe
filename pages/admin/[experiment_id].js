@@ -259,7 +259,13 @@ function ExperimentPageDashboard({ experiment_id }) {
 
           {showResolved && <UploadsResolvedNotice />}
 
-          {showErrorPanel && <ErrorPanel errors={errorLog} />}
+          {/* `uploadError` is logs/{id}.logError -- the lifetime count. It is
+              passed alongside the array because write-log.ts caps the array
+              at 50 entries, so its length is a floor on the real number, not
+              the number itself. */}
+          {showErrorPanel && (
+            <ErrorPanel errors={errorLog} totalCount={uploadError} />
+          )}
 
           {queueEntries.length > 0 && (
             <QueuePanel entries={queueEntries} experimentId={experiment_id} />

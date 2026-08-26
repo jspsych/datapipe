@@ -217,9 +217,13 @@ export default function PrivacyPage() {
               Your experiment&apos;s configuration and its log.
             </Text>{" "}
             The log records how many requests of each kind the experiment
-            received, plus a list of errors with timestamps. No participant data
-            is written to it. An error entry can, however, contain the filename
-            your experiment chose and the error message your storage provider
+            received and how they turned out, which storage provider it is
+            configured for, when it was created, when it last received a
+            request, a tally of errors by type, and the fifty most recent
+            errors with timestamps. Older error entries are discarded as newer
+            ones arrive; the tallies are not. No participant data is written to
+            it. An error entry can, however, contain the filename your
+            experiment chose and the error message your storage provider
             returned.
           </List.Item>
           <List.Item>
