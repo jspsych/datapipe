@@ -1,11 +1,4 @@
-import {
-  Field,
-  HStack,
-  Stack,
-  Textarea,
-  Checkbox,
-  CheckboxGroup,
-} from "@chakra-ui/react";
+import { HStack, Stack, Checkbox, CheckboxGroup } from "@chakra-ui/react";
 
 import { useEffect, useRef, useState } from "react";
 
@@ -16,6 +9,7 @@ import SettingsRow, {
   SavedFlag,
   useTrackedSave,
 } from "../ui/SettingsRow";
+import TagListInput, { normalizeList } from "../ui/TagListInput";
 import { SwitchTable } from "./SectionPanel";
 
 function writeExperiment(expId, fields) {
@@ -27,13 +21,18 @@ export default function ExperimentValidation({ data }) {
   if (data.allowCSV) validationOptionsArray.push("csv");
   if (data.allowJSON) validationOptionsArray.push("json");
 
-  const requiredFieldsText = data.requiredFields.join(", ");
+  // Normalized on the way in as well as on the way out. Live documents can
+  // hold `[""]` -- the textarea this replaced stored an empty box that way
+  // before it learned to filter, and both validators still carry a filter for
+  // it (functions/src/validate-json.ts). An empty pill has nothing to draw, so
+  // rendering the raw array would produce an invisible chip the researcher
+  // could neither see nor delete.
+  const initialFields = normalizeList(data.requiredFields);
 
   const [validationSettings, setValidationSettings] = useState(
     validationOptionsArray
   );
-  const [requiredFields, setRequiredFields] = useState(requiredFieldsText);
-  const [fieldsArray, setFieldsArray] = useState(data.requiredFields);
+  const [fieldsArray, setFieldsArray] = useState(initialFields);
   // Mirrors the switch so the dependent controls appear the instant it is
   // flipped rather than after the Firestore round trip. SettingsRow calls
   // this again with the previous value if the write fails, so the revealed
@@ -53,7 +52,7 @@ export default function ExperimentValidation({ data }) {
   // in force. Seeded from the document and updated only after a write lands.
   const committed = useRef({
     validationSettings: validationOptionsArray,
-    fieldsArray: data.requiredFields,
+    fieldsArray: initialFields,
   });
 
   // The old version of this effect had two defects. It listed `data` in its
@@ -102,7 +101,6 @@ export default function ExperimentValidation({ data }) {
       () => {
         setValidationSettings(previous.validationSettings);
         setFieldsArray(previous.fieldsArray);
-        setRequiredFields(previous.fieldsArray.join(", "));
       }
     );
     // detailSave.save is stable (useCallback over a constant message), and
@@ -172,37 +170,29 @@ export default function ExperimentValidation({ data }) {
                 savedLabel="Validation rules saved"
               />
             </HStack>
-            <Field.Root>
-              <Field.Label>Required fields</Field.Label>
-              <Textarea
-                value={requiredFields}
-                onChange={(e) => {
-                  setRequiredFields(e.target.value);
-                }}
-                onBlur={() => {
-                  const parsed = requiredFields
-                    .split(",")
-                    .map((field) => field.trim())
-                    .filter(Boolean);
-                  // Only commit a genuinely different list. `split` returns a
-                  // fresh array every blur, and the save effect is keyed to
-                  // `fieldsArray` by identity -- so without this, tabbing
-                  // through the field without editing it wrote to Firestore.
-                  if (parsed.join(",") !== fieldsArray.join(",")) {
-                    setFieldsArray(parsed);
-                  }
-                }}
-              />
-              {/* `color="gray"` here was the CSS named color #808080, which
-                  measures 4.19:1 on the dark page -- below the 4.5:1 body
-                  floor, and a raw literal besides (DESIGN.md §8.5). Dropping
-                  the prop lets the Field recipe's own fg.muted apply: 8.30:1
-                  light / 9.14:1 dark. */}
-              <Field.HelperText>
-                A comma-separated list of column names that every submission
-                must contain.
-              </Field.HelperText>
-            </Field.Root>
+            {/* The old control was a Textarea holding a comma-separated
+                string, parsed on blur. Two things were wrong with it, and only
+                one was cosmetic. The cosmetic one: `color="gray"` on the
+                helper text resolved to the CSS named color #808080 (4.19:1 on
+                the dark page, and a raw literal besides -- DESIGN.md §8.5).
+                The real one: the researcher could not see what the parse had
+                produced. These names are compared exactly against JSON keys
+                and CSV headers, a mismatch is an unexplained 400, and a
+                trailing comma or a pasted quote is invisible in a textarea.
+                TagListInput shows the parsed result instead of asking the
+                researcher to imagine it. */}
+            <TagListInput
+              label="Required fields"
+              itemNoun="field"
+              value={fieldsArray}
+              onChange={setFieldsArray}
+              placeholder="trial_type"
+              helperText={
+                fieldsArray.length === 0
+                  ? "No required fields: DataPipe will check only that a submission is well-formed. Type a column name and press Enter or comma to require one."
+                  : "Every submission must contain all of these. Type a column name and press Enter or comma to add another."
+              }
+            />
             <SaveError error={detailSave.error} />
           </Stack>
         )}
