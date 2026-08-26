@@ -141,10 +141,16 @@ export default function FinishingAStudyPage() {
         <Text maxW="70ch">Once an experiment is finalized:</Text>
         <Box as="ul" pl={5} listStyleType="disc" maxW="70ch">
           <Box as="li" mb={2}>
+            Data collection is switched off for you. Finalizing turns{" "}
+            <em>Accept new data</em> and <em>Accept base64 file uploads</em>{" "}
+            off in the same write that seals the record, and the dashboard
+            locks both switches from then on.
+          </Box>
+          <Box as="li" mb={2}>
             Every submission is rejected with{" "}
-            <Code>EXPERIMENT_FINALIZED</Code>, whether or not the experiment is
-            still switched on. That check runs ahead of the active switch, so
-            turning the experiment back on does not reopen it.
+            <Code>EXPERIMENT_FINALIZED</Code> regardless. That check runs ahead
+            of the active switch, so the experiment stays closed even if
+            something puts those flags back on outside the dashboard.
           </Box>
           <Box as="li" mb={2}>
             Base64 submissions are rejected on the same grounds.

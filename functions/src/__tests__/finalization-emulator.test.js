@@ -419,6 +419,42 @@ describe("F1. the full merge", () => {
     expect(entries.has("dataset_description.json")).toBe(true);
   });
 
+  it("switches data collection off in the same write that sets the finalized flag", async () => {
+    const { experimentID } = await seedFinalizableExperiment();
+    const before = (await db.collection("experiments").doc(experimentID).get()).data();
+    // The seed is a live experiment, so this test would pass vacuously if the
+    // flags were already off.
+    expect(before.active).toBe(true);
+    expect(before.activeBase64).toBe(true);
+
+    const result = await finalizeExperiment(experimentID);
+    expect(result.status).toBe("finalized");
+
+    const expData = (await db.collection("experiments").doc(experimentID).get()).data();
+    expect(expData.finalized).toBe(true);
+    // The submission guards already reject on `finalized` alone, so this is
+    // about the dashboard: `active: true` on a sealed record drew a green
+    // "Accepting data" switch on an experiment whose loose files had already
+    // been deleted.
+    expect(expData.active).toBe(false);
+    expect(expData.activeBase64).toBe(false);
+  });
+
+  it("leaves condition assignment alone, which a finalized experiment still does", async () => {
+    const { experimentID } = await seedFinalizableExperiment();
+    await db.collection("experiments").doc(experimentID).update({
+      activeConditionAssignment: true,
+    });
+
+    await finalizeExperiment(experimentID);
+
+    const expData = (await db.collection("experiments").doc(experimentID).get()).data();
+    // api-condition.ts has no `finalized` check by design -- see
+    // pages/docs/data/finalizing.js. Switching this off here would be
+    // finalization claiming a behaviour change it does not implement.
+    expect(expData.activeConditionAssignment).toBe(true);
+  });
+
   it("moves both Psych-DS control files inside the archive", async () => {
     const { experimentID } = await seedFinalizableExperiment();
     await finalizeExperiment(experimentID);

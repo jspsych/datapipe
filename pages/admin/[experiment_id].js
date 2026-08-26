@@ -191,11 +191,22 @@ function ExperimentPageDashboard({ experiment_id }) {
               {/* Badges -> StatusIndicator. The "Active" badge was white on
                   green.600 at 3.30:1, and the queued/error badges were solid
                   chips in a second red and a second orange. StatusIndicator
-                  rides `status.*` and always states the status in words. */}
-              <StatusIndicator
-                status={data.active ? "ok" : "neutral"}
-                label={data.active ? "Accepting data" : "Not accepting data"}
-              />
+                  rides `status.*` and always states the status in words.
+
+                  Finalized takes this slot instead of sitting beside it --
+                  same reasoning as the experiment list, including the legacy
+                  case where a pre-existing finalized experiment still holds
+                  `active: true`. The Danger zone panel further down carries
+                  the detail; up here it only has to be the first thing the
+                  page says about the experiment. */}
+              {data.finalized ? (
+                <StatusIndicator status="ok" label="Finalized" />
+              ) : (
+                <StatusIndicator
+                  status={data.active ? "ok" : "neutral"}
+                  label={data.active ? "Accepting data" : "Not accepting data"}
+                />
+              )}
               <Text fontSize="sm" color="fg.muted">
                 {plural(data.sessions || 0, "completed session")}
               </Text>

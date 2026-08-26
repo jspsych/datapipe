@@ -194,11 +194,24 @@ function ExperimentItem({ exp }) {
           <HStack gap={[2, 4]} flexWrap="wrap" rowGap={2}>
             {/* One status per row, stated in words. "Data / Base64 /
                 Conditions / Metadata" were feature NAMES, not statuses --
-                whether each was on lived in the dot's hue. */}
-            <StatusIndicator
-              status={exp.active ? "ok" : "neutral"}
-              label={exp.active ? "Collecting data" : "Not collecting"}
-            />
+                whether each was on lived in the dot's hue.
+
+                Finalized REPLACES the collecting/not-collecting line rather
+                than joining it. Two reasons. "Not collecting" is the weaker
+                and more reversible-sounding of the two facts, so leading with
+                it buries the one that matters. And an experiment finalized
+                before finalization started switching `active` off still holds
+                `active: true` in Firestore -- reading `finalized` first is
+                what stops those rows from advertising "Collecting data" on a
+                sealed archive. */}
+            {exp.finalized ? (
+              <StatusIndicator status="ok" label="Finalized" />
+            ) : (
+              <StatusIndicator
+                status={exp.active ? "ok" : "neutral"}
+                label={exp.active ? "Collecting data" : "Not collecting"}
+              />
+            )}
             {exp.sessions > 0 && (
               <Text fontSize="sm" color="fg.muted">
                 {exp.sessions} {exp.sessions === 1 ? "session" : "sessions"}
