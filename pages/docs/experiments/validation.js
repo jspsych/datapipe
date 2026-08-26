@@ -99,8 +99,11 @@ export default function ValidationAndSessionLimitsPage() {
           </List.Item>
         </List.Root>
         <Text maxW="70ch">
-          The dashboard takes the list as comma-separated names. Empty it and
-          DataPipe checks only that the file is well-formed.
+          On the dashboard, type a name and press Enter or comma to add it, or
+          paste a comma-separated list in one go. Each name becomes a chip
+          showing exactly the text that will be matched, so a stray space or a
+          pasted quote is visible before it costs you a session. Remove every
+          chip and DataPipe checks only that the file is well-formed.
         </Text>
       </DocsSection>
 
