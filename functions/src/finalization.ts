@@ -401,11 +401,32 @@ async function runFinalization(experimentID: string): Promise<Omit<FinalizationR
  * same write. `compaction.lastError` is cleared the way a successful
  * compaction pass clears it -- a stale error from an earlier attempt should
  * not linger once the pass it belongs to has actually succeeded.
+ *
+ * `active` and `activeBase64` go off in the SAME write, and that is not
+ * cosmetic. The submission guards already reject everything on `finalized`
+ * alone (api-data.ts, api-base64.ts, both ahead of the active check), so the
+ * experiment was already closed -- but the dashboard renders those two fields
+ * as switches, and a finalized experiment left with `active: true` drew a
+ * green "Accepting data" switch on a record that had been sealed and whose
+ * loose files had already been deleted. The researcher's own dashboard was
+ * the least accurate thing about their study.
+ *
+ * One write, not two, because there is no state worth having in between: a
+ * reader that sees `finalized: true` sees the switches off in the same
+ * snapshot.
+ *
+ * `activeConditionAssignment` is deliberately NOT touched. A finalized
+ * experiment still hands out condition numbers -- api-condition.ts has no
+ * `finalized` check, by design, so an experiment that is being replayed or
+ * re-run for a demo keeps assigning -- and switching it off here would be
+ * this function claiming a behaviour change it does not implement.
  */
 async function markFinalized(experimentID: string, sessionsSeen: number): Promise<void> {
   await releaseLease(experimentID, sessionsSeen, {
     finalized: true,
     finalizedAt: Timestamp.now(),
+    active: false,
+    activeBase64: false,
     "compaction.lastError": FieldValue.delete(),
   });
 }

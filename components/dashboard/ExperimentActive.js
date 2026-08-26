@@ -29,6 +29,18 @@ function writeExperiment(expId, fields) {
 }
 
 export default function ExperimentActive({ data }) {
+  // Finalizing seals the dataset: the submission guards in api-data.ts and
+  // api-base64.ts reject on `finalized` BEFORE they look at these two flags,
+  // so a switch left writable here is a switch that cannot do what it says.
+  // finalization.ts now writes both to false as it finalizes; this makes the
+  // controls agree, and covers experiments finalized before it did.
+  //
+  // Same shape as MetadataControl's `locked`: inert switch plus a description
+  // saying WHY, because a control that is off with no explanation reads as
+  // broken (Nielsen 1). Condition assignment is not locked -- a finalized
+  // experiment still assigns conditions, by design.
+  const finalized = data.finalized === true;
+
   const [sessionLimitActive, setSessionLimitActive] = useState(
     data.limitSessions
   );
@@ -62,8 +74,20 @@ export default function ExperimentActive({ data }) {
     <SwitchTable label="Data collection settings">
       <SettingsRow
         label="Accept new data"
-        description="While this is on, your experiment ID accepts submissions from participants. Turning it off stops new submissions immediately; data you have already collected is not affected."
-        checked={data.active}
+        description={
+          finalized
+            ? "Locked because this experiment has been finalized. Its data is sealed in a single archive on your storage provider, and submissions are rejected whether this is on or off."
+            : "While this is on, your experiment ID accepts submissions from participants. Turning it off stops new submissions immediately; data you have already collected is not affected."
+        }
+        // `&& !finalized` is about experiments finalized BEFORE finalization
+        // started switching this off, which still hold `active: true`. The
+        // row asks "does this experiment accept new data"; for a sealed
+        // experiment the answer is no, whatever the stale flag says, and a
+        // green switch here would be the exact lie this file's rewrite
+        // removed. Nothing is written -- the display is corrected, not the
+        // document.
+        checked={data.active && !finalized}
+        disabled={finalized}
         onSave={(next) => writeExperiment(data.id, { active: next })}
         failureMessage="Could not change data collection. Your experiment is still set the way it was before -- check your connection and try again."
         savedLabel="Data collection setting saved"
@@ -71,8 +95,13 @@ export default function ExperimentActive({ data }) {
 
       <SettingsRow
         label="Accept base64 file uploads"
-        description="Needed only if your experiment sends binary files -- audio, video or images -- rather than CSV or JSON data."
-        checked={data.activeBase64 || false}
+        description={
+          finalized
+            ? "Locked because this experiment has been finalized. Base64 submissions are rejected on the same grounds as everything else."
+            : "Needed only if your experiment sends binary files -- audio, video or images -- rather than CSV or JSON data."
+        }
+        checked={(data.activeBase64 || false) && !finalized}
+        disabled={finalized}
         onSave={(next) => writeExperiment(data.id, { activeBase64: next })}
         failureMessage="Could not change base64 uploads. The setting is unchanged -- check your connection and try again."
       />

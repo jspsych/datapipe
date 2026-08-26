@@ -161,8 +161,21 @@ function featureSummary(exp) {
   return `${on.slice(0, -1).join(", ")} and ${on[on.length - 1]} on`;
 }
 
+// Which service actually holds this experiment's data. Worth a line on a list
+// of thirty studies: a lab mid-migration has experiments on two or three
+// providers at once, and nothing in a title says which. Legacy OSF
+// experiments are absent from STORAGE_PROVIDERS by design (they keep their
+// bespoke surfaces), so they are named separately rather than falling through
+// to nothing -- those are exactly the rows whose location matters most while
+// OSF is being retired.
+function providerName(exp) {
+  if (isLegacyOsfExperiment(exp)) return "OSF";
+  return STORAGE_PROVIDERS[exp.storageProvider]?.name ?? null;
+}
+
 function ExperimentItem({ exp }) {
   const features = featureSummary(exp);
+  const provider = providerName(exp);
 
   return (
     <Box
@@ -194,11 +207,33 @@ function ExperimentItem({ exp }) {
           <HStack gap={[2, 4]} flexWrap="wrap" rowGap={2}>
             {/* One status per row, stated in words. "Data / Base64 /
                 Conditions / Metadata" were feature NAMES, not statuses --
-                whether each was on lived in the dot's hue. */}
-            <StatusIndicator
-              status={exp.active ? "ok" : "neutral"}
-              label={exp.active ? "Collecting data" : "Not collecting"}
-            />
+                whether each was on lived in the dot's hue.
+
+                Finalized REPLACES the collecting/not-collecting line rather
+                than joining it. Two reasons. "Not collecting" is the weaker
+                and more reversible-sounding of the two facts, so leading with
+                it buries the one that matters. And an experiment finalized
+                before finalization started switching `active` off still holds
+                `active: true` in Firestore -- reading `finalized` first is
+                what stops those rows from advertising "Collecting data" on a
+                sealed archive. */}
+            {exp.finalized ? (
+              <StatusIndicator status="ok" label="Finalized" />
+            ) : (
+              <StatusIndicator
+                status={exp.active ? "ok" : "neutral"}
+                label={exp.active ? "Collecting data" : "Not collecting"}
+              />
+            )}
+            {/* "Stored on X", not a bare "Zenodo". Every other item on this
+                line says what it is ("42 sessions", "base64 uploads on"); a
+                lone proper noun among them would be the only one the reader
+                has to work out. */}
+            {provider && (
+              <Text fontSize="sm" color="fg.muted">
+                Stored on {provider}
+              </Text>
+            )}
             {exp.sessions > 0 && (
               <Text fontSize="sm" color="fg.muted">
                 {exp.sessions} {exp.sessions === 1 ? "session" : "sessions"}

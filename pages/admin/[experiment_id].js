@@ -36,6 +36,7 @@ import SettingsSection from "../../components/ui/SettingsSection";
 import GuidanceLine from "../../components/ui/GuidanceLine";
 import StatusIndicator from "../../components/ui/StatusIndicator";
 import SectionPanel from "../../components/dashboard/SectionPanel";
+import { STORAGE_PROVIDERS } from "../../lib/provider-config";
 
 export async function getServerSideProps() {
   return { props: {} };
@@ -191,11 +192,22 @@ function ExperimentPageDashboard({ experiment_id }) {
               {/* Badges -> StatusIndicator. The "Active" badge was white on
                   green.600 at 3.30:1, and the queued/error badges were solid
                   chips in a second red and a second orange. StatusIndicator
-                  rides `status.*` and always states the status in words. */}
-              <StatusIndicator
-                status={data.active ? "ok" : "neutral"}
-                label={data.active ? "Accepting data" : "Not accepting data"}
-              />
+                  rides `status.*` and always states the status in words.
+
+                  Finalized takes this slot instead of sitting beside it --
+                  same reasoning as the experiment list, including the legacy
+                  case where a pre-existing finalized experiment still holds
+                  `active: true`. The Danger zone panel further down carries
+                  the detail; up here it only has to be the first thing the
+                  page says about the experiment. */}
+              {data.finalized ? (
+                <StatusIndicator status="ok" label="Finalized" />
+              ) : (
+                <StatusIndicator
+                  status={data.active ? "ok" : "neutral"}
+                  label={data.active ? "Accepting data" : "Not accepting data"}
+                />
+              )}
               <Text fontSize="sm" color="fg.muted">
                 {plural(data.sessions || 0, "completed session")}
               </Text>
@@ -390,7 +402,28 @@ function ExperimentPageDashboard({ experiment_id }) {
         </SettingsSection>
       </Box>
 
-      {/* mt={16}, not mt={10}: the extra air is the signal that the next
+      {/* Offered only where finalizing is a thing that can happen.
+
+          Finalizing merges a study into one archive to stay under a
+          provider's file-count ceiling, and Zenodo is the only provider that
+          has one -- finalization.ts refuses everything else with
+          `not-eligible`. Until now the section rendered for every provider,
+          so a Drive or Dataverse researcher was shown a red Danger zone
+          promising to stop their experiment "forever", walked through a
+          confirmation dialog about permanently deleting their files, and
+          only then told it could not be done. Offering an irreversible
+          action that was never available is worse than not offering it.
+
+          The whole section goes, not just the button: finalization is
+          currently its only entry, and an empty Danger zone is its own kind
+          of alarming.
+
+          `supportsFinalizing` is the frontend's presentational mirror of the
+          adapter's `capabilities.maxFileCount` (lib/provider-config.js); the
+          server remains authoritative, and a legacy OSF experiment -- absent
+          from that map entirely -- correctly falls through to false. */}
+      {STORAGE_PROVIDERS[data.storageProvider]?.supportsFinalizing && (
+        /* mt={16}, not mt={10}: the extra air is the signal that the next
           section plays by different rules.
 
           "Danger zone", not "Finalize", for parity with
@@ -400,31 +433,32 @@ function ExperimentPageDashboard({ experiment_id }) {
           becomes an <h3> INSIDE it: it is currently the only irreversible
           action here, and naming it as one entry in a zone rather than as the
           zone itself leaves room for the next one (experiment deletion)
-          without another rename. */}
-      <Box mt={16} w="100%">
-        <SettingsSection
-          title="Danger zone"
-          description="Actions here are permanent. Nothing in this section can be undone."
-          variant="danger"
-        >
-          <Stack gap={3} align="flex-start">
-            <Heading as="h3" size="sm" fontWeight="semibold" color="fg">
-              Finalize
-            </Heading>
-            {/* Kept verbatim from the old section description. DESIGN.md
+          without another rename. */
+        <Box mt={16} w="100%">
+          <SettingsSection
+            title="Danger zone"
+            description="Actions here are permanent. Nothing in this section can be undone."
+            variant="danger"
+          >
+            <Stack gap={3} align="flex-start">
+              <Heading as="h3" size="sm" fontWeight="semibold" color="fg">
+                Finalize
+              </Heading>
+              {/* Kept verbatim from the old section description. DESIGN.md
                 §8.10: the confirmation dialog must not hold the only copy of
                 the consequence, so it has to be stated here, before the
                 button that opens it. */}
-            <GuidanceLine>
-              Finalizing merges every file into a single archive on your
-              storage provider, permanently deletes the loose files it was
-              built from, and stops this experiment from accepting data
-              forever. This cannot be undone.
-            </GuidanceLine>
-            <FinalizeControl data={data} experimentId={experiment_id} />
-          </Stack>
-        </SettingsSection>
-      </Box>
+              <GuidanceLine>
+                Finalizing merges every file into a single archive on your
+                storage provider, permanently deletes the loose files it was
+                built from, and stops this experiment from accepting data
+                forever. This cannot be undone.
+              </GuidanceLine>
+              <FinalizeControl data={data} experimentId={experiment_id} />
+            </Stack>
+          </SettingsSection>
+        </Box>
+      )}
     </VStack>
   );
 }
