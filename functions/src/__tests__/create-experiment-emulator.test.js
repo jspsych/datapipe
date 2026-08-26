@@ -288,6 +288,22 @@ describe("5. createExperiment happy path (gdrive)", () => {
 
     const userDoc = await db.collection("users").doc(uid).get();
     expect(userDoc.data().experiments).toContain(body.experimentID);
+
+    // logs/{id} is seeded in the same batch. `owner` is the field
+    // firestore.rules checks on every read of this document -- it was never
+    // written by any code path, so the rule could not pass and the dashboard's
+    // error panel never rendered for anyone. Seeding it here covers the
+    // experiment that has not received a request yet; write-log.ts covers the
+    // rest.
+    const logDoc = await db.collection("logs").doc(body.experimentID).get();
+    expect(logDoc.exists).toBe(true);
+    expect(logDoc.data().owner).toBe(uid);
+    expect(logDoc.data().storageProvider).toBe("gdrive");
+    expect(logDoc.data().createdAt).toBeTruthy();
+    // Zeroed rather than absent, so a log document is never a half-populated
+    // shape.
+    expect(logDoc.data().saveData).toBe(0);
+    expect(logDoc.data().logError).toBe(0);
   });
 });
 

@@ -209,6 +209,35 @@ export const createExperiment = onRequest({ cors: true }, async (req, res) => {
       storageProvider: provider,
       providerContainer,
     });
+    // Seed logs/{id} in the batch that was already being committed, so the
+    // document exists with an owner from the moment the experiment does.
+    //
+    // Two reasons this is worth the field:
+    //
+    // 1. firestore.rules gates log reads on `resource.data.owner ==
+    //    request.auth.uid`. Nothing ever wrote that field, so the rule could
+    //    never pass and no researcher has ever been able to read their own
+    //    error log. Writing it on every log write (write-log.ts) fixes it for
+    //    an experiment that receives traffic; seeding it here fixes it for one
+    //    that has not received any yet.
+    //
+    // 2. `createdAt` is what makes `lastRequestAt` legible -- "no requests
+    //    since March" and "created yesterday, no requests yet" are different
+    //    situations. It also stands in for a firstRequestAt field, which would
+    //    have cost a read of this document on every submission to maintain.
+    //
+    // The counters are seeded at zero so that a log document is never a
+    // half-populated shape: an experiment with no submissions reads as
+    // saveData: 0, not as a missing field.
+    batch.set(db.collection("logs").doc(experimentID), {
+      owner: uid,
+      storageProvider: provider,
+      createdAt: FieldValue.serverTimestamp(),
+      saveData: 0,
+      saveBase64Data: 0,
+      getCondition: 0,
+      logError: 0,
+    });
     // set+merge (not update) -- a freshly-signed-up user may have no
     // Firestore doc yet, same rationale as connect-provider.ts's
     // set()+mergeFields for connectedAccounts.

@@ -22,8 +22,6 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 
     return;
   }
 
-  await writeLog(experimentID, "saveBase64Data");
-
   const exp_doc_ref: DocumentReference<DocumentData> = db.collection("experiments").doc(experimentID);
   const exp_doc: DocumentSnapshot = await exp_doc_ref.get();
 
@@ -41,24 +39,31 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 
     return;
   }
 
+  // Identity for every log write below, and the reason the attempt is counted
+  // here rather than at the top of the handler -- see the matching comment in
+  // api-data.ts and the header of write-log.ts.
+  const logContext = { owner: exp_data.owner, storageProvider: exp_data.storageProvider };
+
+  await writeLog(experimentID, "saveBase64Data", undefined, logContext);
+
   // Finalization is permanent (docs/finalization-spec.md) -- see the matching
   // comment in api-data.ts for why this is checked ahead of, and independent
   // from, the ordinary activeBase64 flag.
   if (exp_data.finalized) {
     res.status(400).json(MESSAGES.EXPERIMENT_FINALIZED);
-    await writeLog(experimentID, "logError", MESSAGES.EXPERIMENT_FINALIZED);
+    await writeLog(experimentID, "logError", MESSAGES.EXPERIMENT_FINALIZED, logContext);
     return;
   }
 
   if (!exp_data.activeBase64) {
     res.status(400).json(MESSAGES.BASE64DATA_COLLECTION_NOT_ACTIVE);
-    await writeLog(experimentID, "logError", MESSAGES.BASE64DATA_COLLECTION_NOT_ACTIVE);
+    await writeLog(experimentID, "logError", MESSAGES.BASE64DATA_COLLECTION_NOT_ACTIVE, logContext);
     return;
   }
 
   if (!isBase64(data, {allowMime: true})) {
     res.status(400).json(MESSAGES.INVALID_BASE64_DATA);
-    await writeLog(experimentID, "logError", MESSAGES.INVALID_BASE64_DATA);
+    await writeLog(experimentID, "logError", MESSAGES.INVALID_BASE64_DATA, logContext);
     return;
   }
 
@@ -74,7 +79,7 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 
     }
   } catch (e) {
     res.status(400).json(MESSAGES.INVALID_BASE64_DATA);
-    await writeLog(experimentID, "logError", MESSAGES.INVALID_BASE64_DATA);
+    await writeLog(experimentID, "logError", MESSAGES.INVALID_BASE64_DATA, logContext);
     return;
   }
 
@@ -87,14 +92,14 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 
   } catch (e) {
     const detail = e instanceof Error ? e.message : "Unknown error";
     res.status(500).json(MESSAGES.DATA_PERSIST_ERROR);
-    await writeLog(experimentID, "logError", {...MESSAGES.DATA_PERSIST_ERROR, detail});
+    await writeLog(experimentID, "logError", {...MESSAGES.DATA_PERSIST_ERROR, detail}, logContext);
     return;
   }
 
   const user_doc = await db.doc(`users/${exp_data.owner}`).get();
   if (!user_doc.exists) {
     res.status(400).json(MESSAGES.INVALID_OWNER);
-    await writeLog(experimentID, "logError", MESSAGES.INVALID_OWNER);
+    await writeLog(experimentID, "logError", MESSAGES.INVALID_OWNER, logContext);
     return;
   }
 
@@ -102,7 +107,7 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 
 
   if (!user_data) {
     res.status(400).json(MESSAGES.USER_DATA_NOT_FOUND);
-    await writeLog(experimentID, "logError", MESSAGES.USER_DATA_NOT_FOUND);
+    await writeLog(experimentID, "logError", MESSAGES.USER_DATA_NOT_FOUND, logContext);
     return;
   }
 
@@ -112,14 +117,14 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 
   } catch (e) {
     const detail = e instanceof Error ? e.message : "Unknown error";
     res.status(500).json(MESSAGES.TOKEN_RESOLUTION_ERROR);
-    await writeLog(experimentID, "logError", {...MESSAGES.TOKEN_RESOLUTION_ERROR, detail});
+    await writeLog(experimentID, "logError", {...MESSAGES.TOKEN_RESOLUTION_ERROR, detail}, logContext);
     return;
   }
 
   if (!tokenResult.success) {
     const errorMessage = MESSAGES[tokenResult.error as keyof typeof MESSAGES] || MESSAGES.TOKEN_RESOLUTION_ERROR;
     res.status(400).json(errorMessage);
-    await writeLog(experimentID, "logError", {...errorMessage, detail: tokenResult.detail});
+    await writeLog(experimentID, "logError", {...errorMessage, detail: tokenResult.detail}, logContext);
     return;
   }
 
@@ -157,11 +162,14 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 
         });
         await cleanupPending(pendingPath); // queue-upload has its own copy
         res.status(202).json(MESSAGES.OSF_UPLOAD_QUEUED);
-        await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail: `Collision cache rehydration failed: ${detail}`});
+        // Held for retry, not stored and not refused -- see the matching
+        // comment in api-data.ts and the header of write-log.ts.
+        await writeLog(experimentID, "saveBase64DataQueued", undefined, logContext);
+        await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail: `Collision cache rehydration failed: ${detail}`}, logContext);
         return;
       } catch {
         res.status(500).json(MESSAGES.OSF_UPLOAD_EXCEPTION);
-        await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail});
+        await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail}, logContext);
         return;
       }
     }
@@ -172,7 +180,7 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 
     if (claimResult.reason === "duplicate") {
       await cleanupPending(pendingPath);
       res.status(400).json(MESSAGES.OSF_FILE_EXISTS);
-      await writeLog(experimentID, "logError", MESSAGES.OSF_FILE_EXISTS);
+      await writeLog(experimentID, "logError", MESSAGES.OSF_FILE_EXISTS, logContext);
       return;
     }
 
@@ -189,11 +197,12 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 
       });
       await cleanupPending(pendingPath); // queue-upload has its own copy
       res.status(202).json(MESSAGES.OSF_UPLOAD_QUEUED);
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail: "Collision cache rehydrating"});
+      await writeLog(experimentID, "saveBase64DataQueued", undefined, logContext);
+      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail: "Collision cache rehydrating"}, logContext);
       return;
     } catch {
       res.status(500).json(MESSAGES.OSF_UPLOAD_EXCEPTION);
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail: "Collision cache rehydrating"});
+      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail: "Collision cache rehydrating"}, logContext);
       return;
     }
   }
@@ -219,6 +228,7 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 
       });
       await cleanupPending(pendingPath); // queue-upload has its own copy
       res.status(202).json(MESSAGES.OSF_UPLOAD_QUEUED);
+      await writeLog(experimentID, "saveBase64DataQueued", undefined, logContext);
       return;
     } catch {
       res.status(500).json(MESSAGES.OSF_UPLOAD_EXCEPTION);
@@ -251,11 +261,12 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 
       });
       await cleanupPending(pendingPath); // queue-upload has its own copy
       res.status(202).json(MESSAGES.OSF_UPLOAD_QUEUED);
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail});
+      await writeLog(experimentID, "saveBase64DataQueued", undefined, logContext);
+      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail}, logContext);
       return;
     } catch {
       res.status(500).json(MESSAGES.OSF_UPLOAD_EXCEPTION);
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail});
+      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail}, logContext);
       return;
     }
   }
@@ -268,11 +279,14 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 
       await confirmClaim(experimentID, claimName, claimToken);
       // Logs before response — see the matching comment in api-data.ts:
       // responding first races observers of the log against the write.
-      await writeLog(experimentID, "logError", MESSAGES.OSF_FILE_EXISTS);
+      await writeLog(experimentID, "logError", MESSAGES.OSF_FILE_EXISTS, logContext);
       await writeLog(experimentID, "logError", {
+        // See the matching comment in api-data.ts for why this entry carries
+        // an `error` code of its own.
+        error: "COLLISION_CACHE_DISAGREEMENT",
         collisionCacheDisagreement: true,
         direction: "cache-free-provider-conflict",
-      });
+      }, logContext);
       await cleanupPending(pendingPath);
       res.status(400).json(MESSAGES.OSF_FILE_EXISTS);
       return;
@@ -290,11 +304,12 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 
       });
       await cleanupPending(pendingPath); // queue-upload has its own copy
       res.status(202).json(MESSAGES.OSF_UPLOAD_QUEUED);
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.providerStatus, osfStatusText: result.providerMessage});
+      await writeLog(experimentID, "saveBase64DataQueued", undefined, logContext);
+      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.providerStatus, osfStatusText: result.providerMessage}, logContext);
       return;
     } catch {
       res.status(400).json(MESSAGES.OSF_UPLOAD_ERROR);
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.providerStatus, osfStatusText: result.providerMessage});
+      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.providerStatus, osfStatusText: result.providerMessage}, logContext);
       return;
     }
   }
@@ -302,6 +317,10 @@ export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 
   // Successful write — confirm the claim (best-effort; a confirm failure
   // must not fail a request that already succeeded against the provider).
   await confirmClaim(experimentID, claimName, claimToken);
+
+  // The file is in the researcher's storage. This is the only place in this
+  // handler that is true.
+  await writeLog(experimentID, "saveBase64DataSucceeded", undefined, logContext);
 
   // Data successfully uploaded to OSF — clean up the pending copy.
   await cleanupPending(pendingPath);

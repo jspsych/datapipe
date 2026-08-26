@@ -88,6 +88,11 @@ export async function queueDerivedFiles(
   failureReason: string,
   providerErrorCode?: ProviderErrorCode,
 ): Promise<void> {
+  // The target already carries the two fields logs/{id} needs to identify
+  // itself (write-log.ts) -- it is built from the experiment document in
+  // api-data.ts.
+  const logContext = { owner: target.owner, storageProvider: target.storageProvider };
+
   for (const file of files) {
     try {
       await queueUpload({
@@ -104,10 +109,10 @@ export async function queueDerivedFiles(
         sessionIncremented: true,
         failureReason,
       });
-      await writeLog(target.experimentID, "logError", {...MESSAGES.OSF_UPLOAD_QUEUED, detail: `derived file ${file.filename}: ${failureReason}`});
+      await writeLog(target.experimentID, "logError", {...MESSAGES.OSF_UPLOAD_QUEUED, detail: `derived file ${file.filename}: ${failureReason}`}, logContext);
     } catch (e) {
       const detail = e instanceof Error ? e.message : "Unknown error";
-      await writeLog(target.experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, detail: `derived file ${file.filename} could not be queued: ${detail}`});
+      await writeLog(target.experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, detail: `derived file ${file.filename} could not be queued: ${detail}`}, logContext);
     }
   }
 }
