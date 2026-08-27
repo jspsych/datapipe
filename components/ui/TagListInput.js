@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback } from "react";
 import { TagsInput, Text } from "@chakra-ui/react";
 import { X } from "lucide-react";
+import useTransientNotice from "./useTransientNotice";
 
 /**
  * TagListInput
@@ -85,11 +86,6 @@ import { X } from "lucide-react";
  *   highlighted pill, or double-click).
  */
 
-// How long a rejection notice holds the message slot before the helper text
-// comes back. Matches SettingsRow's SAVED_VISIBLE_MS -- the two pieces of
-// transient feedback on this page should not linger for different durations.
-const NOTICE_VISIBLE_MS = 3000;
-
 // Quote characters a researcher can plausibly paste around a field name:
 // straight pairs from source code, curly pairs from a document or a chat
 // client, and backticks from a Markdown span. `"trial_type"` copied out of a
@@ -160,31 +156,10 @@ export default function TagListInput({
     if (!onChange) console.error("TagListInput: `onChange` is required.");
   }
 
-  const [notice, setNotice] = useState(null);
-
-  // The rejection notice is transient. Keyed on a counter rather than the
-  // message text so that the same rejection twice in a row restarts the timer
-  // instead of letting the first one's timeout clear the second one early.
-  const [noticeKey, setNoticeKey] = useState(0);
-  const mounted = useRef(true);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
-  useEffect(() => {
-    if (!notice) return undefined;
-    const timer = setTimeout(() => {
-      if (mounted.current) setNotice(null);
-    }, NOTICE_VISIBLE_MS);
-    return () => clearTimeout(timer);
-  }, [notice, noticeKey]);
-
-  const say = useCallback((message) => {
-    setNotice(message);
-    setNoticeKey((k) => k + 1);
-  }, []);
+  // Shared with the format checkboxes in ExperimentValidation, which refuse
+  // the same way for the same reason: the write never happened, and the
+  // researcher is owed the reason.
+  const { notice, say, clear: clearNotice } = useTransientNotice();
 
   const committed = normalizeList(value);
 
@@ -196,10 +171,10 @@ export default function TagListInput({
       // "rt," adds nothing once the empty is dropped. Writing in that case
       // would be a Firestore round trip for no change.
       if (sameList(next, committed)) return;
-      setNotice(null);
+      clearNotice();
       onChange(next);
     },
-    [committed, onChange]
+    [committed, onChange, clearNotice]
   );
 
   /**
