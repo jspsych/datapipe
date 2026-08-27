@@ -202,6 +202,60 @@ describe("ExperimentValidation — format checkboxes", () => {
     expect(screen.getByText("Allow CSV")).toBeInTheDocument();
   });
 
+  // With validation on and neither format allowed, api-data.ts skips both
+  // validators and every submission takes the 400 -- the experiment stops
+  // collecting and the log blames the participant's data. The control refuses
+  // rather than saving it.
+  it("refuses to untick the last remaining format", async () => {
+    renderWithChakra(
+      <ExperimentValidation data={experiment({ allowJSON: false })} />
+    );
+
+    const csv = screen.getByRole("checkbox", { name: "Allow CSV" });
+    expect(csv).toBeChecked();
+
+    fireEvent.click(screen.getByText("Allow CSV"));
+    await act(async () => {});
+
+    expect(csv).toBeChecked();
+    expect(setDocMock).not.toHaveBeenCalled();
+    expect(screen.getByText(/at least one format has to stay allowed/i))
+      .toBeInTheDocument();
+  });
+
+  it("still allows unticking a format when the other one is on", async () => {
+    renderWithChakra(<ExperimentValidation data={experiment()} />);
+
+    fireEvent.click(screen.getByText("Allow CSV"));
+
+    await waitFor(() => expect(setDocMock).toHaveBeenCalledTimes(1));
+    expect(setDocMock.mock.calls[0][1].allowCSV).toBe(false);
+    expect(
+      screen.queryByText(/at least one format has to stay allowed/i)
+    ).not.toBeInTheDocument();
+  });
+
+  it("lets the refused format be re-ticked afterwards", async () => {
+    renderWithChakra(
+      <ExperimentValidation data={experiment({ allowJSON: false })} />
+    );
+
+    // Refused: the box stays ticked, so the next click is an untick again.
+    fireEvent.click(screen.getByText("Allow CSV"));
+    await act(async () => {});
+    expect(setDocMock).not.toHaveBeenCalled();
+
+    // The refusal must not have wedged the group -- adding the other format
+    // still saves.
+    fireEvent.click(screen.getByText("Allow JSON"));
+    await waitFor(() => expect(setDocMock).toHaveBeenCalledTimes(1));
+    expect(setDocMock.mock.calls[0][1]).toEqual({
+      allowJSON: true,
+      allowCSV: true,
+      requiredFields: ["trial_type"],
+    });
+  });
+
   it("gives the switch and each checkbox its own input id", () => {
     renderWithChakra(<ExperimentValidation data={experiment()} />);
 

@@ -1,4 +1,4 @@
-import { HStack, Stack, Checkbox, CheckboxGroup } from "@chakra-ui/react";
+import { HStack, Stack, Text, Checkbox, CheckboxGroup } from "@chakra-ui/react";
 
 import { useEffect, useRef, useState } from "react";
 
@@ -10,6 +10,7 @@ import SettingsRow, {
   useTrackedSave,
 } from "../ui/SettingsRow";
 import TagListInput, { normalizeList } from "../ui/TagListInput";
+import useTransientNotice from "../ui/useTransientNotice";
 import { SwitchTable } from "./SectionPanel";
 
 function writeExperiment(expId, fields) {
@@ -46,6 +47,69 @@ export default function ExperimentValidation({ data }) {
       "submissions against the previous rules -- check your connection and " +
       "try again."
   );
+
+  const { notice: formatNotice, say: sayFormatNotice } = useTransientNotice();
+
+  const formatGroupRef = useRef(null);
+
+  /**
+   * Refuses to untick the last remaining format.
+   *
+   * With validation on and neither format allowed, `api-data.ts` cannot reach
+   * either validator: `valid` starts false, both branches are skipped, and
+   * every submission takes the 400. The experiment silently stops collecting,
+   * and the error the researcher eventually finds in the log says the DATA is
+   * invalid -- pointing at the participant's submission, when the submission
+   * never mattered.
+   *
+   * There is no legitimate reading of "validate submissions, accept nothing",
+   * so the control declines rather than saving it. Declining means simply not
+   * calling `setValidationSettings`: the group is controlled, so the tick mark
+   * never moves and the save effect never fires. The notice is what stops that
+   * from looking like a dead checkbox.
+   *
+   * This is a UI floor, not a guarantee. The server is unchanged, so a
+   * document that already holds the state -- or one written any other way --
+   * still behaves as before. Deliberate: see the PR discussion.
+   */
+  const handleFormatChange = (values) => {
+    if (values.length === 0) {
+      sayFormatNotice(
+        "At least one format has to stay allowed. With neither, every " +
+          "submission would be rejected."
+      );
+      resyncFormatInputs();
+      return;
+    }
+    setValidationSettings(values);
+  };
+
+  /**
+   * Puts the native checkbox inputs back in agreement with our state after a
+   * refusal.
+   *
+   * Ark has already flipped the real `<input>` by the time `onValueChange`
+   * runs. Refusing leaves `validationSettings` untouched, so React re-renders
+   * with the same `checked` prop it rendered last time and does not reset the
+   * node. What the researcher SEES is still right -- the tick mark is drawn
+   * from the controlled group value, so it never moved -- but the hidden input
+   * is what the accessibility tree reads, and it now says unchecked. A
+   * screen-reader user would be told the box they just refused had been
+   * unticked, which is the opposite of what happened and worse than no
+   * feedback at all.
+   *
+   * `queueMicrotask` so this lands after React has finished the render the
+   * notice triggers; setting the property during the handler is undone by it.
+   */
+  function resyncFormatInputs() {
+    queueMicrotask(() => {
+      const inputs =
+        formatGroupRef.current?.querySelectorAll('input[type="checkbox"]') ?? [];
+      inputs.forEach((input) => {
+        input.checked = validationSettings.includes(input.value);
+      });
+    });
+  }
 
   // The last values Firestore is known to hold, so a failed write can put the
   // form back to the truth rather than leaving it showing rules that are not
@@ -136,40 +200,58 @@ export default function ExperimentValidation({ data }) {
                 right of the block, holding its width, rather than mounting a
                 line under the textarea and shoving the section below down
                 every time a checkbox is ticked. */}
-            <HStack
-              justify="space-between"
-              alignItems="center"
-              w="100%"
-              gap={4}
-            >
-              <CheckboxGroup
-                value={validationSettings}
-                onValueChange={(values) => {
-                  setValidationSettings(values);
-                }}
+            {/* gap={2}, so the message line reads as attached to the
+                checkboxes rather than as a third item in the gap={4} column
+                the block is laid out in. */}
+            <Stack gap={2} w="100%">
+              <HStack
+                justify="space-between"
+                alignItems="center"
+                w="100%"
+                gap={4}
               >
-                <Stack gap={6} direction="row">
-                  <Checkbox.Root value="json" colorPalette="brandGreen">
-                    <Checkbox.HiddenInput />
-                    <Checkbox.Control>
-                      <Checkbox.Indicator />
-                    </Checkbox.Control>
-                    <Checkbox.Label>Allow JSON</Checkbox.Label>
-                  </Checkbox.Root>
-                  <Checkbox.Root value="csv" colorPalette="brandGreen">
-                    <Checkbox.HiddenInput />
-                    <Checkbox.Control>
-                      <Checkbox.Indicator />
-                    </Checkbox.Control>
-                    <Checkbox.Label>Allow CSV</Checkbox.Label>
-                  </Checkbox.Root>
-                </Stack>
-              </CheckboxGroup>
-              <SavedFlag
-                saved={detailSave.saved}
-                savedLabel="Validation rules saved"
-              />
-            </HStack>
+                <CheckboxGroup
+                  value={validationSettings}
+                  onValueChange={handleFormatChange}
+                >
+                  <Stack gap={6} direction="row" ref={formatGroupRef}>
+                    <Checkbox.Root value="json" colorPalette="brandGreen">
+                      <Checkbox.HiddenInput />
+                      <Checkbox.Control>
+                        <Checkbox.Indicator />
+                      </Checkbox.Control>
+                      <Checkbox.Label>Allow JSON</Checkbox.Label>
+                    </Checkbox.Root>
+                    <Checkbox.Root value="csv" colorPalette="brandGreen">
+                      <Checkbox.HiddenInput />
+                      <Checkbox.Control>
+                        <Checkbox.Indicator />
+                      </Checkbox.Control>
+                      <Checkbox.Label>Allow CSV</Checkbox.Label>
+                    </Checkbox.Root>
+                  </Stack>
+                </CheckboxGroup>
+                <SavedFlag
+                  saved={detailSave.saved}
+                  savedLabel="Validation rules saved"
+                />
+              </HStack>
+              {/* ONE line, always exactly one line's worth of box, whether it
+                  is holding guidance or the refusal -- same slot discipline as
+                  TagListInput's message line, and for the same reason: a
+                  message that mounts underneath would push the required-fields
+                  control and the save-error block down a row every time a
+                  checkbox is clicked. */}
+              <Text
+                fontSize="sm"
+                maxW="70ch"
+                color={formatNotice ? "brandOrange.fg" : "fg.muted"}
+                aria-live="polite"
+              >
+                {formatNotice ||
+                  "A submission is accepted if it matches either allowed format."}
+              </Text>
+            </Stack>
             {/* The old control was a Textarea holding a comma-separated
                 string, parsed on blur. Two things were wrong with it, and only
                 one was cosmetic. The cosmetic one: `color="gray"` on the
