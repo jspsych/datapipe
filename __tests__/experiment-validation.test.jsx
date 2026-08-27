@@ -160,3 +160,77 @@ describe("ExperimentValidation — required fields", () => {
     expect(screen.queryByText("Required fields")).not.toBeInTheDocument();
   });
 });
+
+const masterSwitch = () =>
+  screen.getByRole("checkbox", { name: /Check submissions before storing/i });
+
+// Regression: the format checkboxes render as SettingsRow's `children`, and
+// those children used to sit inside the row's `Field.Root`. Ark hands every
+// Switch AND Checkbox in a Field the same hidden-input id
+// (`ids: { hiddenInput: field?.ids.control }`), and `Checkbox.Root` is itself
+// a `<label htmlFor>` -- so clicking "Allow CSV" resolved to the FIRST element
+// carrying that id, which is the master switch above it. Validation silently
+// turned itself off and the whole block collapsed out from under the click.
+//
+// These click the LABELS, not the inputs: clicking an input directly never
+// went through the broken path, so a test that does that passes either way.
+describe("ExperimentValidation — format checkboxes", () => {
+  it("does not touch the master switch when a format is unticked", async () => {
+    renderWithChakra(<ExperimentValidation data={experiment()} />);
+
+    expect(masterSwitch()).toBeChecked();
+
+    fireEvent.click(screen.getByText("Allow CSV"));
+
+    await waitFor(() => expect(setDocMock).toHaveBeenCalledTimes(1));
+
+    expect(masterSwitch()).toBeChecked();
+    expect(setDocMock.mock.calls[0][1]).toEqual({
+      allowJSON: true,
+      allowCSV: false,
+      requiredFields: ["trial_type"],
+    });
+  });
+
+  it("keeps the dependent controls on screen after a click", async () => {
+    renderWithChakra(<ExperimentValidation data={experiment()} />);
+
+    fireEvent.click(screen.getByText("Allow JSON"));
+
+    await waitFor(() => expect(setDocMock).toHaveBeenCalledTimes(1));
+    expect(screen.getByText("Required fields")).toBeInTheDocument();
+    expect(screen.getByText("Allow CSV")).toBeInTheDocument();
+  });
+
+  it("gives the switch and each checkbox its own input id", () => {
+    renderWithChakra(<ExperimentValidation data={experiment()} />);
+
+    const ids = screen
+      .getAllByRole("checkbox")
+      .map((el) => el.getAttribute("id"));
+
+    expect(ids).toHaveLength(3);
+    expect(new Set(ids).size).toBe(3);
+  });
+});
+
+describe("ExperimentValidation — master switch", () => {
+  it("hides the format checkboxes when validation is off", () => {
+    renderWithChakra(
+      <ExperimentValidation data={experiment({ useValidation: false })} />
+    );
+    expect(screen.queryByText("Allow CSV")).not.toBeInTheDocument();
+  });
+
+  it("writes only useValidation when the switch is flipped", async () => {
+    renderWithChakra(
+      <ExperimentValidation data={experiment({ useValidation: false })} />
+    );
+
+    fireEvent.click(masterSwitch());
+
+    await waitFor(() => expect(setDocMock).toHaveBeenCalledTimes(1));
+    expect(setDocMock.mock.calls[0][1]).toEqual({ useValidation: true });
+    expect(screen.getByText("Allow CSV")).toBeInTheDocument();
+  });
+});

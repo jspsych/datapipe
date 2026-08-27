@@ -340,47 +340,68 @@ export default function SettingsRow({
   };
 
   return (
-    <Field.Root>
-      <Stack w="100%" gap={0}>
-        <HStack justify="space-between" alignItems="center" w="100%" gap={4}>
-          <HStack gap={2} alignItems="center" minW={0}>
-            <Field.Label fontWeight="normal" mb={0} color="fg">
-              {label}
-            </Field.Label>
-            {badge}
+    <Stack w="100%" gap={0}>
+      {/* The Field wraps ONLY the switch and its label. It must not wrap
+          `children`, and that is not a stylistic preference.
+
+          Ark's `useSwitch` and `useCheckbox` both take their hidden input's
+          id from the surrounding Field context -- literally
+          `ids: { hiddenInput: field?.ids.control }`. So a Checkbox rendered
+          inside this row's Field.Root was handed the SAME DOM id as the
+          switch's hidden input. `Checkbox.Root` is itself a
+          `<label htmlFor={thatId}>`, and the browser resolves a label to the
+          FIRST element in the document carrying that id -- the switch, which
+          renders above. Ticking "Allow CSV" in the validation panel therefore
+          flipped the row's switch instead: validation turned itself off and
+          the dependent block collapsed out from under the click. The label
+          ids collided the same way.
+
+          Dependent controls open their own fields (the numeric inputs in
+          ExperimentActive, the required-fields box in ExperimentValidation),
+          so nothing below needs this context -- and anything that inherits it
+          is broken by it. */}
+      <Field.Root>
+        <Stack w="100%" gap={0}>
+          <HStack justify="space-between" alignItems="center" w="100%" gap={4}>
+            <HStack gap={2} alignItems="center" minW={0}>
+              <Field.Label fontWeight="normal" mb={0} color="fg">
+                {label}
+              </Field.Label>
+              {badge}
+            </HStack>
+            {/* The confirmation rides in the same group as the switch, on the
+                switch's left, so it reads as belonging to THIS row. It holds
+                its width whether or not it is showing, which is what keeps
+                the switch from sliding sideways when a save lands. */}
+            <HStack gap={3} alignItems="center" flexShrink={0}>
+              <SavedFlag saved={saved} savedLabel={savedLabel} />
+              <Switch.Root
+                colorPalette="brandGreen"
+                size="md"
+                checked={value}
+                disabled={disabled}
+                onCheckedChange={(e) => handleChange(e.checked)}
+              >
+                <Switch.HiddenInput />
+                <Switch.Control>
+                  <Switch.Thumb />
+                </Switch.Control>
+              </Switch.Root>
+            </HStack>
           </HStack>
-          {/* The confirmation rides in the same group as the switch, on the
-              switch's left, so it reads as belonging to THIS row. It holds
-              its width whether or not it is showing, which is what keeps the
-              switch from sliding sideways when a save lands. */}
-          <HStack gap={3} alignItems="center" flexShrink={0}>
-            <SavedFlag saved={saved} savedLabel={savedLabel} />
-            <Switch.Root
-              colorPalette="brandGreen"
-              size="md"
-              checked={value}
-              disabled={disabled}
-              onCheckedChange={(e) => handleChange(e.checked)}
-            >
-              <Switch.HiddenInput />
-              <Switch.Control>
-                <Switch.Thumb />
-              </Switch.Control>
-            </Switch.Root>
-          </HStack>
-        </HStack>
 
-        {description && <GuidanceLine mt={2}>{description}</GuidanceLine>}
+          {description && <GuidanceLine mt={2}>{description}</GuidanceLine>}
+        </Stack>
+      </Field.Root>
 
-        <SaveError error={error} />
+      <SaveError error={error} />
 
-        {children && (
-          <Box w="100%" mt={3}>
-            {children}
-          </Box>
-        )}
-      </Stack>
-    </Field.Root>
+      {children && (
+        <Box w="100%" mt={3}>
+          {children}
+        </Box>
+      )}
+    </Stack>
   );
 }
 
