@@ -326,42 +326,72 @@ Run order:
    backfill has already cleared most of the population that would otherwise
    hit the gate on their very next visit.
 
-## 4. Mail retention: the TTL policy is now a MANUAL step
+## 4. Mail retention: the TTL policy lives in `firestore.indexes.json`
 
 `mail` documents hold a researcher's address (in `to`) and, after delivery, the
 audit trail `mail-delivery.ts` writes (`delivery.state`, `delivery.attempts`,
 `delivery.error`, `delivery.info`). They should not accumulate indefinitely.
 
-**This is the one thing the extension used to configure for you and now nobody
-does.** There is no install step that creates the TTL policy any more, and
-`mail-delivery.ts` cannot create one — a TTL policy is project configuration,
-not something an SDK write can set. If this step is skipped, `mail` grows
-unbounded forever, holding researcher addresses, and nothing else will catch
-it. Create it by hand, once per project:
+The extension used to configure this for you. `mail-delivery.ts` cannot — a TTL
+policy is project configuration, not something an SDK write can set. So it is
+declared in `firestore.indexes.json` and deployed with everything else:
+
+```json
+"fieldOverrides": [
+  {
+    "collectionGroup": "mail",
+    "fieldPath": "delivery.expireAt",
+    "ttl": true,
+    "indexes": [
+      { "order": "ASCENDING",  "queryScope": "COLLECTION" },
+      { "order": "DESCENDING", "queryScope": "COLLECTION" },
+      { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION" }
+    ]
+  }
+]
+```
+
+**DO NOT create this by hand with `gcloud`, and do not remove it from this
+file.** An earlier version of this section said to run
+`gcloud firestore fields ttls update` once per project. That is worse than
+useless, and here is what actually happened when someone followed it:
 
 ```
-gcloud firestore fields ttls update 'delivery.expireAt' \
-  --collection-group=mail \
-  --enable-ttl \
-  --database='(default)' \
-  --project=osf-relay
+14:51  gcloud ... --enable-ttl --project=datapipe-test   → ACTIVE
+15:02  PR merged to `test`
+15:04  firestore: Deleting 1 field overrides...          ← the deploy
+15:10  TTL gone
 ```
 
-(Console equivalent: Firestore → **Time-to-live (TTL)** → *Create policy* →
-collection group `mail`, timestamp field **`delivery.expireAt`** — the same
-field as the command above, NOT `delivery.endTime`. An earlier draft of this
-line said `endTime`, which would have been silently wrong in the expensive
-direction: native TTL deletes as soon as the timestamp passes, and `endTime` is
-set the instant an outcome turns terminal, so that policy reaps every mail
-document the moment it is delivered. No debugging window, and nothing anywhere
-saying it happened. See the first bullet below.) Repeat with
-`--project=datapipe-test`. Confirm afterwards with:
+The deploy step is `firebase deploy --only firestore,functions,hosting
+--force`, and `--only firestore` **reconciles** field overrides against this
+file. With `"fieldOverrides": []` in it, a hand-made TTL is not merely
+un-managed — it is something the deploy is actively instructed to delete. The
+`--force` flag suppresses the confirmation prompt that would otherwise say so,
+and the deploy reports success. A manual TTL therefore survives exactly until
+the next deploy of any kind, silently, and the retention promise quietly stops
+being kept while the runbook says it is.
+
+The three default single-field indexes in the block above are deliberate. A
+`fieldOverride` replaces the field's whole index configuration, so writing
+`"indexes": []` would additionally turn OFF single-field indexing for
+`delivery.expireAt` — a second, unrelated change nobody asked for. The block
+above is what `firebase firestore:indexes` emits for a field with TTL on and
+default indexing, so it round-trips.
+
+Confirm after a deploy with either:
 
 ```
+gcloud firestore fields ttls list --collection-group=mail --project=datapipe-test
 gcloud firestore fields ttls list --collection-group=mail --project=osf-relay
 ```
 
-Three things about this policy that are worth knowing before you run it:
+`state: ACTIVE` is what you want. `CREATING` means the field-level backfill is
+still running — it takes several minutes regardless of collection size, because
+it is a control-plane operation, not a data one. `Listed 0 items` after a deploy
+means this block is missing from `firestore.indexes.json`.
+
+Three things about this policy that are worth knowing:
 
 - **`delivery.endTime` is set only on a TERMINAL outcome** — `SUCCESS`, or an
   `ERROR` that will not be retried. A document in a retryable error state has

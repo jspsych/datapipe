@@ -26,7 +26,7 @@
 // `delivery.endTime`, `delivery.error`, `delivery.info.messageId`. Every
 // downstream decision that was ever going to be made from an extension-shaped
 // document still works -- including the Firestore TTL policy, which keys on
-// `delivery.endTime` (docs/deploy-contact-email.md §4). Nothing new is added
+// `delivery.expireAt` (docs/deploy-contact-email.md §4). Nothing new is added
 // at the top level of the document, so purge-user-data.ts's
 // `datapipe.owner == uid` query is untouched: everything here lives under
 // `delivery`.
@@ -762,9 +762,10 @@ export async function deliverMailDocument(docId: string): Promise<DeliveryOutcom
       "delivery.leaseExpiresAt": Timestamp.fromMillis(now.toMillis() + LEASE_MS),
       "delivery.error": null,
       "delivery.retryable": null,
-      // The TTL policy keys on endTime (docs/deploy-contact-email.md §4).
-      // Explicitly null while in flight so a document being retried cannot be
-      // reaped out from under the retry.
+      // endTime is not itself the TTL key -- delivery.expireAt is
+      // (docs/deploy-contact-email.md §4) -- but expireAt is only ever written
+      // alongside a terminal endTime, so clearing this is what keeps a
+      // document being retried out of the reaper's reach.
       "delivery.endTime": null,
     };
     // startTime is when delivery FIRST began, so a retry does not move it --
