@@ -67,6 +67,20 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "mail",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "delivery.state",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "delivery.retryable",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": [

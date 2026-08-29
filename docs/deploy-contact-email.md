@@ -424,6 +424,79 @@ experiments and queue entries. That query is unaffected by delivery:
 handled (the send resolves, the receipt has nowhere to land, one warning is
 logged).
 
+## 5. When sending is unavailable: the breaker
+
+The two things DataPipe mails fail differently, and the difference only matters
+when quota runs out:
+
+| | Verification code | Upload-failure notification |
+|---|---|---|
+| Nature | **Realtime.** Someone is watching a form. | **Deferrable.** Still true an hour later. |
+| Delivered by | The request itself, synchronously | `onmailcreated`, then the sweeper |
+| Retried? | **Never** | Yes, `scheduledmailretry` |
+| On failure | 503, vague message, cooldown cleared | Stays queued, swept later |
+
+**`systemStatus/mail` is the breaker.** `mail-delivery.ts` writes it after every
+send: the daily quota reading on success, a shut breaker on
+`daily_quota_exceeded`. It is server-only — no `firestore.rules` match, so it is
+default-denied to every client, and the account page learns nothing from it
+directly.
+
+**The proactive part is a response header.** Resend returns
+`x-resend-daily-quota` — the quota *used* today — on ordinary **successful**
+responses, so DataPipe learns it is at 94/100 while sending still works rather
+than by failing. Verification stops at a ceiling (currently 90 of 100) while
+upload-failure notifications keep going to the full limit. That asymmetry is the
+point: a researcher waiting on a code can come back later, but a notification
+that their data has stopped arriving is the only signal they get.
+
+The header is documented as free-plan-only, so it disappears on a paid plan.
+Absent reads as "no daily cap applies", which is correct — the reserve logic
+turns itself off on upgrade instead of needing to be removed.
+
+**When does it reopen?** Resend publishes no daily-reset time, and nothing here
+depends on knowing one. `unavailableUntil` is set to the next UTC midnight as a
+*ceiling*; what actually reopens sending is the sweeper landing a successful
+send. The deferrable path probes, the realtime path only ever reads. If the real
+reset is later than midnight UTC the sweeper's next attempt re-arms the breaker;
+if it is earlier, the sweeper finds out first.
+
+**What a researcher sees:** *"We can't send verification codes right now. Please
+try again in a little while."* Deliberately vague, and deliberately the same
+message for an exhausted quota, an unverified domain and a revoked key — the
+cause is operational detail they cannot act on differently. The code-entry form
+is not opened, because there is no code out there to enter, and the resend
+cooldown is cleared so they can retry the moment it comes back.
+
+**To force the feature open or shut by hand**, edit
+`systemStatus/mail.unavailableUntil` (a Timestamp, or null). Useful for testing
+the message, and for shutting off verification during a Resend incident without
+a deploy.
+
+## 6. Alerting: two metrics, no code
+
+**You cannot email yourself that you are out of email.** Same account, same
+quota. Alerting has to be out-of-band, which in practice means Cloud Monitoring
+delivering it rather than DataPipe.
+
+No code is needed — `mail-delivery.ts` already logs everything at error level.
+Create log-based metrics on the functions' logs and alert on them:
+
+| Match | Why |
+|---|---|
+| `MailConfigMissingError` | **First.** Every notification the deployment sends is being dropped. |
+| `daily_quota_exceeded` | Sending has stopped. Reactive — it is already happening. |
+| `mail-availability` + `dailyQuotaUsed` above ~80 | **The useful one.** Leading indicator, from the success-response header, while there is still time to act. |
+
+Route them to a channel Google delivers — Slack, PagerDuty, or an email address
+that is **not** on the `jspsych.org` sending domain, so an alert about mail
+being broken does not depend on mail working.
+
+Worth watching alongside, though neither needs an alert: `scheduled-mail-retry`
+lines reporting a non-zero `agedOut` (notifications that expired undelivered),
+and any accumulation of `delivery.state == "ERROR"` with `retryable == true`,
+which is the sweeper's backlog.
+
 ## Not covered here
 
 Firestore index changes (none expected — see the design doc §3.4/§7 on why

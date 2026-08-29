@@ -17,6 +17,18 @@ import { isValidEmailFormat, buildContactEmailUpdate } from "../../lib/contact-e
 const SEND_ERROR_COPY = {
   "no-contact-email": "Add a contact email address before requesting a code.",
   "rate-limited": "Please wait a moment before requesting another code.",
+  // Sending is paused -- an exhausted daily quota, an unverified sending
+  // domain, a revoked key. Deliberately vague, and deliberately one message for
+  // all of them: the cause is operational detail a researcher cannot act on
+  // differently, and naming it ("we are out of email quota") would be both
+  // meaningless to them and needlessly revealing. What they CAN act on is the
+  // only thing said: not now, try later.
+  //
+  // The code form is NOT opened for this one (see requestCode) -- there is no
+  // code out there to enter, and offering the field would be a second, quieter
+  // lie on top of the first.
+  "mail-unavailable":
+    "We can't send verification codes right now. Please try again in a little while.",
 };
 const VERIFY_ERROR_COPY = {
   "invalid-code": "That code is incorrect. Check it and try again.",

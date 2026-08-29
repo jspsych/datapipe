@@ -74,6 +74,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { randomUUID } from "crypto";
 import { db } from "./app.js";
 import { MAIL_COLLECTION } from "./mail.js";
+import { recordSendOutcome } from "./mail-availability.js";
 
 // ---------------------------------------------------------------------------
 // Timings. The relationship between these three numbers is load-bearing.
@@ -399,6 +400,33 @@ const AMBIGUOUS_ERRORS = new Set([
   "UND_ERR_SOCKET",
 ]);
 
+// Quota exhaustion, as opposed to the per-second rate limit. These are what
+// trip the breaker in mail-availability.ts, because they are the ones that stay
+// true for the rest of the day.
+export const QUOTA_ERRORS = new Set(["daily_quota_exceeded", "monthly_quota_exceeded"]);
+
+// Errors where Resend provably did NOT send: it refused the request, or we
+// never reached it. Safe to retry at ANY age, because there is no message to
+// duplicate.
+//
+// This set is the sweeper's licence. Everything else that is merely `retryable`
+// is only safe to retry inside the 24-hour window in which Resend still honours
+// the Idempotency-Key -- past that, a 5xx that might have been accepted becomes
+// a coin flip on a second copy. See scheduled-mail-retry.ts.
+export const REFUSED_ERRORS = new Set([
+  "daily_quota_exceeded",
+  "monthly_quota_exceeded",
+  "rate_limit_exceeded",
+  "concurrent_idempotent_requests",
+  "resource_locked",
+  "ENOTFOUND",
+  "ECONNREFUSED",
+  "EAI_AGAIN",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "UND_ERR_CONNECT_TIMEOUT",
+]);
+
 /**
  * A non-2xx answer from Resend, or an unusable one. Carries the HTTP status so
  * classification can fall back on it when the body named nothing familiar.
@@ -563,6 +591,13 @@ export interface SendResult {
   // Resend's `id` for the accepted message. Recorded as
   // delivery.info.messageId, which is the extension's field name.
   id?: string;
+  // `x-resend-daily-quota` -- the quota USED today, read off the SUCCESS
+  // response. This is what makes the breaker proactive instead of reactive:
+  // we learn we are at 94/100 while sending still works. Absent on paid plans
+  // (Resend only sends it to free-plan accounts), which correctly reads as
+  // "no daily cap applies".
+  dailyQuotaUsed?: number;
+  monthlyQuotaUsed?: number;
 }
 
 export interface SendOptions {
@@ -579,6 +614,14 @@ export type MailSender = (
 ) => Promise<SendResult>;
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
+
+/** A response header as a number, or undefined if absent or unparseable. */
+function headerInt(response: Response, name: string): number | undefined {
+  const raw = response.headers.get(name);
+  if (raw === null) return undefined;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) ? n : undefined;
+}
 
 let injectedSender: MailSender | null = null;
 
@@ -648,14 +691,29 @@ function resendSender(config: MailConfig): MailSender {
       throw new MailTransportError(name, message, response.status);
     }
 
+    // Quota headers ride on the SUCCESS response, which is the whole point --
+    // see mail-availability.ts. Read before the body so a malformed body cannot
+    // cost us the reading.
+    const quota = {
+      ...(headerInt(response, "x-resend-daily-quota") !== undefined
+        ? { dailyQuotaUsed: headerInt(response, "x-resend-daily-quota") }
+        : {}),
+      ...(headerInt(response, "x-resend-monthly-quota") !== undefined
+        ? { monthlyQuotaUsed: headerInt(response, "x-resend-monthly-quota") }
+        : {}),
+    };
+
     // 2xx means Resend accepted it. An unreadable body after that point costs
     // us the message id, which is a worse audit trail -- not a failed send, so
     // it must not throw. delivery.info.messageId simply lands null.
     try {
       const body = (await response.json()) as { id?: unknown };
-      return { id: typeof body?.id === "string" ? body.id : undefined };
+      return {
+        ...quota,
+        id: typeof body?.id === "string" ? body.id : undefined,
+      };
     } catch {
-      return {};
+      return quota;
     }
   };
 }
@@ -684,6 +742,20 @@ const SKIP_OUTCOMES: Record<Exclude<ClaimDecision, "claim">, DeliveryOutcome> = 
   "skip-terminal": "skipped-terminal",
   "skip-attempts-exhausted": "skipped-attempts-exhausted",
 };
+
+/**
+ * Is this mail delivered inline by its caller, rather than by the trigger?
+ *
+ * Set by send-contact-email-verification.ts. Two consequences, both here and
+ * both deliberate: onMailCreated leaves the document alone (so the trigger and
+ * the inline caller cannot race for the claim, which would leave the caller
+ * unable to report an outcome), and a failure is terminal rather than
+ * retryable.
+ */
+export function isInline(data: FirebaseFirestore.DocumentData | undefined): boolean {
+  const meta = data?.datapipe as { deliverInline?: unknown } | undefined;
+  return meta?.deliverInline === true;
+}
 
 interface Claim {
   data: FirebaseFirestore.DocumentData;
@@ -832,11 +904,26 @@ export async function deliverMailDocument(docId: string): Promise<DeliveryOutcom
     });
   } catch (error) {
     const classified = classifyMailError(error);
+
+    // Quota exhaustion is not just this mail's problem -- it is every send's
+    // problem until the quota rolls over, and the realtime path needs to know
+    // BEFORE it mints a code. Trip the breaker. Awaited but never fatal:
+    // recordSendOutcome swallows its own failures.
+    if (QUOTA_ERRORS.has(classified.name)) {
+      await recordSendOutcome({ quotaExhausted: true, errorName: classified.name });
+    }
+
     // The attempts cap is applied HERE and not in classifyMailError, because
     // "retryable in principle" and "we are still willing to retry" are two
     // different facts and the document should be able to show both.
     const exhausted = claim.attempts >= MAX_ATTEMPTS;
-    const retryable = classified.retryable && !exhausted;
+    // An inline send is a realtime one: its caller is holding an HTTP request
+    // open and will report the outcome to a researcher who is watching. Nothing
+    // will ever retry it -- scheduled-mail-retry.ts skips these on purpose --
+    // so calling it "retryable" would be a lie that also costs something real:
+    // a retryable error is never given delivery.expireAt, so the document would
+    // sit outside the TTL's reach holding an address forever.
+    const retryable = classified.retryable && !exhausted && !isInline(claim.data);
     // No recipient in this line: the docId is the handle, and the neighbours
     // (upload-failure-notify.ts, send-contact-email-verification.ts) log ids
     // and uids, never addresses.
@@ -866,6 +953,17 @@ export async function deliverMailDocument(docId: string): Promise<DeliveryOutcom
     "delivery.retryable": false,
     "delivery.info": { messageId: result?.id ?? null, transport: "resend" },
   });
+  // Bookkeeping, after the receipt rather than before it: a send that
+  // succeeded is recorded as a success even if this write loses a race. The
+  // daily quota reading rides on the success response (mail-availability.ts),
+  // and a success also closes the breaker -- this is the half-open close, and
+  // in practice the sweeper is what performs it.
+  await recordSendOutcome({
+    ...(typeof result?.dailyQuotaUsed === "number"
+      ? { dailyQuotaUsed: result.dailyQuotaUsed }
+      : {}),
+  });
+
   if (!wrote) {
     // The mail WAS sent. Only the receipt is missing -- either the document is
     // gone (purged), or a stale-lease takeover has already written its own.
@@ -891,6 +989,13 @@ async function finish(
   const updates: Updates = {
     "delivery.state": "ERROR",
     "delivery.retryable": classified.retryable,
+    // When this attempt happened. NOT startTime (which is when delivery first
+    // began and deliberately never moves) and not endTime (which is null on a
+    // retryable error by design). scheduled-mail-retry.ts needs it to tell
+    // whether a document is still inside Resend's 24-hour Idempotency-Key
+    // window, which is what decides whether a not-provably-refused error may
+    // be retried at all.
+    "delivery.lastAttemptAt": Timestamp.now(),
     // Structured, and never the stack: name + message only.
     "delivery.error": { name: classified.name, message: classified.message },
     // Lease released either way. On a retryable error that is what lets the
@@ -960,6 +1065,25 @@ export const onMailCreated = onDocumentCreated(
     if (process.env.FUNCTIONS_EMULATOR === "true") {
       console.log(
         `mail-delivery: emulator instance, leaving ${docId} unsent (no Resend here)`
+      );
+      return;
+    }
+
+    // -----------------------------------------------------------------------
+    // INLINE MAIL BELONGS TO ITS SENDER, NOT TO THIS TRIGGER.
+    // -----------------------------------------------------------------------
+    //
+    // send-contact-email-verification.ts delivers its own mail, awaiting the
+    // result, because a researcher is holding an HTTP request open waiting to
+    // be told whether a code is coming. If this trigger also ran, both would
+    // race for the claim. The claim makes that SAFE -- one wins, one skips, the
+    // mail is sent once -- but safety is not the requirement here: the loser
+    // gets "skipped-in-flight" and cannot say what happened, which is precisely
+    // the ambiguity the inline path exists to remove. So this instance stands
+    // down, provably, before the claim transaction.
+    if (isInline(event.data?.data())) {
+      console.log(
+        `mail-delivery: ${docId} is delivered inline by its sender, not by this trigger`
       );
       return;
     }

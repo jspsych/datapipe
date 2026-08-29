@@ -2,6 +2,8 @@ import { onRequest } from "firebase-functions/v2/https";
 import { randomInt, createHash } from "crypto";
 import { db, auth } from "./app.js";
 import { contactEmailRecipient, sendMail } from "./mail.js";
+import { deliverMailDocument } from "./mail-delivery.js";
+import { readMailStatus, verificationAvailability } from "./mail-availability.js";
 import { ACCOUNT_URL } from "./email/upload-failure-copy.js";
 
 // Send (or resend) a 6-digit code that confirms users/{uid}.contactEmail.
@@ -143,6 +145,36 @@ export const sendContactEmailVerification = onRequest(
         return;
       }
 
+      // ---------------------------------------------------------------------
+      // CAN WE SEND AT ALL? ASKED BEFORE ANYTHING IS SPENT.
+      // ---------------------------------------------------------------------
+      //
+      // Deliberately ahead of minting a code, writing the verification record,
+      // and arming the resend cooldown. Ask afterwards and a researcher gets
+      // told to check their inbox, gets a 60-second cooldown on requesting
+      // another, and never receives anything -- the failure invisible on both
+      // ends. Asking here also means a researcher clicking the button
+      // repeatedly during a quota outage costs zero Resend requests, which is
+      // the difference between a paused feature and a feature that makes the
+      // outage worse.
+      //
+      // The message is vague on purpose. "Quota" is operational detail that
+      // means nothing to a researcher, and one honest sentence covers every
+      // terminal cause -- exhausted quota, an unverified domain, a revoked key
+      // -- none of which they can act on differently anyway.
+      const availability = verificationAvailability(await readMailStatus(), Date.now());
+      if (!availability.available) {
+        console.warn(
+          `send-contact-email-verification: refused for ${uid}, mail unavailable (${availability.reason})`
+        );
+        res.status(503).json({
+          error:
+            "We can't send verification codes right now. Please try again in a little while.",
+          code: "mail-unavailable",
+        });
+        return;
+      }
+
       const existing = await verificationRef(uid).get();
       const sentAt = existing.exists
         ? (existing.data()?.sentAt as number | undefined)
@@ -175,13 +207,86 @@ export const sendContactEmailVerification = onRequest(
       // there is nothing else to keep consistent with the send -- this is a
       // direct response to a request the researcher just made, which is
       // exactly the case mail.ts's sendMail doc comment names.
-      await sendMail({
+      const mailRef = await sendMail({
         to: recipient,
         subject,
         text,
         html,
-        meta: { kind: "contact-email-verification", owner: uid },
+        meta: {
+          kind: "contact-email-verification",
+          owner: uid,
+          // Delivered below, synchronously, by THIS request -- not by the
+          // onmailcreated trigger, which stands down for inline mail. The
+          // document is still written first, so the audit trail, the
+          // purge-user-data handle and the TTL all work exactly as they do for
+          // queued mail; only who performs the send changes.
+          deliverInline: true,
+        },
       });
+
+      // ---------------------------------------------------------------------
+      // THE EMULATOR NEVER SENDS, SO IT NEVER REPORTS A SEND FAILURE EITHER.
+      // ---------------------------------------------------------------------
+      //
+      // onMailCreated returns before doing anything at all when
+      // FUNCTIONS_EMULATOR is set, and the inline path has to make the same
+      // promise -- otherwise it becomes the one route by which a local test run
+      // could mail a real person, which is precisely the hole that gate exists
+      // to close.
+      //
+      // It also has to answer 200. The mail document is written either way, and
+      // contact-email-verify-emulator.test.js recovers the code from it exactly
+      // as it did when the trigger owned delivery; answering 503 here would
+      // fail every emulator-backed verification test on a send that was never
+      // going to be attempted.
+      //
+      // Coverage does not suffer: the inline delivery path below is exercised
+      // in-process, against the emulator, with an injected transport, by
+      // mail-retry-emulator.test.js.
+      if (process.env.FUNCTIONS_EMULATOR === "true") {
+        console.log(
+          `send-contact-email-verification: emulator instance, leaving mail ${mailRef.id} unsent`
+        );
+        res.status(200).json({ success: true });
+        return;
+      }
+
+      // ---------------------------------------------------------------------
+      // AWAITED, BECAUSE SOMEBODY IS WATCHING A FORM.
+      // ---------------------------------------------------------------------
+      //
+      // The queue's asynchrony is right for a failure notification and wrong
+      // here: a verification code that arrives tomorrow is not a late success,
+      // it is a code that expired (EXPIRY_MS) before it landed. So this request
+      // does not return until the send has actually happened or actually
+      // failed. deliverMailDocument never throws -- every expected failure is a
+      // returned outcome and a field on the document.
+      const outcome = await deliverMailDocument(mailRef.id);
+      if (outcome !== "sent") {
+        // The code was never delivered, so the record that proves it exists
+        // must go -- and with it the resend cooldown it arms. A researcher
+        // whose code never arrived should be able to press the button again
+        // immediately, not wait out a minute for a code that does not exist.
+        try {
+          await verificationRef(uid).delete();
+        } catch (cleanupError) {
+          // Non-fatal, but worth a line: the researcher is now sitting on a
+          // cooldown for a code they never got.
+          console.error(
+            `send-contact-email-verification: could not clear the unsent record for ${uid}:`,
+            cleanupError instanceof Error ? cleanupError.message : "Unknown error"
+          );
+        }
+        console.error(
+          `send-contact-email-verification: delivery for ${uid} ended as ${outcome}, mail ${mailRef.id}`
+        );
+        res.status(503).json({
+          error:
+            "We couldn't send a verification code right now. Please try again in a little while.",
+          code: "mail-unavailable",
+        });
+        return;
+      }
 
       res.status(200).json({ success: true });
     } catch (error) {
