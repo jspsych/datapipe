@@ -36,13 +36,19 @@ const CODE_SPACE = 10 ** CODE_DIGITS; // 1_000_000 possible codes
 // plan §2.2: "24-hour expiry, 5 attempts."
 export const EXPIRY_MS = 24 * 60 * 60 * 1000;
 
-// Floor between two sends to the same account. The plan does not pin a
-// number beyond "rate-limited" and putting `sentAt` in the
+// Floor between two ATTEMPTS to send to the same account. The plan does not pin
+// a number beyond "rate-limited" and putting `sentAt` in the
 // contactEmailVerifications schema for exactly this purpose; one minute is
 // enough to stop a resend-mail-bomb loop (an impatient double-click, or
 // someone hammering the endpoint) without making a researcher who mistyped
 // and wants a fresh code wait anywhere near as long as the 24-hour code
 // expiry itself.
+//
+// ATTEMPTS, not deliveries, and that distinction is the rate limit. This
+// endpoint spends a real Resend request every time it gets past this check, so
+// a path that reaches the send is a path that has to be throttled whatever the
+// send then does. See the failure branch below, which used to delete the very
+// record this reads.
 export const RESEND_COOLDOWN_MS = 60 * 1000;
 
 export const VERIFICATIONS_COLLECTION = "contactEmailVerifications";
@@ -164,8 +170,13 @@ export const sendContactEmailVerification = onRequest(
       // -- none of which they can act on differently anyway.
       const availability = verificationAvailability(await readMailStatus(), Date.now());
       if (!availability.available) {
-        console.warn(
-          `send-contact-email-verification: refused for ${uid}, mail unavailable (${availability.reason})`
+        // ERROR, not WARN, and with a stable token: "verification is refused
+        // for everybody" is a condition an operator wants to hear about,
+        // especially in the `quota-reserve` case, where the only evidence that
+        // the daily-quota header means what this code thinks it means is that
+        // this line is NOT firing all day (docs/deploy-contact-email.md §6).
+        console.error(
+          `send-contact-email-verification: MailVerificationUnavailable (${availability.reason}) -- refused for ${uid}`
         );
         res.status(503).json({
           error:
@@ -263,17 +274,38 @@ export const sendContactEmailVerification = onRequest(
       // returned outcome and a field on the document.
       const outcome = await deliverMailDocument(mailRef.id);
       if (outcome !== "sent") {
-        // The code was never delivered, so the record that proves it exists
-        // must go -- and with it the resend cooldown it arms. A researcher
-        // whose code never arrived should be able to press the button again
-        // immediately, not wait out a minute for a code that does not exist.
+        // ---------------------------------------------------------------------
+        // THE RECORD STAYS. IT IS THE RATE LIMIT.
+        // ---------------------------------------------------------------------
+        //
+        // This branch used to delete it, so that a researcher whose code never
+        // arrived would not be stuck behind a cooldown for a code that does not
+        // exist. That reasoning is right about the researcher and wrong about
+        // the endpoint: `sentAt` is the ONLY server-side throttle on this path,
+        // and deleting it here removed the throttle from exactly the case that
+        // needs one. A send that fails still costs a Resend request and still
+        // writes a mail document, so a signed-in researcher holding the button
+        // -- or a loop on one valid ID token -- drove both without any bound at
+        // all, and the pre-send breaker did not cover it either, because it only
+        // shut on quota errors.
+        //
+        // Two changes make that safe rather than merely throttled: the breaker
+        // now also shuts on a systemic failure (mail-delivery.ts's
+        // SYSTEMIC_ERRORS), so a revoked key or an unverified domain stops
+        // costing a request per click within one attempt; and the code itself is
+        // cleared here, so what survives is a cooldown and not a secret nobody
+        // received. The researcher waits at most RESEND_COOLDOWN_MS, which is the
+        // same minute they would wait after a send that worked.
         try {
-          await verificationRef(uid).delete();
+          await verificationRef(uid).update({
+            codeHash: null,
+            deliveryFailedAt: now,
+          });
         } catch (cleanupError) {
-          // Non-fatal, but worth a line: the researcher is now sitting on a
-          // cooldown for a code they never got.
+          // Non-fatal. The code is undeliverable either way and expires in 24
+          // hours; what matters is that `sentAt` is still standing.
           console.error(
-            `send-contact-email-verification: could not clear the unsent record for ${uid}:`,
+            `send-contact-email-verification: could not clear the unsent code for ${uid}:`,
             cleanupError instanceof Error ? cleanupError.message : "Unknown error"
           );
         }

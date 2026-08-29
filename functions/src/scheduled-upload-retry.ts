@@ -405,43 +405,89 @@ async function handleRetryFailure(
   });
 }
 
-async function cleanupOldEntries() {
+// One pass' deletion budget, unchanged. The sweep runs every five minutes, so
+// this is 14,400 entries a day -- far more than the steady state, and small
+// enough that no single pass is a surprise.
+const CLEANUP_DELETE_LIMIT = 50;
+
+// How many aged entries one pass will LOOK at.
+//
+// The two numbers are different now, and that is the fix. The query finds
+// entries by age, ascending -- the inequality on `createdAt` forces that order
+// -- but whether one may actually be destroyed is a separate question
+// (upload-retention.ts), and an entry that must be retained is not removed from
+// the result set by being looked at. So with a single `limit(50)` on the query,
+// fifty retained entries at the head of the queue meant a pass that deleted
+// nothing, forever: one experiment stuck behind a dead storage provider could
+// stop every OTHER experiment's payloads from ever being deleted, until the
+// blockers crossed the 14-day ceiling up to a week later. Paging past them with
+// a cursor is what keeps the retention rule from becoming a deletion outage.
+const CLEANUP_SCAN_LIMIT = 500;
+
+// Page size for that scan.
+const CLEANUP_PAGE_SIZE = 100;
+
+/**
+ * Delete aged-out queue entries and the payloads behind them.
+ *
+ * Exported for the same reason retryPendingUploads is, and with the same seam:
+ * `ownerScope` defaults to production behaviour (every entry) and lets a test
+ * confine an age-based sweep of a collection every suite shares to its own
+ * fixtures.
+ */
+export async function cleanupOldEntries(ownerScope?: string) {
   const cutoff = Timestamp.fromMillis(Date.now() - SEVEN_DAYS_MS);
-
-  const oldEntries = await db
-    .collection("uploadQueue")
-    .where("createdAt", "<=", cutoff)
-    .limit(50)
-    .get();
-
-  if (oldEntries.empty) {
-    return;
-  }
-
   const bucket = storage.bucket();
   const now = Date.now();
+
   let deleted = 0;
   let retained = 0;
+  let scanned = 0;
+  let cursor: FirebaseFirestore.QueryDocumentSnapshot | null = null;
 
-  for (const doc of oldEntries.docs) {
-    const data = doc.data();
-
-    // The query above finds entries by AGE. Whether one may actually be
-    // destroyed is a separate question, and not one an age answers on its own
-    // -- see upload-retention.ts.
-    if (retentionDecision(data, now) === "retain") {
-      retained += 1;
-      continue;
+  while (deleted < CLEANUP_DELETE_LIMIT && scanned < CLEANUP_SCAN_LIMIT) {
+    // orderBy is explicit rather than left implicit: the inequality already
+    // imposes it, and startAfter() below depends on it.
+    let query = db
+      .collection("uploadQueue")
+      .where("createdAt", "<=", cutoff)
+      .orderBy("createdAt")
+      .limit(CLEANUP_PAGE_SIZE);
+    if (cursor) {
+      query = query.startAfter(cursor);
     }
 
-    try {
-      await bucket.file(data.storagePath).delete();
-    } catch {
-      // File may already be deleted
+    const page = await query.get();
+    if (page.empty) break;
+    cursor = page.docs[page.docs.length - 1];
+
+    for (const doc of page.docs) {
+      if (deleted >= CLEANUP_DELETE_LIMIT) break;
+      scanned += 1;
+      const data = doc.data();
+      if (ownerScope && data.owner !== ownerScope) continue;
+
+      // The query above finds entries by AGE. Whether one may actually be
+      // destroyed is a separate question, and not one an age answers on its own
+      // -- see upload-retention.ts.
+      if (retentionDecision(data, now) === "retain") {
+        retained += 1;
+        continue;
+      }
+
+      try {
+        await bucket.file(data.storagePath).delete();
+      } catch {
+        // File may already be deleted
+      }
+      await doc.ref.delete();
+      deleted += 1;
     }
-    await doc.ref.delete();
-    deleted += 1;
+
+    if (page.size < CLEANUP_PAGE_SIZE) break;
   }
+
+  if (deleted === 0 && retained === 0) return;
 
   console.log(
     `Cleanup: ${deleted} old queue entries deleted, ${retained} retained (still retrying, or the researcher has not been notified yet).`

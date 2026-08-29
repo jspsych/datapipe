@@ -31,20 +31,41 @@ import ConfirmDialog from "../../components/ui/ConfirmDialog";
 export default function AdminPage({}) {
   return (
     <AuthCheck>
-      {/* DESIGN.md §4 allows exactly two measures: 560px for a single-subject
-          settings column, 1100px for dashboard and marketing pages. This was
-          960px, one of three different widths across the three dashboard
-          routes (960 / 540 / 1200). */}
-      <VStack gap={8} w="100%" maxW="1100px" align="stretch">
-        <AddSignInMethodBanner />
-        <UnverifiedEmailBanner />
-        <ExperimentList />
-      </VStack>
+      <Dashboard />
     </AuthCheck>
   );
 }
 
-function ExperimentList() {
+// Inside AuthCheck rather than in AdminPage itself, because everything here
+// reads `auth.currentUser` and AuthCheck is what guarantees there is one.
+//
+// ONE subscription to users/{uid} for this page, passed down -- the convention
+// pages/admin/account.js already follows (ProviderConnections, ContactEmail,
+// OAuthTokenStatus and SelectAuth all take `data` as a prop and none of them
+// subscribes). Two components here read that document for different reasons,
+// and before this they opened a listener each: two live listeners on one
+// document, two independent loading flickers, and two chances for them to
+// render disagreeing states for a frame.
+function Dashboard() {
+  const user = auth.currentUser;
+  const [userDoc] = useDocumentData(
+    user?.uid ? doc(db, "users", user.uid) : null
+  );
+
+  return (
+    /* DESIGN.md §4 allows exactly two measures: 560px for a single-subject
+       settings column, 1100px for dashboard and marketing pages. This was
+       960px, one of three different widths across the three dashboard
+       routes (960 / 540 / 1200). */
+    <VStack gap={8} w="100%" maxW="1100px" align="stretch">
+      <AddSignInMethodBanner />
+      <UnverifiedEmailBanner userDoc={userDoc} />
+      <ExperimentList userDoc={userDoc} />
+    </VStack>
+  );
+}
+
+function ExperimentList({ userDoc }) {
   const user = auth.currentUser;
   const experiments = collection(db, `experiments`);
   const q = query(experiments, where("owner", "==", user.uid));
@@ -56,9 +77,6 @@ function ExperimentList() {
   // step, not a maintenance screen), and firestore.rules enforces it. Offering
   // "Create your first experiment" to someone who will be refused is the dead
   // end the critique traces persona Jordan into.
-  const [userDoc] = useDocumentData(
-    user?.uid ? doc(db, "users", user.uid) : null
-  );
   const hasProvider = Object.values(STORAGE_PROVIDERS).some((p) =>
     p.isConnected(userDoc)
   );

@@ -1,5 +1,5 @@
 import { db, storage } from "./app.js";
-import { MAIL_COLLECTION } from "./mail.js";
+import { mailCollection } from "./mail.js";
 
 // Everything that belongs to one researcher, removed in one pass.
 //
@@ -132,8 +132,7 @@ export async function purgeUserData(uid: string): Promise<PurgeCounts> {
   // them. Deleting these is why account deletion must not leave an address
   // behind: an undelivered or already-processed mail document is still a
   // record of where DataPipe last tried to reach this person.
-  const queuedMail = await db
-    .collection(MAIL_COLLECTION)
+  const queuedMail = await mailCollection()
     .where("datapipe.owner", "==", uid)
     .get();
   counts.mailDocuments = await deleteInBatches(

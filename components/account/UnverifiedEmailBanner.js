@@ -1,10 +1,5 @@
-import { useContext } from "react";
 import { Box, Text, VStack, Button, HStack } from "@chakra-ui/react";
 import Link from "next/link";
-import { doc } from "firebase/firestore";
-import { useDocumentData } from "react-firebase-hooks/firestore";
-import { UserContext } from "../../lib/context";
-import { db } from "../../lib/firebase";
 import { hasContactEmail } from "../../lib/contact-email";
 
 // Shown to researchers whose contact address has never been confirmed.
@@ -40,14 +35,20 @@ import { hasContactEmail } from "../../lib/contact-email";
 // acted on. `contactEmailVerified` flipping to true is written server-side by
 // verify-contact-email.ts and ONLY there, so the condition is exact and there
 // is no dismissal state to store, expire, or reset when the address changes.
-export default function UnverifiedEmailBanner() {
-  const { user } = useContext(UserContext);
-
-  const [userDoc, loading] = useDocumentData(
-    user ? doc(db, "users", user.uid) : null
-  );
-
-  if (!user || loading || !userDoc) return null;
+//
+// ---------------------------------------------------------------------------
+// NO SUBSCRIPTION OF ITS OWN
+// ---------------------------------------------------------------------------
+//
+// `userDoc` is the users/{uid} document, passed down from the dashboard's
+// single subscription -- the same convention ContactEmail, ProviderConnections
+// and SelectAuth follow on the account page. This component used to open its
+// own live listener, which made three on one document on /admin (AuthCheck's
+// gate, the experiment list's provider check, and this), each with its own
+// loading flicker. Undefined means "not loaded yet" and renders nothing,
+// exactly as the in-component loading flag did.
+export default function UnverifiedEmailBanner({ userDoc }) {
+  if (!userDoc) return null;
 
   // Nothing to say to someone who is already reachable.
   if (userDoc.contactEmailVerified === true) return null;

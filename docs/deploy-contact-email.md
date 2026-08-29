@@ -397,9 +397,14 @@ Three things about this policy that are worth knowing:
   `ERROR` that will not be retried. A document in a retryable error state has
   `delivery.endTime: null` and is therefore *never* eligible for deletion,
   which is deliberate: the TTL must not reap a mail that is still deliverable.
-  The flip side is that a document stuck in retryable `ERROR` lives forever.
-  Those are worth a periodic look (`delivery.state == "ERROR"` and
-  `delivery.retryable == true`); there is no automatic sweeper.
+  The flip side used to be that a document stuck in retryable `ERROR` lived
+  forever, holding an address the TTL could not reach.
+  `scheduled-mail-retry.ts` is what closes that: every document it looks at
+  either gets sent or gets a terminal state, so nothing it can see stays
+  outside the TTL's reach. It sweeps two shapes — a retryable `ERROR`, and a
+  `PROCESSING` document whose lease has expired, which is what an instance
+  killed *inside* a send leaves behind. Both need an index; both are in
+  `firestore.indexes.json`.
 - **The retention window is seven days, by design.** `mail-delivery.ts`
   writes `delivery.expireAt = endTime + 7 days` on every terminal outcome
   (delivered or permanently failed), and the TTL policy above keys on it.
@@ -434,13 +439,39 @@ when quota runs out:
 | Nature | **Realtime.** Someone is watching a form. | **Deferrable.** Still true an hour later. |
 | Delivered by | The request itself, synchronously | `onmailcreated`, then the sweeper |
 | Retried? | **Never** | Yes, `scheduledmailretry` |
-| On failure | 503, vague message, cooldown cleared | Stays queued, swept later |
+| On failure | 503, vague message, cooldown **kept** | Stays queued, swept later |
+
+**The cooldown is kept on failure, and that is deliberate.** It used to be
+cleared, so that a researcher whose code never arrived was not stuck waiting a
+minute for a code that does not exist. That is right about the researcher and
+wrong about the endpoint: `contactEmailVerifications/{uid}.sentAt` is the only
+server-side rate limit on a path that spends a real Resend request, and clearing
+it removed the limit from exactly the case that needs one — a signed-in
+researcher holding the button while sends fail. What is cleared now is the
+`codeHash`, not the record: no code is left standing, the throttle is, and
+`verify-contact-email.ts` answers such a record with "request a new code"
+instead of spending one of the five attempts on it.
 
 **`systemStatus/mail` is the breaker.** `mail-delivery.ts` writes it after every
-send: the daily quota reading on success, a shut breaker on
-`daily_quota_exceeded`. It is server-only — no `firestore.rules` match, so it is
-default-denied to every client, and the account page learns nothing from it
-directly.
+send: the daily quota reading on success, and a shut breaker on any failure that
+is not this one message's problem. It is server-only — no `firestore.rules`
+match, so it is default-denied to every client, and the account page learns
+nothing from it directly.
+
+**Three reasons it shuts, and they last for different lengths of time:**
+
+| Cause | Shut until | Why that long |
+|---|---|---|
+| `daily_quota_exceeded` | next UTC midnight | the daily cap resets there (a guess — see below) |
+| `monthly_quota_exceeded` | start of the next UTC month | the 3,000/month cap does **not** reset at midnight. Reopening nightly means probing into a cap with days left to run, and each probe spends one of a queued mail's three attempts — three nights and every queued notification is terminal |
+| a revoked key, an unverified domain, missing config (`SYSTEMIC_ERRORS`) | 15 minutes | nothing resets; a human has to act. The pause exists only to stop a loop of failing sends, and to keep the realtime path from minting codes for mail that cannot go anywhere |
+
+`validation_error` is deliberately **not** in the systemic set: Resend uses it
+both for an unverified sending domain and for one malformed recipient address,
+and one researcher's typo must not switch verification off for everybody.
+
+**If you upgrade the plan mid-month**, clear `systemStatus/mail` by hand — the
+monthly pause is a wait for a reset that has just stopped applying.
 
 **The proactive part is a response header.** Resend returns
 `x-resend-daily-quota` — the quota *used* today — on ordinary **successful**
@@ -453,6 +484,27 @@ that their data has stopped arriving is the only signal they get.
 The header is documented as free-plan-only, so it disappears on a paid plan.
 Absent reads as "no daily cap applies", which is correct — the reserve logic
 turns itself off on upgrade instead of needing to be removed.
+
+**Check what that number actually means before you trust it.** Resend documents
+the header's existence, not its semantics, and "used today" and "remaining
+today" are the same shape. If it is really the plan *limit*, every reading is
+100, the reserve rule is true forever, and verification is off for good — and
+because every send rewrites `dailyQuotaObservedAt`, the staleness escape hatch
+never fires either. Capture one for yourself:
+
+```
+curl -sS -D - -o /dev/null -X POST https://api.resend.com/emails \
+  -H "Authorization: Bearer $RESEND_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"from":"DataPipe <datapipe-notifications@jspsych.org>",
+       "to":["you@example.edu"],"subject":"quota header check","text":"."}' \
+  | grep -i x-resend
+```
+
+Send it twice and watch which way the number moves, then compare it with the
+Resend dashboard's usage for the day. Two guards stand in the meantime: a
+reading outside `0..100` is refused at the write and ignored at the read, and a
+refusal on the reserve alone logs at ERROR (§6).
 
 **When does it reopen?** Resend publishes no daily-reset time, and nothing here
 depends on knowing one. `unavailableUntil` is set to the next UTC midnight as a
@@ -487,15 +539,18 @@ Create log-based metrics on the functions' logs and alert on them:
 | `MailConfigMissingError` | **First.** Every notification the deployment sends is being dropped. |
 | `daily_quota_exceeded` | Sending has stopped. Reactive — it is already happening. |
 | `mail-availability` + `dailyQuotaUsed` above ~80 | **The useful one.** Leading indicator, from the success-response header, while there is still time to act. |
+| `MailVerificationUnavailable` | Verification is being refused for everyone. On `quota-reserve` it is also the check on the header's meaning: if this fires all day while sending works, the reading is not what we think it is (§5). |
+| `refusing an implausible x-resend-daily-quota` | The reading is out of range — the header is not a count of today's sends. |
 
 Route them to a channel Google delivers — Slack, PagerDuty, or an email address
 that is **not** on the `jspsych.org` sending domain, so an alert about mail
 being broken does not depend on mail working.
 
-Worth watching alongside, though neither needs an alert: `scheduled-mail-retry`
+Worth watching alongside, though none needs an alert: `scheduled-mail-retry`
 lines reporting a non-zero `agedOut` (notifications that expired undelivered),
-and any accumulation of `delivery.state == "ERROR"` with `retryable == true`,
-which is the sweeper's backlog.
+any accumulation of `delivery.state == "ERROR"` with `retryable == true` (the
+sweeper's backlog), and `MailSweepAbandoned` on a document, which means an
+instance died inside a send — one is noise, a run of them is a platform problem.
 
 ## 7. Payload retention: the clock now measures the right thing
 
@@ -523,11 +578,26 @@ meant to lose:
 | `retainUntil` in the future | retain — the researcher has not been told |
 | otherwise | delete — unchanged from before |
 
-`retainUntil` is written by `scheduled-mail-retry.ts` while an upload-failure
-notification is undelivered, and it covers **every unresolved entry for the
-experiment**, not just the one that tripped the episode. It is written even
-while the breaker is shut, because extending is a Firestore write that costs no
-quota and an outage is exactly when the data is at risk.
+`retainUntil` is written by `upload-retention.ts` — which owns this whole rule,
+predicate and write together — and `scheduled-mail-retry.ts` is what calls it,
+while an upload-failure notification is undelivered. It covers **every
+unresolved entry for the experiment**, not just the one that tripped the
+episode, and once per experiment per pass however many notifications name it.
+
+Two things about when it is written:
+
+- **Even while the breaker is shut.** Extending is a Firestore write that costs
+  no quota, and an outage is exactly when the data is at risk.
+- **Including the pass that gives up on the notification.** Ageing a
+  notification out is the case where the researcher will never be told at all,
+  so it must not also be the moment their data quietly goes back on the
+  original clock. The 14-day ceiling is what bounds this.
+
+**The deletion sweep pages.** It looks at up to 500 aged entries to find its 50
+deletions, rather than taking the oldest 50 and stopping. Without that, fifty
+retained entries at the head of the queue — one experiment behind a dead
+provider — meant a pass that deleted nothing at all, for every other experiment
+too, until the blockers crossed the 14-day ceiling up to a week later.
 
 **What deliberately does not extend:** an experiment whose owner has no contact
 email. `upload-failure-notify.ts` records `suppressedReason: "no-contact-email"`

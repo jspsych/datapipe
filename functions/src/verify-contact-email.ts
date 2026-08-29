@@ -42,6 +42,18 @@ function verificationRef(uid: string): FirebaseFirestore.DocumentReference {
   return db.collection(VERIFICATIONS_COLLECTION).doc(uid);
 }
 
+// One answer, two ways to arrive at it: no record at all, and a record whose
+// code was cleared because it could not be delivered. The researcher's next
+// move is the same either way, so the wording is defined once rather than kept
+// in step by hand.
+const NO_CODE_REQUESTED = {
+  status: 400,
+  body: {
+    error: "Request a new verification code.",
+    code: "no-code-requested",
+  },
+};
+
 export const verifyContactEmail = onRequest({ cors: true }, async (req, res) => {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
@@ -104,16 +116,22 @@ export const verifyContactEmail = onRequest({ cors: true }, async (req, res) => 
       }
 
       if (!vSnap.exists) {
-        return {
-          status: 400,
-          body: {
-            error: "Request a new verification code.",
-            code: "no-code-requested",
-          },
-        };
+        return NO_CODE_REQUESTED;
       }
 
       const v = vSnap.data()!;
+
+      // A record whose code was never delivered. send-contact-email-
+      // verification.ts clears `codeHash` and keeps the rest of the record --
+      // the record is that endpoint's rate limit, so it may not be deleted, but
+      // there is no code out there to enter. Answering "request a new one" is
+      // both true and the same answer a missing record gets above; falling
+      // through would spend one of the five attempts on a code that does not
+      // exist.
+      if (typeof v.codeHash !== "string") {
+        return NO_CODE_REQUESTED;
+      }
+
       const expiresAt = typeof v.expiresAt === "number" ? v.expiresAt : 0;
       if (Date.now() > expiresAt) {
         return {

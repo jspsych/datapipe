@@ -29,13 +29,19 @@ process.env.FIREBASE_CONFIG = JSON.stringify({
 let verificationAvailability;
 let deliveryPaused;
 let nextUtcMidnight;
+let nextUtcMonthStart;
+let pauseUntil;
+let usableQuotaReading;
 let isQuotaReadingStale;
 let VERIFICATION_CEILING;
 let FREE_PLAN_DAILY_LIMIT;
+let SYSTEMIC_PAUSE_MS;
 
 let sweepDecision;
+let pauseKindFor;
 let MAX_SWEEP_AGE_MS;
 let IDEMPOTENCY_WINDOW_MS;
+let MAX_ATTEMPTS;
 
 let retentionDecision;
 
@@ -44,14 +50,20 @@ beforeAll(async () => {
     verificationAvailability,
     deliveryPaused,
     nextUtcMidnight,
+    nextUtcMonthStart,
+    pauseUntil,
+    usableQuotaReading,
     isQuotaReadingStale,
     VERIFICATION_CEILING,
     FREE_PLAN_DAILY_LIMIT,
+    SYSTEMIC_PAUSE_MS,
   } = await import("../../lib/mail-availability.js"));
 
   ({ sweepDecision, MAX_SWEEP_AGE_MS, IDEMPOTENCY_WINDOW_MS } = await import(
     "../../lib/scheduled-mail-retry.js"
   ));
+
+  ({ pauseKindFor, MAX_ATTEMPTS } = await import("../../lib/mail-delivery.js"));
 
   ({ retentionDecision } = await import("../../lib/upload-retention.js"));
 });
@@ -86,6 +98,88 @@ describe("nextUtcMidnight", () => {
     expect(nextUtcMidnight(Date.UTC(2026, 11, 31, 23, 0, 0))).toBe(
       Date.UTC(2027, 0, 1, 0, 0, 0)
     );
+  });
+});
+
+describe("nextUtcMonthStart", () => {
+  test("is the start of the next UTC month, not thirty days out", () => {
+    expect(nextUtcMonthStart(NOON)).toBe(Date.UTC(2026, 8, 1));
+    // The 20th of the month is the motivating case: the monthly cap is hit
+    // with eleven days still to run, and a daily reset would reopen the
+    // breaker that night.
+    expect(nextUtcMonthStart(Date.UTC(2026, 7, 20, 3, 0, 0))).toBe(
+      Date.UTC(2026, 8, 1)
+    );
+    // December rolls the year.
+    expect(nextUtcMonthStart(Date.UTC(2026, 11, 31, 23, 59, 59))).toBe(
+      Date.UTC(2027, 0, 1)
+    );
+  });
+});
+
+describe("pauseUntil", () => {
+  test("a daily cap holds until midnight; a MONTHLY cap holds until the month turns", () => {
+    // The distinction the breaker used to lack. Treating a monthly exhaustion
+    // as a daily one reopened sending every midnight into a cap with days left
+    // to run -- and each probe spent one of a queued mail's three attempts, so
+    // three nights turned every queued notification terminal.
+    expect(pauseUntil("daily-quota", NOON)).toBe(MIDNIGHT_AFTER);
+    expect(pauseUntil("monthly-quota", NOON)).toBe(Date.UTC(2026, 8, 1));
+    expect(pauseUntil("monthly-quota", NOON)).toBeGreaterThan(
+      pauseUntil("daily-quota", NOON)
+    );
+  });
+
+  test("a systemic failure is a short cooldown, not a wait for a reset", () => {
+    // Nothing resets: a revoked key or an unverified domain needs a human. The
+    // pause is only there to stop a loop of failing sends, so it is minutes.
+    expect(pauseUntil("systemic", NOON)).toBe(NOON + SYSTEMIC_PAUSE_MS);
+    expect(pauseUntil("systemic", NOON)).toBeLessThan(MIDNIGHT_AFTER);
+  });
+});
+
+describe("pauseKindFor", () => {
+  test("tells the two quota caps apart, and names the systemic failures", () => {
+    expect(pauseKindFor("daily_quota_exceeded")).toBe("daily-quota");
+    expect(pauseKindFor("monthly_quota_exceeded")).toBe("monthly-quota");
+    for (const name of [
+      "suspended_api_key",
+      "missing_api_key",
+      "restricted_api_key",
+      "invalid_permission",
+      "MailConfigMissingError",
+    ]) {
+      expect(pauseKindFor(name)).toBe("systemic");
+    }
+  });
+
+  test("does NOT shut the breaker for a per-message failure", () => {
+    // validation_error is Resend's name both for an unverified sending domain
+    // and for one malformed recipient address. One researcher's typo must not
+    // switch verification off for everybody, so the ambiguous name is left out
+    // and the unambiguous ones carry the rule.
+    expect(pauseKindFor("validation_error")).toBeNull();
+    expect(pauseKindFor("rate_limit_exceeded")).toBeNull();
+    expect(pauseKindFor("application_error")).toBeNull();
+    expect(pauseKindFor("ECONNRESET")).toBeNull();
+  });
+});
+
+describe("usableQuotaReading", () => {
+  test("refuses a reading that cannot be a count of today's sends", () => {
+    // The bound exists because the header's MEANING is assumed, not documented.
+    // If x-resend-daily-quota turns out to be the monthly counter or a plan
+    // limit, an unbounded reading would sit above the reserve ceiling forever
+    // and hold verification shut with nothing in the logs saying why.
+    expect(usableQuotaReading(0)).toBe(0);
+    expect(usableQuotaReading(94)).toBe(94);
+    expect(usableQuotaReading(FREE_PLAN_DAILY_LIMIT)).toBe(FREE_PLAN_DAILY_LIMIT);
+    expect(usableQuotaReading(FREE_PLAN_DAILY_LIMIT + 1)).toBeNull();
+    expect(usableQuotaReading(2900)).toBeNull();
+    expect(usableQuotaReading(-1)).toBeNull();
+    expect(usableQuotaReading("94")).toBeNull();
+    expect(usableQuotaReading(Number.NaN)).toBeNull();
+    expect(usableQuotaReading(undefined)).toBeNull();
   });
 });
 
@@ -199,6 +293,21 @@ describe("verificationAvailability", () => {
   });
 });
 
+describe("verificationAvailability, on an implausible reading", () => {
+  test("an out-of-range reading does not hold verification shut", () => {
+    // A stored 2,900 is not "today's sends on a free plan" whatever else it
+    // is -- the monthly counter, say. Acting on it would refuse every
+    // researcher a code indefinitely, and because each send rewrites
+    // dailyQuotaObservedAt, the staleness escape hatch would never fire.
+    expect(
+      verificationAvailability(
+        { dailyQuotaUsed: 2900, dailyQuotaObservedAt: ts(NOON - 60_000) },
+        NOON
+      )
+    ).toEqual({ available: true });
+  });
+});
+
 describe("deliveryPaused", () => {
   test("tracks unavailableUntil only, and ignores the verification reserve", () => {
     // The reserve exists to keep the realtime path off the last few sends. The
@@ -263,36 +372,137 @@ describe("sweepDecision", () => {
   test("sweeps a 5xx only INSIDE the idempotency window", () => {
     // A 500 may or may not have been accepted. Inside the window the
     // Idempotency-Key makes a retry a no-op; outside it, the retry is a coin
-    // flip on a second copy, so we decline.
+    // flip on a second copy, so we give up rather than gamble.
     const inside = doc({
       error: { name: "application_error", message: "boom" },
+      startTime: ts(NOON - 60 * 60 * 1000),
       lastAttemptAt: ts(NOON - 60 * 60 * 1000),
     });
     expect(sweepDecision(inside, NOON)).toBe("deliver");
 
     const outside = doc({
       error: { name: "application_error", message: "boom" },
+      startTime: ts(NOON - IDEMPOTENCY_WINDOW_MS - 60_000),
       lastAttemptAt: ts(NOON - IDEMPOTENCY_WINDOW_MS - 60_000),
     });
-    expect(sweepDecision(outside, NOON)).toBe("skip");
+    // Terminal, not skipped: it can never become deliverable again -- the key
+    // has expired and only gets older -- so leaving it "retryable" would keep
+    // expireAt off the document and hold the address forever, while occupying
+    // a slot in every future pass.
+    expect(sweepDecision(outside, NOON)).toBe("age-out");
   });
 
-  test("NEVER sweeps inline mail, whatever the error says", () => {
+  test("measures the idempotency window from startTime, NOT from the last attempt", () => {
+    // THE BUG THIS PINS. The Idempotency-Key is the document id, and Resend
+    // expires it 24 hours after its FIRST use. Measuring the window from
+    // lastAttemptAt slides it forward with every retry: a mail first attempted
+    // at T0 and retried at T0+20h is "20 hours old" at T0+40h and would be
+    // sent again on a key that expired at T0+24h -- which Resend treats as a
+    // new message, and the researcher gets a second copy.
+    const retriedTwice = doc({
+      error: { name: "application_error", message: "boom" },
+      startTime: ts(NOON - 40 * 60 * 60 * 1000),
+      lastAttemptAt: ts(NOON - 20 * 60 * 60 * 1000),
+    });
+    expect(sweepDecision(retriedTwice, NOON)).toBe("age-out");
+
+    // ...and the same document while the key is genuinely still live.
+    const stillInside = doc({
+      error: { name: "application_error", message: "boom" },
+      startTime: ts(NOON - 20 * 60 * 60 * 1000),
+      lastAttemptAt: ts(NOON - 60 * 60 * 1000),
+    });
+    expect(sweepDecision(stillInside, NOON)).toBe("deliver");
+  });
+
+  test("NEVER sends inline mail, whatever the error says -- it ends it instead", () => {
     // A verification code is realtime. Delivering one an hour late is not a
     // late success -- it may already have expired, and the researcher has long
-    // since given up or requested another.
+    // since given up or requested another. Terminal rather than skipped: a
+    // skipped document keeps `retryable: true`, never gets expireAt, and holds
+    // its recipient's address outside the TTL's reach for good.
     expect(
       sweepDecision(
         doc(
           {
             error: { name: "daily_quota_exceeded", message: "quota" },
+            startTime: ts(NOON - 60_000),
             lastAttemptAt: ts(NOON - 60_000),
           },
           { datapipe: { kind: "contact-email-verification", deliverInline: true } }
         ),
         NOON
       )
+    ).toBe("age-out");
+  });
+
+  test("recovers a claim that was abandoned mid-send", () => {
+    // deliverMailDocument's claim writes PROCESSING with `retryable: null`
+    // BEFORE the send, so an instance killed inside the send leaves a document
+    // that the retryable-ERROR query cannot see and the TTL cannot reap. An
+    // expired lease is the proof the claimant is dead.
+    const stranded = {
+      to: ["researcher@example.edu"],
+      datapipe: { kind: "upload-failure", owner: "uid-1" },
+      delivery: {
+        state: "PROCESSING",
+        retryable: null,
+        attempts: 1,
+        startTime: ts(NOON - 30 * 60 * 1000),
+        leaseExpiresAt: ts(NOON - 60_000),
+      },
+    };
+    expect(sweepDecision(stranded, NOON)).toBe("deliver");
+
+    // A LIVE lease is the one case that is genuinely somebody else's: another
+    // invocation may be inside the send right now.
+    expect(
+      sweepDecision(
+        {
+          ...stranded,
+          delivery: { ...stranded.delivery, leaseExpiresAt: ts(NOON + 60_000) },
+        },
+        NOON
+      )
     ).toBe("skip");
+  });
+
+  test("ends a stranded claim rather than resending it once the key has expired", () => {
+    // Same document, a day and a half later. Nothing knows whether the send
+    // went out, and the Idempotency-Key that would have made a retry safe is
+    // gone -- so this is exactly the coin flip the sweeper declines.
+    expect(
+      sweepDecision(
+        {
+          to: ["researcher@example.edu"],
+          datapipe: { kind: "upload-failure", owner: "uid-1" },
+          delivery: {
+            state: "PROCESSING",
+            attempts: 1,
+            startTime: ts(NOON - IDEMPOTENCY_WINDOW_MS - 60_000),
+            leaseExpiresAt: ts(NOON - IDEMPOTENCY_WINDOW_MS),
+          },
+        },
+        NOON
+      )
+    ).toBe("age-out");
+  });
+
+  test("ends a document that has spent its whole attempt budget", () => {
+    // Otherwise deliverMailDocument answers "skipped-attempts-exhausted" on
+    // every pass forever, and the document sits in the query eating the budget
+    // a deliverable notification needed.
+    expect(
+      sweepDecision(
+        doc({
+          error: { name: "daily_quota_exceeded", message: "quota" },
+          attempts: MAX_ATTEMPTS,
+          startTime: ts(NOON - 60_000),
+          lastAttemptAt: ts(NOON - 60_000),
+        }),
+        NOON
+      )
+    ).toBe("age-out");
   });
 
   test("ages out anything past the age bound, rather than skipping it", () => {
@@ -323,6 +533,20 @@ describe("sweepDecision", () => {
     ).toBe("age-out");
   });
 
+  test("a document with NO usable clock ages out rather than living forever", () => {
+    // An older deploy's write, a hand edit during an incident, a partially
+    // applied update. With neither timestamp there is no age at which it would
+    // ever cross the age bound, so a "skip" here is permanent: no expireAt is
+    // ever written, the TTL never reaps it, and it holds a researcher's address
+    // for good -- the precise hole ageing out exists to close.
+    expect(
+      sweepDecision(
+        doc({ error: { name: "application_error", message: "boom" } }),
+        NOON
+      )
+    ).toBe("age-out");
+  });
+
   test("ignores anything that is not a live retryable error", () => {
     expect(sweepDecision(doc({ state: "SUCCESS", retryable: false }), NOON)).toBe(
       "skip"
@@ -331,11 +555,29 @@ describe("sweepDecision", () => {
     expect(sweepDecision({ to: ["x@example.edu"] }, NOON)).toBe("skip");
   });
 
-  test("skips an error with no usable name rather than guessing", () => {
+  test("treats an error with no usable name as ambiguous, not as unswept work", () => {
+    // Not knowing what happened is the definition of ambiguous, and ambiguity
+    // is what the Idempotency-Key resolves: inside the window a retry is a
+    // no-op at Resend, so it is safe; outside it, this becomes terminal like
+    // every other ambiguity. What it must never be is a permanent skip -- that
+    // is a document nothing ever writes again, in a query nothing ever
+    // finishes.
     expect(
-      sweepDecision(doc({ error: {}, lastAttemptAt: ts(NOON - 1000) }), NOON)
-    ).toBe("skip");
-    expect(sweepDecision(doc({ lastAttemptAt: ts(NOON - 1000) }), NOON)).toBe("skip");
+      sweepDecision(
+        doc({ error: {}, startTime: ts(NOON - 1000), lastAttemptAt: ts(NOON - 1000) }),
+        NOON
+      )
+    ).toBe("deliver");
+    expect(
+      sweepDecision(
+        doc({
+          error: {},
+          startTime: ts(NOON - IDEMPOTENCY_WINDOW_MS - 1000),
+          lastAttemptAt: ts(NOON - IDEMPOTENCY_WINDOW_MS - 1000),
+        }),
+        NOON
+      )
+    ).toBe("age-out");
   });
 });
 

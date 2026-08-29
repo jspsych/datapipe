@@ -73,8 +73,9 @@ import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { Timestamp } from "firebase-admin/firestore";
 import { randomUUID } from "crypto";
 import { db } from "./app.js";
-import { MAIL_COLLECTION } from "./mail.js";
+import { MAIL_COLLECTION, mailCollection } from "./mail.js";
 import { recordSendOutcome } from "./mail-availability.js";
+import type { PauseKind } from "./mail-availability.js";
 
 // ---------------------------------------------------------------------------
 // Timings. The relationship between these three numbers is load-bearing.
@@ -402,8 +403,48 @@ const AMBIGUOUS_ERRORS = new Set([
 
 // Quota exhaustion, as opposed to the per-second rate limit. These are what
 // trip the breaker in mail-availability.ts, because they are the ones that stay
-// true for the rest of the day.
+// true for the rest of the day -- or, for the monthly cap, the rest of the
+// month, which is why they are told apart rather than lumped together.
 export const QUOTA_ERRORS = new Set(["daily_quota_exceeded", "monthly_quota_exceeded"]);
+
+// Nothing is exhausted; this deployment cannot send AT ALL until a human
+// changes something. A revoked or rescoped key, an unverified sending domain,
+// missing configuration, a wrong endpoint.
+//
+// These trip the breaker too, and the reason is the realtime path. Without it
+// the breaker only ever shuts on quota, so a revoked key leaves
+// verificationAvailability answering "available" forever: every click mints a
+// code, writes a document, spends a real Resend request and fails -- with no
+// server-side ceiling on how often. Tripping here bounds that to one request
+// per SYSTEMIC_PAUSE_MS no matter how many researchers are pressing the button.
+//
+// WHAT IS DELIBERATELY NOT HERE: `validation_error`. Resend uses it both for
+// "your sending domain is unverified" (systemic) and for "this recipient
+// address is malformed" (one researcher's typo). One researcher's typo must
+// not switch verification off for everybody, so the ambiguous name stays out
+// and the unambiguous ones carry the rule.
+export const SYSTEMIC_ERRORS = new Set([
+  "missing_api_key",
+  "restricted_api_key",
+  "suspended_api_key",
+  "invalid_permission",
+  "not_found",
+  "method_not_allowed",
+  CONFIG_MISSING_ERROR,
+]);
+
+/**
+ * How long should this failure stop DataPipe sending, if at all?
+ *
+ * Pure, and exported for it: "how long is the breaker shut" is a decision worth
+ * asserting as a table rather than provoking through a transport.
+ */
+export function pauseKindFor(errorName: string): PauseKind | null {
+  if (errorName === "daily_quota_exceeded") return "daily-quota";
+  if (errorName === "monthly_quota_exceeded") return "monthly-quota";
+  if (SYSTEMIC_ERRORS.has(errorName)) return "systemic";
+  return null;
+}
 
 // Errors where Resend provably did NOT send: it refused the request, or we
 // never reached it. Safe to retry at ANY age, because there is no message to
@@ -541,6 +582,23 @@ function millisOrZero(value: unknown): number {
   return (value as { toMillis: () => number }).toMillis();
 }
 
+/**
+ * Is a PROCESSING claim's lease dead?
+ *
+ * The single source of truth for "the claimant is provably gone". Exported
+ * because scheduled-mail-retry.ts's sweepDecision asks the same question about
+ * the same field for the opposite reason -- claimDecision asks so it may take
+ * the claim, the sweep asks so it may recover the document -- and two
+ * independent copies of the lease rule is exactly how one of them silently
+ * stops matching LEASE_MS.
+ */
+export function leaseIsExpired(
+  delivery: { leaseExpiresAt?: unknown } | undefined,
+  nowMs: number
+): boolean {
+  return millisOrZero(delivery?.leaseExpiresAt) <= nowMs;
+}
+
 function attemptsOf(delivery: DeliveryRecord | undefined): number {
   const n = delivery?.attempts;
   return typeof n === "number" && Number.isFinite(n) && n > 0 ? n : 0;
@@ -566,7 +624,7 @@ export function claimDecision(
 
   if (state === "PROCESSING") {
     // Someone holds the claim and may be inside the send right now.
-    if (millisOrZero(delivery?.leaseExpiresAt) > nowMs) return "skip-in-flight";
+    if (!leaseIsExpired(delivery, nowMs)) return "skip-in-flight";
     // Lease expired: the claimant is provably dead (see LEASE_MS). Recoverable.
   } else if (state === "ERROR") {
     if (delivery?.retryable !== true) return "skip-terminal";
@@ -616,11 +674,31 @@ export type MailSender = (
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
 /** A response header as a number, or undefined if absent or unparseable. */
-function headerInt(response: Response, name: string): number | undefined {
-  const raw = response.headers.get(name);
+function headerInt(headers: Headers, name: string): number | undefined {
+  const raw = headers.get(name);
   if (raw === null) return undefined;
   const n = Number.parseInt(raw, 10);
   return Number.isFinite(n) ? n : undefined;
+}
+
+// The quota headers, named ONCE each.
+//
+// Exported because these two string literals are the entire proactive half of
+// the breaker and nothing else can tell you they are wrong: misspell one and
+// every send returns no reading, mail-availability.ts never learns a number,
+// verificationAvailability answers "available" forever, and every test still
+// passes. Taking a plain Headers makes that assertable without a network call
+// (mail-delivery.test.js).
+export function quotaFromHeaders(headers: Headers): {
+  dailyQuotaUsed?: number;
+  monthlyQuotaUsed?: number;
+} {
+  const daily = headerInt(headers, "x-resend-daily-quota");
+  const monthly = headerInt(headers, "x-resend-monthly-quota");
+  return {
+    ...(daily === undefined ? {} : { dailyQuotaUsed: daily }),
+    ...(monthly === undefined ? {} : { monthlyQuotaUsed: monthly }),
+  };
 }
 
 let injectedSender: MailSender | null = null;
@@ -647,7 +725,7 @@ export function _setMailSenderForTests(sender: MailSender | null): void {
  * apidata (index.ts imports every module in this codebase). There is now no
  * mail dependency to keep off it.
  */
-function resendSender(config: MailConfig): MailSender {
+export function resendSender(config: MailConfig): MailSender {
   return async (input, { timeoutMs, idempotencyKey }) => {
     const response = await fetch(RESEND_ENDPOINT, {
       method: "POST",
@@ -694,14 +772,7 @@ function resendSender(config: MailConfig): MailSender {
     // Quota headers ride on the SUCCESS response, which is the whole point --
     // see mail-availability.ts. Read before the body so a malformed body cannot
     // cost us the reading.
-    const quota = {
-      ...(headerInt(response, "x-resend-daily-quota") !== undefined
-        ? { dailyQuotaUsed: headerInt(response, "x-resend-daily-quota") }
-        : {}),
-      ...(headerInt(response, "x-resend-monthly-quota") !== undefined
-        ? { monthlyQuotaUsed: headerInt(response, "x-resend-monthly-quota") }
-        : {}),
-    };
+    const quota = quotaFromHeaders(response.headers);
 
     // 2xx means Resend accepted it. An unreadable body after that point costs
     // us the message id, which is a worse audit trail -- not a failed send, so
@@ -808,7 +879,7 @@ async function writeIfStillOurs(
  * real trigger deliveries out of the emulator.
  */
 export async function deliverMailDocument(docId: string): Promise<DeliveryOutcome> {
-  const ref = db.collection(MAIL_COLLECTION).doc(docId);
+  const ref = mailCollection().doc(docId);
   const leaseOwner = randomUUID();
 
   // ---------------- CLAIM -------------------------------------------------
@@ -870,6 +941,17 @@ export async function deliverMailDocument(docId: string): Promise<DeliveryOutcom
     console.error(
       `mail-delivery: ${CONFIG_MISSING_ERROR} -- Resend is not configured, mail ${docId} cannot be sent. Missing: ${missing.join(", ")}`
     );
+    // Systemic by definition: nothing this deployment sends can succeed. Shut
+    // the breaker so the realtime path stops minting codes for mail that
+    // cannot go anywhere -- this branch returns before the send, so the catch
+    // below never sees it.
+    //
+    // Through pauseKindFor rather than a literal, so this branch and the catch
+    // below cannot come to disagree about how long a systemic failure pauses.
+    const configPause = pauseKindFor(CONFIG_MISSING_ERROR);
+    if (configPause) {
+      await recordSendOutcome({ pause: configPause, errorName: CONFIG_MISSING_ERROR });
+    }
     await finish(ref, claim, {
       name: CONFIG_MISSING_ERROR,
       message: `Missing configuration: ${missing.join(", ")}`,
@@ -905,12 +987,14 @@ export async function deliverMailDocument(docId: string): Promise<DeliveryOutcom
   } catch (error) {
     const classified = classifyMailError(error);
 
-    // Quota exhaustion is not just this mail's problem -- it is every send's
-    // problem until the quota rolls over, and the realtime path needs to know
-    // BEFORE it mints a code. Trip the breaker. Awaited but never fatal:
-    // recordSendOutcome swallows its own failures.
-    if (QUOTA_ERRORS.has(classified.name)) {
-      await recordSendOutcome({ quotaExhausted: true, errorName: classified.name });
+    // This failure is often not just this mail's problem -- an exhausted quota
+    // or a revoked key is every send's problem, and the realtime path needs to
+    // know BEFORE it mints a code. Trip the breaker, for as long as the reason
+    // will stay true. Awaited but never fatal: recordSendOutcome swallows its
+    // own failures.
+    const pause = pauseKindFor(classified.name);
+    if (pause) {
+      await recordSendOutcome({ pause, errorName: classified.name });
     }
 
     // The attempts cap is applied HERE and not in classifyMailError, because

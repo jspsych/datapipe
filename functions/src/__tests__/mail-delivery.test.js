@@ -41,6 +41,8 @@ let LEASE_MS;
 let MAX_ATTEMPTS;
 let CONFIG_MISSING_ERROR;
 let INVALID_DOCUMENT_ERROR;
+let quotaFromHeaders;
+let resendSender;
 
 beforeAll(async () => {
   ({
@@ -54,6 +56,8 @@ beforeAll(async () => {
     MAX_ATTEMPTS,
     CONFIG_MISSING_ERROR,
     INVALID_DOCUMENT_ERROR,
+    quotaFromHeaders,
+    resendSender,
   } = await import("../../lib/mail-delivery.js"));
 });
 
@@ -472,5 +476,117 @@ describe("configuration", () => {
     const error = new Error("Missing configuration: RESEND_API_KEY");
     error.name = CONFIG_MISSING_ERROR;
     expect(classifyMailError(error).retryable).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 5. The transport, and the two header names the breaker depends on
+// ---------------------------------------------------------------------------
+//
+// WHY THIS IS WORTH ITS OWN SECTION. Everything else in the mail suite mocks
+// the sender, which means it hands the delivery path an ALREADY-PARSED
+// `dailyQuotaUsed` -- the exact value the transport is supposed to produce. So
+// the header names, their casing on a real Headers object, and what
+// Number.parseInt does to a value that is not a bare integer were the one part
+// of the proactive breaker that no test touched: misspell "x-resend-daily-quota"
+// and every send returns no reading, mail-availability.ts never learns a
+// number, verification never stops at the reserve, and every other test still
+// passes.
+
+describe("quotaFromHeaders", () => {
+  test("reads both quota headers, case-insensitively, off a real Headers", () => {
+    // Headers lower-cases its keys, which is why a real one is used here rather
+    // than a plain object with a get().
+    const headers = new Headers({
+      "X-Resend-Daily-Quota": "94",
+      "x-resend-monthly-quota": "2412",
+    });
+    expect(quotaFromHeaders(headers)).toEqual({
+      dailyQuotaUsed: 94,
+      monthlyQuotaUsed: 2412,
+    });
+  });
+
+  test("absent headers leave the field out, rather than reporting zero", () => {
+    // Resend sends the daily header to free-plan accounts only, so absent has
+    // to read as "no daily cap applies". A 0 here would be a permanent claim
+    // that nothing has been sent today.
+    expect(quotaFromHeaders(new Headers())).toEqual({});
+    expect(quotaFromHeaders(new Headers({ "x-resend-daily-quota": "0" }))).toEqual({
+      dailyQuotaUsed: 0,
+    });
+  });
+
+  test("an unparseable value is no reading at all", () => {
+    expect(quotaFromHeaders(new Headers({ "x-resend-daily-quota": "" }))).toEqual({});
+    expect(
+      quotaFromHeaders(new Headers({ "x-resend-daily-quota": "unlimited" }))
+    ).toEqual({});
+  });
+});
+
+describe("resendSender", () => {
+  const okResponse = (body, headers = {}) =>
+    new Response(JSON.stringify(body), { status: 200, headers });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test("sends the id and the idempotency key, and returns the quota reading", async () => {
+    const fetchMock = jest
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        okResponse({ id: "resend-1" }, { "x-resend-daily-quota": "94" })
+      );
+
+    const result = await resendSender(CONFIG)(
+      { from: CONFIG.from, to: ["researcher@example.edu"], subject: "s", text: "t" },
+      { timeoutMs: 1000, idempotencyKey: "mail-doc-1" }
+    );
+
+    expect(result).toEqual({ id: "resend-1", dailyQuotaUsed: 94 });
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("https://api.resend.com/emails");
+    // The document id as the Idempotency-Key is what makes an ambiguous
+    // timeout safe to retry at all (see AMBIGUOUS_ERRORS).
+    expect(init.headers["Idempotency-Key"]).toBe("mail-doc-1");
+    expect(init.headers.Authorization).toBe(`Bearer ${CONFIG.apiKey}`);
+  });
+
+  test("a 2xx with an unreadable body is still a send, and still a reading", async () => {
+    // Losing the message id costs an audit trail, not a delivery -- and the
+    // headers are read before the body precisely so a bad body cannot cost the
+    // quota reading too.
+    jest.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("not json", {
+        status: 200,
+        headers: { "x-resend-daily-quota": "12" },
+      })
+    );
+
+    await expect(
+      resendSender(CONFIG)(
+        { from: CONFIG.from, to: ["researcher@example.edu"], subject: "s", text: "t" },
+        { timeoutMs: 1000, idempotencyKey: "mail-doc-2" }
+      )
+    ).resolves.toEqual({ dailyQuotaUsed: 12 });
+  });
+
+  test("a refusal throws with Resend's own name, so the taxonomy can classify it", async () => {
+    jest.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({ name: "daily_quota_exceeded", message: "over quota" }),
+        { status: 429 }
+      )
+    );
+
+    await expect(
+      resendSender(CONFIG)(
+        { from: CONFIG.from, to: ["researcher@example.edu"], subject: "s", text: "t" },
+        { timeoutMs: 1000, idempotencyKey: "mail-doc-3" }
+      )
+    ).rejects.toMatchObject({ name: "daily_quota_exceeded", status: 429 });
   });
 });

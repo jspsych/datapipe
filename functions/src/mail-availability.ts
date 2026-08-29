@@ -41,6 +41,23 @@
 // absence therefore means the daily cap does not apply, which is exactly right:
 // on a paid plan this module quietly stops tripping instead of needing to be
 // removed.
+//
+// THAT READING IS AN ASSUMPTION, AND IT IS LOAD-BEARING. Resend documents the
+// header's existence, not its semantics, and "used today" and "remaining today"
+// are the same shape. If it is really the plan LIMIT, every reading is 100, the
+// reserve rule below is true forever, and verification is off for good -- and
+// because each send rewrites dailyQuotaObservedAt, the staleness escape hatch
+// never fires either. Three things bound that:
+//
+//   1. A reading outside [0, FREE_PLAN_DAILY_LIMIT] is refused at the write
+//      (recordSendOutcome) and ignored at the read. That catches a header that
+//      turns out to be the monthly counter, or a remaining-quota value on a
+//      paid plan.
+//   2. Refusing a verification on the reserve alone logs at ERROR with a stable
+//      token, so the condition is alertable rather than silent
+//      (docs/deploy-contact-email.md §6).
+//   3. The runbook says how to capture a real response header and check the
+//      number against the Resend dashboard (§5). Do that before trusting it.
 
 import { Timestamp } from "firebase-admin/firestore";
 import { db } from "./app.js";
@@ -103,6 +120,68 @@ export function nextUtcMidnight(nowMs: number): number {
 }
 
 /**
+ * Start of the UTC month after the given instant.
+ *
+ * The free plan has TWO caps -- 100/day and 3,000/month -- and they reset on
+ * different clocks. Reusing the daily reset for a monthly exhaustion is not a
+ * small error: hit the monthly cap on the 20th and the breaker reopens at
+ * midnight, the sweeper probes into a cap that has eleven days left to run,
+ * fails, and spends one of each queued document's MAX_ATTEMPTS doing it. Three
+ * nights of that and every queued notification is terminal -- which is the
+ * exact retry-budget exhaustion the breaker exists to prevent.
+ *
+ * Same guess-status as nextUtcMidnight, and the same escape hatch: an operator
+ * who upgrades the plan mid-month clears `systemStatus/mail` by hand rather
+ * than waiting this out (docs/deploy-contact-email.md §5).
+ */
+export function nextUtcMonthStart(nowMs: number): number {
+  const d = new Date(nowMs);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1);
+}
+
+// Why sending stopped, and therefore how long it stays stopped.
+//
+//   daily-quota    resets at the next UTC midnight.
+//   monthly-quota  resets at the start of the next UTC month.
+//   systemic       nothing about the account is exhausted; the deployment
+//                  cannot send at all (a revoked key, an unverified domain,
+//                  missing configuration). No reset time exists, so this is a
+//                  short cooldown and nothing more -- see SYSTEMIC_PAUSE_MS.
+export type PauseKind = "daily-quota" | "monthly-quota" | "systemic";
+
+// How long a systemic failure holds sending shut.
+//
+// Short on purpose. A systemic failure needs a human, and this cannot wait for
+// one -- but it must not let a loop of failing sends run either. Fifteen
+// minutes bounds a revoked key to ~4 wasted Resend requests an hour no matter
+// how many researchers press the button, and it is long enough that the
+// sweeper (every 10 minutes) skips at most two passes if the diagnosis was
+// wrong.
+export const SYSTEMIC_PAUSE_MS = 15 * 60 * 1000;
+
+/** When may sending be tried again, given why it stopped? */
+export function pauseUntil(kind: PauseKind, nowMs: number): number {
+  if (kind === "daily-quota") return nextUtcMidnight(nowMs);
+  if (kind === "monthly-quota") return nextUtcMonthStart(nowMs);
+  return nowMs + SYSTEMIC_PAUSE_MS;
+}
+
+/**
+ * A stored daily-quota reading, or null if there isn't a usable one.
+ *
+ * The bound is the point. `dailyQuotaUsed` comes from a response header whose
+ * semantics are assumed rather than documented (see the header), and a reading
+ * that cannot be what we think it is must not be allowed to hold the
+ * verification path shut forever. Anything outside [0, FREE_PLAN_DAILY_LIMIT]
+ * is not a count of today's sends on a free plan, whatever else it is.
+ */
+export function usableQuotaReading(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  if (value < 0 || value > FREE_PLAN_DAILY_LIMIT) return null;
+  return value;
+}
+
+/**
  * Has a quota reading aged out?
  *
  * A reading taken before the most recent UTC midnight describes yesterday's
@@ -131,11 +210,10 @@ export function verificationAvailability(
     return { available: false, reason: "quota-exhausted", until };
   }
 
-  const used = status?.dailyQuotaUsed;
+  const used = usableQuotaReading(status?.dailyQuotaUsed);
   const observedAt = millisOrNull(status?.dailyQuotaObservedAt);
   if (
-    typeof used === "number" &&
-    Number.isFinite(used) &&
+    used !== null &&
     !isQuotaReadingStale(observedAt, nowMs) &&
     used >= VERIFICATION_CEILING
   ) {
@@ -209,28 +287,47 @@ export async function readMailStatus(): Promise<MailStatus | undefined> {
  */
 export async function recordSendOutcome(outcome: {
   dailyQuotaUsed?: number;
-  quotaExhausted?: boolean;
+  pause?: PauseKind;
   errorName?: string;
 }): Promise<void> {
   const now = Date.now();
   const updates: Record<string, unknown> = { updatedAt: Timestamp.fromMillis(now) };
 
-  if (outcome.quotaExhausted) {
-    updates.unavailableUntil = Timestamp.fromMillis(nextUtcMidnight(now));
-    updates.reason = outcome.errorName ?? "quota-exhausted";
-    // Pin the counter at the limit. Without this a stale, lower reading from
-    // earlier in the day would keep saying the reserve is untouched.
-    updates.dailyQuotaUsed = FREE_PLAN_DAILY_LIMIT;
-    updates.dailyQuotaObservedAt = Timestamp.fromMillis(now);
+  if (outcome.pause) {
+    updates.unavailableUntil = Timestamp.fromMillis(pauseUntil(outcome.pause, now));
+    updates.reason = outcome.errorName ?? outcome.pause;
+    if (outcome.pause === "daily-quota") {
+      // Pin the counter at the limit. Without this a stale, lower reading from
+      // earlier in the day would keep saying the reserve is untouched.
+      //
+      // ONLY for the daily cap. A monthly exhaustion says nothing about
+      // today's counter, and pinning it there would block verification on the
+      // reserve rule for a reason that has nothing to do with the reserve --
+      // and would go on doing so after the daily counter resets. The monthly
+      // pause above already holds everything shut for as long as it needs to.
+      updates.dailyQuotaUsed = FREE_PLAN_DAILY_LIMIT;
+      updates.dailyQuotaObservedAt = Timestamp.fromMillis(now);
+    }
   } else {
     // A send got through, so whatever the breaker believed is now out of date.
     // This is the half-open close: the sweeper probes, and its success is what
     // reopens the realtime path.
     updates.unavailableUntil = null;
     updates.reason = null;
-    if (typeof outcome.dailyQuotaUsed === "number") {
-      updates.dailyQuotaUsed = outcome.dailyQuotaUsed;
-      updates.dailyQuotaObservedAt = Timestamp.fromMillis(now);
+    if (outcome.dailyQuotaUsed !== undefined) {
+      const used = usableQuotaReading(outcome.dailyQuotaUsed);
+      if (used === null) {
+        // Loud, because the alternative is silent: an implausible reading
+        // stored here would hold the verification path shut on the reserve
+        // rule with nothing in the logs saying why. See the header -- this is
+        // what a wrong guess about the header's meaning looks like.
+        console.error(
+          `mail-availability: refusing an implausible x-resend-daily-quota reading (${outcome.dailyQuotaUsed}); expected 0..${FREE_PLAN_DAILY_LIMIT}. Check what the header actually means before trusting it.`
+        );
+      } else {
+        updates.dailyQuotaUsed = used;
+        updates.dailyQuotaObservedAt = Timestamp.fromMillis(now);
+      }
     }
   }
 
