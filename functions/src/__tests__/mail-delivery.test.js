@@ -5,10 +5,9 @@
 // Pure coverage for mail-delivery.ts's three decisions.
 //
 // Everything asserted here is a function of its arguments: the mail
-// document -> SendEmailCommand mapping, the error taxonomy, and the claim
-// state machine. No emulator, no network, and -- deliberately -- no AWS
-// package: mail-delivery.ts imports @aws-sdk/client-sesv2 dynamically, inside
-// the transport seam, so nothing in this file loads it. The end-to-end
+// document -> Resend request-body mapping, the error taxonomy, and the claim
+// state machine. No emulator and no network: the transport is one `fetch`
+// behind the sender seam, and nothing in this file reaches it. The end-to-end
 // behaviour (claiming, retrying, the outcome fields) lives in
 // mail-delivery-emulator.test.js.
 //
@@ -31,7 +30,7 @@ process.env.FIREBASE_CONFIG = JSON.stringify({
 });
 
 let buildSendEmailInput;
-let classifySesError;
+let classifyMailError;
 let claimDecision;
 let missingConfigKeys;
 let readMailConfig;
@@ -46,7 +45,7 @@ let INVALID_DOCUMENT_ERROR;
 beforeAll(async () => {
   ({
     buildSendEmailInput,
-    classifySesError,
+    classifyMailError,
     claimDecision,
     missingConfigKeys,
     readMailConfig,
@@ -59,9 +58,7 @@ beforeAll(async () => {
 });
 
 const CONFIG = {
-  region: "us-east-1",
-  accessKeyId: "AKIAEXAMPLE",
-  secretAccessKey: "secret",
+  apiKey: "re_testtesttest",
   from: "DataPipe <datapipe-notifications@jspsych.org>",
   replyTo: "contact@jspsych.org",
 };
@@ -81,62 +78,71 @@ function mailDoc(overrides = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// 1. Document -> SES request
+// 1. Document -> Resend request body
 // ---------------------------------------------------------------------------
 
 describe("buildSendEmailInput", () => {
-  test("maps every part of the document onto Simple content", () => {
+  test("maps every part of the document onto the request body", () => {
     const input = buildSendEmailInput(mailDoc(), CONFIG);
 
-    expect(input.FromEmailAddress).toBe(
-      "DataPipe <datapipe-notifications@jspsych.org>"
-    );
-    expect(input.Destination.ToAddresses).toEqual(["researcher@example.edu"]);
-    expect(input.ReplyToAddresses).toEqual(["contact@jspsych.org"]);
-    expect(input.Content.Simple.Subject.Data).toBe(
+    expect(input.from).toBe("DataPipe <datapipe-notifications@jspsych.org>");
+    expect(input.to).toEqual(["researcher@example.edu"]);
+    expect(input.subject).toBe(
       "DataPipe couldn't upload data for Working Memory Span"
     );
-    expect(input.Content.Simple.Body.Text.Data).toBe("The file is not lost.");
-    expect(input.Content.Simple.Body.Html.Data).toBe(
-      "<p>The file is not lost.</p>"
-    );
-    // Non-ASCII shows up in experiment titles routinely; a missing charset
-    // renders them as mojibake in the one mail a researcher was going to read.
-    expect(input.Content.Simple.Subject.Charset).toBe("UTF-8");
-    expect(input.Content.Simple.Body.Text.Charset).toBe("UTF-8");
-    expect(input.Content.Simple.Body.Html.Charset).toBe("UTF-8");
+    expect(input.text).toBe("The file is not lost.");
+    expect(input.html).toBe("<p>The file is not lost.</p>");
   });
 
-  test("omits the Html part entirely when the document has none", () => {
-    // mail.ts writes `message` WITHOUT an html key for text-only mail. An
-    // empty Html part is not the same thing as no Html part to a mail client.
+  test("spells Reply-To the way the REST API does, not the way the SDK does", () => {
+    // The single highest-value assertion in this file. Resend's Node SDK takes
+    // `replyTo`; the raw API this code speaks takes `reply_to` and IGNORES
+    // unknown keys silently. Get this wrong and there is no error, no bounce
+    // and no log line -- just every notification going out with no Reply-To,
+    // for however long it takes someone to notice.
+    const input = buildSendEmailInput(mailDoc(), CONFIG);
+    expect(input.reply_to).toEqual(["contact@jspsych.org"]);
+    expect(input).not.toHaveProperty("replyTo");
+  });
+
+  test("sends no key at all for a part the document does not have", () => {
+    // mail.ts writes `message` WITHOUT an html key for text-only mail, and an
+    // empty html string is not the same thing as no html to a mail client.
     const doc = mailDoc({ message: { subject: "s", text: "t" } });
     const input = buildSendEmailInput(doc, CONFIG);
 
-    expect(input.Content.Simple.Body.Text.Data).toBe("t");
-    expect(input.Content.Simple.Body).not.toHaveProperty("Html");
+    expect(input.text).toBe("t");
+    expect(input).not.toHaveProperty("html");
   });
 
   test("omits Reply-To when none is configured", () => {
     const { replyTo, ...noReplyTo } = CONFIG;
     const input = buildSendEmailInput(mailDoc(), noReplyTo);
 
-    expect(input).not.toHaveProperty("ReplyToAddresses");
+    expect(input).not.toHaveProperty("reply_to");
   });
 
   test("accepts a bare string recipient as well as an array", () => {
     // mail.ts always writes an array, but the extension contract this replaces
     // also allowed a string, and a hand-written document may well be one.
     const input = buildSendEmailInput(mailDoc({ to: "one@example.edu" }), CONFIG);
-    expect(input.Destination.ToAddresses).toEqual(["one@example.edu"]);
+    expect(input.to).toEqual(["one@example.edu"]);
   });
 
-  test("drops junk entries rather than handing SES a null recipient", () => {
+  test("drops junk entries rather than handing Resend a null recipient", () => {
     const input = buildSendEmailInput(
       mailDoc({ to: [null, "  keep@example.edu  ", "", 42] }),
       CONFIG
     );
-    expect(input.Destination.ToAddresses).toEqual(["keep@example.edu"]);
+    expect(input.to).toEqual(["keep@example.edu"]);
+  });
+
+  test("the body is JSON-serialisable, which is the only form it is ever used in", () => {
+    // buildSendEmailInput's output goes straight into JSON.stringify. A value
+    // that survives an assertion but not serialisation (undefined, a Date, a
+    // Timestamp leaked out of the document) would vanish silently on the wire.
+    const input = buildSendEmailInput(mailDoc(), CONFIG);
+    expect(JSON.parse(JSON.stringify(input))).toEqual(input);
   });
 
   test("refuses a document with no usable recipient", () => {
@@ -170,7 +176,7 @@ describe("buildSendEmailInput", () => {
       thrown = error;
     }
     expect(thrown.name).toBe(INVALID_DOCUMENT_ERROR);
-    expect(classifySesError(thrown).retryable).toBe(false);
+    expect(classifyMailError(thrown).retryable).toBe(false);
   });
 });
 
@@ -178,98 +184,135 @@ describe("buildSendEmailInput", () => {
 // 2. Error taxonomy
 // ---------------------------------------------------------------------------
 
-describe("classifySesError", () => {
-  function sesError(name, extra = {}) {
+describe("classifyMailError", () => {
+  // Resend answers a refusal with {name, message, statusCode}; the transport
+  // turns that into a MailTransportError whose `name` is Resend's code and
+  // whose `status` is the HTTP status. This builds the same shape.
+  function apiError(name, status) {
     const error = new Error(`${name} happened`);
     error.name = name;
-    return Object.assign(error, extra);
+    if (status !== undefined) error.status = status;
+    return error;
+  }
+
+  // A node/undici transport failure, which is a different animal: undici
+  // reports EVERY one as `TypeError: fetch failed` with the real diagnosis on
+  // .cause. Tested in that wrapped form on purpose -- the unwrapped form is
+  // not what this code ever receives.
+  function transportError(code) {
+    const error = new TypeError("fetch failed");
+    error.cause = Object.assign(new Error(code), { code });
+    return error;
   }
 
   const table = [
-    // [error, retryable, why]
-    ["MessageRejected", false, "bad address / rejected content"],
-    ["MailFromDomainNotVerifiedException", false, "domain not verified"],
-    ["AccountSuspendedException", false, "account problem"],
-    ["SendingPausedException", false, "account problem"],
-    ["AccessDeniedException", false, "IAM policy problem"],
-    ["UnrecognizedClientException", false, "bad credentials"],
-    ["SignatureDoesNotMatch", false, "bad credentials"],
-    ["ValidationException", false, "malformed request"],
-    ["TooManyRequestsException", true, "throttled"],
-    ["ThrottlingException", true, "throttled"],
-    ["LimitExceededException", true, "throttled"],
-    ["ServiceUnavailableException", true, "SES 5xx"],
-    ["InternalServiceErrorException", true, "SES 5xx"],
-    ["ENOTFOUND", true, "never connected, so nothing was sent"],
-    ["ECONNREFUSED", true, "never connected, so nothing was sent"],
-    ["TimeoutError", false, "AMBIGUOUS: may have been accepted"],
-    ["AbortError", false, "AMBIGUOUS: may have been accepted"],
-    ["ECONNRESET", false, "AMBIGUOUS: may have been accepted"],
+    // [Resend error code, status, retryable, why]
+    ["validation_error", 403, false, "sending domain not verified"],
+    ["validation_error", 422, false, "malformed request"],
+    ["missing_required_field", 422, false, "malformed request"],
+    ["missing_api_key", 401, false, "not configured"],
+    ["restricted_api_key", 401, false, "key scoped wrong or inactive"],
+    ["suspended_api_key", 403, false, "account problem"],
+    ["invalid_permission", 403, false, "key lacks the send scope"],
+    ["not_found", 404, false, "wrong endpoint -- a deploy fixes it"],
+    ["method_not_allowed", 405, false, "wrong endpoint -- a deploy fixes it"],
+    ["invalid_idempotent_request", 409, false, "same key, different body"],
+    ["rate_limit_exceeded", 429, true, "per-second limit"],
+    ["daily_quota_exceeded", 429, true, "plan cap -- 100/day on the free plan"],
+    ["monthly_quota_exceeded", 429, true, "plan cap"],
+    ["concurrent_idempotent_requests", 409, true, "our own earlier attempt"],
+    ["application_error", 500, true, "Resend 5xx"],
+    ["service_unavailable", 503, true, "Resend 5xx"],
   ];
 
-  test.each(table)("%s -> retryable=%s (%s)", (name, retryable) => {
-    const classified = classifySesError(sesError(name));
+  test.each(table)("%s (%d) -> retryable=%s (%s)", (name, status, retryable) => {
+    const classified = classifyMailError(apiError(name, status));
     expect(classified.name).toBe(name);
     expect(classified.retryable).toBe(retryable);
   });
 
-  test("the ambiguous set is terminal on purpose, not by omission", () => {
-    // SESv2 SendEmail has no idempotency token, so a request that went out and
-    // never answered cannot be retried safely. Retrying risks a SECOND copy of
-    // a notification whose entire value is arriving once; not retrying loses
-    // at most one, and loses it loudly (the name survives on the document).
-    // If this assertion is ever flipped, read the AMBIGUOUS_ERRORS comment in
-    // mail-delivery.ts first -- it is a deliberate trade, not a default.
-    expect(classifySesError(sesError("TimeoutError")).retryable).toBe(false);
-    expect(classifySesError(sesError("ECONNRESET")).retryable).toBe(false);
-    // ...and the distinction from "never connected" is the whole reason the
-    // two lists are separate.
-    expect(classifySesError(sesError("ECONNREFUSED")).retryable).toBe(true);
+  test("unwraps undici's `TypeError: fetch failed` to the real cause", () => {
+    // Load-bearing. Undici hides every network error behind that TypeError.
+    // Without the unwrap each one classifies as an unrecognised name with no
+    // status -- which is TERMINAL -- so a momentary DNS blip would silently
+    // become a permanently lost notification.
+    expect(classifyMailError(transportError("ECONNREFUSED")).name).toBe(
+      "ECONNREFUSED"
+    );
+    expect(classifyMailError(transportError("ECONNRESET")).name).toBe(
+      "ECONNRESET"
+    );
+    expect(classifyMailError(new TypeError("fetch failed")).name).toBe(
+      "UnknownError"
+    );
+  });
+
+  test("never-connected errors are retryable: nothing can have been sent", () => {
+    for (const code of ["ENOTFOUND", "ECONNREFUSED", "EAI_AGAIN"]) {
+      expect(classifyMailError(transportError(code)).retryable).toBe(true);
+    }
+  });
+
+  test("AMBIGUOUS errors are retryable BECAUSE of the idempotency key", () => {
+    // This assertion is inverted from the SES version of this file, and the
+    // inversion is the point. Under SESv2 there was no idempotency token, so a
+    // request that went out and never answered could not be retried safely:
+    // retrying risked a SECOND copy of a notification whose entire value is
+    // arriving once, and the code chose to lose the mail instead.
+    //
+    // Resend takes an Idempotency-Key, and mail-delivery.ts sends the mail
+    // document's id as that key on every attempt, so a retry after a timeout
+    // is not a second send -- Resend returns the original result. We get the
+    // retry AND exactly-once, instead of choosing.
+    //
+    // IF THIS IS EVER FLIPPED BACK, the reason will be that something can now
+    // retry more than 24 hours later, which is when Resend expires the key.
+    // Read AMBIGUOUS_ERRORS in mail-delivery.ts before touching it.
+    expect(classifyMailError(apiError("TimeoutError")).retryable).toBe(true);
+    expect(classifyMailError(apiError("AbortError")).retryable).toBe(true);
+    expect(classifyMailError(transportError("ECONNRESET")).retryable).toBe(true);
   });
 
   test("falls back to the HTTP status when the name is unfamiliar", () => {
-    const throttled = classifySesError(
-      sesError("SomeNewThrottle", { $metadata: { httpStatusCode: 429 } })
+    // Resend adds error codes; an unknown one must still be judged.
+    expect(classifyMailError(apiError("some_new_throttle", 429)).retryable).toBe(
+      true
     );
-    expect(throttled.retryable).toBe(true);
-
-    const serverSide = classifySesError(
-      sesError("SomeNewOutage", { $metadata: { httpStatusCode: 503 } })
+    expect(classifyMailError(apiError("some_new_outage", 503)).retryable).toBe(
+      true
     );
-    expect(serverSide.retryable).toBe(true);
-
-    const clientSide = classifySesError(
-      sesError("SomeNewRefusal", { $metadata: { httpStatusCode: 400 } })
+    expect(classifyMailError(apiError("some_new_refusal", 400)).retryable).toBe(
+      false
     );
-    expect(clientSide.retryable).toBe(false);
   });
 
-  test("honors the SDK's own $retryable hint when nothing else matched", () => {
-    const hinted = classifySesError(
-      sesError("SomethingNobodyListed", { $retryable: { throttling: true } })
-    );
-    expect(hinted.retryable).toBe(true);
+  test("a non-JSON error body still classifies, on status alone", () => {
+    // An edge or proxy failure answers HTML, so the transport synthesises the
+    // name from the status. 502 from a CDN must not be treated as terminal.
+    expect(classifyMailError(apiError("HttpError502", 502)).retryable).toBe(true);
+    expect(classifyMailError(apiError("HttpError400", 400)).retryable).toBe(false);
   });
 
   test("an unknown, unnamed, statusless error does not consume the retry budget", () => {
-    // More likely a defect on our side than a blip on SES's.
-    expect(classifySesError(new Error("boom")).retryable).toBe(false);
-    expect(classifySesError(new Error("boom")).name).toBe("UnknownError");
-    expect(classifySesError(undefined).name).toBe("UnknownError");
-    expect(classifySesError("just a string").message).toBe("Unknown error");
+    // More likely a defect on our side than a blip at Resend.
+    expect(classifyMailError(new Error("boom")).retryable).toBe(false);
+    expect(classifyMailError(new Error("boom")).name).toBe("UnknownError");
+    expect(classifyMailError(undefined).name).toBe("UnknownError");
+    expect(classifyMailError("just a string").message).toBe("Unknown error");
   });
 
   test("reads a node-style `code` when there is no useful name", () => {
     const error = new Error("socket hang up");
     error.code = "ECONNRESET";
-    expect(classifySesError(error).name).toBe("ECONNRESET");
+    expect(classifyMailError(error).name).toBe("ECONNRESET");
   });
 
   test("never carries a stack, and truncates the message", () => {
-    const error = sesError("MessageRejected", { message: "x".repeat(5000) });
-    const classified = classifySesError(error);
+    const error = apiError("validation_error", 422);
+    error.message = "x".repeat(5000);
+    const classified = classifyMailError(error);
     expect(classified).toEqual({
-      name: "MessageRejected",
+      name: "validation_error",
       message: "x".repeat(500),
       retryable: false,
     });
@@ -388,9 +431,7 @@ describe("claimDecision", () => {
 
 describe("configuration", () => {
   const FULL = {
-    SES_REGION: "us-east-1",
-    SES_ACCESS_KEY_ID: "AKIAEXAMPLE",
-    SES_SECRET_ACCESS_KEY: "secret",
+    RESEND_API_KEY: "re_testtesttest",
     MAIL_FROM: "DataPipe <datapipe-notifications@jspsych.org>",
     MAIL_REPLY_TO: "contact@jspsych.org",
   };
@@ -406,24 +447,21 @@ describe("configuration", () => {
   });
 
   test("names every missing key, and blank counts as missing", () => {
-    expect(missingConfigKeys({ ...FULL, SES_SECRET_ACCESS_KEY: "   " })).toEqual([
-      "SES_SECRET_ACCESS_KEY",
+    expect(missingConfigKeys({ ...FULL, RESEND_API_KEY: "   " })).toEqual([
+      "RESEND_API_KEY",
     ]);
-    expect(missingConfigKeys({})).toEqual([
-      "SES_REGION",
-      "SES_ACCESS_KEY_ID",
-      "SES_SECRET_ACCESS_KEY",
-      "MAIL_FROM",
-    ]);
+    expect(missingConfigKeys({})).toEqual(["RESEND_API_KEY", "MAIL_FROM"]);
   });
 
-  test("readMailConfig trims, so a stray newline from the .env heredoc cannot break signing", () => {
+  test("readMailConfig trims, so a stray newline from the .env heredoc cannot 401", () => {
+    // A trailing newline inside a bearer token is not a visible problem: it is
+    // a 401 that looks exactly like a wrong key.
     const config = readMailConfig({
       ...FULL,
-      SES_ACCESS_KEY_ID: "  AKIAEXAMPLE\n",
+      RESEND_API_KEY: "  re_testtesttest\n",
       MAIL_REPLY_TO: "  contact@jspsych.org  ",
     });
-    expect(config.accessKeyId).toBe("AKIAEXAMPLE");
+    expect(config.apiKey).toBe("re_testtesttest");
     expect(config.replyTo).toBe("contact@jspsych.org");
   });
 
@@ -431,8 +469,8 @@ describe("configuration", () => {
     // It is the alert handle: it means every notification this deployment
     // sends is being dropped on the floor.
     expect(CONFIG_MISSING_ERROR).toBe("MailConfigMissingError");
-    const error = new Error("Missing configuration: SES_REGION");
+    const error = new Error("Missing configuration: RESEND_API_KEY");
     error.name = CONFIG_MISSING_ERROR;
-    expect(classifySesError(error).retryable).toBe(false);
+    expect(classifyMailError(error).retryable).toBe(false);
   });
 });

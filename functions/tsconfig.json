@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2018", // Compile to ES6
-    "module": "es2020", // ESM emit; es2020 (superset of ES6) allows dynamic import() -- mail-delivery.ts lazy-loads the AWS SDK off the hot path
+    "module": "es2020", // ESM emit; es2020 (superset of ES6) also allows dynamic import(). Nothing uses it now -- mail-delivery.ts lazy-loaded the AWS SDK off the hot path until delivery moved to Resend, which needs no SDK at all
     "outDir": "./lib", // Output compiled files to the lib directory
     "rootDir": "./src", // Specify the root directory of input files
     "moduleResolution": "node", // Use Node.js module resolution mechanism

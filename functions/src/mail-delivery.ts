@@ -12,10 +12,14 @@
 //
 // The plan was the Firebase "Trigger Email" extension
 // (firebase/firestore-send-email). That platform is deprecated, so delivery
-// moves in-repo, on Amazon SES via the AWS API directly -- no SMTP, no
-// nodemailer. mail.ts's header still describes the extension; its DOCUMENT
-// contract is unchanged and still authoritative, which is the whole reason
-// the swap costs nothing on the write side.
+// moved in-repo. The transport was then Amazon SES, until AWS denied the
+// production-access request that would have let it send to anyone but a
+// verified address; it is now Resend, over its plain JSON HTTP API -- no SMTP,
+// no nodemailer, and no SDK at all (one `fetch` to one endpoint).
+//
+// mail.ts's header still describes the extension; its DOCUMENT contract is
+// unchanged and still authoritative, which is the whole reason both swaps cost
+// nothing on the write side.
 //
 // The outcome fields written below are deliberately the extension's:
 // `delivery.state`, `delivery.attempts`, `delivery.startTime`,
@@ -75,10 +79,10 @@ import { MAIL_COLLECTION } from "./mail.js";
 // Timings. The relationship between these three numbers is load-bearing.
 // ---------------------------------------------------------------------------
 
-// Hard ceiling on one SES call. SES answers in well under a second in the
-// normal case; ten seconds is "the network eating the request", not "SES is
-// thinking".
-export const SES_TIMEOUT_MS = 10 * 1000;
+// Hard ceiling on one Resend API call. Resend answers in well under a second
+// in the normal case; ten seconds is "the network eating the request", not
+// "Resend is thinking".
+export const SEND_TIMEOUT_MS = 10 * 1000;
 
 // The function's own timeout. Nothing here holds data -- one document read,
 // one HTTPS call, one document write -- so this is generous by an order of
@@ -94,14 +98,17 @@ export const FUNCTION_TIMEOUT_SECONDS = 60;
 // value trades two failures against each other:
 //
 //   too SHORT -> a second invocation takes over a claim whose original owner
-//                is still alive and still inside client.send(). Both send.
-//                That is the double-send this whole file exists to prevent.
+//                is still alive and still inside the send. Both send. That is
+//                the double-send this whole file exists to prevent. (Resend's
+//                Idempotency-Key makes that collision survivable now -- see
+//                the transport seam -- but "survivable" is not "fine", and
+//                the lease is still the thing that prevents it.)
 //   too LONG  -> a genuinely crashed claim sits undelivered for that long.
 //
 // The floor is therefore the longest an invocation can still be running after
 // it claimed, and that is bounded by the FUNCTION timeout (60s), not by the
-// SES timeout (10s): past 60 seconds the platform has killed the invocation,
-// so it is provably not in client.send() any more. 5 minutes is 5x that
+// send timeout (10s): past 60 seconds the platform has killed the invocation,
+// so it is provably not in the send any more. 5 minutes is 5x that
 // bound, which absorbs clock skew between instances and any future increase
 // of the function timeout short of five minutes. The cost of the choice is
 // that a crashed claim waits up to five minutes -- irrelevant for mail whose
@@ -136,25 +143,27 @@ const TRANSACTION_ATTEMPTS = 10;
 // convention crypto-utils.ts / payload-crypto.ts use for TOKEN_ENCRYPTION_KEY,
 // and for the same reason: tests set these after module load.
 //
-// The three secret values are written into functions/.env by the deploy
-// workflows from repo secrets, exactly as TOKEN_ENCRYPTION_KEY already is
+// RESEND_API_KEY is written into functions/.env by the deploy workflows from a
+// repo secret, exactly as TOKEN_ENCRYPTION_KEY already is
 // (.github/workflows/firebase-deploy.yml, firebase-deploy-test.yml). MAIL_FROM
 // and MAIL_REPLY_TO are not secret and are written as literals in the same
 // block. See docs/deploy-contact-email.md §2.
+//
+// ONE secret, not the three SES needed: Resend authenticates with a bearer
+// token, so there is no region to keep in sync with a verified identity and no
+// request signing to be broken by a stray newline. The trim() below survives
+// from the SES version anyway -- a trailing newline in a bearer token is a 401,
+// which is just as fatal and rather harder to see.
 // ---------------------------------------------------------------------------
 
-export const REQUIRED_CONFIG_KEYS = [
-  "SES_REGION",
-  "SES_ACCESS_KEY_ID",
-  "SES_SECRET_ACCESS_KEY",
-  "MAIL_FROM",
-] as const;
+export const REQUIRED_CONFIG_KEYS = ["RESEND_API_KEY", "MAIL_FROM"] as const;
 
 export interface MailConfig {
-  region: string;
-  accessKeyId: string;
-  secretAccessKey: string;
+  // Resend API key, "re_..." -- sent as `Authorization: Bearer <key>`.
+  apiKey: string;
   // "DataPipe <datapipe-notifications@jspsych.org>" -- the extension's DEFAULT_FROM.
+  // Must be on a domain verified in the Resend account, or every send is a 403
+  // validation_error.
   from: string;
   // The extension's DEFAULT_REPLY_TO. Optional: mail with no Reply-To is
   // deliverable, mail with a bad one is not.
@@ -179,39 +188,31 @@ export function readMailConfig(
 ): MailConfig {
   const replyTo = env.MAIL_REPLY_TO?.trim();
   return {
-    region: (env.SES_REGION ?? "").trim(),
-    accessKeyId: (env.SES_ACCESS_KEY_ID ?? "").trim(),
-    secretAccessKey: (env.SES_SECRET_ACCESS_KEY ?? "").trim(),
+    apiKey: (env.RESEND_API_KEY ?? "").trim(),
     from: (env.MAIL_FROM ?? "").trim(),
     ...(replyTo ? { replyTo } : {}),
   };
 }
 
 // ---------------------------------------------------------------------------
-// The SES request, built from the mail document.
+// The Resend request, built from the mail document.
 // ---------------------------------------------------------------------------
 
-interface SesContentPart {
-  Data: string;
-  Charset: string;
-}
-
-// SESv2 SendEmailCommand input, "Simple" content. Declared structurally rather
-// than imported from the SDK so this shape is assertable in a pure test with
-// no AWS package loaded at all.
+// The JSON body of POST https://api.resend.com/emails.
+//
+// SNAKE_CASE IS NOT A TYPO. Resend's Node SDK takes `replyTo`; the raw REST
+// API this file speaks takes `reply_to`, and silently ignores keys it does not
+// recognise -- so a camelCase `replyTo` here would not error, it would just
+// send every notification with no Reply-To header and nothing would say so.
+// That is exactly the class of bug buildSendEmailInput is exported to catch.
 export interface SendEmailInput {
-  FromEmailAddress: string;
-  Destination: { ToAddresses: string[] };
-  ReplyToAddresses?: string[];
-  Content: {
-    Simple: {
-      Subject: SesContentPart;
-      Body: { Text: SesContentPart; Html?: SesContentPart };
-    };
-  };
+  from: string;
+  to: string[];
+  subject: string;
+  text: string;
+  html?: string;
+  reply_to?: string[];
 }
-
-const CHARSET = "UTF-8";
 
 // A mail document that cannot be turned into a request. Permanent by
 // definition: no amount of retrying fixes a missing recipient.
@@ -228,7 +229,7 @@ export class MailInputError extends Error {
 
 // mail.ts always writes `to` as an array; the extension contract also allowed
 // a bare string, and a hand-written document may well be one. Accept both, and
-// drop anything that is not a non-empty string rather than handing SES a
+// drop anything that is not a non-empty string rather than handing Resend a
 // `null` recipient.
 function recipients(to: unknown): string[] {
   const list: unknown[] = Array.isArray(to) ? (to as unknown[]) : [to];
@@ -239,11 +240,11 @@ function recipients(to: unknown): string[] {
 }
 
 /**
- * mail document -> SESv2 SendEmailCommand input.
+ * mail document -> Resend request body.
  *
- * Pure, and exported for it: this mapping is where a silent wrong-From or a
- * dropped html part would hide, and it needs no emulator and no AWS package to
- * assert.
+ * Pure, and exported for it: this mapping is where a silent wrong-From, a
+ * dropped html part, or a camelCased `reply_to` would hide, and it needs no
+ * emulator and no network to assert.
  */
 export function buildSendEmailInput(
   data: FirebaseFirestore.DocumentData,
@@ -266,23 +267,17 @@ export function buildSendEmailInput(
   }
 
   const input: SendEmailInput = {
-    FromEmailAddress: config.from,
-    Destination: { ToAddresses: to },
-    Content: {
-      Simple: {
-        Subject: { Data: subject, Charset: CHARSET },
-        // Text always, Html only when the document carries one -- mail.ts
-        // omits `html` entirely for text-only mail, and an empty Html part is
-        // not the same thing as no Html part to a mail client.
-        Body: {
-          Text: { Data: text, Charset: CHARSET },
-          ...(html ? { Html: { Data: html, Charset: CHARSET } } : {}),
-        },
-      },
-    },
+    from: config.from,
+    to,
+    subject,
+    // Text always, html only when the document carries one -- mail.ts omits
+    // `html` entirely for text-only mail, and an empty html part is not the
+    // same thing as no html part to a mail client.
+    text,
+    ...(html ? { html } : {}),
   };
   if (config.replyTo) {
-    input.ReplyToAddresses = [config.replyTo];
+    input.reply_to = [config.replyTo];
   }
   return input;
 }
@@ -297,94 +292,159 @@ export interface ClassifiedError {
   retryable: boolean;
 }
 
+// Resend names its refusals in the response body (`name`), and those names are
+// the precise signal -- more precise than the status, which reuses 403 for
+// "unverified domain", "suspended key" and "over quota" alike. Status is the
+// fallback for anything not listed here (Resend adds codes); see
+// https://resend.com/docs/api-reference/errors.
+
 // Permanent. Retrying changes nothing; a human has to change something.
-// MessageRejected is the bad-address case, the rest are configuration and
-// account problems.
+// Everything here is a configuration, credential, or bad-document problem.
 const PERMANENT_ERRORS = new Set([
-  "MessageRejected",
-  "MailFromDomainNotVerifiedException",
-  "AccountSuspendedException",
-  "SendingPausedException",
-  "NotFoundException",
-  "BadRequestException",
-  "ValidationException",
-  "InvalidParameterValue",
-  "InvalidParameterValueException",
-  "AccessDeniedException",
-  "AccessDenied",
-  "UnrecognizedClientException",
-  "InvalidClientTokenId",
-  "SignatureDoesNotMatch",
-  "InvalidSignatureException",
-  "ExpiredTokenException",
-  "CredentialsProviderError",
-  "IncompleteSignature",
-  "OptInRequired",
+  // 400/403/422 -- bad field, unverified sending domain, or a free-account
+  // restriction to the account owner's own address. The last one is the
+  // Resend equivalent of the SES sandbox that started this migration, and it
+  // fails exactly as loudly: terminal, named, on the document.
+  "validation_error",
+  "missing_required_field",
+  "missing_required_parameter",
+  "invalid_parameter",
+  "invalid_attachment",
+  // 401/403 -- the key is absent, wrong, scoped wrong, or switched off.
+  "missing_api_key",
+  "restricted_api_key",
+  "suspended_api_key",
+  "invalid_permission",
+  // 403 -- the account cannot send this at all.
+  "email_above_quota",
+  // 404/405 -- this code is calling the wrong endpoint. A deploy fixes it, a
+  // retry does not.
+  "not_found",
+  "method_not_allowed",
+  // 400/409 -- our Idempotency-Key is malformed, or was reused with a
+  // different body. Both are defects here, not conditions at Resend.
+  "invalid_idempotency_key",
+  "invalid_idempotent_request",
   INVALID_DOCUMENT_ERROR,
   CONFIG_MISSING_ERROR,
 ]);
 
-// Transient. SES answered, and its answer was "not now".
+// Transient. Resend answered, and its answer was "not now".
 const TRANSIENT_ERRORS = new Set([
-  "TooManyRequestsException",
-  "ThrottlingException",
-  "Throttling",
-  "RequestThrottled",
-  "RequestThrottledException",
-  "SlowDown",
-  "LimitExceededException",
-  "ServiceUnavailable",
-  "ServiceUnavailableException",
-  "InternalServiceErrorException",
-  "InternalFailure",
-  "InternalServerError",
+  // 429 -- the per-second limit. Genuinely momentary.
+  "rate_limit_exceeded",
+  // 429 -- THE PLAN CAP, and worth understanding before it happens. Nothing
+  // retries a retryable error on a timer (see the header): marking these
+  // retryable makes the document say "still deliverable" and makes an
+  // operator re-drive work, but the mail does not resend itself tomorrow.
+  // On the free plan the cap is 100/day, and the burst case that reaches it
+  // is a storage-provider outage putting many experiments into failure
+  // episodes at once -- i.e. exactly when these notifications matter most.
+  // `daily_quota_exceeded` in the logs is the signal to move to a paid plan;
+  // it is the second line worth alerting on after MailConfigMissingError.
+  "daily_quota_exceeded",
+  "monthly_quota_exceeded",
+  // 409 -- a previous attempt on the same Idempotency-Key is still in flight
+  // at Resend. It will finish; ours should stand down and let a later
+  // delivery read the result.
+  "concurrent_idempotent_requests",
+  "resource_locked",
+  // 500/503.
+  "application_error",
+  "service_unavailable",
+  "internal_server_error",
 ]);
 
-// AMBIGUOUS: the request went out and no answer came back. SES may or may not
-// have accepted the message, and SESv2 SendEmail has no idempotency token that
-// would let a retry be safe.
-//
-// These are treated as TERMINAL, not retryable, and that is a deliberate
-// asymmetry rather than an oversight. Retrying an ambiguous send is a coin
-// flip on delivering a second copy of a notification whose whole value is that
-// it arrives once; not retrying loses at most one mail, LOUDLY -- the error
-// name is preserved on the document and logged at error level, so it is
-// visible and re-drivable by hand, never silent. Given the choice the feature
-// itself already made (upload-failure-notify.ts: one mail per episode, a
-// 24-hour floor, and an explicit preference for saying nothing over saying it
-// twice), losing the coin flip in the quiet direction is the consistent call.
-const AMBIGUOUS_ERRORS = new Set([
-  "TimeoutError",
-  "RequestTimeout",
-  "RequestTimeoutException",
-  "AbortError",
-  "ECONNRESET",
-  "EPIPE",
-  "ECONNABORTED",
-  "ERR_SOCKET_CONNECTION_TIMEOUT",
-]);
-
-// Never connected at all, so nothing can have been sent. Safe to retry,
-// unlike the ambiguous set above -- the distinction is the whole reason these
-// are not one list.
+// Never connected at all, so nothing can have been sent.
 const NEVER_CONNECTED_ERRORS = new Set([
   "ENOTFOUND",
   "ECONNREFUSED",
   "EAI_AGAIN",
   "EHOSTUNREACH",
   "ENETUNREACH",
+  "UND_ERR_CONNECT_TIMEOUT",
 ]);
+
+// AMBIGUOUS: the request went out and no answer came back. Resend may or may
+// not have accepted the message.
+//
+// THIS SET IS RETRYABLE NOW, AND IT WAS NOT UNDER SES. That is the one
+// behavioural change the transport swap carries, and it is an improvement
+// rather than a slip. The old comment here read: "SESv2 SendEmail has no
+// idempotency token that would let a retry be safe", and so it chose to lose
+// an ambiguous mail rather than risk delivering a second copy of a
+// notification whose whole value is arriving once.
+//
+// Resend takes an Idempotency-Key header, and the transport below sends the
+// mail document's own id as that key on every attempt. So a retry after a
+// timeout is not a second send: Resend recognises the key and returns the
+// original result. The trade the old comment was making no longer exists --
+// we can now retry ambiguity AND keep the exactly-once guarantee, instead of
+// choosing between them.
+//
+// THE ONE THING THAT WOULD BREAK THIS: Resend expires an idempotency key after
+// 24 hours. Every retry path here is minutes wide (at-least-once redelivery of
+// the create event, or a lease takeover bounded by LEASE_MS), so nothing comes
+// close. If a retry mechanism is ever added that can fire a day later, this set
+// goes back to terminal, or the key stops being sufficient.
+const AMBIGUOUS_ERRORS = new Set([
+  "TimeoutError",
+  "AbortError",
+  "RequestTimeout",
+  "ECONNRESET",
+  "EPIPE",
+  "ECONNABORTED",
+  "UND_ERR_HEADERS_TIMEOUT",
+  "UND_ERR_BODY_TIMEOUT",
+  "UND_ERR_SOCKET",
+]);
+
+/**
+ * A non-2xx answer from Resend, or an unusable one. Carries the HTTP status so
+ * classification can fall back on it when the body named nothing familiar.
+ */
+export class MailTransportError extends Error {
+  status?: number;
+  constructor(name: string, message: string, status?: number) {
+    super(message);
+    this.name = name;
+    this.status = status;
+  }
+}
 
 function errorName(error: unknown): string {
   if (error === null || typeof error !== "object") return "UnknownError";
-  const e = error as { name?: unknown; code?: unknown };
+  const e = error as { name?: unknown; code?: unknown; cause?: unknown };
+
   // `!== "Error"` because a bare `new Error(...)` carries no diagnosis at all;
   // its node-style `code` (ECONNRESET and friends) is the useful signal.
-  if (typeof e.name === "string" && e.name.length > 0 && e.name !== "Error") {
+  //
+  // `!== "TypeError"` for the same reason, and it is load-bearing: undici --
+  // the fetch implementation in Node 22 -- wraps EVERY transport failure as
+  // `TypeError: fetch failed` and hangs the real diagnosis off `.cause`. Take
+  // the name at face value here and every network error in this file becomes
+  // an unrecognised "TypeError", which classifies terminal, which silently
+  // turns every transient blip into a permanently lost notification.
+  if (
+    typeof e.name === "string" &&
+    e.name.length > 0 &&
+    e.name !== "Error" &&
+    e.name !== "TypeError"
+  ) {
     return e.name;
   }
-  if (typeof e.code === "string" && e.code.length > 0) {
-    return e.code;
+  if (typeof e.code === "string" && e.code.length > 0) return e.code;
+
+  const cause = e.cause as { name?: unknown; code?: unknown } | undefined;
+  if (cause && typeof cause === "object") {
+    if (typeof cause.code === "string" && cause.code.length > 0) return cause.code;
+    if (
+      typeof cause.name === "string" &&
+      cause.name.length > 0 &&
+      cause.name !== "Error"
+    ) {
+      return cause.name;
+    }
   }
   return "UnknownError";
 }
@@ -392,39 +452,34 @@ function errorName(error: unknown): string {
 /**
  * Classify a failed send.
  *
- * Never returns a stack. `message` is the SES/SDK message text, which
- * describes the refusal ("Email address is not verified"), not the payload --
- * a stack here would end up in a Firestore document and in a log line, and
- * neither is a place for one.
+ * Never returns a stack. `message` is Resend's own message text, which
+ * describes the refusal ("The gmail.com domain is not verified"), not the
+ * payload -- a stack here would end up in a Firestore document and in a log
+ * line, and neither is a place for one.
  */
-export function classifySesError(error: unknown): ClassifiedError {
+export function classifyMailError(error: unknown): ClassifiedError {
   const name = errorName(error);
   const raw = (error as { message?: unknown })?.message;
   const message =
     typeof raw === "string" && raw.length > 0 ? raw.slice(0, 500) : "Unknown error";
 
-  // Explicit names win over status codes: SES returns some permanent refusals
-  // with unhelpful status codes, and the name is the precise signal.
+  // Explicit names win over status codes: Resend reuses 403 for problems that
+  // are not alike, and the name is the precise signal.
   if (PERMANENT_ERRORS.has(name)) return { name, message, retryable: false };
-  if (AMBIGUOUS_ERRORS.has(name)) return { name, message, retryable: false };
   if (NEVER_CONNECTED_ERRORS.has(name)) return { name, message, retryable: true };
+  if (AMBIGUOUS_ERRORS.has(name)) return { name, message, retryable: true };
   if (TRANSIENT_ERRORS.has(name)) return { name, message, retryable: true };
 
-  const status = (error as { $metadata?: { httpStatusCode?: number } })?.$metadata
-    ?.httpStatusCode;
+  const status = (error as { status?: unknown })?.status;
   if (typeof status === "number") {
-    // 429 and 5xx: SES answered and declined to do the work now.
+    // 429 and 5xx: Resend answered and declined to do the work now.
     if (status === 429 || status >= 500) return { name, message, retryable: true };
     // Any other 4xx is a refusal of THIS request, and it will refuse it again.
     if (status >= 400) return { name, message, retryable: false };
   }
 
-  // The SDK's own judgement, last, because it is coarser than the lists above.
-  const retryableHint = (error as { $retryable?: unknown })?.$retryable;
-  if (retryableHint) return { name, message, retryable: true };
-
   // Unknown, unnamed, no status. More likely a defect on our side than a blip
-  // on SES's, so it does not get to consume the retry budget.
+  // at Resend, so it does not get to consume the retry budget.
   return { name, message, retryable: false };
 }
 
@@ -482,7 +537,7 @@ export function claimDecision(
   if (state === "SUCCESS") return "skip-delivered";
 
   if (state === "PROCESSING") {
-    // Someone holds the claim and may be inside client.send() right now.
+    // Someone holds the claim and may be inside the send right now.
     if (millisOrZero(delivery?.leaseExpiresAt) > nowMs) return "skip-in-flight";
     // Lease expired: the claimant is provably dead (see LEASE_MS). Recoverable.
   } else if (state === "ERROR") {
@@ -505,82 +560,108 @@ export function claimDecision(
 // ---------------------------------------------------------------------------
 
 export interface SendResult {
-  MessageId?: string;
+  // Resend's `id` for the accepted message. Recorded as
+  // delivery.info.messageId, which is the extension's field name.
+  id?: string;
+}
+
+export interface SendOptions {
+  timeoutMs: number;
+  // Sent as the Idempotency-Key header. The mail document's id: stable across
+  // every attempt on one document, unique across documents. See
+  // AMBIGUOUS_ERRORS for what this buys.
+  idempotencyKey: string;
 }
 
 export type MailSender = (
   input: SendEmailInput,
-  options: { timeoutMs: number }
+  options: SendOptions
 ) => Promise<SendResult>;
 
-// The AWS SDK, described by what this file actually uses. Declared structurally
-// so nothing here depends on the SDK's exact exported types, and so the module
-// under test never has to load the package.
-interface SesSdk {
-  SESv2Client: new (config: Record<string, unknown>) => {
-    send(command: unknown, options?: unknown): Promise<SendResult>;
-  };
-  SendEmailCommand: new (input: SendEmailInput) => unknown;
-}
+const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
 let injectedSender: MailSender | null = null;
-let cachedSender: MailSender | null = null;
-let cachedSenderKey = "";
 
 /**
- * Test seam. Replaces the SES transport with a plain function.
+ * Test seam. Replaces the Resend transport with a plain function.
  *
  * A function rather than a client object on purpose: it means no test in this
- * repo -- pure or emulator-backed -- ever loads @aws-sdk/client-sesv2, and it
- * means the mocked surface is exactly the one line of behaviour that matters
- * (an input goes in, a MessageId or a throw comes out). Pass null to restore.
+ * repo -- pure or emulator-backed -- ever makes a network call, and it means
+ * the mocked surface is exactly the one line of behaviour that matters (an
+ * input goes in, an id or a throw comes out). Pass null to restore.
  */
-export function _setSesClientForTests(sender: MailSender | null): void {
+export function _setMailSenderForTests(sender: MailSender | null): void {
   injectedSender = sender;
-  cachedSender = null;
-  cachedSenderKey = "";
 }
 
-async function getSender(config: MailConfig): Promise<MailSender> {
-  if (injectedSender) return injectedSender;
+/**
+ * The real transport: one POST, no SDK.
+ *
+ * There is nothing to cache and nothing to construct between calls -- which is
+ * why the SES version's client cache and its credential-rotation cache key are
+ * both gone. `fetch` is global in Node 22, so this also drops the dynamic
+ * import that existed to keep @aws-sdk/client-sesv2 off the cold-start path of
+ * apidata (index.ts imports every module in this codebase). There is now no
+ * mail dependency to keep off it.
+ */
+function resendSender(config: MailConfig): MailSender {
+  return async (input, { timeoutMs, idempotencyKey }) => {
+    const response = await fetch(RESEND_ENDPOINT, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        "Content-Type": "application/json",
+        "Idempotency-Key": idempotencyKey,
+      },
+      body: JSON.stringify(input),
+      // No retries of its own, deliberately -- the same reason the SES client
+      // was built with maxAttempts: 1. Attempts are counted on the document
+      // and capped there; an invisible second attempt inside the transport
+      // would be a send this file cannot see or bound.
+      signal: AbortSignal.timeout(timeoutMs),
+    });
 
-  // Keyed so a credential rotation between invocations on a warm instance
-  // builds a new client instead of reusing one signed with the old key.
-  const key = `${config.region}:${config.accessKeyId}`;
-  if (cachedSender && cachedSenderKey === key) return cachedSender;
+    if (!response.ok) {
+      // Resend answers errors as {name, message, statusCode}, but that shape
+      // is not in its published contract and an edge/proxy failure is HTML.
+      // So: try for the body, fall back to the status, never throw from here
+      // -- a parse failure must not be reported as the reason the mail failed.
+      let name = `HttpError${response.status}`;
+      let message = response.statusText || `HTTP ${response.status}`;
+      try {
+        const body = (await response.json()) as {
+          name?: unknown;
+          message?: unknown;
+        };
+        if (body && typeof body === "object") {
+          if (typeof body.name === "string" && body.name.length > 0) {
+            name = body.name;
+          }
+          if (typeof body.message === "string" && body.message.length > 0) {
+            message = body.message;
+          }
+        }
+      } catch {
+        // Not JSON. The status-derived name and message above stand, and
+        // classifyMailError falls back to `status` for the verdict.
+      }
+      throw new MailTransportError(name, message, response.status);
+    }
 
-  // Dynamic, not top-level: index.ts imports every module in this codebase, so
-  // a top-level AWS import would be paid on the cold start of apidata --
-  // DataPipe's hot path -- to send no mail at all.
-  const sdk = (await import("@aws-sdk/client-sesv2")) as unknown as SesSdk;
-  const client = new sdk.SESv2Client({
-    region: config.region,
-    credentials: {
-      accessKeyId: config.accessKeyId,
-      secretAccessKey: config.secretAccessKey,
-    },
-    // The SDK's own retries are turned OFF. Attempts are counted on the
-    // document and capped there; an invisible second attempt inside send()
-    // would be a second send this file cannot see or bound.
-    maxAttempts: 1,
-  });
-
-  cachedSender = async (input, { timeoutMs }) => {
-    const controller = new AbortController();
-    const timer: ReturnType<typeof setTimeout> = setTimeout(
-      () => controller.abort(),
-      timeoutMs
-    );
+    // 2xx means Resend accepted it. An unreadable body after that point costs
+    // us the message id, which is a worse audit trail -- not a failed send, so
+    // it must not throw. delivery.info.messageId simply lands null.
     try {
-      return await client.send(new sdk.SendEmailCommand(input), {
-        abortSignal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timer);
+      const body = (await response.json()) as { id?: unknown };
+      return { id: typeof body?.id === "string" ? body.id : undefined };
+    } catch {
+      return {};
     }
   };
-  cachedSenderKey = key;
-  return cachedSender;
+}
+
+function getSender(config: MailConfig): MailSender {
+  return injectedSender ?? resendSender(config);
 }
 
 // ---------------------------------------------------------------------------
@@ -714,7 +795,7 @@ export async function deliverMailDocument(docId: string): Promise<DeliveryOutcom
     // the line to alert on: it means every notification this deployment sends
     // is being dropped on the floor.
     console.error(
-      `mail-delivery: ${CONFIG_MISSING_ERROR} -- SES is not configured, mail ${docId} cannot be sent. Missing: ${missing.join(", ")}`
+      `mail-delivery: ${CONFIG_MISSING_ERROR} -- Resend is not configured, mail ${docId} cannot be sent. Missing: ${missing.join(", ")}`
     );
     await finish(ref, claim, {
       name: CONFIG_MISSING_ERROR,
@@ -730,7 +811,7 @@ export async function deliverMailDocument(docId: string): Promise<DeliveryOutcom
   try {
     input = buildSendEmailInput(claim.data, config);
   } catch (error) {
-    const classified = classifySesError(error);
+    const classified = classifyMailError(error);
     console.error(
       `mail-delivery: ${docId} is not sendable (${classified.name}): ${classified.message}`
     );
@@ -740,11 +821,17 @@ export async function deliverMailDocument(docId: string): Promise<DeliveryOutcom
 
   let result: SendResult;
   try {
-    const send = await getSender(config);
-    result = await send(input, { timeoutMs: SES_TIMEOUT_MS });
+    const send = getSender(config);
+    result = await send(input, {
+      timeoutMs: SEND_TIMEOUT_MS,
+      // The document id, so every attempt on this mail carries the same key
+      // and Resend collapses them into one delivery. This is what makes an
+      // ambiguous timeout safe to retry -- see AMBIGUOUS_ERRORS.
+      idempotencyKey: docId,
+    });
   } catch (error) {
-    const classified = classifySesError(error);
-    // The attempts cap is applied HERE and not in classifySesError, because
+    const classified = classifyMailError(error);
+    // The attempts cap is applied HERE and not in classifyMailError, because
     // "retryable in principle" and "we are still willing to retry" are two
     // different facts and the document should be able to show both.
     const exhausted = claim.attempts >= MAX_ATTEMPTS;
@@ -776,7 +863,7 @@ export async function deliverMailDocument(docId: string): Promise<DeliveryOutcom
     "delivery.leaseExpiresAt": null,
     "delivery.error": null,
     "delivery.retryable": false,
-    "delivery.info": { messageId: result?.MessageId ?? null, transport: "ses" },
+    "delivery.info": { messageId: result?.id ?? null, transport: "resend" },
   });
   if (!wrote) {
     // The mail WAS sent. Only the receipt is missing -- either the document is
@@ -848,11 +935,13 @@ export const onMailCreated = onDocumentCreated(
     // fires on every mail document every suite creates: upload-failure-notify,
     // contact-email-verify, purge-user-data, and this file's own tests.
     //
-    // There is no SES in the emulator and there are no AWS credentials there,
-    // so without this gate the live instance would race every one of those
-    // fixtures, win some of them, and stamp a terminal MailConfigMissingError
-    // on documents whose tests are asserting a delivered state -- a CI-only
-    // failure that does not reproduce locally.
+    // There is no Resend key in the emulator, so without this gate the live
+    // instance would race every one of those fixtures, win some of them, and
+    // stamp a terminal MailConfigMissingError on documents whose tests are
+    // asserting a delivered state -- a CI-only failure that does not reproduce
+    // locally. Worse now than under SES: a real key in a developer's
+    // functions/.env would make the racing instance mail a real person from a
+    // test run.
     //
     // The gate makes that instance a PROVABLE no-op: it returns before the
     // claim transaction, so it performs no read, no write and no send, and
@@ -869,7 +958,7 @@ export const onMailCreated = onDocumentCreated(
     // providers/zenodo.ts uses to make its API-base override safe.
     if (process.env.FUNCTIONS_EMULATOR === "true") {
       console.log(
-        `mail-delivery: emulator instance, leaving ${docId} unsent (no SES here)`
+        `mail-delivery: emulator instance, leaving ${docId} unsent (no Resend here)`
       );
       return;
     }

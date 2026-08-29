@@ -2,7 +2,7 @@
  * @jest-environment node
  */
 
-// SES mail delivery against the Firestore emulator.
+// Resend mail delivery against the Firestore emulator.
 //
 // Harness conventions are the established ones (upload-failure-notify-
 // emulator.test.js:1-108, upload-queue.test.js:1-90): emulator env vars set at
@@ -17,14 +17,12 @@
 // in-process -- the same seam handleQueueWrite(before, after, docId) and
 // retryPendingUploads(ownerScope) exist for.
 //
-// THE TRANSPORT IS MOCKED AT A FUNCTION SEAM, NOT AT THE SDK. mail-delivery.ts
-// exposes _setSesClientForTests(sender), where `sender` is a plain
-// (input, {timeoutMs}) => Promise<{MessageId}> function. That shape is
-// deliberate and it is why this file needs no jest.mock and no ESM wrestling:
-// the real transport lazily `await import`s @aws-sdk/client-sesv2 inside that
-// same seam, so with a sender injected the AWS package is never loaded at all.
-// (The dynamic import also keeps the SDK off apidata's cold-start path -- see
-// getSender in mail-delivery.ts.)
+// THE TRANSPORT IS MOCKED AT A FUNCTION SEAM, NOT AT fetch. mail-delivery.ts
+// exposes _setMailSenderForTests(sender), where `sender` is a plain
+// (input, {timeoutMs, idempotencyKey}) => Promise<{id}> function. That shape is
+// deliberate and it is why this file needs no jest.mock, no ESM wrestling and
+// no HTTP interception: with a sender injected, getSender never builds the real
+// one, so no test in this repo can reach api.resend.com even by accident.
 //
 // ---------------------------------------------------------------------------
 // CI RUNS THIS SUITE WITH THE REAL TRIGGER LIVE. READ BEFORE CHANGING.
@@ -36,7 +34,7 @@
 // every mail document this file creates, concurrently with the direct calls
 // below. That is the same hazard upload-failure-notify-emulator.test.js
 // documents at length, and here it would be considerably worse: the emulator's
-// functions process has no SES credentials and no AWS anything, so a live
+// functions process has no RESEND_API_KEY, so a live
 // instance that won the race would stamp a TERMINAL MailConfigMissingError on
 // a fixture whose test is about to assert SUCCESS. Every happy-path assertion
 // in this file would become CI-only flaky, in a way that never reproduces
@@ -77,15 +75,13 @@ process.env.FIREBASE_CONFIG = JSON.stringify({
   storageBucket: "datapipe-test.appspot.com",
 });
 
-// SES configuration. Read LAZILY, per invocation, by mail-delivery.ts (the
+// Resend configuration. Read LAZILY, per invocation, by mail-delivery.ts (the
 // crypto-utils.ts convention), so setting it here reaches the compiled module
-// even though it is imported later. These are dummies: with a sender injected
-// nothing signs a request, and no value below is ever sent anywhere.
+// even though it is imported later. This is a dummy: with a sender injected no
+// request is ever built, and the value below is never sent anywhere.
 const FROM = "DataPipe <datapipe-notifications@jspsych.org>";
 const REPLY_TO = "contact@jspsych.org";
-process.env.SES_REGION = "us-east-1";
-process.env.SES_ACCESS_KEY_ID = "AKIATESTTESTTESTTEST";
-process.env.SES_SECRET_ACCESS_KEY = "test-secret-not-a-real-key";
+process.env.RESEND_API_KEY = "re_test_not_a_real_key";
 process.env.MAIL_FROM = FROM;
 process.env.MAIL_REPLY_TO = REPLY_TO;
 
@@ -93,7 +89,7 @@ jest.setTimeout(30000);
 
 let db;
 let deliverMailDocument;
-let _setSesClientForTests;
+let _setMailSenderForTests;
 // Read from the production module rather than restated here.
 let LEASE_MS;
 let MAX_ATTEMPTS;
@@ -110,7 +106,7 @@ beforeAll(async () => {
 
   ({
     deliverMailDocument,
-    _setSesClientForTests,
+    _setMailSenderForTests,
     LEASE_MS,
     MAX_ATTEMPTS,
     CONFIG_MISSING_ERROR,
@@ -126,7 +122,7 @@ const RECIPIENT = "researcher@example.edu";
 
 // Exactly what mail.ts's mailDocument() writes. Built through the same shape
 // rather than a minimal stub, because half of what this suite proves is that
-// the real document maps onto a real SES request.
+// the real document maps onto a real Resend request.
 async function seedMail(overrides = {}) {
   const owner = `md-user-${randomUUID()}`;
   const ref = db.collection("mail").doc();
@@ -154,11 +150,11 @@ async function deliveryOf(ref) {
   return snap.exists ? snap.data().delivery : undefined;
 }
 
-// A sender that resolves with a MessageId, or one that rejects with a named
-// SES-shaped error. jest.fn so call COUNT is assertable -- "zero additional
-// SES calls" is the single most important assertion in this file.
-function sendingOk(messageId = "ses-message-id-1") {
-  return jest.fn().mockResolvedValue({ MessageId: messageId });
+// A sender that resolves with a Resend message id, or one that rejects with a
+// named Resend-shaped error. jest.fn so call COUNT is assertable -- "zero
+// additional sends" is the single most important assertion in this file.
+function sendingOk(messageId = "resend-message-id-1") {
+  return jest.fn().mockResolvedValue({ id: messageId });
 }
 
 function sendingError(name, extra = {}) {
@@ -189,7 +185,7 @@ function loggedText() {
 }
 
 afterEach(async () => {
-  _setSesClientForTests(null);
+  _setMailSenderForTests(null);
   jest.restoreAllMocks();
   const batch = db.batch();
   while (created.length) batch.delete(created.pop());
@@ -202,28 +198,32 @@ afterEach(async () => {
 
 describe("delivery", () => {
   test("sends the document and records SUCCESS, a messageId and an endTime", async () => {
-    const send = sendingOk("ses-0102030405");
-    _setSesClientForTests(send);
+    const send = sendingOk("resend-0102030405");
+    _setMailSenderForTests(send);
     const { ref, id } = await seedMail();
 
     expect(await deliverMailDocument(id)).toBe("sent");
 
     expect(send).toHaveBeenCalledTimes(1);
     const [input, options] = send.mock.calls[0];
-    expect(input.FromEmailAddress).toBe(FROM);
-    expect(input.ReplyToAddresses).toEqual([REPLY_TO]);
-    expect(input.Destination.ToAddresses).toEqual([RECIPIENT]);
-    expect(input.Content.Simple.Subject.Data).toContain("Working Memory Span");
-    expect(input.Content.Simple.Body.Text.Data).toBe("The file is not lost.");
-    expect(input.Content.Simple.Body.Html.Data).toContain("not lost");
+    expect(input.from).toBe(FROM);
+    expect(input.reply_to).toEqual([REPLY_TO]);
+    expect(input.to).toEqual([RECIPIENT]);
+    expect(input.subject).toContain("Working Memory Span");
+    expect(input.text).toBe("The file is not lost.");
+    expect(input.html).toContain("not lost");
     // A send with no ceiling is a claim held until the function itself is
-    // killed -- see SES_TIMEOUT_MS / LEASE_MS.
+    // killed -- see SEND_TIMEOUT_MS / LEASE_MS.
     expect(options.timeoutMs).toBeGreaterThan(0);
+    // The document id, not a fresh uuid: the key has to be STABLE across
+    // attempts on one document, which is what makes a retry after an ambiguous
+    // timeout a no-op at Resend rather than a second copy.
+    expect(options.idempotencyKey).toBe(id);
 
     const delivery = await deliveryOf(ref);
     expect(delivery.state).toBe("SUCCESS");
     expect(delivery.attempts).toBe(1);
-    expect(delivery.info.messageId).toBe("ses-0102030405");
+    expect(delivery.info.messageId).toBe("resend-0102030405");
     expect(delivery.error).toBeNull();
     // endTime is what the Firestore TTL policy keys on (deploy runbook §4).
     // Unset here would mean this document never self-deletes.
@@ -240,27 +240,26 @@ describe("delivery", () => {
     // (send-contact-email-verification.ts, upload-failure-notify.ts), and a
     // failure path is exactly where an address is most likely to be helpfully
     // appended to an error string.
-    _setSesClientForTests(sendingError("MessageRejected"));
+    _setMailSenderForTests(sendingError("validation_error"));
     const { id } = await seedMail();
     await deliverMailDocument(id);
 
     const text = loggedText();
     expect(text).toContain(id);
-    expect(text).toContain("MessageRejected");
+    expect(text).toContain("validation_error");
     expect(text).not.toContain(RECIPIENT);
-    expect(text).not.toContain(process.env.SES_SECRET_ACCESS_KEY);
-    expect(text).not.toContain(process.env.SES_ACCESS_KEY_ID);
+    expect(text).not.toContain(process.env.RESEND_API_KEY);
   });
 
   test("mail with no html part is still sent, without an empty Html body", async () => {
     const send = sendingOk();
-    _setSesClientForTests(send);
+    _setMailSenderForTests(send);
     const { id } = await seedMail({
       message: { subject: "Your DataPipe verification code", text: "123456" },
     });
 
     expect(await deliverMailDocument(id)).toBe("sent");
-    expect(send.mock.calls[0][0].Content.Simple.Body).not.toHaveProperty("Html");
+    expect(send.mock.calls[0][0]).not.toHaveProperty("html");
   });
 });
 
@@ -269,13 +268,13 @@ describe("delivery", () => {
 // ---------------------------------------------------------------------------
 
 describe("duplicate invocation", () => {
-  test("a second delivery of an already-sent document makes ZERO SES calls", async () => {
+  test("a second delivery of an already-sent document makes ZERO sends", async () => {
     // Firestore triggers are at-least-once, so this is the ordinary case, not
     // an exotic one -- and a duplicate "your uploads are failing" email is the
     // precise annoyance upload-failure-notify.ts spends its whole design
     // avoiding. Nothing downstream of this assertion is allowed to regress.
     const send = sendingOk("ses-once");
-    _setSesClientForTests(send);
+    _setMailSenderForTests(send);
     const { ref, id } = await seedMail();
 
     expect(await deliverMailDocument(id)).toBe("sent");
@@ -293,7 +292,7 @@ describe("duplicate invocation", () => {
     // The other half of at-least-once: a redelivery arriving WHILE the first
     // invocation is still inside send(). Taking it over would double-send.
     const send = sendingOk();
-    _setSesClientForTests(send);
+    _setMailSenderForTests(send);
     const { ref, id } = await seedMail({
       delivery: {
         state: "PROCESSING",
@@ -315,7 +314,7 @@ describe("duplicate invocation", () => {
     // The claim is a transaction, so this is the same serializability property
     // upload-failure-notify.ts's twenty-way race test relies on, one hop later.
     const send = sendingOk();
-    _setSesClientForTests(send);
+    _setMailSenderForTests(send);
     const { ref, id } = await seedMail();
 
     const outcomes = await Promise.all(
@@ -338,7 +337,7 @@ describe("duplicate invocation", () => {
     // The lease's only job. It is several times the function timeout, so by
     // the time it expires the original owner is provably dead -- see LEASE_MS.
     const send = sendingOk("ses-after-crash");
-    _setSesClientForTests(send);
+    _setMailSenderForTests(send);
     const { ref, id } = await seedMail({
       delivery: {
         state: "PROCESSING",
@@ -367,7 +366,7 @@ describe("duplicate invocation", () => {
 
 describe("transient failure", () => {
   test("leaves a retryable ERROR with no endTime, and a rerun then succeeds", async () => {
-    _setSesClientForTests(sendingError("ThrottlingException"));
+    _setMailSenderForTests(sendingError("rate_limit_exceeded"));
     const { ref, id } = await seedMail();
 
     expect(await deliverMailDocument(id)).toBe("retryable-error");
@@ -376,8 +375,8 @@ describe("transient failure", () => {
     expect(failed.state).toBe("ERROR");
     expect(failed.retryable).toBe(true);
     expect(failed.attempts).toBe(1);
-    expect(failed.error.name).toBe("ThrottlingException");
-    expect(failed.error.message).toContain("ThrottlingException");
+    expect(failed.error.name).toBe("rate_limit_exceeded");
+    expect(failed.error.message).toContain("rate_limit_exceeded");
     // Structured, and never a stack.
     expect(Object.keys(failed.error).sort()).toEqual(["message", "name"]);
     // NOT terminal, so the TTL policy must not become eligible to reap a
@@ -386,22 +385,22 @@ describe("transient failure", () => {
     // Lease released, so the retry does not have to wait five minutes.
     expect(failed.leaseExpiresAt).toBeNull();
 
-    const send = sendingOk("ses-second-try");
-    _setSesClientForTests(send);
+    const send = sendingOk("resend-second-try");
+    _setMailSenderForTests(send);
     expect(await deliverMailDocument(id)).toBe("sent");
 
     const delivered = await deliveryOf(ref);
     expect(delivered.state).toBe("SUCCESS");
     expect(delivered.attempts).toBe(2);
-    expect(delivered.info.messageId).toBe("ses-second-try");
+    expect(delivered.info.messageId).toBe("resend-second-try");
     expect(delivered.endTime.toMillis()).toBeGreaterThan(0);
     expect(send).toHaveBeenCalledTimes(1);
   });
 
-  test("a 5xx from SES is transient even under an unfamiliar name", async () => {
-    _setSesClientForTests(
-      sendingError("SomeFutureOutage", { $metadata: { httpStatusCode: 503 } })
-    );
+  test("a 5xx is transient even under an unfamiliar name", async () => {
+    // Resend adds error codes; an unrecognised one still has to be judged, and
+    // status is the fallback.
+    _setMailSenderForTests(sendingError("some_future_outage", { status: 503 }));
     const { ref, id } = await seedMail();
 
     expect(await deliverMailDocument(id)).toBe("retryable-error");
@@ -411,10 +410,11 @@ describe("transient failure", () => {
 
 describe("permanent failure", () => {
   test("a rejected address is terminal immediately and is never retried", async () => {
-    const send = sendingError("MessageRejected", {
-      message: "Email address is not verified.",
+    const send = sendingError("validation_error", {
+      message: "Invalid `to` field.",
+      status: 422,
     });
-    _setSesClientForTests(send);
+    _setMailSenderForTests(send);
     const { ref, id } = await seedMail();
 
     expect(await deliverMailDocument(id)).toBe("terminal-error");
@@ -423,7 +423,7 @@ describe("permanent failure", () => {
     expect(delivery.state).toBe("ERROR");
     expect(delivery.retryable).toBe(false);
     expect(delivery.attempts).toBe(1);
-    expect(delivery.error.name).toBe("MessageRejected");
+    expect(delivery.error.name).toBe("validation_error");
     // Terminal, so the TTL policy can eventually reap the address in `to`.
     expect(delivery.endTime.toMillis()).toBeGreaterThan(0);
 
@@ -434,7 +434,7 @@ describe("permanent failure", () => {
 
   test("a document that cannot be turned into a request is terminal, not a crash", async () => {
     const send = sendingOk();
-    _setSesClientForTests(send);
+    _setMailSenderForTests(send);
     const { ref, id } = await seedMail({ to: [] });
 
     expect(await deliverMailDocument(id)).toBe("terminal-error");
@@ -446,33 +446,50 @@ describe("permanent failure", () => {
     expect(delivery.error.name).toBe("MailDocumentInvalidError");
   });
 
-  test("an ambiguous send is terminal -- a maybe-delivered mail is not retried", async () => {
-    // The request went out and no answer came back, and SESv2 SendEmail has no
-    // idempotency token. Retrying is a coin flip on a SECOND copy of a
-    // notification whose entire value is arriving once. See AMBIGUOUS_ERRORS.
-    _setSesClientForTests(sendingError("TimeoutError"));
+  test("an ambiguous send is RETRYABLE, and the retry reuses the same idempotency key", async () => {
+    // Inverted from the SES version of this suite, deliberately. SESv2 had no
+    // idempotency token, so a request that went out and never answered could
+    // not be retried without risking a SECOND copy of a notification whose
+    // entire value is arriving once -- and the code chose to lose the mail.
+    //
+    // Resend takes an Idempotency-Key. mail-delivery.ts sends the document id
+    // as that key on EVERY attempt, so the retry below is not a second send:
+    // Resend recognises the key and returns the original result. The assertion
+    // that both attempts carried the same key is what makes that true, and is
+    // the reason this test can assert `retryable` at all.
+    _setMailSenderForTests(sendingError("TimeoutError"));
     const { ref, id } = await seedMail();
 
-    expect(await deliverMailDocument(id)).toBe("terminal-error");
-    const delivery = await deliveryOf(ref);
-    expect(delivery.retryable).toBe(false);
-    // Loudly, though -- it is visible on the document and in the log, so it is
-    // re-drivable by hand. Never silent.
-    expect(delivery.error.name).toBe("TimeoutError");
+    expect(await deliverMailDocument(id)).toBe("retryable-error");
+    const failed = await deliveryOf(ref);
+    expect(failed.retryable).toBe(true);
+    // Still loud: visible on the document and in the log, never silent.
+    expect(failed.error.name).toBe("TimeoutError");
     expect(loggedText()).toContain("TimeoutError");
+    // Still deliverable, so the TTL must not be able to reap it.
+    expect(failed.endTime).toBeNull();
+
+    const send = sendingOk("resend-after-timeout");
+    _setMailSenderForTests(send);
+    expect(await deliverMailDocument(id)).toBe("sent");
+    expect(send.mock.calls[0][1].idempotencyKey).toBe(id);
+
+    const delivered = await deliveryOf(ref);
+    expect(delivered.state).toBe("SUCCESS");
+    expect(delivered.attempts).toBe(2);
   });
 });
 
 describe("attempts cap", () => {
   test("a document already at the cap is not claimed at all", async () => {
     const send = sendingOk();
-    _setSesClientForTests(send);
+    _setMailSenderForTests(send);
     const { ref, id } = await seedMail({
       delivery: {
         state: "ERROR",
         retryable: true,
         attempts: MAX_ATTEMPTS,
-        error: { name: "ThrottlingException", message: "throttled" },
+        error: { name: "rate_limit_exceeded", message: "throttled" },
         leaseExpiresAt: null,
         endTime: null,
       },
@@ -487,13 +504,13 @@ describe("attempts cap", () => {
   test("the attempt that reaches the cap turns a transient error terminal", async () => {
     // "Retryable in principle" and "still willing to retry" are two different
     // facts; the cap is what closes the second one.
-    _setSesClientForTests(sendingError("ThrottlingException"));
+    _setMailSenderForTests(sendingError("rate_limit_exceeded"));
     const { ref, id } = await seedMail({
       delivery: {
         state: "ERROR",
         retryable: true,
         attempts: MAX_ATTEMPTS - 1,
-        error: { name: "ThrottlingException", message: "throttled" },
+        error: { name: "rate_limit_exceeded", message: "throttled" },
         leaseExpiresAt: null,
         endTime: null,
         startTime: Timestamp.now(),
@@ -505,9 +522,9 @@ describe("attempts cap", () => {
     const delivery = await deliveryOf(ref);
     expect(delivery.attempts).toBe(MAX_ATTEMPTS);
     expect(delivery.retryable).toBe(false);
-    // The SES error name survives -- what changed is our willingness, not the
+    // The Resend error name survives -- what changed is our willingness, not the
     // diagnosis.
-    expect(delivery.error.name).toBe("ThrottlingException");
+    expect(delivery.error.name).toBe("rate_limit_exceeded");
     expect(delivery.endTime.toMillis()).toBeGreaterThan(0);
     expect(await deliverMailDocument(id)).toBe("skipped-terminal");
   });
@@ -517,19 +534,19 @@ describe("attempts cap", () => {
 // 4. Missing configuration
 // ---------------------------------------------------------------------------
 
-describe("missing SES configuration", () => {
+describe("missing Resend configuration", () => {
   test("is terminal, distinctly named, and loudly logged -- mail never vanishes", async () => {
     const send = sendingOk();
-    _setSesClientForTests(send);
+    _setMailSenderForTests(send);
     const { ref, id } = await seedMail();
 
-    const saved = process.env.SES_SECRET_ACCESS_KEY;
-    delete process.env.SES_SECRET_ACCESS_KEY;
+    const saved = process.env.RESEND_API_KEY;
+    delete process.env.RESEND_API_KEY;
     let outcome;
     try {
       outcome = await deliverMailDocument(id);
     } finally {
-      process.env.SES_SECRET_ACCESS_KEY = saved;
+      process.env.RESEND_API_KEY = saved;
     }
 
     expect(outcome).toBe("terminal-error");
@@ -541,7 +558,7 @@ describe("missing SES configuration", () => {
     expect(delivery.error.name).toBe(CONFIG_MISSING_ERROR);
     // The document says WHICH key, by name. That is the whole difference
     // between a five-minute fix and an afternoon.
-    expect(delivery.error.message).toContain("SES_SECRET_ACCESS_KEY");
+    expect(delivery.error.message).toContain("RESEND_API_KEY");
     expect(delivery.endTime.toMillis()).toBeGreaterThan(0);
 
     // Loud: this line means every notification the deployment sends is being
@@ -549,7 +566,7 @@ describe("missing SES configuration", () => {
     expect(errorSpy).toHaveBeenCalled();
     const text = loggedText();
     expect(text).toContain(CONFIG_MISSING_ERROR);
-    expect(text).toContain("SES_SECRET_ACCESS_KEY");
+    expect(text).toContain("RESEND_API_KEY");
     // The NAME of the missing key, never a value of any key.
     expect(text).not.toContain(saved);
   });
@@ -564,7 +581,7 @@ describe("races with account deletion", () => {
     // purge-user-data.ts deletes a researcher's queued mail on account
     // deletion. Racing that is expected, not a fault.
     const send = sendingOk();
-    _setSesClientForTests(send);
+    _setMailSenderForTests(send);
     const { ref, id } = await seedMail();
     await ref.delete();
 
@@ -574,10 +591,10 @@ describe("races with account deletion", () => {
 
   test("a document deleted mid-send still resolves, and says so", async () => {
     const { ref, id } = await seedMail();
-    _setSesClientForTests(
+    _setMailSenderForTests(
       jest.fn(async () => {
         await ref.delete();
-        return { MessageId: "ses-sent-then-purged" };
+        return { id: "resend-sent-then-purged" };
       })
     );
 
@@ -592,14 +609,14 @@ describe("races with account deletion", () => {
     // while this invocation is inside send() -- which is what a stale-lease
     // takeover looks like from here.
     const { ref, id } = await seedMail();
-    _setSesClientForTests(
+    _setMailSenderForTests(
       jest.fn(async () => {
         await ref.update({
           "delivery.leaseOwner": "a-newer-invocation",
           "delivery.state": "SUCCESS",
           "delivery.info": { messageId: "written-by-the-newer-one" },
         });
-        return { MessageId: "written-by-the-loser" };
+        return { id: "written-by-the-loser" };
       })
     );
 
@@ -622,7 +639,7 @@ describe("purge-user-data compatibility", () => {
     // (PurgeCounts.mailDocuments, asserted exactly in
     // purge-user-data-emulator.test.js). A delivery that touched the top level
     // of the document, or `datapipe`, would change that count or that query.
-    _setSesClientForTests(sendingOk());
+    _setMailSenderForTests(sendingOk());
     const { ref, id, owner } = await seedMail();
 
     const before = (await ref.get()).data();

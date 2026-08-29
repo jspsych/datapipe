@@ -14,8 +14,9 @@ import { onExperimentGrew, onUploadQueueChanged } from "./compaction-triggers.js
 // onUploadQueueChanged above -- see the header of upload-failure-notify.ts.
 import { onUploadFailure } from "./upload-failure-notify.js";
 // Delivery for the `mail` collection. Replaces the deprecated Firebase
-// "Trigger Email" extension with a direct Amazon SES send; mail.ts's document
-// contract is unchanged, so nothing on the write side moved.
+// "Trigger Email" extension with a direct Resend send (Amazon SES until AWS
+// denied production access); mail.ts's document contract is unchanged through
+// both swaps, so nothing on the write side moved.
 import { onMailCreated } from "./mail-delivery.js";
 // The verification round trip (plan §2.2, §5 package P3): a resend-capable
 // send + a hash-checked verify, both bearer-token onRequest endpoints in the
