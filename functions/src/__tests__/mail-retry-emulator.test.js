@@ -102,6 +102,21 @@ async function seedMail({ delivery, inline = false, kind = "upload-failure" } = 
   return { ref, id: ref.id };
 }
 
+async function seedQueueEntry(experimentID, { status = "failed", ageMs = 8 * 24 * 60 * 60 * 1000 } = {}) {
+  const ref = db.collection("uploadQueue").doc();
+  created.push(ref);
+  await ref.set({
+    experimentID,
+    owner: `mr-user-${randomUUID()}`,
+    status,
+    retryCount: 5,
+    maxRetries: 5,
+    storagePath: `pending-data/${experimentID}/subject-1.json`,
+    createdAt: Timestamp.fromMillis(Date.now() - ageMs),
+  });
+  return ref;
+}
+
 const statusRef = () => db.collection("systemStatus").doc(STATUS_DOC_ID);
 const deliveryOf = async (ref) => (await ref.get()).data()?.delivery;
 
@@ -255,12 +270,12 @@ describe("inline mail", () => {
 // ---------------------------------------------------------------------------
 
 describe("sweepRetryableMail", () => {
-  test("sweeps NOTHING while the breaker is shut, and burns no attempts", async () => {
-    // The most important assertion in this file. Sweeping into an exhausted
-    // quota fails every document and spends one of its three MAX_ATTEMPTS
-    // doing it -- so a day-long outage would exhaust the retry budget of every
-    // queued mail and turn all of them terminal, which is the exact opposite of
-    // what the sweeper is for.
+  test("SENDS nothing while the breaker is shut, and burns no attempts", async () => {
+    // The most important send-side assertion in this file. Sweeping into an
+    // exhausted quota fails every document and spends one of its three
+    // MAX_ATTEMPTS doing it -- so a day-long outage would exhaust the retry
+    // budget of every queued mail and turn all of them terminal, which is the
+    // exact opposite of what the sweeper is for.
     const send = sendingOk();
     _setMailSenderForTests(send);
     const { ref } = await seedMail({ delivery: failedDelivery("daily_quota_exceeded") });
@@ -272,7 +287,6 @@ describe("sweepRetryableMail", () => {
     const report = await sweepRetryableMail();
 
     expect(report.paused).toBe(true);
-    expect(report.scanned).toBe(0);
     expect(send).not.toHaveBeenCalled();
     // Untouched: attempts did not creep up by being looked at.
     expect((await deliveryOf(ref)).attempts).toBe(1);
@@ -359,6 +373,73 @@ describe("sweepRetryableMail", () => {
     expect(report.paused).toBe(true);
     // One attempt discovers the quota; the rest of the pass stands down.
     expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  test("holds the data back EVEN WHILE PAUSED -- the case that needs it most", async () => {
+    // Retention is a Firestore write, not a send: it costs no quota, so an
+    // exhausted quota is no reason to skip it. The opposite, in fact. A quota
+    // outage is exactly when a researcher's unuploaded data is ageing towards
+    // deletion behind a notification that never arrived, so putting this after
+    // the breaker check would switch the protection off in the only situation
+    // that needs it.
+    const send = sendingOk();
+    _setMailSenderForTests(send);
+    const experimentID = `mr-exp-${randomUUID()}`;
+    const entry = await seedQueueEntry(experimentID);
+    const { ref } = await seedMail({ delivery: failedDelivery("daily_quota_exceeded") });
+    await ref.update({ "datapipe.experimentID": experimentID });
+    await statusRef().set({
+      unavailableUntil: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
+    });
+
+    const report = await sweepRetryableMail();
+
+    expect(report.paused).toBe(true);
+    expect(send).not.toHaveBeenCalled();
+    expect(report.retained).toBe(1);
+    const retainUntil = (await entry.get()).data().retainUntil;
+    expect(retainUntil.toMillis()).toBeGreaterThan(Date.now());
+  });
+
+  test("holds back EVERY unresolved entry for the experiment, not just the one that tripped it", async () => {
+    // A notification is per EPISODE, and an episode belongs to an experiment,
+    // not to one file. datapipe.queueDocId records only the entry that tripped
+    // it -- extending just that one would leave the rest of the episode's data
+    // expiring on schedule, which is the original bug in miniature.
+    _setMailSenderForTests(sendingOk());
+    const experimentID = `mr-exp-${randomUUID()}`;
+    const entries = [
+      await seedQueueEntry(experimentID),
+      await seedQueueEntry(experimentID),
+      await seedQueueEntry(experimentID, { status: "pending" }),
+    ];
+    const { ref } = await seedMail({ delivery: failedDelivery("daily_quota_exceeded") });
+    await ref.update({ "datapipe.experimentID": experimentID });
+
+    const report = await sweepRetryableMail();
+
+    expect(report.retained).toBe(3);
+    for (const entry of entries) {
+      expect((await entry.get()).data().retainUntil.toMillis()).toBeGreaterThan(
+        Date.now()
+      );
+    }
+  });
+
+  test("holds nothing back for a verification code -- there is no data behind it", async () => {
+    _setMailSenderForTests(sendingOk());
+    const experimentID = `mr-exp-${randomUUID()}`;
+    const entry = await seedQueueEntry(experimentID);
+    const { ref } = await seedMail({
+      kind: "contact-email-verification",
+      delivery: failedDelivery("daily_quota_exceeded"),
+    });
+    await ref.update({ "datapipe.experimentID": experimentID });
+
+    const report = await sweepRetryableMail();
+
+    expect(report.retained).toBe(0);
+    expect((await entry.get()).data().retainUntil).toBeUndefined();
   });
 
   test("an empty mail collection is a quiet no-op", async () => {

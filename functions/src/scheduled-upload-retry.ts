@@ -9,6 +9,7 @@ import { ExperimentData, UserData } from "./interfaces.js";
 import { isFastRetry } from "./queue-upload.js";
 import { isCompactionInFlight, COMPACTION_HOLD_REASON } from "./compaction-gate.js";
 import { decryptPayload } from "./payload-crypto.js";
+import { retentionDecision } from "./upload-retention.js";
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_BACKOFF_MS = 24 * 60 * 60 * 1000; // 24 hours (slow tier cap, unchanged)
@@ -417,17 +418,32 @@ async function cleanupOldEntries() {
     return;
   }
 
-  console.log(`Cleaning up ${oldEntries.size} old queue entries.`);
-
   const bucket = storage.bucket();
+  const now = Date.now();
+  let deleted = 0;
+  let retained = 0;
 
   for (const doc of oldEntries.docs) {
     const data = doc.data();
+
+    // The query above finds entries by AGE. Whether one may actually be
+    // destroyed is a separate question, and not one an age answers on its own
+    // -- see upload-retention.ts.
+    if (retentionDecision(data, now) === "retain") {
+      retained += 1;
+      continue;
+    }
+
     try {
       await bucket.file(data.storagePath).delete();
     } catch {
       // File may already be deleted
     }
     await doc.ref.delete();
+    deleted += 1;
   }
+
+  console.log(
+    `Cleanup: ${deleted} old queue entries deleted, ${retained} retained (still retrying, or the researcher has not been notified yet).`
+  );
 }

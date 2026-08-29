@@ -37,6 +37,8 @@ let sweepDecision;
 let MAX_SWEEP_AGE_MS;
 let IDEMPOTENCY_WINDOW_MS;
 
+let retentionDecision;
+
 beforeAll(async () => {
   ({
     verificationAvailability,
@@ -50,6 +52,8 @@ beforeAll(async () => {
   ({ sweepDecision, MAX_SWEEP_AGE_MS, IDEMPOTENCY_WINDOW_MS } = await import(
     "../../lib/scheduled-mail-retry.js"
   ));
+
+  ({ retentionDecision } = await import("../../lib/upload-retention.js"));
 });
 
 // Stored Timestamps, as the Admin SDK hands them back.
@@ -332,5 +336,82 @@ describe("sweepDecision", () => {
       sweepDecision(doc({ error: {}, lastAttemptAt: ts(NOON - 1000) }), NOON)
     ).toBe("skip");
     expect(sweepDecision(doc({ lastAttemptAt: ts(NOON - 1000) }), NOON)).toBe("skip");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 4. May this researcher's unuploaded data be destroyed?
+// ---------------------------------------------------------------------------
+
+describe("retentionDecision", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  // The sweep only ever asks about entries already older than seven days.
+  const entry = (over = {}) => ({
+    status: "failed",
+    retryCount: 5,
+    maxRetries: 5,
+    createdAt: ts(NOON - 8 * DAY),
+    ...over,
+  });
+
+  test("deletes an ordinary aged-out entry, exactly as before", () => {
+    // The unchanged default. Nothing below should make the common case keep
+    // data longer than it used to.
+    expect(retentionDecision(entry(), NOON)).toBe("delete");
+  });
+
+  test("retains an entry whose upload is still being retried", () => {
+    // The storage-provider outage case: this would have uploaded fine on day
+    // eight, so deleting it on day seven throws away data that was never
+    // actually lost.
+    expect(
+      retentionDecision(entry({ status: "pending", retryCount: 3 }), NOON)
+    ).toBe("retain");
+  });
+
+  test("deletes a pending entry whose retries are exhausted", () => {
+    // "Pending" alone is not a reason to keep it -- an entry that has spent its
+    // whole retry budget is not live work, it is a corpse with a hopeful status.
+    expect(
+      retentionDecision(entry({ status: "pending", retryCount: 5 }), NOON)
+    ).toBe("delete");
+  });
+
+  test("retains an entry the researcher has not been told about", () => {
+    expect(
+      retentionDecision(entry({ retainUntil: ts(NOON + 2 * DAY) }), NOON)
+    ).toBe("retain");
+  });
+
+  test("deletes once the extension itself has expired", () => {
+    expect(
+      retentionDecision(entry({ retainUntil: ts(NOON - 1000) }), NOON)
+    ).toBe("delete");
+  });
+
+  test("the absolute ceiling beats every reason to keep it", () => {
+    // Without this, an experiment whose provider is dead and whose owner never
+    // reads their mail would hold research payloads in Cloud Storage forever,
+    // silently, at DataPipe's cost. Both extension paths are tested against it
+    // because either one alone would otherwise be unbounded.
+    const ancient = { createdAt: ts(NOON - 15 * DAY) };
+    expect(
+      retentionDecision(
+        entry({ ...ancient, status: "pending", retryCount: 0 }),
+        NOON
+      )
+    ).toBe("delete");
+    expect(
+      retentionDecision(
+        entry({ ...ancient, retainUntil: ts(NOON + 5 * DAY) }),
+        NOON
+      )
+    ).toBe("delete");
+  });
+
+  test("a missing or unreadable createdAt does not disable the ceiling check", () => {
+    // Defensive: a hand-written or partially-migrated entry must not become
+    // immortal by lacking a field.
+    expect(retentionDecision({ status: "failed" }, NOON)).toBe("delete");
   });
 });

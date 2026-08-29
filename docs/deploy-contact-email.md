@@ -497,6 +497,66 @@ lines reporting a non-zero `agedOut` (notifications that expired undelivered),
 and any accumulation of `delivery.state == "ERROR"` with `retryable == true`,
 which is the sweeper's backlog.
 
+## 7. Payload retention: the clock now measures the right thing
+
+`scheduled-upload-retry.ts` deletes queue entries and their Cloud Storage
+payloads seven days after **submission**. That is the only thing that deletes
+them — there is no GCS lifecycle rule on the bucket — so this sweep is the whole
+retention policy.
+
+Counting from submission is subtly wrong in two ways, and both lose data nobody
+meant to lose:
+
+- **A storage-provider outage.** The entry is still `pending` with retries left,
+  so it would have uploaded fine on day eight. Deleting it on day seven throws
+  away data that was never actually lost.
+- **A notification that never arrived.** Part of the seven days is spent before
+  anything goes wrong, and if the notification died (a quota outage, a bounced
+  address) the window closes without the researcher ever learning there was one.
+
+`upload-retention.ts` now decides, and the sweep asks it per entry:
+
+| Condition | Outcome |
+|---|---|
+| Older than **14 days** from `createdAt` | **delete** — the ceiling wins over everything |
+| `status: "pending"` with retries left | retain — the upload may yet succeed |
+| `retainUntil` in the future | retain — the researcher has not been told |
+| otherwise | delete — unchanged from before |
+
+`retainUntil` is written by `scheduled-mail-retry.ts` while an upload-failure
+notification is undelivered, and it covers **every unresolved entry for the
+experiment**, not just the one that tripped the episode. It is written even
+while the breaker is shut, because extending is a Firestore write that costs no
+quota and an outage is exactly when the data is at risk.
+
+**What deliberately does not extend:** an experiment whose owner has no contact
+email. `upload-failure-notify.ts` records `suppressedReason: "no-contact-email"`
+and returns before enqueuing any mail, so no mail document exists, so nothing
+extends it — it keeps the plain seven days. That is the right answer when there
+is nobody to tell, and it falls out of the design rather than being special-cased.
+
+**The 14-day ceiling is not optional.** Without it, an experiment whose provider
+is dead and whose owner never reads their mail would hold research payloads
+forever, silently, at DataPipe's cost.
+
+## 8. The unverified-address warning
+
+`ContactEmailGate` walls off every admin route until a usable address exists, so
+"no contact email" is nearly extinct among active researchers. What the gate
+does not check is whether the address **works** — `hasContactEmail()` tests
+format only, never `contactEmailVerified`.
+
+That gap is the failure mode. A typo passes the gate. So does anything the
+2026-08 backfill seeded from Firebase Auth. And upload-failure notifications go
+to the address regardless of verified status, so the mail bounces and is marked
+terminally failed somewhere nobody looks.
+
+`components/account/UnverifiedEmailBanner.js` renders on the dashboard whenever
+`contactEmailVerified` is false and an address exists. Not dismissible, and with
+no flag to maintain: `contactEmailVerified` is written server-side by
+`verify-contact-email.ts` and only there, so the banner removes itself the moment
+it is acted on.
+
 ## Not covered here
 
 Firestore index changes (none expected — see the design doc §3.4/§7 on why

@@ -55,6 +55,7 @@ import {
   MAIL_RETENTION_MS,
 } from "./mail-delivery.js";
 import { deliveryPaused, readMailStatus } from "./mail-availability.js";
+import { UNRESOLVED_STATUSES } from "./upload-failure-notify.js";
 
 // How long Resend honours an Idempotency-Key. The bound on retrying anything
 // that is not provably un-sent. Raising this without checking Resend's docs
@@ -79,6 +80,24 @@ export const MAX_SWEEP_AGE_MS = 3 * 24 * 60 * 60 * 1000;
 // recoverable backlog into a burned retry budget.
 export const SWEEP_LIMIT = 25;
 
+// How much longer a researcher's unuploaded data is kept while the
+// notification about it is still undelivered.
+//
+// Seven days is not arbitrary: it is the SAME window the researcher would have
+// had if the notification had worked. scheduled-upload-retry.ts's sweep counts
+// from `createdAt` -- submission -- so by the time a notification fails, part
+// of that window is already spent on a problem the researcher could not have
+// known about. This gives it back, and keeps giving it back until they are
+// actually told. The absolute ceiling lives in scheduled-upload-retry.ts's
+// ABSOLUTE_MAX_RETENTION_MS, where the deletion happens, so there is exactly
+// one place that can decide data is gone.
+export const RETENTION_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Unresolved entries touched per undelivered notification. An episode is
+// usually a handful of files; the cap is there so one pathological experiment
+// cannot make a sweep unbounded.
+export const RETENTION_BATCH = 100;
+
 export interface SweepReport {
   scanned: number;
   delivered: number;
@@ -86,6 +105,9 @@ export interface SweepReport {
   skipped: number;
   agedOut: number;
   paused: boolean;
+  // Queue entries whose deletion was pushed back because the researcher has
+  // not been told about them yet.
+  retained: number;
 }
 
 function millisOrZero(value: unknown): number {
@@ -133,6 +155,48 @@ export function sweepDecision(
 }
 
 /**
+ * Hold back the data an undelivered notification is ABOUT.
+ *
+ * The notification is per EPISODE, and an episode belongs to an experiment, not
+ * to one file -- `datapipe.queueDocId` merely records the entry that tripped
+ * it. So the extension has to cover every unresolved entry for the experiment;
+ * extending only the one that tripped it would leave the other nineteen failed
+ * files in the same episode expiring on schedule, which is the original bug in
+ * miniature.
+ *
+ * Returns how many entries were held back.
+ */
+async function extendRetentionFor(
+  mailData: FirebaseFirestore.DocumentData,
+  nowMs: number
+): Promise<number> {
+  const meta = (mailData.datapipe ?? {}) as Record<string, unknown>;
+  // Verification codes have no data behind them to keep.
+  if (meta.kind !== "upload-failure") return 0;
+  const experimentID = typeof meta.experimentID === "string" ? meta.experimentID : null;
+  if (!experimentID) return 0;
+
+  // `experimentID ==` plus `status in` is served as a prefix by the existing
+  // (experimentID, status, providerErrorCode) composite -- the same shape
+  // upload-failure-notify.ts's drain query already runs.
+  const entries = await db
+    .collection("uploadQueue")
+    .where("experimentID", "==", experimentID)
+    .where("status", "in", UNRESOLVED_STATUSES)
+    .limit(RETENTION_BATCH)
+    .get();
+  if (entries.empty) return 0;
+
+  const retainUntil = Timestamp.fromMillis(nowMs + RETENTION_GRACE_MS);
+  const batch = db.batch();
+  for (const entry of entries.docs) {
+    batch.update(entry.ref, { retainUntil });
+  }
+  await batch.commit();
+  return entries.size;
+}
+
+/**
  * One sweep.
  *
  * Exported as the test seam this codebase already uses for scheduled work
@@ -148,18 +212,8 @@ export async function sweepRetryableMail(nowMs = Date.now()): Promise<SweepRepor
     skipped: 0,
     agedOut: 0,
     paused: false,
+    retained: 0,
   };
-
-  // The breaker, FIRST. See the header: sweeping into an exhausted quota fails
-  // every document and spends a MAX_ATTEMPTS on each failure.
-  const status = await readMailStatus();
-  if (deliveryPaused(status, nowMs)) {
-    report.paused = true;
-    console.log(
-      "scheduled-mail-retry: delivery is paused (quota), sweeping nothing this pass"
-    );
-    return report;
-  }
 
   const snap = await db
     .collection(MAIL_COLLECTION)
@@ -170,9 +224,48 @@ export async function sweepRetryableMail(nowMs = Date.now()): Promise<SweepRepor
 
   report.scanned = snap.size;
 
-  for (const doc of snap.docs) {
-    const decision = sweepDecision(doc.data(), nowMs);
+  // Decided once, so the retention pass and the send pass cannot disagree
+  // about which documents are still live.
+  const decisions = snap.docs.map(
+    (doc) => [doc, sweepDecision(doc.data(), nowMs)] as const
+  );
 
+  // -------------------------------------------------------------------------
+  // RETENTION FIRST, AND DELIBERATELY BEFORE THE BREAKER.
+  // -------------------------------------------------------------------------
+  //
+  // Holding a queue entry back is a Firestore write, not a send: it costs no
+  // quota, so nothing about an exhausted quota is a reason to skip it. The
+  // opposite, in fact -- a quota outage is precisely when a researcher's data
+  // is quietly ageing towards deletion behind a notification that never
+  // arrived. Putting this after the breaker check would switch the protection
+  // off in the only situation that needs it.
+  for (const [doc, decision] of decisions) {
+    if (decision !== "deliver") continue;
+    try {
+      report.retained += await extendRetentionFor(doc.data(), nowMs);
+    } catch (error) {
+      // Never fatal. Failing to extend costs the researcher time, but throwing
+      // here would cost them the sweep as well.
+      console.error(
+        `scheduled-mail-retry: could not extend retention for ${doc.id}:`,
+        error instanceof Error ? error.message : "Unknown error"
+      );
+    }
+  }
+
+  // The breaker. See the header: sweeping into an exhausted quota fails every
+  // document and spends a MAX_ATTEMPTS on each failure.
+  const status = await readMailStatus();
+  if (deliveryPaused(status, nowMs)) {
+    report.paused = true;
+    console.log(
+      "scheduled-mail-retry: delivery is paused (quota), sending nothing this pass"
+    );
+    return report;
+  }
+
+  for (const [doc, decision] of decisions) {
     if (decision === "skip") {
       report.skipped += 1;
       continue;

@@ -18,6 +18,7 @@ import {
 } from "@chakra-ui/react";
 import { Trash2 } from "lucide-react";
 import AddSignInMethodBanner from "../../components/account/AddSignInMethodBanner";
+import UnverifiedEmailBanner from "../../components/account/UnverifiedEmailBanner";
 import OsfSunsetNotice from "../../components/OsfSunsetNotice";
 import { isLegacyOsfExperiment } from "../../lib/osf-sunset";
 import { STORAGE_PROVIDERS } from "../../lib/provider-config";
@@ -36,6 +37,7 @@ export default function AdminPage({}) {
           routes (960 / 540 / 1200). */}
       <VStack gap={8} w="100%" maxW="1100px" align="stretch">
         <AddSignInMethodBanner />
+        <UnverifiedEmailBanner />
         <ExperimentList />
       </VStack>
     </AuthCheck>
