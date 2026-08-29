@@ -107,7 +107,7 @@ if (!admin.apps.length) {
 
     admin.initializeApp({
       credential: credentials ? admin.credential.cert(credentials) : admin.credential.applicationDefault(),
-      projectId: process.env.FIREBASE_PROJECT_ID || 'datapipe-prod'
+      projectId: process.env.FIREBASE_PROJECT_ID || 'osf-relay'
     });
   } else if (process.env.USE_LOCAL_SERVICE_ACCOUNT) {
     const serviceAccountPath = path.join(os.homedir(), '.config', 'datapipe', 'datapipe-service-account.json');

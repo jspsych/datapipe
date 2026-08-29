@@ -91,22 +91,25 @@ jobs:
           # redirect uri and ZENODO_ENV are non-secret and live in
           # functions/.env.datapipe-test.
           echo "ZENODO_CLIENT_SECRET=${{ secrets.TEST_ZENODO_CLIENT_SECRET }}" >> .env
-          # Amazon SES for the deployed test site (functions/src/mail-delivery.ts).
-          # Leave these three repo secrets UNSET to keep the test site from
-          # mailing real people: the onmailcreated trigger then records a
-          # terminal MailConfigMissingError on each mail document and sends
-          # nothing, which is visible rather than silent. Set them only against
-          # an SES account still in the sandbox, whose verified identities are
-          # addresses you own. See docs/deploy-contact-email.md §2.
-          echo "SES_REGION=${{ secrets.TEST_SES_REGION }}" >> .env
-          echo "SES_ACCESS_KEY_ID=${{ secrets.TEST_SES_ACCESS_KEY_ID }}" >> .env
-          echo "SES_SECRET_ACCESS_KEY=${{ secrets.TEST_SES_SECRET_ACCESS_KEY }}" >> .env
+          # Resend for the deployed test site (functions/src/mail-delivery.ts).
+          # SET this one. The test site is the only place mail DELIVERY is
+          # exercised before production -- the emulator short-circuits before
+          # sending and the unit suites mock the transport -- so it is where a
+          # mail change is proved to pass DKIM/SPF and reach an inbox. Use a
+          # SEPARATE sending-only key from prod, on the same Resend account
+          # (the From domain is the same, so it has to be the same account).
+          # Unset is still safe rather than silent: the onmailcreated trigger
+          # records a terminal MailConfigMissingError on each mail document and
+          # sends nothing. Reputation and daily quota are shared with prod --
+          # see docs/deploy-contact-email.md §2(d).
+          echo "RESEND_API_KEY=${{ secrets.TEST_RESEND_API_KEY }}" >> .env
           # Not secret, so literals here, the same way REDIRECT_URI above is.
-          # Same sender as production: SES verifies the DOMAIN (jspsych.org),
-          # not the deployment, and datapipe-test.web.app is not a verified
-          # identity -- sending from it was rejected outright, which is why
-          # contact-email codes never arrived on the test site. Only the
-          # display name differs, so test mail is recognisable in an inbox.
+          # Same sender as production: Resend verifies the DOMAIN
+          # (jspsych.org), not the deployment, and datapipe-test.web.app is not
+          # a verified domain -- sending from it is a 403 validation_error,
+          # which is why contact-email codes never arrived on the test site.
+          # Only the display name differs, so test mail is recognisable in an
+          # inbox.
           echo "MAIL_FROM=DataPipe (test) <datapipe-notifications@jspsych.org>" >> .env
           echo "MAIL_REPLY_TO=datapipe@jspsych.org" >> .env
       - name: Install dependencies and build functions

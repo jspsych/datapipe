@@ -67,17 +67,15 @@ jobs:
           echo "REDIRECT_URI=https://pipe.jspsych.org/oauth2/callback" >> .env
           echo "TOKEN_ENCRYPTION_KEY=${{ secrets.FIRESTORE_KEY_PRODUCTION }}" >> .env
           echo "NEXT_PUBLIC_OSF_ENV=" >> .env
-          # Amazon SES. functions/src/mail-delivery.ts delivers everything
-          # mail.ts queues into the `mail` collection; without these three the
+          # Resend. functions/src/mail-delivery.ts delivers everything mail.ts
+          # queues into the `mail` collection; without this key the
           # onmailcreated trigger writes a terminal MailConfigMissingError on
-          # every notification and sends nothing. The IAM user behind the keys
-          # is scoped to ses:SendEmail only -- see docs/deploy-contact-email.md
-          # §2, which also covers domain verification and sandbox exit.
-          echo "SES_REGION=${{ secrets.PROD_SES_REGION }}" >> .env
-          echo "SES_ACCESS_KEY_ID=${{ secrets.PROD_SES_ACCESS_KEY_ID }}" >> .env
-          echo "SES_SECRET_ACCESS_KEY=${{ secrets.PROD_SES_SECRET_ACCESS_KEY }}" >> .env
+          # every notification and sends nothing. Scope the key to Sending
+          # access only -- see docs/deploy-contact-email.md §2, which also
+          # covers domain verification.
+          echo "RESEND_API_KEY=${{ secrets.PROD_RESEND_API_KEY }}" >> .env
           # Not secret, so literals here, the same way REDIRECT_URI above is.
-          # MAIL_FROM must be an address on the SES-verified sending domain.
+          # MAIL_FROM must be an address on a domain verified in Resend.
           echo "MAIL_FROM=DataPipe <datapipe-notifications@jspsych.org>" >> .env
           echo "MAIL_REPLY_TO=datapipe@jspsych.org" >> .env
       - name: Install dependencies and build functions

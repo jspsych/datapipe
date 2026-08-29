@@ -32,134 +32,130 @@ Both failure modes are silent-to-the-researcher permission errors, not
 crashes, which is exactly the kind of bug that sits undetected until a
 support email arrives. Deploy rules first.
 
-## 2. Amazon SES setup
+## 2. Resend setup
 
-> **This section replaced the Trigger Email extension.** The plan was
-> `firebase/firestore-send-email`; that platform is deprecated, so delivery now
-> lives in this repo — `functions/src/mail-delivery.ts`, a Firestore
-> `onDocumentCreated("mail/{id}")` trigger deployed as `onmailcreated`, sending
-> through the Amazon SES v2 API directly (no SMTP, no nodemailer).
+> **This section has been rewritten twice.** The original plan was the Firebase
+> Trigger Email extension (`firebase/firestore-send-email`); that platform is
+> deprecated, so delivery moved in-repo to `functions/src/mail-delivery.ts`, a
+> Firestore `onDocumentCreated("mail/{id}")` trigger deployed as `onmailcreated`.
+> That version sent through Amazon SES. **AWS denied the SES production-access
+> request**, which would have left every send restricted to verified recipient
+> addresses — i.e. failing for every real researcher — so the transport is now
+> **Resend**, over its JSON HTTP API.
 >
-> **Nothing on the write side changed.** `functions/src/mail.ts` still owns the
-> document shape, and `mail-delivery.ts` still writes the extension's outcome
-> fields (`delivery.state`, `delivery.attempts`, `delivery.startTime`,
-> `delivery.endTime`, `delivery.error`, `delivery.info.messageId`), so §4's TTL
-> policy and every test that reads the `mail` collection are unaffected. What
-> changed is that there is no longer an extension to install, and no
-> `SMTP_CONNECTION_URI` — the credentials are ordinary function env vars,
-> plumbed exactly like `TOKEN_ENCRYPTION_KEY` already is.
+> **Nothing on the write side changed, either time.** `functions/src/mail.ts`
+> still owns the document shape, and `mail-delivery.ts` still writes the
+> extension's outcome fields (`delivery.state`, `delivery.attempts`,
+> `delivery.startTime`, `delivery.endTime`, `delivery.error`,
+> `delivery.info.messageId`), so §4's TTL policy and every test that reads the
+> `mail` collection are unaffected. `delivery.info.transport` now reads
+> `"resend"` rather than `"ses"`.
+>
+> **What got simpler.** One secret instead of three; no region to keep in sync
+> with a verified identity; no IAM user, no long-lived AWS access key, and no
+> request signing that a stray newline can break. The `@aws-sdk/client-sesv2`
+> dependency is gone — delivery is one `fetch` to one endpoint, so there is no
+> SDK on the cold-start path to keep off it either.
+>
+> **If you are migrating an already-deployed SES setup**, see (f) at the end
+> for what to tear down.
 
-### (a) Verify the sending domain, and publish its DKIM records
+### (a) Verify the sending domain, and publish the DNS records
 
-In the SES console → **Verified identities** → *Create identity* → **Domain**,
-enter the sending domain (`jspsych.org` — the org domain, which covers every
-subdomain, so `pipe.jspsych.org` needs no separate identity), and leave **Easy DKIM** on
-(RSA_2048). SES then hands back **three CNAME records**:
+Resend dashboard → **Domains** → *Add Domain* → `jspsych.org`, and pick the
+region you want to send from.
 
-```
-<token1>._domainkey.jspsych.org  CNAME  <token1>.dkim.amazonses.com
-<token2>._domainkey.jspsych.org  CNAME  <token2>.dkim.amazonses.com
-<token3>._domainkey.jspsych.org  CNAME  <token3>.dkim.amazonses.com
-```
+Resend then shows the exact records to publish — **the dashboard is the
+authority on the values, which are per-account; do not copy them from here.**
+The shape is three things:
 
-Publish all three in DNS. Verification usually completes within an hour;
-the identity's status must read **Verified** before anything is sent.
+- a **DKIM** `TXT` record on a `resend._domainkey` host,
+- an **SPF** `TXT` record on a `send` subdomain, and
+- an **MX** record on that same `send` subdomain, which is the custom
+  Return-Path that makes SPF align with your From domain.
 
-Two optional-but-recommended records while you have DNS open:
+Publish all of them and wait for the domain to read **Verified** in the
+dashboard. Until it does, every send fails with a `403 validation_error`
+("domain is not verified"), which `mail-delivery.ts` classifies as
+**permanent** — the mail is not retried, it is marked terminally failed.
 
-- **A custom MAIL FROM domain** (e.g. `mail.jspsych.org`), which needs an
-  MX record pointing at `feedback-smtp.<region>.amazonses.com` and a TXT
-  record `"v=spf1 include:amazonses.com ~all"`. This is what makes SPF align
-  with the From domain; without it, SES sends SPF-aligned to
-  `amazonses.com` and only DKIM carries alignment.
-- **A DMARC record** on the org domain: `_dmarc.jspsych.org  TXT
-  "v=DMARC1; p=none; rua=mailto:<an address you read>"`. Start at `p=none`;
-  it reports without rejecting.
+Two notes on scope:
+
+- **A verified root domain does not automatically cover subdomains in Resend**,
+  unlike an SES identity. This does not matter here — `MAIL_FROM` is an address
+  *at* `jspsych.org`, not at `pipe.jspsych.org` — but it is worth knowing before
+  someone changes the From address to a subdomain and watches every mail fail.
+- **DMARC** is worth adding while DNS is open: `_dmarc.jspsych.org TXT
+  "v=DMARC1; p=none; rua=mailto:<an address you read>"`. Start at `p=none`; it
+  reports without rejecting.
 
 **The spam warning still stands, and it is the reason this step is first.**
-Without DKIM (and ideally SPF alignment) in place, a meaningful share of these
+Without DKIM and SPF alignment in place, a meaningful share of these
 notifications will land in spam or be silently dropped — and because this
 feature exists specifically to reach a researcher whose data has stopped
 arriving, a notification nobody sees is functionally the same as no
 notification at all. This needs DNS access to `jspsych.org`. Confirm the
-records are in place (or in progress) before flipping this on in prod, and
-leave the SES secrets unset in the interim rather than sending unauthenticated
-mail from a new address — an unset secret is a loud, recorded failure (see (d)),
-not a silent one.
+records are in place before flipping this on in prod, and leave `RESEND_API_KEY`
+unset in the interim rather than sending from an unverified domain — an unset
+secret is a loud, recorded failure (see (d)), not a silent one.
 
-### (b) Leave the SES sandbox
+### (b) What replaces the SES sandbox
 
-A new SES account is in the **sandbox**: it can only send *to* verified
-addresses, and is capped at 200 messages/day. Every notification to a real
-researcher would be rejected with `MessageRejected` ("Email address is not
-verified"), which `mail-delivery.ts` classifies as **permanent** — the mail is
-not retried, it is marked terminally failed. So a production deploy that skips
-this step does not degrade gracefully; it fails every send.
+There is no sandbox to exit, which is the entire reason for the migration. Two
+limits take its place, and both behave differently from the SES one:
 
-SES console → **Account dashboard** → *Request production access*. The request
-asks for the use case; the honest answer is short and is what gets approved:
-transactional-only mail, to addresses the recipient entered themselves on their
-own account page, one notification per experiment per 24 hours maximum
-(`RATE_LIMIT_MS` in `upload-failure-notify.ts`), plus verification codes the
-recipient just asked for. No marketing, no lists, no purchased addresses.
-Mention that bounces and complaints are visible because the sending volume is
-tiny. Turnaround is typically one business day.
+- **Before the domain is verified**, a Resend account can only send to the
+  account owner's own address. Same failure shape as the SES sandbox, same
+  terminal classification — and the fix is (a), not a support ticket.
+- **After verification, the plan caps apply.** The free plan is **3,000
+  emails/month with a 100/day ceiling**; Pro is $20/month for 50,000. DataPipe's
+  steady-state volume is far below either — verification codes are one per
+  address change (with a resend cooldown in
+  `send-contact-email-verification.ts`), and failure notifications are capped at
+  one per experiment per 24 hours (`RATE_LIMIT_MS` in
+  `upload-failure-notify.ts`).
 
-Sanity-check the granted **sending quota** afterwards. DataPipe's steady-state
-volume is minuscule, but the burst case is real: an outage at a storage
-provider can put many experiments into a failure episode at once.
+  **The burst case is the one to size for, not the steady state.** An outage at
+  a storage provider puts many experiments into a failure episode at once, and
+  100/day is reachable there. When it is reached, Resend answers
+  `429 daily_quota_exceeded`, which `mail-delivery.ts` classifies as retryable —
+  but nothing retries a retryable error on a timer (see the file header), so in
+  practice those notifications are undelivered until someone re-drives them.
+  That is precisely the moment these mails matter most, so
+  **`daily_quota_exceeded` in the logs is the signal to move to a paid plan.**
+  It is the second line worth alerting on, after `MailConfigMissingError`.
 
-### (c) An IAM user scoped to `ses:SendEmail`, and nothing else
+### (c) An API key scoped to sending, and to this domain
 
-Cloud Functions has no way to assume an AWS role, so this is a long-lived
-access key. Keep it worth as little as possible:
+Resend dashboard → **API keys** → *Create API key*:
 
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "SendOnlyFromDataPipeIdentity",
-      "Effect": "Allow",
-      "Action": "ses:SendEmail",
-      "Resource": "arn:aws:ses:<region>:<account-id>:identity/jspsych.org",
-      "Condition": {
-        "StringEquals": {
-          "ses:FromAddress": "datapipe-notifications@jspsych.org"
-        }
-      }
-    }
-  ]
-}
-```
+- **Permission: sending access**, not full access. A sending-only key cannot
+  read the account, list domains, or create other keys.
+- **Domain: `jspsych.org`.** The optional domain restriction is the Resend
+  equivalent of the `ses:FromAddress` IAM condition it replaces, and it is what
+  stops a leaked key from being used to send as anything other than DataPipe.
 
-Create the IAM user with **no console access**, attach only this policy, and
-create one access key. `ses:SendEmail` covers the v2 `SendEmail` call this code
-makes; `ses:SendRawEmail` is *not* needed (nothing here sends raw MIME), and
-neither is any `ses:Get*`/`ses:List*` — the function never reads SES state.
-The `Resource` and the `ses:FromAddress` condition are what stop a leaked key
-from being used to send as anything other than DataPipe.
+The key is shown **once**. Put it straight into the repo secret in (d); if it is
+lost, delete it and make another rather than leaving an unaccounted-for key
+active.
 
-### (d) Three repo secrets, two literals, and the workflows that write them
+### (d) Two repo secrets, two literals, and the workflows that write them
 
 The credentials reach the functions as ordinary environment variables in
 `functions/.env`, written at deploy time from GitHub repo secrets — the same
-mechanism `TOKEN_ENCRYPTION_KEY` already uses. There is no Secret Manager
-entry and no extension config to keep in sync.
+mechanism `TOKEN_ENCRYPTION_KEY` already uses. There is no Secret Manager entry
+and no extension config to keep in sync.
 
 | Function env var | Secret? | Production value from | Test value from |
 |---|---|---|---|
-| `SES_REGION` | yes (repo secret) | `PROD_SES_REGION` | `TEST_SES_REGION` |
-| `SES_ACCESS_KEY_ID` | yes (repo secret) | `PROD_SES_ACCESS_KEY_ID` | `TEST_SES_ACCESS_KEY_ID` |
-| `SES_SECRET_ACCESS_KEY` | yes (repo secret) | `PROD_SES_SECRET_ACCESS_KEY` | `TEST_SES_SECRET_ACCESS_KEY` |
-| `MAIL_FROM` | no — literal in the workflow | `DataPipe <datapipe-notifications@jspsych.org>` | `DataPipe (test) <datapipe-notifications@jspsych.org>` — same verified address, display name marks it as test |
+| `RESEND_API_KEY` | yes (repo secret) | `PROD_RESEND_API_KEY` | `TEST_RESEND_API_KEY` |
+| `MAIL_FROM` | no — literal in the workflow | `DataPipe <datapipe-notifications@jspsych.org>` | `DataPipe (test) <datapipe-notifications@jspsych.org>` — same verified domain, display name marks it as test |
 | `MAIL_REPLY_TO` | no — literal in the workflow | `datapipe@jspsych.org` | `datapipe@jspsych.org` |
 
-So: **three new repo secrets per environment** (region, access key id, secret
-access key), six in total, named in the repo's existing
-`PROD_*`/`TEST_*` style (`PROD_CLIENT_SECRET`, `TEST_GDRIVE_CLIENT_SECRET`, …).
-The region is a secret rather than a literal only so that prod and test can
-point at different SES accounts without editing a workflow.
+So: **one new repo secret per environment**, two in total, named in the repo's
+existing `PROD_*`/`TEST_*` style (`PROD_CLIENT_SECRET`,
+`TEST_GDRIVE_CLIENT_SECRET`, …). This replaces the six `*_SES_*` secrets the
+previous version of this section called for.
 
 They are written in the **`Create functions environment file`** step of:
 
@@ -168,15 +164,15 @@ They are written in the **`Create functions environment file`** step of:
 
 immediately after the `TOKEN_ENCRYPTION_KEY` line. `MAIL_FROM` and
 `MAIL_REPLY_TO` are plain literals in the same block, like `REDIRECT_URI`.
-`.github/workflows/node.js.yml` (CI) deliberately writes **none** of them — see
+`.github/workflows/node.js.yml` (CI) deliberately writes **neither** — see
 "What happens without configuration" below.
 
-`MAIL_FROM` must be an address on the SES-verified identity from (a), and it
-must match the `ses:FromAddress` condition in (c). `MAIL_REPLY_TO` is a
-forwarding alias on `jspsych.org` that reaches the operating team; it is optional (mail with
-no Reply-To is deliverable, mail with a bad one is not).
+`MAIL_FROM` must be an address on the Resend-verified domain from (a), and on
+the domain the key is restricted to in (c). `MAIL_REPLY_TO` is a forwarding
+alias on `jspsych.org` that reaches the operating team; it is optional (mail
+with no Reply-To is deliverable, mail with a bad one is not).
 
-**What happens without configuration.** Missing or blank SES config is a
+**What happens without configuration.** Missing or blank config is a
 **terminal** delivery error with the distinct name `MailConfigMissingError`,
 written onto the mail document (`delivery.error.name`, and
 `delivery.error.message` naming the missing keys) and logged at error level
@@ -184,44 +180,101 @@ naming the keys — never their values. Mail never silently vanishes, but note
 that terminal means terminal: **documents that failed this way are not retried
 once the config is fixed.** Re-drive them by deleting the `delivery` field, or
 accept the loss. Grep production logs for `MailConfigMissingError`; it is the
-single line worth alerting on, because it means every notification the
+first line worth alerting on, because it means every notification the
 deployment sends is being dropped.
 
 **The test site and the emulator.**
 
-- **`datapipe-test`**: leaving the three `TEST_SES_*` secrets unset is the safe
-  default — the trigger records `MailConfigMissingError` and mails nobody, which
-  is visible rather than silent. If you do want the test site to send, the
-  `TEST_SES_*` credentials must belong to an SES account (or the production
-  one, with a separate IAM user) in which `jspsych.org` is a verified identity,
-  because the test `MAIL_FROM` is `datapipe-notifications@jspsych.org` too —
-  an address on `datapipe-test.web.app` can never be verified and was rejected
-  by SES. If that account is still in the SES sandbox it can only deliver
-  *to* verified recipient addresses as well.
+- **`datapipe-test`: set `TEST_RESEND_API_KEY`.** The test site is expected to
+  send, and that is a deliberate reversal of the "leave it unset" default an
+  earlier draft of this section recommended.
+
+  The reason is that **the test site is the only place delivery is exercised
+  before production.** The emulator cannot do it — see the next bullet,
+  `onmailcreated` returns before reading, writing or sending — and the unit
+  suites mock the transport at a function seam, so nothing below the test site
+  proves that a real message leaves the building, passes DKIM/SPF/DMARC and
+  lands in an inbox rather than a spam folder. Ship a mail change straight to
+  prod without that step and the first real send is to a researcher whose data
+  has stopped arriving, which is the worst possible audience for a first
+  attempt.
+
+  Use a **separate sending-only key from prod, on the same Resend account.** It
+  has to be the same account: the test `MAIL_FROM` is
+  `datapipe-notifications@jspsych.org` too, and a `datapipe-test.web.app`
+  address can never be verified. Two keys rather than one shared key, because
+  test can then be revoked without touching prod, and Resend attributes sends
+  per key, so test traffic stays distinguishable in the dashboard.
 - **The emulator (and therefore CI)**: `onmailcreated` checks
   `FUNCTIONS_EMULATOR` and returns before doing anything at all — no read, no
-  write, no send. Un-delivered mail in an emulator run is expected, exactly as
-  it was when the extension (which also never ran against the emulator) was the
-  plan. This gate is also what keeps the live trigger from racing the test
-  suites' `mail` fixtures under `firebase emulators:exec`; see the header of
+  write, no send. Un-delivered mail in an emulator run is expected. This gate
+  matters more than it did under SES: a real key sitting in a developer's
+  `functions/.env` would otherwise let a local test run mail a real person. It
+  is also what keeps the live trigger from racing the test suites' `mail`
+  fixtures under `firebase emulators:exec`; see the header of
   `functions/src/__tests__/mail-delivery-emulator.test.js`.
+
+**Verifying delivery before a production deploy.** Two things are worth actually
+sending on `datapipe-test`, and they are not equally easy to provoke:
+
+- **A verification code** is trivial: change the contact email on a test
+  account and `send-contact-email-verification.ts` mails one. This is the one
+  to use for deliverability checks — DKIM/SPF alignment, inbox versus spam
+  folder, how the From name and Reply-To render in a real client.
+- **An upload-failure notification** needs a real failure *episode*.
+  `upload-failure-notify.ts` opens one only on a failure DataPipe has actually
+  recorded, and rate-limits to one mail per experiment per 24 hours
+  (`RATE_LIMIT_MS`), so it cannot be provoked by repetition — you have to make
+  an upload genuinely fail on the test site, e.g. revoke a test experiment's
+  storage-provider token and then post data to it. Budget more time for this
+  one than for the code, and remember the 24-hour floor between attempts on the
+  same experiment.
+
+**Two cautions, both because test and prod share one sending identity.**
+
+- **Reputation is shared.** Both deployments send from
+  `datapipe-notifications@jspsych.org` on the same verified domain, so bounces
+  and spam complaints generated by test sends damage the reputation that
+  *production* notifications depend on. Send test mail only to addresses you
+  control, and never to an invented one — an invented address bounces, and
+  bounces are the expensive kind of mistake here.
+- **Quota is shared.** Both keys draw on the same Resend account plan: on the
+  free plan that is 100/day across *both* deployments, not 100 each. The bad
+  case is specific — a test run consuming quota while a storage-provider outage
+  is firing the production burst described in (b). If the test site sends
+  routinely, that argues for the paid plan sooner than production volume alone
+  would.
 
 ### (e) Region
 
-Pick one region and keep the identity, the IAM policy's `Resource` ARN, and
-`SES_REGION` in agreement — a verified identity exists **per region**, and an
-identity verified in `us-east-1` does not exist in `us-west-2`.
+A Resend domain is created in a region, and that is the whole of it — the region
+lives in the dashboard, not in this repo. There is no `SES_REGION` to keep in
+agreement with an identity and an IAM ARN, and no way for the three to drift
+apart, which was the failure mode this section used to warn about.
 
-`us-east-2` is this deployment's region -- the AWS project lives there, so the identity, the IAM user, and `SES_REGION` all say `us-east-2`. (Historically `us-east-1` was the SES default suggestion,
-it is the region most SES documentation and tooling assumes, and it is closest
-to the functions' own `us-central1`, which keeps the cross-region hop on the
-send negligible. There is no data-residency argument to weigh here — the only
-personal data crossing to AWS is the recipient address and the message body,
-and both are transient.
+There is no data-residency argument to weigh: the only personal data reaching
+Resend is the recipient address and the message body, and both are transient.
 
-Whatever you choose, it must match on all three of: the verified identity, the
-`arn:aws:ses:<region>:...` in the IAM policy, and `PROD_SES_REGION` /
-`TEST_SES_REGION`.
+### (f) Tearing down the SES setup
+
+Only relevant if the SES half was already deployed. None of it is load-bearing
+any more, and all of it is credential surface:
+
+1. **Delete the IAM user** created for `ses:SendEmail`, which deletes its
+   long-lived access key with it. This is the one that matters — it is a
+   standing credential that nothing reads.
+2. **Delete the six `*_SES_*` repo secrets** (`PROD_SES_REGION`,
+   `PROD_SES_ACCESS_KEY_ID`, `PROD_SES_SECRET_ACCESS_KEY`, and the `TEST_*`
+   three). The workflows no longer reference them.
+3. **The SES verified identity and its DNS records can stay or go.** The three
+   `*._domainkey.jspsych.org` DKIM CNAMEs are inert once nothing sends through
+   SES. Leaving them costs nothing and keeps the option of going back if the
+   appeal ever succeeds; removing them is tidier. Do **not** remove the `_dmarc`
+   record — Resend wants that one too.
+4. If a custom SES MAIL FROM subdomain (`mail.jspsych.org`) was set up, its MX
+   and SPF records are now unused. Resend uses its own `send` subdomain for the
+   same purpose, so these do not conflict — but leaving a stale SPF record on a
+   subdomain nothing sends from is a small, avoidable piece of confusion.
 
 ## 3. Backfill run procedure
 
@@ -261,7 +314,7 @@ Run order:
 3. **Target project:** the script uses the same three-way init as the other
    `migrations/*.cjs` scripts — `NODE_ENV=production` or `CI` for a service
    account from `GOOGLE_CREDENTIALS`/application-default credentials against
-   `FIREBASE_PROJECT_ID` (default `datapipe-prod`); `USE_LOCAL_SERVICE_ACCOUNT`
+   `FIREBASE_PROJECT_ID` (default `osf-relay`); `USE_LOCAL_SERVICE_ACCOUNT`
    for a local service-account file against `datapipe-test`; otherwise it
    points at the Firestore *and* Auth emulators (`localhost:8080` /
    `localhost:9099`) against `datapipe-test`. Double-check
@@ -291,15 +344,21 @@ gcloud firestore fields ttls update 'delivery.expireAt' \
   --collection-group=mail \
   --enable-ttl \
   --database='(default)' \
-  --project=datapipe-prod
+  --project=osf-relay
 ```
 
 (Console equivalent: Firestore → **Time-to-live (TTL)** → *Create policy* →
-collection group `mail`, timestamp field `delivery.endTime`.) Repeat with
+collection group `mail`, timestamp field **`delivery.expireAt`** — the same
+field as the command above, NOT `delivery.endTime`. An earlier draft of this
+line said `endTime`, which would have been silently wrong in the expensive
+direction: native TTL deletes as soon as the timestamp passes, and `endTime` is
+set the instant an outcome turns terminal, so that policy reaps every mail
+document the moment it is delivered. No debugging window, and nothing anywhere
+saying it happened. See the first bullet below.) Repeat with
 `--project=datapipe-test`. Confirm afterwards with:
 
 ```
-gcloud firestore fields ttls list --collection-group=mail --project=datapipe-prod
+gcloud firestore fields ttls list --collection-group=mail --project=osf-relay
 ```
 
 Three things about this policy that are worth knowing before you run it:
@@ -344,6 +403,6 @@ in the main design doc, not here.
 
 Function secrets: the contact-email feature itself adds none — verification
 codes are SHA-256 hashed, not encrypted, and `TOKEN_ENCRYPTION_KEY` is
-untouched. The three `*_SES_*` secrets in §2(d) belong to **delivery**, which
+untouched. The `RESEND_API_KEY` secret in §2(d) belongs to **delivery**, which
 was the extension's job when that sentence was written and is now
 `functions/src/mail-delivery.ts`'s.

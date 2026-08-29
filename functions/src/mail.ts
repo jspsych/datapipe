@@ -3,20 +3,45 @@ import { db } from "./app.js";
 
 // The one and only place DataPipe writes outbound mail.
 //
-// Delivery is the Firebase "Trigger Email" extension
-// (firebase/firestore-send-email), which watches the `mail` collection and
-// sends what it finds. Nothing in this codebase knows an SMTP host, a
-// provider, or a credential: the connection URI is extension configuration in
-// Secret Manager and is chosen at DEPLOY time, not here. Switching providers
-// is a config change, not a redeploy of these functions.
+// This file QUEUES mail. It does not send any. Delivery is
+// mail-delivery.ts, an onDocumentCreated trigger on this collection.
 //
-// Why an extension rather than nodemailer inside the functions: it keeps a
-// mail transport out of the same process that writes research data, it gets
-// retries and a `delivery.{state,attempts,error}` audit trail for free, and it
-// makes every test that touches this path assertable with no network and no
-// mock -- the emulator has no extension, so tests read the `mail` collection
-// and check that the right document appeared. That document IS the contract
-// DataPipe owns; delivery is the extension's.
+// (Historical note, because this header used to say otherwise: delivery was
+// originally the Firebase "Trigger Email" extension, then Amazon SES, and is
+// now Resend. The document shape below is the extension's, kept deliberately
+// through both swaps -- which is why neither one changed a line on this side.
+// The claim that "switching providers is a config change, not a redeploy" was
+// true of the extension and is NOT true now: the transport lives in this repo.)
+//
+// ---------------------------------------------------------------------------
+// WHY A COLLECTION, RATHER THAN JUST CALLING THE MAIL API
+// ---------------------------------------------------------------------------
+//
+// The load-bearing reason is TRANSACTIONAL. upload-failure-notify.ts creates
+// the mail document with tx.create INSIDE the same transaction as the episode
+// flag write, so "we decided to notify" and "a notification exists" commit or
+// roll back together. Calling a mail API inline would force a choice between
+// two bad options: send before the commit (and mail a researcher about an
+// episode that then rolls back) or commit then send (and lose the notification
+// to a crash in between, with nothing recording it was ever owed).
+//
+// Two lesser reasons that would not on their own justify it: the at-least-once
+// delivery machinery needs somewhere durable to keep its claim, lease, attempt
+// count and outcome, and the document doubles as the audit trail that answers
+// "did we actually mail them, and what happened" weeks later.
+//
+// It also keeps a mail transport out of the process that writes research data,
+// and it makes every test on this path assertable with no network and no mock:
+// tests read the `mail` collection and check the right document appeared.
+//
+// THE COST, WHICH IS WHY THE TTL EXISTS. These documents hold a researcher's
+// address in `to` and a rendered body naming their experiment. Left alone the
+// collection becomes a permanent, growing archive of researcher addresses
+// inside what is only meant to be a work queue. Two things bound it:
+// purge-user-data.ts deletes a purged user's mail directly (the `datapipe.owner`
+// handle below), and a Firestore TTL on `delivery.expireAt` reaps everything
+// else seven days after a terminal outcome. The TTL is project configuration,
+// not something this code can set -- docs/deploy-contact-email.md §4.
 //
 // `mail` needs no entry in firestore.rules. Firestore default-denies every
 // unmatched path, so the collection is already invisible and unwritable from
