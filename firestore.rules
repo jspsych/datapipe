@@ -84,6 +84,14 @@ service cloud.firestore {
     // Same for the `mail` collection (functions/src/mail.ts): unmatched,
     // therefore already closed. Written down so nobody "fixes" the absence
     // later by granting access.
+    //
+    // Same again for `systemStatus/mail` (functions/src/mail-availability.ts),
+    // which records how much of the Resend daily quota has been used and until
+    // when sending is paused. A client that could read it would learn nothing
+    // about any researcher, but it would learn DataPipe's operational posture,
+    // and the account page does not need it to: the verification endpoint
+    // answers 503 with `code: "mail-unavailable"` and the UI renders from that.
+    // Keeping this unmatched keeps a purely operational document off the wire.
     match /experiments/{experimentId} {
       function baseFields() {
         return request.resource.data.keys().hasAll(['active', 'activeBase64', 'activeConditionAssignment', 'id', 'owner', 'title', 'sessions', 'nConditions', 'currentCondition', 'useValidation', 'allowJSON', 'allowCSV', 'requiredFields', 'maxSessions', 'limitSessions'])

@@ -18,6 +18,11 @@ import { onUploadFailure } from "./upload-failure-notify.js";
 // denied production access); mail.ts's document contract is unchanged through
 // both swaps, so nothing on the write side moved.
 import { onMailCreated } from "./mail-delivery.js";
+// Re-drives mail whose failure has since stopped being true (a quota that has
+// rolled over, a blip that has passed). onMailCreated cannot: an
+// onDocumentCreated trigger does not re-fire on updates, so before this existed
+// a `retryable` ERROR was retried by nobody.
+import { scheduledMailRetry } from "./scheduled-mail-retry.js";
 // The verification round trip (plan §2.2, §5 package P3): a resend-capable
 // send + a hash-checked verify, both bearer-token onRequest endpoints in the
 // same shape as deleteAccount / apiQueueStatus below.
@@ -53,6 +58,7 @@ export {
   onUploadQueueChanged as onuploadqueuechanged,
   onUploadFailure as onuploadfailure,
   onMailCreated as onmailcreated,
+  scheduledMailRetry as scheduledmailretry,
   sendContactEmailVerification as sendcontactemailverification,
   verifyContactEmail as verifycontactemail,
   apiQueueStatus as apiqueuestatus,

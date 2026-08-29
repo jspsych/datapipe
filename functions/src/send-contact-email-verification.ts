@@ -2,6 +2,8 @@ import { onRequest } from "firebase-functions/v2/https";
 import { randomInt, createHash } from "crypto";
 import { db, auth } from "./app.js";
 import { contactEmailRecipient, sendMail } from "./mail.js";
+import { deliverMailDocument } from "./mail-delivery.js";
+import { readMailStatus, verificationAvailability } from "./mail-availability.js";
 import { ACCOUNT_URL } from "./email/upload-failure-copy.js";
 
 // Send (or resend) a 6-digit code that confirms users/{uid}.contactEmail.
@@ -34,13 +36,19 @@ const CODE_SPACE = 10 ** CODE_DIGITS; // 1_000_000 possible codes
 // plan §2.2: "24-hour expiry, 5 attempts."
 export const EXPIRY_MS = 24 * 60 * 60 * 1000;
 
-// Floor between two sends to the same account. The plan does not pin a
-// number beyond "rate-limited" and putting `sentAt` in the
+// Floor between two ATTEMPTS to send to the same account. The plan does not pin
+// a number beyond "rate-limited" and putting `sentAt` in the
 // contactEmailVerifications schema for exactly this purpose; one minute is
 // enough to stop a resend-mail-bomb loop (an impatient double-click, or
 // someone hammering the endpoint) without making a researcher who mistyped
 // and wants a fresh code wait anywhere near as long as the 24-hour code
 // expiry itself.
+//
+// ATTEMPTS, not deliveries, and that distinction is the rate limit. This
+// endpoint spends a real Resend request every time it gets past this check, so
+// a path that reaches the send is a path that has to be throttled whatever the
+// send then does. See the failure branch below, which used to delete the very
+// record this reads.
 export const RESEND_COOLDOWN_MS = 60 * 1000;
 
 export const VERIFICATIONS_COLLECTION = "contactEmailVerifications";
@@ -143,6 +151,41 @@ export const sendContactEmailVerification = onRequest(
         return;
       }
 
+      // ---------------------------------------------------------------------
+      // CAN WE SEND AT ALL? ASKED BEFORE ANYTHING IS SPENT.
+      // ---------------------------------------------------------------------
+      //
+      // Deliberately ahead of minting a code, writing the verification record,
+      // and arming the resend cooldown. Ask afterwards and a researcher gets
+      // told to check their inbox, gets a 60-second cooldown on requesting
+      // another, and never receives anything -- the failure invisible on both
+      // ends. Asking here also means a researcher clicking the button
+      // repeatedly during a quota outage costs zero Resend requests, which is
+      // the difference between a paused feature and a feature that makes the
+      // outage worse.
+      //
+      // The message is vague on purpose. "Quota" is operational detail that
+      // means nothing to a researcher, and one honest sentence covers every
+      // terminal cause -- exhausted quota, an unverified domain, a revoked key
+      // -- none of which they can act on differently anyway.
+      const availability = verificationAvailability(await readMailStatus(), Date.now());
+      if (!availability.available) {
+        // ERROR, not WARN, and with a stable token: "verification is refused
+        // for everybody" is a condition an operator wants to hear about,
+        // especially in the `quota-reserve` case, where the only evidence that
+        // the daily-quota header means what this code thinks it means is that
+        // this line is NOT firing all day (docs/deploy-contact-email.md §6).
+        console.error(
+          `send-contact-email-verification: MailVerificationUnavailable (${availability.reason}) -- refused for ${uid}`
+        );
+        res.status(503).json({
+          error:
+            "We can't send verification codes right now. Please try again in a little while.",
+          code: "mail-unavailable",
+        });
+        return;
+      }
+
       const existing = await verificationRef(uid).get();
       const sentAt = existing.exists
         ? (existing.data()?.sentAt as number | undefined)
@@ -175,13 +218,107 @@ export const sendContactEmailVerification = onRequest(
       // there is nothing else to keep consistent with the send -- this is a
       // direct response to a request the researcher just made, which is
       // exactly the case mail.ts's sendMail doc comment names.
-      await sendMail({
+      const mailRef = await sendMail({
         to: recipient,
         subject,
         text,
         html,
-        meta: { kind: "contact-email-verification", owner: uid },
+        meta: {
+          kind: "contact-email-verification",
+          owner: uid,
+          // Delivered below, synchronously, by THIS request -- not by the
+          // onmailcreated trigger, which stands down for inline mail. The
+          // document is still written first, so the audit trail, the
+          // purge-user-data handle and the TTL all work exactly as they do for
+          // queued mail; only who performs the send changes.
+          deliverInline: true,
+        },
       });
+
+      // ---------------------------------------------------------------------
+      // THE EMULATOR NEVER SENDS, SO IT NEVER REPORTS A SEND FAILURE EITHER.
+      // ---------------------------------------------------------------------
+      //
+      // onMailCreated returns before doing anything at all when
+      // FUNCTIONS_EMULATOR is set, and the inline path has to make the same
+      // promise -- otherwise it becomes the one route by which a local test run
+      // could mail a real person, which is precisely the hole that gate exists
+      // to close.
+      //
+      // It also has to answer 200. The mail document is written either way, and
+      // contact-email-verify-emulator.test.js recovers the code from it exactly
+      // as it did when the trigger owned delivery; answering 503 here would
+      // fail every emulator-backed verification test on a send that was never
+      // going to be attempted.
+      //
+      // Coverage does not suffer: the inline delivery path below is exercised
+      // in-process, against the emulator, with an injected transport, by
+      // mail-retry-emulator.test.js.
+      if (process.env.FUNCTIONS_EMULATOR === "true") {
+        console.log(
+          `send-contact-email-verification: emulator instance, leaving mail ${mailRef.id} unsent`
+        );
+        res.status(200).json({ success: true });
+        return;
+      }
+
+      // ---------------------------------------------------------------------
+      // AWAITED, BECAUSE SOMEBODY IS WATCHING A FORM.
+      // ---------------------------------------------------------------------
+      //
+      // The queue's asynchrony is right for a failure notification and wrong
+      // here: a verification code that arrives tomorrow is not a late success,
+      // it is a code that expired (EXPIRY_MS) before it landed. So this request
+      // does not return until the send has actually happened or actually
+      // failed. deliverMailDocument never throws -- every expected failure is a
+      // returned outcome and a field on the document.
+      const outcome = await deliverMailDocument(mailRef.id);
+      if (outcome !== "sent") {
+        // ---------------------------------------------------------------------
+        // THE RECORD STAYS. IT IS THE RATE LIMIT.
+        // ---------------------------------------------------------------------
+        //
+        // This branch used to delete it, so that a researcher whose code never
+        // arrived would not be stuck behind a cooldown for a code that does not
+        // exist. That reasoning is right about the researcher and wrong about
+        // the endpoint: `sentAt` is the ONLY server-side throttle on this path,
+        // and deleting it here removed the throttle from exactly the case that
+        // needs one. A send that fails still costs a Resend request and still
+        // writes a mail document, so a signed-in researcher holding the button
+        // -- or a loop on one valid ID token -- drove both without any bound at
+        // all, and the pre-send breaker did not cover it either, because it only
+        // shut on quota errors.
+        //
+        // Two changes make that safe rather than merely throttled: the breaker
+        // now also shuts on a systemic failure (mail-delivery.ts's
+        // SYSTEMIC_ERRORS), so a revoked key or an unverified domain stops
+        // costing a request per click within one attempt; and the code itself is
+        // cleared here, so what survives is a cooldown and not a secret nobody
+        // received. The researcher waits at most RESEND_COOLDOWN_MS, which is the
+        // same minute they would wait after a send that worked.
+        try {
+          await verificationRef(uid).update({
+            codeHash: null,
+            deliveryFailedAt: now,
+          });
+        } catch (cleanupError) {
+          // Non-fatal. The code is undeliverable either way and expires in 24
+          // hours; what matters is that `sentAt` is still standing.
+          console.error(
+            `send-contact-email-verification: could not clear the unsent code for ${uid}:`,
+            cleanupError instanceof Error ? cleanupError.message : "Unknown error"
+          );
+        }
+        console.error(
+          `send-contact-email-verification: delivery for ${uid} ended as ${outcome}, mail ${mailRef.id}`
+        );
+        res.status(503).json({
+          error:
+            "We couldn't send a verification code right now. Please try again in a little while.",
+          code: "mail-unavailable",
+        });
+        return;
+      }
 
       res.status(200).json({ success: true });
     } catch (error) {

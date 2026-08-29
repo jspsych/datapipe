@@ -50,6 +50,33 @@ import { db } from "./app.js";
 
 export const MAIL_COLLECTION = "mail";
 
+let mailCollectionName: string = MAIL_COLLECTION;
+
+/**
+ * The mail collection. Everything that reads or writes mail goes through this
+ * rather than naming the collection itself.
+ *
+ * WHY THE INDIRECTION EXISTS: scheduled-mail-retry.ts's sweep is a QUERY over
+ * the whole collection, and the emulator is shared by suites running in
+ * parallel. A suite that seeds a retryable failure and then sweeps would pick
+ * up another suite's fixtures, deliver them through ITS injected transport, and
+ * rewrite them mid-assertion -- while its own exact-count assertions failed for
+ * reasons that had nothing to do with the code under test. Isolating the status
+ * document (mail-availability.ts's _setMailStatusDocForTests) was never enough
+ * on its own, because the collection is the other shared singleton.
+ *
+ * The onMailCreated trigger still binds to MAIL_COLLECTION itself: the trigger
+ * path is deploy-time configuration, not something a test may move.
+ */
+export function mailCollection(): FirebaseFirestore.CollectionReference {
+  return db.collection(mailCollectionName);
+}
+
+/** Test seam: point every mail read and write at another collection. */
+export function _setMailCollectionForTests(name: string | null): void {
+  mailCollectionName = name ?? MAIL_COLLECTION;
+}
+
 export interface MailMessage {
   // Single recipient. The extension accepts a string or an array; we always
   // write an array, so the shape is uniform for tests and for purge queries.
@@ -91,7 +118,7 @@ function mailDocument({ to, subject, text, html, meta }: MailInput) {
 // (a transaction may not allocate ids mid-flight), so this is separate from
 // enqueueMail.
 export function newMailRef(): FirebaseFirestore.DocumentReference {
-  return db.collection(MAIL_COLLECTION).doc();
+  return mailCollection().doc();
 }
 
 // Transactional enqueue. The mail document is created as part of the caller's

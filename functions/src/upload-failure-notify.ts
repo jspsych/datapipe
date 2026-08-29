@@ -47,26 +47,13 @@ import { contactEmailRecipient, enqueueMail, newMailRef } from "./mail.js";
 import type { MailMeta } from "./mail.js";
 import { buildUploadFailureEmail } from "./email/upload-failure-copy.js";
 import type { UploadFailureState } from "./interfaces.js";
+import { unresolvedQueueEntriesQuery } from "./upload-retention.js";
 
 // One mail per experiment per 24 hours, maximum, no matter how often the queue
 // flaps clear->fail. A study that breaks every hour for a week produces seven
 // mails, not 168. This is also the backstop for the one residual race the
 // transactions below cannot close -- see clearIfDrained.
 export const RATE_LIMIT_MS = 24 * 60 * 60 * 1000;
-
-// "Not resolved yet, from the researcher's point of view." Deliberately the
-// predicate the dashboard already uses (pages/admin/[experiment_id].js:46-53
-// and api-queue-status.ts:143-144), INCLUDING `failed`, and deliberately not
-// finalization.ts's, which excludes `failed` so that a permanently dead file
-// cannot block sealing forever.
-//
-// Including `failed` is what stops the notification re-arming while a dead
-// file is still sitting there: that file is an unresolved problem the
-// researcher has not dealt with, and re-arming would mail them again about a
-// queue that never actually got better. The episode closes when the last
-// unresolved entry either completes or is swept away by cleanupOldEntries at
-// seven days.
-export const UNRESOLVED_STATUSES = ["pending", "processing", "failed"];
 
 // The Admin SDK default is 5, which is not enough here. The motivating case is
 // the ordinary one: a metadataActive submission produces a raw file, a main
@@ -337,14 +324,9 @@ async function clearIfDrained(experimentID: string): Promise<QueueWriteOutcome> 
   // limit(1) rather than count(): a plain query inside a transaction is
   // universally supported by the Admin SDK and the emulator, costs one
   // document read, and answers the only question being asked -- "is anything
-  // still unresolved?". Index-wise this is `experimentID ==` + `status in`,
-  // which the existing composite (experimentID, status, providerErrorCode)
-  // serves as a prefix, and finalization.ts already runs the same shape.
-  const stillUnresolved = db
-    .collection("uploadQueue")
-    .where("experimentID", "==", experimentID)
-    .where("status", "in", UNRESOLVED_STATUSES)
-    .limit(1);
+  // still unresolved?". The shape, and the composite index it rests on, are
+  // upload-retention.ts's -- which owns what "unresolved" means.
+  const stillUnresolved = unresolvedQueueEntriesQuery(experimentID).limit(1);
 
   return db.runTransaction<QueueWriteOutcome>(async (tx) => {
     // ---------------- ALL READS FIRST (Firestore transaction law) ----------

@@ -397,9 +397,14 @@ Three things about this policy that are worth knowing:
   `ERROR` that will not be retried. A document in a retryable error state has
   `delivery.endTime: null` and is therefore *never* eligible for deletion,
   which is deliberate: the TTL must not reap a mail that is still deliverable.
-  The flip side is that a document stuck in retryable `ERROR` lives forever.
-  Those are worth a periodic look (`delivery.state == "ERROR"` and
-  `delivery.retryable == true`); there is no automatic sweeper.
+  The flip side used to be that a document stuck in retryable `ERROR` lived
+  forever, holding an address the TTL could not reach.
+  `scheduled-mail-retry.ts` is what closes that: every document it looks at
+  either gets sent or gets a terminal state, so nothing it can see stays
+  outside the TTL's reach. It sweeps two shapes — a retryable `ERROR`, and a
+  `PROCESSING` document whose lease has expired, which is what an instance
+  killed *inside* a send leaves behind. Both need an index; both are in
+  `firestore.indexes.json`.
 - **The retention window is seven days, by design.** `mail-delivery.ts`
   writes `delivery.expireAt = endTime + 7 days` on every terminal outcome
   (delivered or permanently failed), and the TTL policy above keys on it.
@@ -423,6 +428,204 @@ experiments and queue entries. That query is unaffected by delivery:
 `message` or `datapipe`. A purge racing an in-flight send is expected and
 handled (the send resolves, the receipt has nowhere to land, one warning is
 logged).
+
+## 5. When sending is unavailable: the breaker
+
+The two things DataPipe mails fail differently, and the difference only matters
+when quota runs out:
+
+| | Verification code | Upload-failure notification |
+|---|---|---|
+| Nature | **Realtime.** Someone is watching a form. | **Deferrable.** Still true an hour later. |
+| Delivered by | The request itself, synchronously | `onmailcreated`, then the sweeper |
+| Retried? | **Never** | Yes, `scheduledmailretry` |
+| On failure | 503, vague message, cooldown **kept** | Stays queued, swept later |
+
+**The cooldown is kept on failure, and that is deliberate.** It used to be
+cleared, so that a researcher whose code never arrived was not stuck waiting a
+minute for a code that does not exist. That is right about the researcher and
+wrong about the endpoint: `contactEmailVerifications/{uid}.sentAt` is the only
+server-side rate limit on a path that spends a real Resend request, and clearing
+it removed the limit from exactly the case that needs one — a signed-in
+researcher holding the button while sends fail. What is cleared now is the
+`codeHash`, not the record: no code is left standing, the throttle is, and
+`verify-contact-email.ts` answers such a record with "request a new code"
+instead of spending one of the five attempts on it.
+
+**`systemStatus/mail` is the breaker.** `mail-delivery.ts` writes it after every
+send: the daily quota reading on success, and a shut breaker on any failure that
+is not this one message's problem. It is server-only — no `firestore.rules`
+match, so it is default-denied to every client, and the account page learns
+nothing from it directly.
+
+**Three reasons it shuts, and they last for different lengths of time:**
+
+| Cause | Shut until | Why that long |
+|---|---|---|
+| `daily_quota_exceeded` | next UTC midnight | the daily cap resets there (a guess — see below) |
+| `monthly_quota_exceeded` | start of the next UTC month | the 3,000/month cap does **not** reset at midnight. Reopening nightly means probing into a cap with days left to run, and each probe spends one of a queued mail's three attempts — three nights and every queued notification is terminal |
+| a revoked key, an unverified domain, missing config (`SYSTEMIC_ERRORS`) | 15 minutes | nothing resets; a human has to act. The pause exists only to stop a loop of failing sends, and to keep the realtime path from minting codes for mail that cannot go anywhere |
+
+`validation_error` is deliberately **not** in the systemic set: Resend uses it
+both for an unverified sending domain and for one malformed recipient address,
+and one researcher's typo must not switch verification off for everybody.
+
+**If you upgrade the plan mid-month**, clear `systemStatus/mail` by hand — the
+monthly pause is a wait for a reset that has just stopped applying.
+
+**The proactive part is a response header.** Resend returns
+`x-resend-daily-quota` — the quota *used* today — on ordinary **successful**
+responses, so DataPipe learns it is at 94/100 while sending still works rather
+than by failing. Verification stops at a ceiling (currently 90 of 100) while
+upload-failure notifications keep going to the full limit. That asymmetry is the
+point: a researcher waiting on a code can come back later, but a notification
+that their data has stopped arriving is the only signal they get.
+
+The header is documented as free-plan-only, so it disappears on a paid plan.
+Absent reads as "no daily cap applies", which is correct — the reserve logic
+turns itself off on upgrade instead of needing to be removed.
+
+**Check what that number actually means before you trust it.** Resend documents
+the header's existence, not its semantics, and "used today" and "remaining
+today" are the same shape. If it is really the plan *limit*, every reading is
+100, the reserve rule is true forever, and verification is off for good — and
+because every send rewrites `dailyQuotaObservedAt`, the staleness escape hatch
+never fires either. Capture one for yourself:
+
+```
+curl -sS -D - -o /dev/null -X POST https://api.resend.com/emails \
+  -H "Authorization: Bearer $RESEND_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"from":"DataPipe <datapipe-notifications@jspsych.org>",
+       "to":["you@example.edu"],"subject":"quota header check","text":"."}' \
+  | grep -i x-resend
+```
+
+Send it twice and watch which way the number moves, then compare it with the
+Resend dashboard's usage for the day. Two guards stand in the meantime: a
+reading outside `0..100` is refused at the write and ignored at the read, and a
+refusal on the reserve alone logs at ERROR (§6).
+
+**When does it reopen?** Resend publishes no daily-reset time, and nothing here
+depends on knowing one. `unavailableUntil` is set to the next UTC midnight as a
+*ceiling*; what actually reopens sending is the sweeper landing a successful
+send. The deferrable path probes, the realtime path only ever reads. If the real
+reset is later than midnight UTC the sweeper's next attempt re-arms the breaker;
+if it is earlier, the sweeper finds out first.
+
+**What a researcher sees:** *"We can't send verification codes right now. Please
+try again in a little while."* Deliberately vague, and deliberately the same
+message for an exhausted quota, an unverified domain and a revoked key — the
+cause is operational detail they cannot act on differently. The code-entry form
+is not opened, because there is no code out there to enter, and the resend
+cooldown is cleared so they can retry the moment it comes back.
+
+**To force the feature open or shut by hand**, edit
+`systemStatus/mail.unavailableUntil` (a Timestamp, or null). Useful for testing
+the message, and for shutting off verification during a Resend incident without
+a deploy.
+
+## 6. Alerting: two metrics, no code
+
+**You cannot email yourself that you are out of email.** Same account, same
+quota. Alerting has to be out-of-band, which in practice means Cloud Monitoring
+delivering it rather than DataPipe.
+
+No code is needed — `mail-delivery.ts` already logs everything at error level.
+Create log-based metrics on the functions' logs and alert on them:
+
+| Match | Why |
+|---|---|
+| `MailConfigMissingError` | **First.** Every notification the deployment sends is being dropped. |
+| `daily_quota_exceeded` | Sending has stopped. Reactive — it is already happening. |
+| `mail-availability` + `dailyQuotaUsed` above ~80 | **The useful one.** Leading indicator, from the success-response header, while there is still time to act. |
+| `MailVerificationUnavailable` | Verification is being refused for everyone. On `quota-reserve` it is also the check on the header's meaning: if this fires all day while sending works, the reading is not what we think it is (§5). |
+| `refusing an implausible x-resend-daily-quota` | The reading is out of range — the header is not a count of today's sends. |
+
+Route them to a channel Google delivers — Slack, PagerDuty, or an email address
+that is **not** on the `jspsych.org` sending domain, so an alert about mail
+being broken does not depend on mail working.
+
+Worth watching alongside, though none needs an alert: `scheduled-mail-retry`
+lines reporting a non-zero `agedOut` (notifications that expired undelivered),
+any accumulation of `delivery.state == "ERROR"` with `retryable == true` (the
+sweeper's backlog), and `MailSweepAbandoned` on a document, which means an
+instance died inside a send — one is noise, a run of them is a platform problem.
+
+## 7. Payload retention: the clock now measures the right thing
+
+`scheduled-upload-retry.ts` deletes queue entries and their Cloud Storage
+payloads seven days after **submission**. That is the only thing that deletes
+them — there is no GCS lifecycle rule on the bucket — so this sweep is the whole
+retention policy.
+
+Counting from submission is subtly wrong in two ways, and both lose data nobody
+meant to lose:
+
+- **A storage-provider outage.** The entry is still `pending` with retries left,
+  so it would have uploaded fine on day eight. Deleting it on day seven throws
+  away data that was never actually lost.
+- **A notification that never arrived.** Part of the seven days is spent before
+  anything goes wrong, and if the notification died (a quota outage, a bounced
+  address) the window closes without the researcher ever learning there was one.
+
+`upload-retention.ts` now decides, and the sweep asks it per entry:
+
+| Condition | Outcome |
+|---|---|
+| Older than **14 days** from `createdAt` | **delete** — the ceiling wins over everything |
+| `status: "pending"` with retries left | retain — the upload may yet succeed |
+| `retainUntil` in the future | retain — the researcher has not been told |
+| otherwise | delete — unchanged from before |
+
+`retainUntil` is written by `upload-retention.ts` — which owns this whole rule,
+predicate and write together — and `scheduled-mail-retry.ts` is what calls it,
+while an upload-failure notification is undelivered. It covers **every
+unresolved entry for the experiment**, not just the one that tripped the
+episode, and once per experiment per pass however many notifications name it.
+
+Two things about when it is written:
+
+- **Even while the breaker is shut.** Extending is a Firestore write that costs
+  no quota, and an outage is exactly when the data is at risk.
+- **Including the pass that gives up on the notification.** Ageing a
+  notification out is the case where the researcher will never be told at all,
+  so it must not also be the moment their data quietly goes back on the
+  original clock. The 14-day ceiling is what bounds this.
+
+**The deletion sweep pages.** It looks at up to 500 aged entries to find its 50
+deletions, rather than taking the oldest 50 and stopping. Without that, fifty
+retained entries at the head of the queue — one experiment behind a dead
+provider — meant a pass that deleted nothing at all, for every other experiment
+too, until the blockers crossed the 14-day ceiling up to a week later.
+
+**What deliberately does not extend:** an experiment whose owner has no contact
+email. `upload-failure-notify.ts` records `suppressedReason: "no-contact-email"`
+and returns before enqueuing any mail, so no mail document exists, so nothing
+extends it — it keeps the plain seven days. That is the right answer when there
+is nobody to tell, and it falls out of the design rather than being special-cased.
+
+**The 14-day ceiling is not optional.** Without it, an experiment whose provider
+is dead and whose owner never reads their mail would hold research payloads
+forever, silently, at DataPipe's cost.
+
+## 8. The unverified-address warning
+
+`ContactEmailGate` walls off every admin route until a usable address exists, so
+"no contact email" is nearly extinct among active researchers. What the gate
+does not check is whether the address **works** — `hasContactEmail()` tests
+format only, never `contactEmailVerified`.
+
+That gap is the failure mode. A typo passes the gate. So does anything the
+2026-08 backfill seeded from Firebase Auth. And upload-failure notifications go
+to the address regardless of verified status, so the mail bounces and is marked
+terminally failed somewhere nobody looks.
+
+`components/account/UnverifiedEmailBanner.js` renders on the dashboard whenever
+`contactEmailVerified` is false and an address exists. Not dismissible, and with
+no flag to maintain: `contactEmailVerified` is written server-side by
+`verify-contact-email.ts` and only there, so the banner removes itself the moment
+it is acted on.
 
 ## Not covered here
 
