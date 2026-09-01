@@ -21,6 +21,7 @@ import CodeSpecimen from "../components/home/CodeSpecimen";
 import BandMark from "../components/home/BandMark";
 import { ConnectIcon, CreateIcon, CollectIcon } from "../components/home/StepIcons";
 import { osfSunsetLabel } from "../lib/osf-sunset";
+import OsfSunsetBanner from "../components/OsfSunsetBanner";
 
 // ─────────────────────────────────────────────────────────────────────────
 // REGISTER NOTE. This page is BRAND register; the rest of DataPipe is
@@ -367,6 +368,14 @@ export default function Home() {
 
   return (
     <Box w="100%">
+      {/* The homepage announcement banner, kept through the page redesign.
+          It is the only OSF surface aimed at a SIGNED-OUT visitor, and it is
+          the only one that links out to COS's own post; the closing band's
+          "Already collecting on OSF?" paragraph speaks to someone who already
+          has data there and points at /docs/providers/osf instead. Two
+          audiences, two destinations -- not a duplicate. */}
+      <OsfSunsetBanner />
+
       {/* ── Ground 1: the page's own surface ────────────────────────────
           Two columns: the type on the left, the code device on the right.
           The specimen is the first thing on the page that shows the actual
