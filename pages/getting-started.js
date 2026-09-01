@@ -11,6 +11,13 @@ import {
 } from "@chakra-ui/react";
 import { ChevronDown, ChevronRight, Shield } from "lucide-react";
 import { useState } from "react";
+import { osfSunsetLabel } from "../lib/osf-sunset";
+import GuidanceLine from "../components/ui/GuidanceLine";
+
+// Which Zenodo this deployment points at -- "" on production, "sandbox." on
+// the test site. Same reasoning as lib/provider-config.js: the test
+// deployment must not send researchers to sign up on the live service.
+const ZENODO_HOST = `https://${process.env.NEXT_PUBLIC_ZENODO_ENV ?? ""}zenodo.org`;
 
 function StepNumber({ number }) {
   return (
@@ -19,8 +26,8 @@ function StepNumber({ number }) {
       w="36px"
       h="36px"
       borderRadius="full"
-      bg="brandTeal.600"
-      color="white"
+      bg="brandGreen.solid"
+      color="brandGreen.contrast"
       display="flex"
       alignItems="center"
       justifyContent="center"
@@ -35,7 +42,14 @@ function StepNumber({ number }) {
 function StepCard({ number, title, children }) {
   return (
     <Box
-      bg="black"
+      // Was bg="black" -- a Card per DESIGN.md §1's own bucket ("Cards,
+      // dialogs, menus" -> bg.panel). Dark's bg.panel is #1C1F22, identical
+      // to the page body, so the border is now the only edge (per DESIGN.md:
+      // "panels must carry a border" -- page<->panel separation is 1.07:1
+      // by design in both modes).
+      bg="bg.panel"
+      borderWidth="1px"
+      borderColor="border"
       borderRadius={12}
       p={[4, 6]}
       w="100%"
@@ -46,7 +60,10 @@ function StepCard({ number, title, children }) {
           {title}
         </Heading>
       </HStack>
-      <Stack gap={4} pl={[0, "48px"]}>
+      {/* 12 == 48px == StepNumber (36px) + the header HStack's gap={3}:
+          the step body hangs off the title, not the number. Was the raw
+          string "48px". */}
+      <Stack gap={4} pl={[0, 12]}>
         {children}
       </Stack>
     </Box>
@@ -56,12 +73,16 @@ function StepCard({ number, title, children }) {
 function Callout({ children }) {
   return (
     <Box
-      bg="brandTeal.900"
+      // Tinted callout: brandGreen.subtle + brandGreen.border. Text below has
+      // no explicit color, so it inherits the page's neutral `fg` -- exactly
+      // the caveat in DESIGN.md §1 ("body text on brandGreen.subtle must be
+      // brandGreen.50 or neutral fg, never brandGreen.300").
+      bg="brandGreen.subtle"
       border="1px solid"
-      borderColor="brandTeal.700"
+      borderColor="brandGreen.border"
       borderRadius={8}
       px={4}
-      py={3}
+      py={4}
     >
       <HStack gap={2} alignItems="flex-start">
         <Shield size={18} style={{ flexShrink: 0, marginTop: "3px" }} />
@@ -78,17 +99,19 @@ function CollapsibleSection({ title, children }) {
       <Collapsible.Trigger asChild>
         <Button
           variant="ghost"
-          color="gray.400"
+          color="fg.muted"
           size="sm"
           px={0}
-          _hover={{ color: "white", bg: "transparent" }}
+          _hover={{ color: "fg", bg: "transparent" }}
         >
           {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
           {title}
         </Button>
       </Collapsible.Trigger>
       <Collapsible.Content>
-        <Stack gap={3} pt={2} pl={4} borderLeft="1px solid" borderColor="gray.700">
+        {/* Decorative hairline inside an already-grouped (collapsed)
+            region, not the section's own boundary -- border.subtle. */}
+        <Stack gap={3} pt={2} pb={4} pl={4} borderLeft="1px solid" borderColor="border.subtle">
           {children}
         </Stack>
       </Collapsible.Content>
@@ -100,96 +123,185 @@ function FeatureItem({ name, children }) {
   return (
     <Box>
       <Text>
-        <Text as="span" fontWeight="semibold" color="brandOrange.300">{name}</Text>
+        <Text as="span" fontWeight="semibold" color="brandOrange.fg">{name}</Text>
         {" "}{children}
       </Text>
     </Box>
   );
 }
 
-export default function GettingStarted() {
+// One storage provider: what it is, where the files land, and the limit that
+// will eventually matter. Deliberately no "choose this if" steer -- which
+// trade-off matters is the researcher's call, and the limits are the only
+// part of it they cannot work out for themselves. Same shape as FeatureItem
+// above, so step 1 and step 4 read as one page; the bordered card this
+// replaced nested a boundary inside the StepCard's own for three short rows.
+function ProviderOption({ name, description, limits }) {
   return (
-    <Stack w={["95%", 960]} gap={8} py={4}>
+    <Box>
+      <Text>
+        <Text as="span" fontWeight="semibold" color="brandOrange.fg">{name}</Text>
+        {" — "}{description}
+      </Text>
+      {limits && (
+        <Text fontSize="sm" color="fg.muted" mt={1}>
+          <Text as="span" fontWeight="semibold">Limits:</Text> {limits}
+        </Text>
+      )}
+    </Box>
+  );
+}
+
+export default function GettingStarted() {
+  const osfDeadline = osfSunsetLabel();
+  // Consequence first (PRODUCT.md principle 2): what stops working, then why.
+  // Both sentences degrade gracefully when no cutoff has been announced --
+  // lib/osf-sunset.js tolerates a null date and so must every reader of it.
+  const osfStops = osfDeadline
+    ? `DataPipe will stop writing to OSF after ${osfDeadline}.`
+    : "DataPipe is winding down its support for OSF.";
+  const osfUntil = osfDeadline
+    ? "Experiments already collecting keep running until that date."
+    : "Experiments already collecting keep running for now.";
+
+  return (
+    // 960 is one of the stray measures DESIGN.md §4 names for consolidation;
+    // this is a public docs page with cards, code blocks and a provider grid,
+    // so it takes the 1100px measure. `py={4}` is gone: the navbar gap and
+    // the footer gap are set once in _app.js for every page.
+    <Stack w="100%" maxW="1100px" gap={8}>
       <VStack gap={2} align="start">
         <Heading as="h1" size="2xl">
           Getting Started
         </Heading>
-        <Text color="gray.400" fontSize="lg">
-          Set up DataPipe to send experiment data directly to the OSF. This
-          guide covers a typical online experiment using free tools.
+        <Text color="fg.muted" fontSize="lg">
+          DataPipe sends data from your experiment straight to storage you
+          control — Google Drive, Dataverse, or Zenodo. This guide sets up one
+          experiment end to end, from choosing a provider to your first test
+          run.
         </Text>
       </VStack>
 
-      <StepCard number={1} title="Create an OSF project">
+      <StepCard number={1} title="Choose where your data goes">
         <Text>
-          Create a project at{" "}
-          <Link href={`https://${process.env.NEXT_PUBLIC_OSF_ENV}osf.io`} target="_blank" rel="noopener noreferrer" color="brandOrange.300">
-            osf.io
+          DataPipe writes each participant&apos;s data into your own account
+          with one of the three storage providers below. The data is yours
+          throughout — DataPipe only ever asks for permission to add files.
+          You can use a different provider for each experiment, so this choice
+          is not permanent.
+        </Text>
+        <Stack gap={3}>
+          <ProviderOption
+            name="Google Drive"
+            description="your own Google Drive. Data lands in a folder in My Drive/DataPipe, or in a parent folder you pick."
+            limits="free Google accounts share 15 GB across Drive, Gmail, and Photos. Uploads stop once that is full."
+          />
+          <ProviderOption
+            name="Dataverse"
+            description="institutional repositories run by universities and consortia — Harvard Dataverse, Borealis, DataverseNL, and others. Data lands in a draft dataset, in a collection you name."
+            limits="your installation sets its own file size and storage limits. API tokens expire, often yearly, and DataPipe cannot renew them — data stops arriving until you reconnect."
+          />
+          <ProviderOption
+            name="Zenodo"
+            description="an open repository run by CERN. Data lands in a deposition that stays private until you publish it, and publishing issues a DOI."
+            limits="100 files and 50 GB per record. DataPipe merges completed sessions into archives so a long study stays under the file limit."
+          />
+        </Stack>
+        <Text>
+          You need an account with whichever provider you choose:{" "}
+          <Link href="https://drive.google.com" target="_blank" rel="noopener noreferrer" color="brandOrange.fg">
+            Google Drive
           </Link>
-          {" "}to store your experiment data. You will need an OSF account
-          — create one if you do not have one already.
-        </Text>
-        <Text>
-          Once you have an account, click <strong>Create Project</strong> and
-          give it any name you like. Your OSF account can also be used to
-          sign in to DataPipe directly.
-        </Text>
-      </StepCard>
-
-      <StepCard number={2} title="Link your OSF account to DataPipe">
-        <Text>
-          DataPipe needs authorization to create files in your OSF projects.
-          If you signed up for DataPipe using your OSF account, this is
-          already done.
-        </Text>
-        <Text>
-          Otherwise, go to your{" "}
-          <Link href="/admin/account" color="brandOrange.300">
-            Account Settings
+          ,{" "}
+          <Link href="https://dataverse.org/institutions" target="_blank" rel="noopener noreferrer" color="brandOrange.fg">
+            your Dataverse installation
           </Link>
-          , switch to one-click authentication if not already enabled, and
-          click <strong>Link OSF Account</strong>. You will be redirected to
-          OSF to authorize DataPipe, then sent back automatically.
+          , or{" "}
+          <Link href={ZENODO_HOST} target="_blank" rel="noopener noreferrer" color="brandOrange.fg">
+            Zenodo
+          </Link>
+          .
         </Text>
-        <CollapsibleSection title="Using a personal access token instead (legacy)">
+        <CollapsibleSection title="Already collecting data on OSF?">
           <Text>
-            Go to your DataPipe Account Settings and switch to &quot;Personal
-            access token&quot; mode. Then on OSF, go to your account settings,
-            click the <strong>Personal Access Tokens</strong> tab, and create
-            a new token with the <strong>osf.full_write</strong> scope.
+            {osfStops} OSF is shutting down its projects feature, so DataPipe
+            can no longer create new experiments there. {osfUntil}
           </Text>
           <Text>
-            Copy the token value and paste it into your DataPipe Account
-            Settings. A green checkmark will confirm the token is valid.
+            Data already on OSF is unaffected and stays in your OSF account. To
+            keep collecting past that point, connect one of the providers
+            above, create a new experiment on it, and point your experiment
+            code at the new experiment ID.
           </Text>
         </CollapsibleSection>
       </StepCard>
 
+      <StepCard number={2} title="Connect your storage provider">
+        <Text>
+          Go to your{" "}
+          <Link href="/admin/account" color="brandOrange.fg">
+            Account Settings
+          </Link>
+          {" "}and find the <strong>Storage Providers</strong> section. Click{" "}
+          <strong>Connect</strong> next to the provider you chose. A green{" "}
+          <strong>Connected</strong> label confirms it worked.
+        </Text>
+        <Text>
+          <strong>Google Drive</strong> and <strong>Zenodo</strong> hand you
+          to their own sign-in page to authorize DataPipe, then bring you
+          straight back.
+        </Text>
+        <Text>
+          <strong>Dataverse</strong> opens a short form instead. It needs the
+          full address of your institution&apos;s installation — for
+          example, <em>https://dataverse.harvard.edu</em> — and an API token,
+          which you create under the <strong>API Token</strong> tab of your
+          Dataverse account.
+        </Text>
+        <Text color="fg.muted" fontSize="sm">
+          You can connect more than one provider, and disconnect any of them
+          from the same screen. Disconnecting stops new data from reaching
+          that provider. It never removes data already stored there.
+        </Text>
+      </StepCard>
+
       <StepCard number={3} title="Create a DataPipe experiment">
         <Text>
-          Click <strong>New Experiment</strong> in the navigation bar. You will
-          need to provide:
+          Click <strong>New Experiment</strong> in the navigation bar. Pick
+          your storage provider at the top of the form and give the experiment
+          a <strong>Title</strong>. The rest of the form changes with the
+          provider:
         </Text>
         <Stack gap={2} pl={4}>
           <Text>
-            <Text as="span" fontWeight="semibold">Title</Text> — a name for
-            your experiment.
+            <Text as="span" fontWeight="semibold">Google Drive</Text> — nothing
+            else is required. To keep the data somewhere specific,
+            click <strong>Choose Drive folder</strong> and pick a parent
+            folder. Otherwise DataPipe creates the folder
+            in <em>My Drive/DataPipe</em>.
           </Text>
           <Text>
-            <Text as="span" fontWeight="semibold">OSF Project ID</Text> — the
-            short code from your OSF project URL. For example, if your project
-            is at <em>osf.io/abcde</em>, the ID is <strong>abcde</strong>.
+            <Text as="span" fontWeight="semibold">Dataverse</Text> — the{" "}
+            <strong>collection alias</strong>, which is the short name from
+            your collection&apos;s URL, plus the author name, contact email,
+            and description that Dataverse requires for every dataset. Subject
+            is optional.
           </Text>
           <Text>
-            <Text as="span" fontWeight="semibold">Data Component Name</Text> — DataPipe
-            will create a new component with this name inside your OSF project
-            to store all data files.
+            <Text as="span" fontWeight="semibold">Zenodo</Text> — the{" "}
+            <strong>creator name</strong> and a <strong>description</strong>{" "}
+            for the deposition. Affiliation is optional.
           </Text>
         </Stack>
         <Text>
-          Click <strong>Create</strong> and you will be taken to the experiment
-          dashboard.
+          Click <strong>Create</strong>. DataPipe makes the folder, dataset,
+          or deposition for you and opens the experiment dashboard, which
+          links straight to it.
         </Text>
+        <GuidanceLine href="/docs/experiments" linkText="Creating an experiment">
+          The dashboard this opens is where you get the experiment ID, watch
+          sessions arrive, and change any setting later.
+        </GuidanceLine>
       </StepCard>
 
       <StepCard number={4} title="Configure the experiment">
@@ -206,40 +318,56 @@ export default function GettingStarted() {
             specify required fields. This helps prevent malicious submissions.
           </FeatureItem>
           <FeatureItem name="Session limit">
-            — cap the number of data files that can be sent to your OSF
-            project. You can increase this later.
+            — cap how many data files DataPipe will accept. You can raise the
+            limit later.
           </FeatureItem>
           <FeatureItem name="Psych-DS metadata">
             — automatically produce metadata adhering to{" "}
-            <Link href="https://github.com/psych-ds/psych-DS" target="_blank" rel="noopener noreferrer" color="brandOrange.300">
+            <Link href="https://psychds-docs.readthedocs.io/en/latest/" target="_blank" rel="noopener noreferrer" color="brandOrange.fg">
               Psych-DS
             </Link>
-            , updated after each session.
+            , updated after each session. See{" "}
+            <Link href="/docs/experiments/metadata" color="brandOrange.fg">how it works</Link>
+            {" "}in the docs.
           </FeatureItem>
         </Stack>
         <Callout>
           Only activate the features you need, and only during active data
-          collection. DataPipe creates an open path to your OSF project —
-          validation and session limits reduce the risk of unwanted submissions.
+          collection. DataPipe creates an open path into your storage provider
+          — validation and session limits reduce the risk of unwanted
+          submissions.
         </Callout>
+        <GuidanceLine href="/docs/experiments#switches" linkText="The four switches">
+          Each of these settings has its own page, with the fine print on
+          conditions, validation and session limits.
+        </GuidanceLine>
       </StepCard>
 
       <StepCard number={5} title="Add code to your experiment">
         <Text>
           Add code to send data from your experiment to DataPipe. If you use
           jsPsych, the easiest option is the{" "}
-          <Link href="https://github.com/jspsych/jspsych-contrib/tree/main/packages/plugin-pipe" target="_blank" rel="noopener noreferrer" color="brandOrange.300">
+          <Link href="https://github.com/jspsych/jspsych-contrib/tree/main/packages/plugin-pipe" target="_blank" rel="noopener noreferrer" color="brandOrange.fg">
             jsPsychPipe plugin
           </Link>
           . Otherwise, you can use the DataPipe API directly with fetch requests.
         </Text>
         <Text>
-          Your experiment dashboard has ready-to-use code snippets for both
-          jsPsych and plain JavaScript. Go to{" "}
-          <Link href="/admin" color="brandOrange.300">My Experiments</Link>,
+          The code is the same whichever storage provider you chose — your
+          experiment sends data to DataPipe, and DataPipe handles the rest.
+          Your experiment dashboard has ready-to-use snippets for both jsPsych
+          and plain JavaScript. Go to{" "}
+          <Link href="/admin" color="brandOrange.fg">My Experiments</Link>,
           select your experiment, and copy the code from the{" "}
           <strong>Code Samples</strong> panel.
         </Text>
+        <GuidanceLine
+          href="/docs/experiments/sending-data"
+          linkText="Sending data from your experiment"
+        >
+          The same snippets, plus what each response means and the 32 MB
+          request limit.
+        </GuidanceLine>
       </StepCard>
 
       <StepCard number={6} title="Publish your experiment online">
@@ -250,11 +378,11 @@ export default function GettingStarted() {
         <CollapsibleSection title="GitHub Pages setup instructions">
           <Text>
             1. Create a GitHub account at{" "}
-            <Link href="https://www.github.com" target="_blank" rel="noopener noreferrer" color="brandOrange.300">
+            <Link href="https://www.github.com" target="_blank" rel="noopener noreferrer" color="brandOrange.fg">
               github.com
             </Link>
             {" "}and{" "}
-            <Link href="https://www.github.com/new" target="_blank" rel="noopener noreferrer" color="brandOrange.300">
+            <Link href="https://www.github.com/new" target="_blank" rel="noopener noreferrer" color="brandOrange.fg">
               create a new repository
             </Link>
             . The repo name becomes part of your experiment URL, so avoid
@@ -287,7 +415,7 @@ export default function GettingStarted() {
         <Stack gap={2} pl={4}>
           <Text>
             <Text as="span" fontWeight="semibold">Enable data collection</Text> — for
-            sending text files (JSON, CSV) to OSF.
+            sending text files (JSON, CSV).
           </Text>
           <Text>
             <Text as="span" fontWeight="semibold">Enable base64 data collection</Text> — for
@@ -299,11 +427,42 @@ export default function GettingStarted() {
           </Text>
         </Stack>
         <Text>
-          Run through your experiment once to verify data files appear in
-          your OSF data component. You should see them immediately after
-          completing the experiment.
+          Run through your experiment once to check that the data arrives. The
+          experiment dashboard links straight to your Drive folder, Dataverse
+          dataset, or Zenodo deposition — your file should appear there
+          shortly after you finish.
         </Text>
       </StepCard>
+
+      {/* mt={8} over the stack's gap={8} = 64px. Eight steps at an
+          identical 32px told the reader nothing about which one is
+          different; this last one is the irreversible one (finalizing
+          cannot be undone), so it gets the break DESIGN.md §4 reserves for
+          a consequential section. */}
+      <Box mt={8}>
+        <StepCard number={8} title="When data collection ends">
+        <Text>
+          When your study is finished on <strong>Zenodo</strong>,{" "}
+          <strong>finalize</strong> the experiment from its dashboard. DataPipe
+          merges every remaining data file into a single archive and stops
+          accepting new submissions, which keeps the deposition under
+          Zenodo&apos;s file limit and makes the dataset easier to share and
+          cite. Finalizing cannot be undone, so do it only when you are
+          certain no more data is coming. Google Drive and Dataverse
+          don&apos;t have that file-count ceiling, so there is nothing to
+          finalize there — just stop sending data when you&apos;re done.
+        </Text>
+        <Text color="fg.muted" fontSize="sm">
+          On Zenodo, finalizing prepares the deposition but does not publish
+          it. Publishing the record, and with it issuing the DOI, stays your
+          decision and happens on Zenodo itself.
+        </Text>
+        <GuidanceLine href="/docs/data/finalizing" linkText="Finishing a study">
+          What finalizing does, which providers support it, and what happens
+          to any uploads still queued when you finalize.
+        </GuidanceLine>
+        </StepCard>
+      </Box>
     </Stack>
   );
 }

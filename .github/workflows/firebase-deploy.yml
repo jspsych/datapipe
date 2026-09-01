@@ -8,6 +8,14 @@ on:
     branches: ["main"]
   workflow_dispatch:
 
+# See the matching block in firebase-deploy-test.yml: concurrent deploys to the
+# same Firebase project collide on the SSR function update and leave the site
+# on the old build. Separate group from the test deploy -- they target
+# different projects and have no reason to queue behind each other.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   #FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
@@ -20,6 +28,9 @@ env:
   NEXT_PUBLIC_GENERATE_STATE: "https://pipe.jspsych.org/api/generateoauthstate"
   NEXT_PUBLIC_BASE_URL: "https://pipe.jspsych.org"
   NEXT_PUBLIC_OSF_ENV: ""
+  # Empty = the real zenodo.org. Set explicitly rather than relying on the
+  # default, so production never inherits a sandbox value by accident.
+  NEXT_PUBLIC_ZENODO_ENV: ""
 
 jobs:
   build:
@@ -41,16 +52,13 @@ jobs:
         with:
           credentials_json: '${{ secrets.GOOGLE_PRODUCTION_CREDENTIALS }}'
       - name: Install firebase tools
-        run: npm install -g firebase-tools@15.8.0
+        run: npm install -g firebase-tools@15.28.1
       - name: Enable firebase webframeworks
         run: firebase experiments:enable webframeworks
       - name: Install dependencies 
         run: npm ci
-      - name: Install dependencies and build metadata
-        working-directory: functions/metadata
-        run: |
-          npm ci
-          npm run build
+      # functions/metadata is a pre-built vendored dist (see functions/metadata/README.md);
+      # it is installed as a file: dependency by the functions npm ci below.
       - name: Create functions environment file
         working-directory: functions
         run: |
@@ -59,6 +67,17 @@ jobs:
           echo "REDIRECT_URI=https://pipe.jspsych.org/oauth2/callback" >> .env
           echo "TOKEN_ENCRYPTION_KEY=${{ secrets.FIRESTORE_KEY_PRODUCTION }}" >> .env
           echo "NEXT_PUBLIC_OSF_ENV=" >> .env
+          # Resend. functions/src/mail-delivery.ts delivers everything mail.ts
+          # queues into the `mail` collection; without this key the
+          # onmailcreated trigger writes a terminal MailConfigMissingError on
+          # every notification and sends nothing. Scope the key to Sending
+          # access only -- see docs/deploy-contact-email.md §2, which also
+          # covers domain verification.
+          echo "RESEND_API_KEY=${{ secrets.PROD_RESEND_API_KEY }}" >> .env
+          # Not secret, so literals here, the same way REDIRECT_URI above is.
+          # MAIL_FROM must be an address on a domain verified in Resend.
+          echo "MAIL_FROM=DataPipe <datapipe-notifications@jspsych.org>" >> .env
+          echo "MAIL_REPLY_TO=datapipe@jspsych.org" >> .env
       - name: Install dependencies and build functions
         working-directory: functions
         run: |

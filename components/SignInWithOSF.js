@@ -1,11 +1,7 @@
 import { useState } from "react";
-import {
-  Button,
-  Text,
-  Alert,
-  VStack
-} from "@chakra-ui/react";
+import { Button, Text, VStack } from "@chakra-ui/react";
 import { OsfIcon } from "./OsfIcon";
+import FormErrorAlert from "./ui/FormErrorAlert";
 
 export default function SignInWithOSF() {
   const [isLoading, setIsLoading] = useState(false);
@@ -15,13 +11,38 @@ export default function SignInWithOSF() {
     setIsLoading(true);
     setError("");
 
+    let stateRes;
     try {
-      const stateRes = await fetch(process.env.NEXT_PUBLIC_GENERATE_STATE, { method: 'POST' });
-      if (!stateRes.ok) throw new Error('Failed to generate state');
+      stateRes = await fetch(process.env.NEXT_PUBLIC_GENERATE_STATE, {
+        method: "POST",
+      });
+    } catch (err) {
+      // fetch() itself threw -- no response at all, which on the web means
+      // the request never reached anything (offline, DNS, CORS block).
+      setError(
+        "Could not reach the sign-in service. Check your connection and try again."
+      );
+      setIsLoading(false);
+      return;
+    }
+
+    if (!stateRes.ok) {
+      // A response came back, just not a good one -- most likely a
+      // misconfigured or missing OSF client setup rather than a dead
+      // network, so the researcher shouldn't be told to check their wifi.
+      console.error("OSF state generation failed:", stateRes.status);
+      setError(
+        "Could not start the OSF sign-in. This looks like a site configuration problem -- please report it through the Contact page."
+      );
+      setIsLoading(false);
+      return;
+    }
+
+    try {
       const { state } = await stateRes.json();
 
-      localStorage.setItem('latestCSRFToken', state);
-      localStorage.setItem('osfAuthFlow', 'signin');
+      localStorage.setItem("latestCSRFToken", state);
+      localStorage.setItem("osfAuthFlow", "signin");
 
       const clientId = process.env.NEXT_PUBLIC_CLIENT_ID;
       const redirectUri = process.env.NEXT_PUBLIC_REDIRECT_URI;
@@ -31,30 +52,32 @@ export default function SignInWithOSF() {
 
       window.location.href = url;
     } catch (err) {
-      setError("Failed to initiate OSF signin. Please try again.");
+      console.error("OSF sign-in redirect failed:", err);
+      setError("Could not start the OSF sign-in. Please try again.");
       setIsLoading(false);
     }
   };
 
   return (
     <VStack gap={4} w="full">
-      {error && (
-        <Alert.Root status="error" borderRadius="md">
-          <Alert.Indicator />
-          <Text fontSize="sm">{error}</Text>
-        </Alert.Root>
-      )}
+      <FormErrorAlert>{error}</FormErrorAlert>
 
       <Button
-        colorPalette="blue"
+        type="button"
+        variant="outline"
         loading={isLoading}
-        loadingText="Redirecting to OSF..."
+        loadingText="Redirecting to OSF…"
         onClick={handleOSFSignin}
         width="full"
-        size="lg"
+        size="sm"
       >
-        <OsfIcon /> Sign In with OSF
+        <OsfIcon /> Sign in with OSF
       </Button>
+
+      <Text fontSize="xs" color="fg.muted" textAlign="center">
+        OSF sign-in is being retired. Sign in once more, then add another
+        provider from your dashboard to keep your account and experiments.
+      </Text>
     </VStack>
   );
 }

@@ -11,6 +11,10 @@ const MESSAGES = {
     error: "BASE64DATA_COLLECTION_NOT_ACTIVE",
     message: "Base64 data collection is not active for this experiment",
   },
+  EXPERIMENT_FINALIZED: {
+    error: "EXPERIMENT_FINALIZED",
+    message: "This experiment has been finalized and no longer accepts submissions",
+  },
   CONDITION_ASSIGNMENT_NOT_ACTIVE: {
     error: "CONDITION_ASSIGNMENT_NOT_ACTIVE",
     message: "Condition assignment is not active for this experiment",
@@ -38,6 +42,23 @@ const MESSAGES = {
   INVALID_REFRESH_TOKEN: {
     error: "INVALID_REFRESH_TOKEN",
     message: "The experiment owner's refresh token is not valid",
+  },
+  PROVIDER_NOT_CONNECTED: {
+    error: "PROVIDER_NOT_CONNECTED",
+    message: "The experiment owner has not connected an account for this experiment's storage provider",
+  },
+  // Names no provider. It once had to cover two static-token adapters, and
+  // hardcoding "Dataverse" told a Zenodo owner to go fix a token on a service
+  // they may not even use. Zenodo moved to OAuth2 on 2026-08-21 and no longer
+  // emits this at all, leaving dataverse.ts as the only source -- but the
+  // wording stays provider-neutral, since the next static-token provider would
+  // reintroduce exactly the same bug. What it carries is what makes this code
+  // distinct from AUTH_EXPIRED: a static token cannot be refreshed, so the
+  // researcher has to CREATE a new one and reconnect, not just re-authorize.
+  PROVIDER_TOKEN_EXPIRED: {
+    error: "PROVIDER_TOKEN_EXPIRED",
+    message:
+      "The API token for this experiment's storage provider has expired. A new token must be created on that provider and reconnected to DataPipe",
   },
   INVALID_BASE64_DATA: {
     error: "INVALID_BASE64_DATA",

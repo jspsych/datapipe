@@ -1,125 +1,265 @@
 import {
   Card,
-  Stack,
   Heading,
   Text,
   Field,
   Input,
   Button,
+  Link as ChakraLink,
+  VStack,
 } from "@chakra-ui/react";
 
 import { auth } from "../lib/firebase";
 import { sendPasswordResetEmail, confirmPasswordReset } from "firebase/auth";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/router";
-import { getError } from "../lib/utils";
+import NextLink from "next/link";
+import { messageForAuthError, isExpiredResetLink } from "../lib/auth-errors";
+import FormErrorAlert from "../components/ui/FormErrorAlert";
 
 export default function ResetPassword() {
   const router = useRouter();
-  const [state, setState] = useState("forgot");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [token, setToken] = useState("");
+  const [emailFieldError, setEmailFieldError] = useState("");
+  const [passwordFieldError, setPasswordFieldError] = useState("");
+  const [formError, setFormError] = useState("");
+  // Set only when a "token" attempt fails because the link expired or was
+  // already used -- shown once, on top of the "forgot" form this bounces
+  // back to, so the researcher knows *why* they are back at square one.
+  const [notice, setNotice] = useState("");
+  const [touched, setTouched] = useState({ email: false, password: false });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [sentTo, setSentTo] = useState("");
+  // Only the transition this page drives itself: "send", after a reset email
+  // goes out, or "forgot", when an expired-token attempt bounces back here.
+  // null means "whatever the URL says".
+  const [submittedState, setSubmittedState] = useState(null);
 
-  useEffect(() => {
-    if (router.query?.token) {
-      setState("token");
-      setToken(router?.query?.token);
+  // Derived from the URL rather than copied into state by an effect. The old
+  // version rendered the "forgot password" form first and swapped to the
+  // token form once the effect ran, so a user arriving from a reset link saw
+  // the wrong form flash by -- and on Next's first client render, where
+  // router.query is still empty, it was the only form they saw until the
+  // query populated.
+  const token = typeof router.query?.token === "string" ? router.query.token : "";
+  const state = submittedState ?? (token ? "token" : "forgot");
+
+  const requestReset = async (e) => {
+    e.preventDefault();
+    setFormError("");
+
+    if (!email.trim()) {
+      setEmailFieldError("Enter your email address.");
+      setTouched((prev) => ({ ...prev, email: true }));
+      return;
     }
-  }, [router, router.query]);
 
-  const resetPassword = async () => {
     setIsSubmitting(true);
     try {
       await sendPasswordResetEmail(auth, email);
+      setSentTo(email);
       setIsSubmitting(false);
-      setState("send");
+      setSubmittedState("send");
     } catch (error) {
       setIsSubmitting(false);
-      setError(getError(error.code));
+      const { code } = error;
+      if (code === "auth/user-not-found") {
+        // Same neutral outcome as success. Confirming that an email has NO
+        // account is exactly the enumeration leak this branch exists to
+        // avoid -- a researcher who mistyped their address sees the same
+        // "check your inbox" screen as one who got it right.
+        setSentTo(email);
+        setSubmittedState("send");
+      } else if (code === "auth/invalid-email") {
+        setEmailFieldError(messageForAuthError(code, null, "resetRequest"));
+      } else {
+        setFormError(messageForAuthError(code, null, "resetRequest"));
+      }
     }
   };
 
-  const setNewPassword = async () => {
+  const resendReset = () => {
+    setSubmittedState(null);
+    setNotice("");
+    setFormError("");
+    setEmailFieldError("");
+    setTouched({ email: false, password: false });
+  };
+
+  const setNewPassword = async (e) => {
+    e.preventDefault();
+    setFormError("");
+
     if (password.length < 12) {
-      setError("Password must be at least 12 characters");
+      setPasswordFieldError("Password must be at least 12 characters.");
+      setTouched((prev) => ({ ...prev, password: true }));
       return;
     }
+
     setIsSubmitting(true);
     try {
       await confirmPasswordReset(auth, token, password);
       router.push("/admin");
     } catch (error) {
-      setError(getError(error.code));
       setIsSubmitting(false);
+      const { code } = error;
+      if (isExpiredResetLink(code)) {
+        // Dead end, fixed: bounce back to "forgot" instead of leaving the
+        // researcher on a form with no way to get a new link.
+        setSubmittedState("forgot");
+        setNotice(
+          "That reset link has expired or was already used. Enter your email and we'll send a new one."
+        );
+      } else if (code === "auth/weak-password") {
+        setPasswordFieldError(messageForAuthError(code, null, "resetConfirm"));
+      } else {
+        setFormError(messageForAuthError(code, null, "resetConfirm"));
+      }
     }
   };
 
   return (
-    <Card.Root w="100%" maxW={360} mx="auto" px={4} variant="unstyled" color="white">
-      <Card.Header>
-        <Heading size="lg">Reset your password</Heading>
-      </Card.Header>
-      <Card.Body>
-        <Stack>
+    <Card.Root
+      w="100%"
+      maxW="560px"
+      mx="auto"
+      // No px here: this Card.Root padding sat INSIDE the card border and
+      // added to Card.Body's p={8}, making the card 48px horizontally and
+      // 32px vertically. The page gutter belongs to _app.js.
+      variant="unstyled"
+      bg="bg.panel"
+      borderWidth="1px"
+      borderColor="border"
+      rounded="lg"
+    >
+      <Card.Body p={8}>
+        <VStack gap={6} align="stretch">
+          <Heading as="h1" fontSize="2xl" fontWeight="700" color="fg">
+            Reset your password
+          </Heading>
+
           {state === "send" && (
-            <Text>We have sent you a link to reset your password.</Text>
+            <VStack gap={4} align="start">
+              <Text color="fg">
+                We sent a reset link to{" "}
+                <Text as="span" fontWeight="600">
+                  {sentTo}
+                </Text>
+                . It expires in one hour. Check your spam folder if it hasn't
+                arrived.
+              </Text>
+              <Button
+                type="button"
+                variant="outline"
+                colorPalette="gray"
+                onClick={resendReset}
+              >
+                Send it again
+              </Button>
+              <ChakraLink
+                asChild
+                fontSize="sm"
+                color="brandGreen.fg"
+                textDecoration="underline"
+              >
+                <NextLink href="/signin">Back to sign in</NextLink>
+              </ChakraLink>
+            </VStack>
           )}
+
           {state === "forgot" && (
-            <>
-              <Field.Root invalid={!!error}>
+            <VStack as="form" onSubmit={requestReset} gap={4} align="stretch" noValidate>
+              <Text fontSize="sm" color="fg.muted">
+                Enter your email and we'll send you a link to reset your
+                password.
+              </Text>
+
+              <FormErrorAlert>{notice}</FormErrorAlert>
+              <FormErrorAlert>{formError}</FormErrorAlert>
+
+              <Field.Root invalid={touched.email && !!emailFieldError}>
                 <Field.Label>Email</Field.Label>
                 <Input
                   type="email"
+                  name="email"
+                  autoComplete="email"
+                  value={email}
                   onChange={(e) => {
                     setEmail(e.target.value);
-                    setError("");
+                    setEmailFieldError("");
+                    setFormError("");
                   }}
+                  onBlur={() =>
+                    setTouched((prev) => ({ ...prev, email: true }))
+                  }
                 />
-                <Field.ErrorText>{error}</Field.ErrorText>
+                <Field.ErrorText>{emailFieldError}</Field.ErrorText>
               </Field.Root>
-              <Text>
-                Enter your email and we will send you a link to reset your
-                password.
-              </Text>
+
+              {/* mt={2} over gap={4}: submit is the end of the form. */}
               <Button
-                colorPalette={"brandTeal"}
+                type="submit"
+                colorPalette="brandGreen"
                 loading={isSubmitting}
-                onClick={resetPassword}
+                loadingText="Sending link…"
+                mt={2}
               >
-                Request Reset
+                Send reset link
               </Button>
-            </>
+
+              <ChakraLink
+                asChild
+                fontSize="sm"
+                color="brandGreen.fg"
+                textDecoration="underline"
+              >
+                <NextLink href="/signin">Back to sign in</NextLink>
+              </ChakraLink>
+            </VStack>
           )}
+
           {state === "token" && (
-            <>
-              <Field.Root invalid={!!error}>
-                <Field.Label>New Password</Field.Label>
+            <VStack as="form" onSubmit={setNewPassword} gap={4} align="stretch" noValidate>
+              <FormErrorAlert>{formError}</FormErrorAlert>
+
+              <Field.Root invalid={touched.password && !!passwordFieldError}>
+                <Field.Label>New password</Field.Label>
                 <Input
                   type="password"
+                  name="password"
+                  autoComplete="new-password"
+                  value={password}
                   onChange={(e) => {
                     setPassword(e.target.value);
-                    setError("");
+                    setPasswordFieldError("");
+                    setFormError("");
                   }}
+                  onBlur={() =>
+                    setTouched((prev) => ({ ...prev, password: true }))
+                  }
                 />
-                <Field.HelperText display={error === "" ? "block" : "none"}>
-                  Password must be at least 12 characters
-                </Field.HelperText>
-                <Field.ErrorText>{error}</Field.ErrorText>
+                {!passwordFieldError && (
+                  <Field.HelperText>
+                    Password must be at least 12 characters.
+                  </Field.HelperText>
+                )}
+                <Field.ErrorText>{passwordFieldError}</Field.ErrorText>
               </Field.Root>
+
               <Button
-                colorPalette={"brandTeal"}
+                type="submit"
+                colorPalette="brandGreen"
                 loading={isSubmitting}
-                onClick={setNewPassword}
+                loadingText="Setting password…"
+                mt={2}
               >
-                Set New Password
+                Set new password
               </Button>
-            </>
+            </VStack>
           )}
-        </Stack>
+        </VStack>
       </Card.Body>
     </Card.Root>
   );

@@ -53,3 +53,40 @@ describe("validateJSON", () => {
     expect(validateJSON(json, requiredFields)).toBe(true);
   });
 });
+
+// Regression coverage for GitHub issue #95. The dashboard used to store an
+// empty "required fields" textbox as `[""]` -- an array containing one
+// empty string -- in the experiment's Firestore doc
+// (components/dashboard/ExperimentValidation.js filters those out on input
+// now, but legacy docs still carry the old shape). `requiredFields.every(...)`
+// then demanded a field literally named "", which no submission has, so
+// validation always failed against these legacy docs. validateJSON now
+// normalizes the incoming list before checking it.
+describe("empty/blank entries in requiredFields (#95)", () => {
+  const json = `{"foo": "bar"}`;
+
+  it("treats [\"\"] the same as no required fields", () => {
+    expect(validateJSON(json, [""])).toBe(true);
+  });
+
+  it("treats [] the same as no required fields", () => {
+    expect(validateJSON(json, [])).toBe(true);
+  });
+
+  it("treats undefined the same as no required fields", () => {
+    expect(validateJSON(json, undefined)).toBe(true);
+  });
+
+  it("ignores whitespace-only entries", () => {
+    expect(validateJSON(json, ["   ", "\t", ""])).toBe(true);
+  });
+
+  it("still enforces a genuine field alongside empty/whitespace entries", () => {
+    expect(validateJSON(json, ["", "  ", "foo"])).toBe(true);
+    expect(validateJSON(json, ["", "  ", "missing"])).toBe(false);
+  });
+
+  it("still rejects invalid JSON even when requiredFields is empty-only", () => {
+    expect(validateJSON(`{"foo": "bar"`, [""])).toBe(false);
+  });
+});

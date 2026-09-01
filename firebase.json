@@ -53,6 +53,46 @@
       {
         "source": "/api/queuestatus",
         "function": "apiqueuestatus"
+      },
+      {
+        "source": "/api/createexperiment",
+        "function": "createexperiment"
+      },
+      {
+        "source": "/api/connectprovider",
+        "function": "connectprovider"
+      },
+      {
+        "source": "/api/connectstatictokenprovider",
+        "function": "connectstatictokenprovider"
+      },
+      {
+        "source": "/api/disconnectprovider",
+        "function": "disconnectprovider"
+      },
+      {
+        "source": "/api/getprovideraccesstoken",
+        "function": "getprovideraccesstoken"
+      },
+      {
+        "source": "/api/providersetupwarnings",
+        "function": "providersetupwarnings"
+      },
+      {
+        "source": "/api/deleteaccount",
+        "function": "deleteaccount"
+      },
+      {
+        "source": "/api/finalize",
+        "function": "apifinalize"
+      },
+      {
+        "source": "/api/sendcontactemailverification",
+        "function": "sendcontactemailverification"
+      },
+      {
+        "source": "/api/verifycontactemail",
+        "function": "verifycontactemail"
       }
     ]
   },

@@ -8,6 +8,20 @@ on:
     branches: ["test"]
   workflow_dispatch:
 
+# Deploys to one Firebase project must not overlap. Two merges landing within
+# a few minutes of each other used to start two deploys at once; the second
+# one's update of the SSR function was rejected with a 409 ("unable to queue
+# the operation") because the first was still mid-flight, and the site kept
+# serving the previous build. Note that firebase deploy reports that failure
+# as a warning and still exits 0, so the collision does not show up as a red
+# check -- keeping deploys serialized is what prevents it, not the exit code.
+# cancel-in-progress stays false on purpose --
+# a deploy that is already updating functions should be allowed to finish,
+# not killed halfway through. Later runs queue behind it instead.
+concurrency:
+  group: deploy-test
+  cancel-in-progress: false
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   #FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
@@ -20,6 +34,20 @@ env:
   NEXT_PUBLIC_GENERATE_STATE: "https://datapipe-test.web.app/api/generateoauthstate"
   NEXT_PUBLIC_BASE_URL: "https://datapipe-test.web.app"
   NEXT_PUBLIC_OSF_ENV: ""
+  # Frontend-only: drives the TestEnvironmentWarning banner gate (see
+  # components/TestEnvironmentWarning.js). Distinct from NEXT_PUBLIC_OSF_ENV
+  # above, which is being retired as OSF is deprecated and was left "" here
+  # -- that meant the banner stopped rendering on this site once OSF_ENV
+  # went empty. Not echoed into functions/.env; functions has no use for it.
+  NEXT_PUBLIC_DEPLOY_ENV: "test"
+  # sandbox.zenodo.org. Without this the TEST site creates real
+  # depositions on the live Zenodo using the researcher's real account.
+  NEXT_PUBLIC_ZENODO_ENV: "sandbox."
+  # Google Picker (folder selection for gdrive experiments). The API key is
+  # restricted to the Picker API + our domains, so it is safe in the browser
+  # bundle -- not a secret. The project number is public.
+  NEXT_PUBLIC_GOOGLE_PICKER_API_KEY: "AIzaSyDLg6uprrY5BPjY4ClVZGSvy7sd_ug0t9M"
+  NEXT_PUBLIC_GDRIVE_PROJECT_NUMBER: "699904257039"
 
 jobs:
   deploy:
@@ -41,16 +69,13 @@ jobs:
         with:
           credentials_json: '${{ secrets.GOOGLE_TEST_CREDENTIALS }}' # Replace with the name of your GitHub Actions secret
       - name: Install firebase tools
-        run: npm install -g firebase-tools@15.8.0
+        run: npm install -g firebase-tools@15.28.1
       - name: Enable firebase webframeworks
         run: firebase experiments:enable webframeworks
       - name: Install dependencies 
         run: npm ci
-      - name: Install dependencies and build metadata
-        working-directory: functions/metadata
-        run: |
-          npm ci
-          npm run build
+      # functions/metadata is a pre-built vendored dist (see functions/metadata/README.md);
+      # it is installed as a file: dependency by the functions npm ci below.
       - name: Create functions environment file
         working-directory: functions
         run: |
@@ -59,6 +84,34 @@ jobs:
           echo "REDIRECT_URI=https://datapipe-test.web.app/oauth2/callback" >> .env
           echo "TOKEN_ENCRYPTION_KEY=${{ secrets.FIRESTORE_KEY_TEST }}" >> .env
           echo "NEXT_PUBLIC_OSF_ENV=" >> .env
+          # Google Drive client secret for the deployed test site. Client id and
+          # redirect uri are non-secret and live in functions/.env.datapipe-test.
+          echo "GDRIVE_CLIENT_SECRET=${{ secrets.TEST_GDRIVE_CLIENT_SECRET }}" >> .env
+          # Zenodo OAuth client secret for the deployed test site. Client id,
+          # redirect uri and ZENODO_ENV are non-secret and live in
+          # functions/.env.datapipe-test.
+          echo "ZENODO_CLIENT_SECRET=${{ secrets.TEST_ZENODO_CLIENT_SECRET }}" >> .env
+          # Resend for the deployed test site (functions/src/mail-delivery.ts).
+          # SET this one. The test site is the only place mail DELIVERY is
+          # exercised before production -- the emulator short-circuits before
+          # sending and the unit suites mock the transport -- so it is where a
+          # mail change is proved to pass DKIM/SPF and reach an inbox. Use a
+          # SEPARATE sending-only key from prod, on the same Resend account
+          # (the From domain is the same, so it has to be the same account).
+          # Unset is still safe rather than silent: the onmailcreated trigger
+          # records a terminal MailConfigMissingError on each mail document and
+          # sends nothing. Reputation and daily quota are shared with prod --
+          # see docs/deploy-contact-email.md §2(d).
+          echo "RESEND_API_KEY=${{ secrets.TEST_RESEND_API_KEY }}" >> .env
+          # Not secret, so literals here, the same way REDIRECT_URI above is.
+          # Same sender as production: Resend verifies the DOMAIN
+          # (jspsych.org), not the deployment, and datapipe-test.web.app is not
+          # a verified domain -- sending from it is a 403 validation_error,
+          # which is why contact-email codes never arrived on the test site.
+          # Only the display name differs, so test mail is recognisable in an
+          # inbox.
+          echo "MAIL_FROM=DataPipe (test) <datapipe-notifications@jspsych.org>" >> .env
+          echo "MAIL_REPLY_TO=datapipe@jspsych.org" >> .env
       - name: Install dependencies and build functions
         working-directory: functions
         run: |

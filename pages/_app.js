@@ -3,7 +3,8 @@ import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import { UserContext } from "../lib/context";
 import { ChakraProvider } from "@chakra-ui/react";
-import { Box, Center } from "@chakra-ui/react";
+import { Box, Flex } from "@chakra-ui/react";
+import { ThemeProvider } from "next-themes";
 
 import { auth } from "../lib/firebase";
 import { useAuthState } from "react-firebase-hooks/auth";
@@ -24,31 +25,79 @@ function MyApp({ Component, pageProps }) {
       justifyContent="space-between"
     >
       <Navbar />
-      <Center
+      {/* This was a <Center>, which is `align-items: center` in BOTH axes:
+          the navbar-to-content gap was never specified, it was whatever
+          flexbox had left over -- zero on any page taller than the viewport
+          (the owner's "very tight" report) and a floating, vertically
+          centered column on any page shorter than it. The gap is now
+          declared once, here, for every page that uses the default layout,
+          rather than each page growing its own top margin.
+
+          DESIGN.md §4 ladder: pt 8/12 opens the page under the nav; the
+          larger pb 12/16 makes the hand-off into the footer band deliberate
+          and asymmetric -- more air before a change of surface than after a
+          change of chrome. */}
+      <Flex
+        as="main"
+        direction="column"
+        alignItems="center"
+        w="100%"
         flexGrow={1}
         flexShrink={0}
         flexBasis="auto"
-        justifySelf="flex-start"
+        px={4}
+        pt={{ base: 8, md: 12 }}
+        pb={{ base: 12, md: 16 }}
       >
         {page}
-      </Center>
+      </Flex>
       <Footer />
       {
-        process.env.NEXT_PUBLIC_OSF_ENV !== "" && <TestEnvironmentWarning />
+        /* Truthy AND not "production": NEXT_PUBLIC_DEPLOY_ENV is unset
+           (falsy) in production deploys, and this second `!== "production"`
+           check means an accidental truthy value there still wouldn't ship
+           the banner. TestEnvironmentWarning itself repeats both checks as
+           a second guard, so it stays safe to mount from any other call
+           site too. */
+        !!process.env.NEXT_PUBLIC_DEPLOY_ENV &&
+          process.env.NEXT_PUBLIC_DEPLOY_ENV !== "production" && (
+            <TestEnvironmentWarning />
+          )
       }
     </Box>
   ));
 
+  // Dark is DataPipe's only mode (DESIGN.md §2). forcedTheme, not just
+  // defaultTheme: visitors who picked Light/System while the toggle existed
+  // still have that choice in localStorage, and it must not resurrect a
+  // retired mode.
   return (
-    <ChakraProvider value={system}>
-      <UserContext.Provider value={{ user, loading }}>
-        <Head>
-          <title>DataPipe</title>
-          <meta name="viewport" content="width=device-width, initial-scale=1" />
-        </Head>
-        {getLayout(<Component {...pageProps} />)}
-      </UserContext.Provider>
-    </ChakraProvider>
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="dark"
+      forcedTheme="dark"
+      disableTransitionOnChange
+    >
+      <ChakraProvider value={system}>
+        <UserContext.Provider value={{ user, loading }}>
+          <Head>
+            <title>DataPipe</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            {/* Vector favicon first so modern browsers get the new mark at any
+                resolution; PNG/ICO fallbacks follow for browsers that don't
+                support type="image/svg+xml" icons. */}
+            <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+            <link rel="icon" href="/favicon-32x32.png" sizes="32x32" type="image/png" />
+            <link rel="icon" href="/favicon-16x16.png" sizes="16x16" type="image/png" />
+            <link rel="shortcut icon" href="/favicon.ico" />
+            <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+            <link rel="manifest" href="/site.webmanifest" />
+            <meta name="theme-color" content="#1C2A22" />
+          </Head>
+          {getLayout(<Component {...pageProps} />)}
+        </UserContext.Provider>
+      </ChakraProvider>
+    </ThemeProvider>
   );
 }
 

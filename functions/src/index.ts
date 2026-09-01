@@ -9,11 +9,36 @@ import { checkEmailConflict } from "./check-email-conflict.js";
 import { scheduledTokenRefresh } from "./scheduled-token-refresh.js";
 import { scheduledUploadRetry } from "./scheduled-upload-retry.js";
 import { scheduledPendingRecovery } from "./scheduled-pending-recovery.js";
+import { onExperimentGrew, onUploadQueueChanged } from "./compaction-triggers.js";
+// A SECOND trigger on uploadQueue/{docId}, deliberately not folded into
+// onUploadQueueChanged above -- see the header of upload-failure-notify.ts.
+import { onUploadFailure } from "./upload-failure-notify.js";
+// Delivery for the `mail` collection. Replaces the deprecated Firebase
+// "Trigger Email" extension with a direct Resend send (Amazon SES until AWS
+// denied production access); mail.ts's document contract is unchanged through
+// both swaps, so nothing on the write side moved.
+import { onMailCreated } from "./mail-delivery.js";
+// Re-drives mail whose failure has since stopped being true (a quota that has
+// rolled over, a blip that has passed). onMailCreated cannot: an
+// onDocumentCreated trigger does not re-fire on updates, so before this existed
+// a `retryable` ERROR was retried by nobody.
+import { scheduledMailRetry } from "./scheduled-mail-retry.js";
+// The verification round trip (plan §2.2, §5 package P3): a resend-capable
+// send + a hash-checked verify, both bearer-token onRequest endpoints in the
+// same shape as deleteAccount / apiQueueStatus below.
+import { sendContactEmailVerification } from "./send-contact-email-verification.js";
+import { verifyContactEmail } from "./verify-contact-email.js";
 import { apiQueueStatus } from "./api-queue-status.js";
 import { generateOAuthState } from "./generate-oauth-state.js";
+import { connectProvider, connectStaticTokenProvider, disconnectProvider } from "./connect-provider.js";
 import { saveOsfToken } from "./save-osf-token.js";
 import { getOsfToken } from "./get-osf-token.js";
 import { onUserDeleted } from "./on-user-deleted.js";
+import { deleteAccount } from "./delete-account.js";
+import { createExperiment } from "./create-experiment.js";
+import { getProviderAccessToken } from "./get-provider-access-token.js";
+import { providerSetupWarnings } from "./provider-setup-warnings.js";
+import { apiFinalize, finalizeTask } from "./api-finalize.js";
 
 setGlobalOptions({
   maxInstances: 20
@@ -29,9 +54,25 @@ export {
   scheduledTokenRefresh as scheduledtokenrefresh,
   scheduledUploadRetry as scheduleduploadretry,
   scheduledPendingRecovery as scheduledpendingrecovery,
+  onExperimentGrew as onexperimentgrew,
+  onUploadQueueChanged as onuploadqueuechanged,
+  onUploadFailure as onuploadfailure,
+  onMailCreated as onmailcreated,
+  scheduledMailRetry as scheduledmailretry,
+  sendContactEmailVerification as sendcontactemailverification,
+  verifyContactEmail as verifycontactemail,
   apiQueueStatus as apiqueuestatus,
   generateOAuthState as generateoauthstate,
+  connectProvider as connectprovider,
+  connectStaticTokenProvider as connectstatictokenprovider,
+  disconnectProvider as disconnectprovider,
   saveOsfToken as saveosftoken,
   getOsfToken as getosftoken,
-  onUserDeleted as onuserdeleted
+  onUserDeleted as onuserdeleted,
+  deleteAccount as deleteaccount,
+  createExperiment as createexperiment,
+  getProviderAccessToken as getprovideraccesstoken,
+  providerSetupWarnings as providersetupwarnings,
+  apiFinalize as apifinalize,
+  finalizeTask as finalizetask
 };

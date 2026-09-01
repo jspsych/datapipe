@@ -2,9 +2,44 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /users/{userId} {
+      // contactEmailVerified is server-only in the TRUE direction. The client
+      // may write it -- it has to, so that saving a new address resets the
+      // flag -- but only ever as false. No client can self-certify an address.
+      //
+      // The test is on the POST-STATE (request.resource.data), not on the
+      // diff, and that is the point: on an update, request.resource.data is
+      // the merged document, so changing the address on an already-verified
+      // account WITHOUT resetting the flag leaves `true` standing against a
+      // new, unconfirmed address -- and is denied here. lib/contact-email.js's
+      // buildContactEmailUpdate() always emits contactEmailVerified: false for
+      // exactly this reason.
+      //
+      // The `in` guard tolerates the case where the field is absent from the
+      // post-state entirely (a first-ever address on a document that has never
+      // carried the flag). Absent is not verified, so there is nothing to
+      // refuse; reading a missing key would instead error and deny a
+      // legitimate write.
+      function contactEmailNotSelfCertified() {
+        return !('contactEmailVerified' in request.resource.data)
+          || request.resource.data.contactEmailVerified == false;
+      }
+      // New accounts (federated or email/password) write only the slim
+      // { uid, email, experiments } shape plus, since the contact-email
+      // feature, the contactEmail* group -- see ensureUserDocument in
+      // lib/user-bootstrap.js. The OSF-era keys stay on the whitelist so
+      // existing documents remain writable, but they are no longer required:
+      // the osfToken == '' assertion below only applies when the field is
+      // actually present, because a new account never has one.
+      //
+      // Adding the four contactEmail* keys to hasOnly() is what makes the
+      // seeded shape writable at all; hasAll() is unchanged, so contactEmail
+      // remains optional -- an ORCID signup has no address to seed and meets
+      // the gate on its first /admin load instead.
       function isAccountCreation() {
-        return request.resource.data.keys().hasOnly(['email', 'experiments', 'osfToken', 'osfTokenValid', 'uid', 'usingPersonalToken', 'refreshToken', 'refreshTokenExpires', 'authToken', 'authTokenExpires', 'osfUserId', 'displayName', 'authMethod', 'createdAt'])
-          && request.resource.data.osfToken == '';
+        return request.resource.data.keys().hasOnly(['email', 'experiments', 'osfToken', 'osfTokenValid', 'uid', 'usingPersonalToken', 'refreshToken', 'refreshTokenExpires', 'authToken', 'authTokenExpires', 'osfUserId', 'displayName', 'authMethod', 'createdAt', 'contactEmail', 'contactEmailVerified', 'contactEmailUpdatedAt', 'contactEmailSource'])
+          && request.resource.data.keys().hasAll(['uid', 'email', 'experiments'])
+          && (!('osfToken' in request.resource.data) || request.resource.data.osfToken == '')
+          && contactEmailNotSelfCertified();
       }
       function isTokenMethodUpdate() {
         return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usingPersonalToken']);
@@ -12,18 +47,158 @@ service cloud.firestore {
       function isExperimentsUpdate() {
         return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['experiments']);
       }
+      // A researcher may set their own notification address, and nothing else
+      // in the same write: a single operation touching contactEmail AND
+      // experiments matches no shape here and fails whole. That is the
+      // established posture of this rule -- one narrow shape per intent --
+      // and it is what stops a contact-email save from being a vehicle for
+      // anything else on the document.
+      //
+      // The 254-character cap mirrors MAX_CONTACT_EMAIL_LENGTH in
+      // lib/contact-email.js (the longest addr-spec SMTP must accept).
+      // Deliverability is not decided here; format is checked client-side and
+      // confirmed by the verification code. This rule only has to stop a
+      // client from parking arbitrary bulk on the document.
+      function isContactEmailUpdate() {
+        return request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['contactEmail', 'contactEmailVerified', 'contactEmailUpdatedAt', 'contactEmailSource'])
+          && request.resource.data.contactEmail is string
+          && request.resource.data.contactEmail.size() > 0
+          && request.resource.data.contactEmail.size() <= 254
+          && contactEmailNotSelfCertified();
+      }
       allow read: if(request.auth.uid == userId);
       allow write: if(request.auth.uid == userId) &&
-        (isAccountCreation() || isTokenMethodUpdate() || isExperimentsUpdate());
+        (isAccountCreation() || isTokenMethodUpdate() || isExperimentsUpdate()
+          || isContactEmailUpdate());
     }
+    // NO match block for contactEmailVerifications/{uid}, and that is
+    // deliberate. It holds the SHA-256 of the verification code alongside the
+    // hash of the address it was sent to, and `allow read` above hands the
+    // owner their entire user document -- so the hash cannot live there, where
+    // the person being verified could read it. Firestore default-denies every
+    // unmatched path, which makes this collection invisible and unwritable to
+    // every client and reachable only by the Admin SDK. Adding a rule here
+    // could only weaken that.
+    //
+    // Same for the `mail` collection (functions/src/mail.ts): unmatched,
+    // therefore already closed. Written down so nobody "fixes" the absence
+    // later by granting access.
+    //
+    // Same again for `systemStatus/mail` (functions/src/mail-availability.ts),
+    // which records how much of the Resend daily quota has been used and until
+    // when sending is paused. A client that could read it would learn nothing
+    // about any researcher, but it would learn DataPipe's operational posture,
+    // and the account page does not need it to: the verification endpoint
+    // answers 503 with `code: "mail-unavailable"` and the UI renders from that.
+    // Keeping this unmatched keeps a purely operational document off the wire.
     match /experiments/{experimentId} {
+      function baseFields() {
+        return request.resource.data.keys().hasAll(['active', 'activeBase64', 'activeConditionAssignment', 'id', 'owner', 'title', 'sessions', 'nConditions', 'currentCondition', 'useValidation', 'allowJSON', 'allowCSV', 'requiredFields', 'maxSessions', 'limitSessions'])
+      }
+      // Finalization is PERMANENT (docs/finalization-spec.md, decision 1):
+      // finalized/finalizedAt/finalization are written only by admin-SDK code
+      // (api-finalize.ts / finalization.ts), which never goes through these
+      // rules at all. This is what stops the CLIENT SDK path from doing it
+      // instead -- diff().affectedKeys() flags a key the instant a write
+      // would add, change, OR remove it, so this blocks every direction at
+      // once: clearing `finalized` back to false to keep submitting after the
+      // loose files are gone, and setting it early to forge a finalized state
+      // that was never actually merged.
+      //
+      // `compaction` and `collisionCache` are listed for a different but
+      // equally concrete reason: both are server-managed maps holding
+      // Timestamps that server code calls .toMillis() on directly, and
+      // compaction.compactingUntil is read on the participant SUBMISSION path
+      // (compaction-gate.ts). A client writing a non-Timestamp there would
+      // have broken every submission to that experiment. The gate is now
+      // defensive about that too, but the field has no business being
+      // client-writable in the first place. Verified no client code writes
+      // either map.
+      //
+      // `uploadFailure` (functions/src/upload-failure-notify.ts) joins them for
+      // exactly the same two reasons: it holds server-written Timestamps that
+      // the notifier calls .toMillis() on, and a client that could clear
+      // uploadFailure.notifiedAt could make DataPipe mail them once per failed
+      // FILE instead of once per episode -- one participant submission can
+      // produce twenty queue entries.
+      //
+      // DEPLOY ORDER: this file ships BEFORE the functions, and it is not
+      // optional. The notifier writes uploadFailure with the Admin SDK, which
+      // these rules never see -- so if the functions land first, every
+      // experiment starts carrying a field that the deployed rules still do
+      // not protect, and any client merge-write can clear notifiedAt for the
+      // duration of the gap. Nothing breaks loudly; the notifier just quietly
+      // re-arms on demand. Rules first closes the window before it opens.
+      function serverManagedFieldsUntouched() {
+        return !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['finalized', 'finalizedAt', 'finalization', 'compaction', 'collisionCache', 'uploadFailure']);
+      }
+      // metadataActive decides WHERE a submission is stored -- container root
+      // with it off, data/raw/<flattened name> with it on (uploadPathFor in
+      // functions/src/metadata-derived-files.ts) -- and therefore which
+      // namespace the collision cache claims in. Flipping it mid-collection
+      // strands every file already written at the old location and resets
+      // duplicate detection against them: a participant resubmitting a
+      // filename from before the flip is no longer recognised and gets a
+      // second file. On Drive, where the cache is the only duplicate gate,
+      // there is no provider-side conflict to catch that either.
+      //
+      // So it freezes at the FIRST SUBMISSION rather than at creation. Before
+      // any data exists none of the above is reachable and the researcher is
+      // free to correct the choice -- which is the case they actually hit,
+      // creating an experiment and fixing the setting before piloting.
+      // Experiments already mid-collection are covered by the same test with
+      // no migration: they have sessions, so they are already locked.
+      //
+      // `sessions` is the honest signal; `collisionCache` is the
+      // tamper-resistant one, since serverManagedFieldsUntouched() above
+      // forbids clients writing it at all. Either one being present means
+      // data has landed.
+      function hasCollectedData() {
+        return (('sessions' in resource.data) && resource.data.sessions is int && resource.data.sessions > 0) ||
+          ('collisionCache' in resource.data);
+      }
+      function metadataChoiceRespected() {
+        return !hasCollectedData() ||
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['metadataActive']);
+      }
+      // UPDATE shape: legacy-tolerant. An experiment created before the
+      // provider-migration schema carries the OSF triple and no
+      // storageProvider, and must stay editable through the OSF wind-down.
       function verifyFields() {
-        return request.resource.data.keys().hasAll(['active', 'activeBase64', 'activeConditionAssignment', 'id', 'osfRepo', 'osfComponent', 'osfFilesLink', 'owner', 'title', 'sessions', 'nConditions', 'currentCondition', 'useValidation', 'allowJSON', 'allowCSV', 'requiredFields', 'maxSessions', 'limitSessions'])
+        return baseFields() && serverManagedFieldsUntouched() && metadataChoiceRespected() &&
+          (('storageProvider' in request.resource.data)
+            ? request.resource.data.keys().hasAll(['storageProvider', 'providerContainer'])
+            : request.resource.data.keys().hasAll(['osfRepo', 'osfComponent', 'osfFilesLink']));
+      }
+      // CREATE shape: strictly non-OSF. OSF is shutting down its projects
+      // feature, so no new experiment may be pointed at it.
+      //
+      // This rule -- not the UI -- is the gate that matters. OSF experiment
+      // creation was browser-driven: lib/experiment-creation.js wrote this
+      // document with the client SDK, so removing the option from
+      // pages/admin/new.js only hides it. Requiring storageProvider on create
+      // also closes the legacy no-provider branch above, which meant OSF by
+      // default (see getProviderForExperiment in
+      // functions/src/providers/index.ts).
+      // No new experiment is ever born finalized -- a create that already
+      // carries finalized/finalizedAt/finalization is exactly as forged as an
+      // update that adds them (see serverManagedFieldsUntouched() above), just
+      // with no prior document for diff() to compare against. `uploadFailure`
+      // is on this list for the same reason: serverManagedFieldsUntouched()
+      // governs updates only, so without it here a client could simply be born
+      // holding an armed notifiedAt and never be mailed about a failure.
+      function isCreatableProvider() {
+        return ('storageProvider' in request.resource.data) &&
+          request.resource.data.storageProvider != 'osf' &&
+          request.resource.data.keys().hasAll(['storageProvider', 'providerContainer']) &&
+          !request.resource.data.keys().hasAny(['finalized', 'finalizedAt', 'finalization', 'uploadFailure']);
       }
       allow read: if(request.auth.uid != null) &&
         resource.data.owner == request.auth.uid;
       allow create: if(request.auth.uid != null) &&
-       verifyFields() &&
+       baseFields() && isCreatableProvider() &&
         request.resource.data.owner == request.auth.uid;
       allow update: if(request.auth.uid == resource.data.owner) &&
        verifyFields() &&

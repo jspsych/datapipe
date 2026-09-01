@@ -1,4 +1,9 @@
 import { storage } from "./app.js";
+import {
+  encryptPayload,
+  decryptPayload,
+  ENCRYPTED_CONTENT_TYPE,
+} from "./payload-crypto.js";
 
 const PENDING_PREFIX = "pending-data";
 
@@ -30,18 +35,28 @@ export async function persistPending(
 
   const bucket = storage.bucket();
   const file = bucket.file(storagePath);
-  await file.save(JSON.stringify(envelope), { contentType: "application/json" });
+  // Encrypted at rest: this object holds a participant's raw submission for up
+  // to 7 days. See payload-crypto.ts.
+  await file.save(encryptPayload(JSON.stringify(envelope)), {
+    contentType: ENCRYPTED_CONTENT_TYPE,
+  });
   return storagePath;
 }
 
 /**
  * Read a pending envelope from Cloud Storage.
+ *
+ * Objects written before payload encryption shipped are plaintext JSON and
+ * pass straight through decryptPayload(); marked objects are decrypted. A
+ * marked object that will not authenticate throws PayloadDecryptionError,
+ * which promoteToQueue in scheduled-pending-recovery.ts handles SEPARATELY
+ * from a corrupt envelope -- it must not be deleted as garbage.
  */
 export async function readPendingEnvelope(storagePath: string): Promise<PendingEnvelope> {
   const bucket = storage.bucket();
   const file = bucket.file(storagePath);
   const [contents] = await file.download();
-  return JSON.parse(contents.toString("utf-8")) as PendingEnvelope;
+  return JSON.parse(decryptPayload(contents).toString("utf-8")) as PendingEnvelope;
 }
 
 /**

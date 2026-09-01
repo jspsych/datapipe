@@ -2,8 +2,14 @@ import { Stack, Heading, Text, Button, Link } from "@chakra-ui/react";
 
 export default function Contact() {
   return (
-    <Stack w="100%" maxW={600} px={4} gap={8}>
-      <Heading as="h1" size="2xl">
+    // maxW 600 -> the committed 560px single-subject column; px={4} removed
+    // (the page gutter is set once in _app.js). gap 8 -> 4 with the heading
+    // carrying its own mb={4}: at a flat gap={8} the h1 sat exactly as far
+    // from the first paragraph as the paragraphs sat from each other, so the
+    // title did not read as a title. Now the body is one tight group and the
+    // heading is separated from it.
+    <Stack w="100%" maxW="560px" gap={4}>
+      <Heading as="h1" size="2xl" mb={4}>
         Contact Us
       </Heading>
       <Text>
@@ -20,8 +26,8 @@ export default function Contact() {
         you to post a new issue there.
       </Text>
       <Text>
-        If you need to contact us directly, you can email Josh de Leeuw at
-        jdeleeuw@vassar.edu.
+        If you need to contact us directly, you can email the DataPipe team at
+        datapipe@jspsych.org.
       </Text>
     </Stack>
   );
