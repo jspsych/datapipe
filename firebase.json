@@ -6,6 +6,9 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
+  "database": {
+    "rules": "database.rules.json"
+  },
   "hosting": {
     "source": ".",
     "ignore": [
@@ -17,6 +20,10 @@
       {
         "source": "/api/data",
         "function": "apidata"
+      },
+      {
+        "source": "/api/session",
+        "function": "apisessionstart"
       },
       {
         "source": "/api/condition",
@@ -107,6 +114,10 @@
     },
     "firestore": {
       "port": 8080,
+      "host": "localhost"
+    },
+    "database": {
+      "port": 9000,
       "host": "localhost"
     },
     "hosting": {

@@ -1,0 +1,175 @@
+// Realtime Database security rules -- the staging tier for incremental session
+// upload (docs/streaming-ingest-design.md).
+//
+// WHAT THIS TREE IS FOR
+//
+// A participant's browser writes each trial here as it is produced, so that a
+// session which never reaches /api/data -- closed tab, dead wifi, crashed
+// browser -- is still recoverable. RTDB is the store because it does not bill
+// operations at all and because onDisconnect() lets Firebase's own servers
+// mark a session abandoned with zero function invocations.
+//
+// These rules are the ONLY thing standing between an unauthenticated writer
+// and this tree. Experiments are served from arbitrary hosts (Prolific, lab
+// domains, jsPsych's CDN pages), so there is no Firebase user to check and no
+// App Check token to require. Read them as the security boundary they are.
+//
+// THE FOUR PROPERTIES
+//
+//  1. WRITE-ONLY. There is no `.read: true` anywhere in this file, at any
+//     depth. A client cannot read back even the trials it wrote itself. Staged
+//     trials are participant data belonging to a researcher, and the session
+//     id is a bearer capability handed to a browser -- if reads were allowed,
+//     anyone holding a session id could pull another participant's data out of
+//     it. Only the Admin SDK (functions/src/staging.ts) ever reads this tree.
+//
+//  2. APPEND-ONLY. `!data.exists()` on each trial key. A trial cannot be
+//     rewritten or deleted once written, so a compromised or buggy client
+//     cannot retroactively alter a participant's record. It also makes a
+//     retrying client idempotent: re-flushing the same seq is a no-op refusal,
+//     not a corruption. See "ORDERING AND DUPLICATES" below.
+//
+//  3. SIZE-CAPPED. 64 KiB per trial, and a sequence number of at most four
+//     digits (10,000 trials). Rules cannot count children, so this is the only
+//     bound expressible here; the sweep enforces a total-bytes ceiling of its
+//     own when it assembles a session (functions/src/staging.ts).
+//
+//  4. GATED ON AN OPEN SESSION. Every write requires
+//     openSessions/{sessionId} to exist, and only POST /api/session
+//     (functions/src/api-session-start.ts) ever creates one -- after running
+//     the same four checks api-data.ts runs today: experiment exists, not
+//     finalized, active, under maxSessions.
+//
+// WHY THERE IS NO `openExperiments` MIRROR
+//
+// The design doc proposed mirroring each experiment's open/closed state into
+// RTDB, because RTDB rules cannot read Firestore and therefore cannot see
+// `active` / `finalized` / `maxSessions`. That mirror was derived state, so it
+// needed a reconciliation pass to stop a half-failed toggle from leaving an
+// experiment permanently open to staging -- and it still left the tree
+// writable by anyone who could read an experiment id out of an experiment's
+// own JavaScript, which is public by construction.
+//
+// Server-minted session ids replace it. The gates run in a function, against
+// Firestore, where they already work and are already tested; what lands in
+// RTDB is a single unguessable id that no client can forge. The mirror, its
+// reconciliation pass, and the "experiment permanently closed or permanently
+// open" failure mode are all gone.
+//
+// WHY staging IS KEYED BY SESSION, NOT BY EXPERIMENT
+//
+// The doc's shape was staging/{experimentId}/{sessionId}. Keying by session
+// alone is strictly safer: the experiment id is bound to the session inside
+// openSessions, by the server, so the client never supplies it on the write
+// path and there is no experimentId/sessionId pairing for these rules to have
+// to re-verify. Grouping by experiment would only have helped a human reading
+// the RTDB console.
+//
+// ORDERING AND DUPLICATES
+//
+// `seq` is assigned by the client and is append-only here, which makes a
+// replayed flush idempotent -- but a retrying client must not renumber. The
+// assembly step deliberately TOLERATES GAPS (a lost flush is a hole in a
+// recovered partial session, not a reason to reject the whole thing).
+{
+  "rules": {
+    // Default deny, restated explicitly. Everything below narrows from here,
+    // and nothing above a leaf grants access -- RTDB rules cascade DOWNWARD,
+    // so a `true` at any ancestor would silently open the whole subtree and no
+    // deeper rule could take it back.
+    ".read": false,
+    ".write": false,
+
+    // openSessions/{sessionId} = { experimentId, startedAt, expiresAt }
+    //
+    // The capability table. Written only by api-session-start.ts, deleted only
+    // by staging.ts, and readable by NOBODY: the block below carries no
+    // `.read` and no `.write`, so it inherits the root deny above and stays
+    // invisible and unwritable to every client while remaining fully available
+    // to the Admin SDK.
+    //
+    // This is the same posture firestore.rules takes for
+    // contactEmailVerifications, `mail`, and systemStatus/mail, and it is
+    // written down for the same reason: so nobody later "fixes" the absence of
+    // an access rule by adding one, which could only weaken it.
+    //
+    // `.indexOn` is a query directive, NOT an access grant -- it tells RTDB to
+    // maintain a server-side index so listOldestOpenSessions() in staging.ts
+    // can bound its read with orderByChild('expiresAt').limitToFirst(). Without
+    // it the query still answers, but by shipping the entire node to the sweep
+    // and sorting there, which is the exact cost the bound exists to avoid.
+    "openSessions": {
+      ".indexOn": ["expiresAt"]
+    },
+
+    "staging": {
+      "$sessionId": {
+        "meta": {
+          // Written once, at session start. `!data.exists()` means a client
+          // cannot backdate a session to dodge the sweep's age tests.
+          "startedAt": {
+            ".write": "root.child('openSessions').child($sessionId).exists() && !data.exists()",
+            ".validate": "newData.isNumber()"
+          },
+          // Refreshed on every flush, in the same multi-path update that
+          // carries the trials, so it costs nothing extra. It is the sweep's
+          // backstop liveness signal for a client that died before
+          // onDisconnect could fire.
+          "lastFlushAt": {
+            ".write": "root.child('openSessions').child($sessionId).exists()",
+            ".validate": "newData.isNumber()"
+          },
+          // Set by Firebase's servers via the client's registered
+          // onDisconnect(), not by the client itself.
+          //
+          // Overwritable, and CLEARABLE (newData null), which is the one thing
+          // that keeps this from misfiring constantly: an online participant
+          // on hotel wifi drops and reconnects routinely, and on reconnect the
+          // plugin clears this and re-arms the onDisconnect. Without the clear
+          // path, a single 5-second blip would permanently mark a session
+          // abandoned and the sweep would write a partial file for a
+          // participant who is still sitting there doing trials.
+          "abandonedAt": {
+            ".write": "root.child('openSessions').child($sessionId).exists()",
+            ".validate": "newData.isNumber() || !newData.exists()"
+          },
+          // No other key belongs under meta.
+          //
+          // DEFENCE IN DEPTH, not the active gate. What actually refuses
+          // meta/anythingElse today is the absence of a `.write` grant for it
+          // -- only the three named children above have one. This exists so
+          // that a later edit which broadens `.write` to the `meta` level (to
+          // let a flush write meta in one operation, say) does not silently
+          // turn meta/ into free unbounded storage in a subtree whose entire
+          // billing model is storage. Named children take precedence over a
+          // $wildcard at the same level, so this does not apply to the three
+          // above.
+          "$other": {
+            ".validate": false
+          }
+        },
+        "trials": {
+          "$seq": {
+            ".write": "root.child('openSessions').child($sessionId).exists() && !data.exists()",
+            // One trial's JSON, as a string. Stored as a string rather than a
+            // parsed object on purpose: it round-trips byte for byte, it
+            // cannot smuggle a deep or wide object shape past a rule that has
+            // no way to bound nesting, and the size cap below then means
+            // exactly what it says.
+            //
+            // 64 KiB is roughly 13x the top of the design doc's 0.5-5 KB
+            // per-trial range -- generous enough for a trial carrying an
+            // embedded response blob, tight enough that the 10,000-key
+            // ceiling is a real bound rather than a formality.
+            ".validate": "$seq.matches(/^[0-9]{1,4}$/) && newData.isString() && newData.val().length <= 65536"
+          }
+        },
+        // Nothing but meta/ and trials/ may exist under a session. Defence in
+        // depth on the same terms as the $other under meta above.
+        "$other": {
+          ".validate": false
+        }
+      }
+    }
+  }
+}
