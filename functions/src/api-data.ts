@@ -62,6 +62,17 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
   //
   // Never throws: discardSession swallows its own errors, because orphaned
   // staging data is a sweep's problem and must never turn a 201 into a 500.
+  //
+  // ORDERING: always awaited BEFORE res.json(), never after. On the branches
+  // that reach cleanupPending() that is already true, because those clean up
+  // ahead of responding. On the four gates above it is a deliberate departure
+  // from the surrounding style -- writeLog() there runs AFTER the response --
+  // and the difference is that a log write losing a race costs a log line,
+  // while this one leaves a participant's trials sitting in RTDB. Work queued
+  // after a response is not guaranteed to run: the instance can be frozen or
+  // scaled down the moment the response is flushed. Same reasoning as the
+  // "logs are written BEFORE the response here" note on the NAME_CONFLICT
+  // branch below.
   const discardStaging = async () => {
     if (sessionId) await discardSession(sessionId);
   };
@@ -104,24 +115,24 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
   // finalizing does not require a researcher to also turn data collection
   // off, and this message is the one that should surface either way.
   if (exp_data.finalized) {
+    await discardStaging();
     res.status(400).json(MESSAGES.EXPERIMENT_FINALIZED);
     await writeLog(experimentID, "logError", MESSAGES.EXPERIMENT_FINALIZED, logContext);
-    await discardStaging();
     return;
   }
 
   if (!exp_data.active) {
+    await discardStaging();
     res.status(400).json(MESSAGES.DATA_COLLECTION_NOT_ACTIVE);
     await writeLog(experimentID, "logError", MESSAGES.DATA_COLLECTION_NOT_ACTIVE, logContext);
-    await discardStaging();
     return;
   }
 
   if (exp_data.limitSessions) {
     if (exp_data.sessions >= exp_data.maxSessions) {
+      await discardStaging();
       res.status(400).json(MESSAGES.SESSION_LIMIT_REACHED);
       await writeLog(experimentID, "logError", MESSAGES.SESSION_LIMIT_REACHED, logContext);
-      await discardStaging();
       return;
     }
   }
@@ -141,9 +152,9 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
       }
     }
     if (!valid) {
+      await discardStaging();
       res.status(400).json(MESSAGES.INVALID_DATA);
       await writeLog(experimentID, "logError", MESSAGES.INVALID_DATA, logContext);
-      await discardStaging();
       return;
     }
   }

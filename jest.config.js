@@ -35,6 +35,13 @@ const customJestConfig = {
 // firebase-admin/auth dies on "Cannot use import statement outside a module".
 // Production is unaffected: functions/ is "type": "module" running on Node 22.
 //
+// `nanoid` is the second one, and arrived with the RTDB staging tier
+// (functions/src/staging.ts). It is ESM-only too, and functions/ depends on it
+// for id generation, so any suite that imports a module reaching staging.ts or
+// create-experiment.ts dies the same way. Before this, the only way to test
+// such a module was over HTTP against the functions emulator, which is why
+// create-experiment has no unit tests.
+//
 // next/jest builds its own transformIgnorePatterns, and Jest skips a file if
 // ANY pattern matches -- so appending a permissive pattern of our own does
 // nothing, next's still matches. The patterns have to be widened in place.
@@ -49,12 +56,12 @@ module.exports = async () => {
   config.transformIgnorePatterns = config.transformIgnorePatterns.map((pattern) => {
     if (!pattern.includes(ALLOWLIST_GROUP)) return pattern
     widened = true
-    return pattern.replace(ALLOWLIST_GROUP, '(?!(jose|geist|')
+    return pattern.replace(ALLOWLIST_GROUP, '(?!(jose|nanoid|geist|')
   })
   if (!widened) {
     throw new Error(
       "jest.config.js: could not widen next/jest's transformIgnorePatterns to " +
-        'include jose. next/jest changed its pattern shape -- see the comment above.'
+        'include jose and nanoid. next/jest changed its pattern shape -- see the comment above.'
     )
   }
   return config
