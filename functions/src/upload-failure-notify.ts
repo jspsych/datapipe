@@ -109,6 +109,29 @@ export type QueueWriteOutcome =
  * tier ~1 hour. The job is to get someone to check in, not to page them.
  */
 export function isFailureEvent(before: QueueData, after: QueueData): boolean {
+  // A recovered partial session is never a notification event
+  // (scheduled-staging-sweep.ts, docs/streaming-ingest-design.md).
+  //
+  // This mail exists to tell a researcher that THEIR DATA STOPPED ARRIVING.
+  // A partial is the opposite situation: a participant abandoned a session,
+  // DataPipe salvaged what had been staged, and is now trying to deliver a
+  // fragment nobody submitted and nobody is waiting for. Mailing about it
+  // would report a failure of data collection when what actually happened is
+  // that data collection worked better than it used to -- and would do so at
+  // whatever rate participants happen to close tabs, which on a Prolific study
+  // is not a rare event.
+  //
+  // Deliberately only the ARM side. A failed partial still counts as an
+  // unresolved entry for clearIfDrained, so it can hold an episode open until
+  // it ages out at seven days -- exactly as any other permanently failed entry
+  // does today. Excluding it from the drain query as well would mean editing
+  // the shared unresolvedQueueEntriesQuery in upload-retention.ts, which is
+  // also what the retention sweep counts on, for a difference that is bounded
+  // and already the established behaviour.
+  if (after?.partial === true) {
+    return false;
+  }
+
   // Fires on EVERY retry increment, not only the first. That is intended: the
   // notifiedAt flag, not this predicate, is what makes the mail singular, and
   // a later increment on an already-open episode is a genuine additional

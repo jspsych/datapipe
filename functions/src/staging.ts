@@ -44,42 +44,23 @@
 // cannot be client-written at all, and the design has to change rather than
 // this module.
 
-import { getDatabase, Database } from "firebase-admin/database";
+import { getDatabaseWithUrl, Database } from "firebase-admin/database";
 import { customAlphabet } from "nanoid";
 import { app } from "./app.js";
+import {
+  AssembledSession,
+  MAX_FILENAME_LENGTH,
+  OpenSession,
+  SessionMeta,
+  SESSION_TTL_MS,
+  assembleTrials,
+} from "./staging-assembly.js";
 
-// ---------------------------------------------------------------------------
-// Limits
-// ---------------------------------------------------------------------------
-
-// Mirrors the `newData.val().length <= 65536` cap in database.rules.json.
-// Exported so api-session-start.ts can tell the client the number rather than
-// letting the plugin carry its own copy that could drift out of sync with the
-// rule that actually enforces it.
-export const MAX_TRIAL_BYTES = 65536;
-
-// Mirrors the 4-digit `$seq` cap in database.rules.json.
-export const MAX_TRIALS_PER_SESSION = 10000;
-
-// Client flush cadence, sent to the plugin by api-session-start.ts for the
-// same reason as MAX_TRIAL_BYTES: one source of truth, tunable without a
-// coordinated plugin release.
-export const FLUSH_INTERVAL_MS = 10000;
-export const FLUSH_EVERY_N_TRIALS = 10;
-
-// How long an admitted session may stay open. Past this the sweep treats it as
-// abandoned regardless of what meta says -- the backstop for a client that
-// died before it could register an onDisconnect, or one whose onDisconnect
-// Firebase never got to run.
-export const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
-
-// Assembly ceiling. The rules permit 10,000 trials x 64 KiB = 640 MB in the
-// worst case, which no honest session approaches and which would OOM the
-// 256MiB sweep instantly. Assembly stops here and flags the result as
-// truncated rather than dying: a truncated recovery of an abusive or runaway
-// session is a diagnosis, a crashed sweep is an outage that also lets every
-// other abandoned session pile up behind it.
-export const MAX_ASSEMBLED_BYTES = 24 * 1024 * 1024;
+// Re-exported so callers have ONE import for the staging tier and do not have
+// to know which half a given name lives in. staging-assembly.ts is the module
+// to import directly only when the RTDB half must stay out of the graph --
+// which is what its own unit tests do.
+export * from "./staging-assembly.js";
 
 // Same alphabet as create-experiment.ts's experiment ids, at double the
 // length. This id is a BEARER CAPABILITY -- whoever holds it can write to the
@@ -128,48 +109,24 @@ export function stagingDatabaseURL(): string {
  * Memoized Admin SDK database handle.
  *
  * Deliberately not a module-level constant (and deliberately not in app.ts):
- * getDatabase() throws when it cannot resolve a URL, and app.ts is imported by
- * every function in this codebase. Resolving it here means a project with no
- * RTDB instance provisioned breaks only the staging endpoints, instead of
- * failing to load api-data.ts and api-condition.ts along with them.
+ * resolving a database URL throws when there is none to resolve, and app.ts is
+ * imported by every function in this codebase. Doing it here means a project
+ * with no RTDB instance provisioned breaks only the staging endpoints, instead
+ * of failing to load api-data.ts and api-condition.ts along with them.
+ *
+ * getDatabaseWithUrl rather than getDatabase: the latter reads the URL out of
+ * the app options, which are empty under the emulator and in the Jest suites
+ * (initializeApp() in app.ts takes no arguments and FIREBASE_CONFIG is only
+ * set inside a deployed function).
  */
 function rtdb(): Database {
-  if (!cachedDb) cachedDb = getDatabase(app, stagingDatabaseURL());
+  if (!cachedDb) cachedDb = getDatabaseWithUrl(stagingDatabaseURL(), app);
   return cachedDb;
 }
 
 /** Test seam: drop the memoized handle so a suite can repoint the emulator. */
 export function resetStagingHandleForTests(): void {
   cachedDb = null;
-}
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export interface OpenSession {
-  sessionId: string;
-  experimentId: string;
-  startedAt: number;
-  expiresAt: number;
-}
-
-export interface SessionMeta {
-  startedAt?: number;
-  lastFlushAt?: number;
-  abandonedAt?: number;
-}
-
-export interface AssembledSession {
-  /** A JSON array of the staged trials, ready for the upload pipeline. */
-  data: string;
-  trialCount: number;
-  /** Trials dropped because they would not parse as JSON. */
-  skipped: number;
-  /** True if assembly stopped at MAX_ASSEMBLED_BYTES. */
-  truncated: boolean;
-  /** Missing sequence numbers below the highest one seen -- lost flushes. */
-  gaps: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -184,12 +141,21 @@ export interface AssembledSession {
  * has no view of Firestore, and that asymmetry is the whole reason session ids
  * are minted server-side.
  */
-export async function openSession(experimentId: string): Promise<string> {
+export async function openSession(
+  experimentId: string,
+  filename?: string
+): Promise<string> {
   const sessionId = generateSessionId();
   const now = Date.now();
-  await rtdb()
-    .ref(`openSessions/${sessionId}`)
-    .set({ experimentId, startedAt: now, expiresAt: now + SESSION_TTL_MS });
+  const record: Record<string, unknown> = {
+    experimentId,
+    startedAt: now,
+    expiresAt: now + SESSION_TTL_MS,
+  };
+  // Omitted rather than written as undefined: RTDB rejects undefined values
+  // the same way Firestore does, and an absent filename is a normal state.
+  if (filename) record.filename = filename.slice(0, MAX_FILENAME_LENGTH);
+  await rtdb().ref(`openSessions/${sessionId}`).set(record);
   return sessionId;
 }
 
@@ -270,54 +236,7 @@ export async function assembleSession(
   if (!snap.exists()) {
     return { data: "[]", trialCount: 0, skipped: 0, truncated: false, gaps: 0 };
   }
-
-  const trials = snap.val() as Record<string, string>;
-  // Numeric sort: RTDB hands back keys in lexicographic order, where "10"
-  // sorts before "2" and the recovered file would have its trials shuffled.
-  const keys = Object.keys(trials).sort((a, b) => Number(a) - Number(b));
-
-  const parts: string[] = [];
-  let bytes = 2; // the enclosing brackets
-  let skipped = 0;
-  let truncated = false;
-
-  for (const key of keys) {
-    const raw = trials[key];
-    if (typeof raw !== "string") {
-      skipped++;
-      continue;
-    }
-    try {
-      JSON.parse(raw);
-    } catch {
-      skipped++;
-      continue;
-    }
-    const cost = raw.length + (parts.length > 0 ? 1 : 0); // + the comma
-    if (bytes + cost > MAX_ASSEMBLED_BYTES) {
-      truncated = true;
-      break;
-    }
-    bytes += cost;
-    parts.push(raw);
-  }
-
-  // Gaps are counted against the highest sequence number actually present, not
-  // against a trial count the client never told us -- there is no way to
-  // distinguish "flush 7 was lost" from "the participant stopped after 6".
-  const highest = keys.length ? Number(keys[keys.length - 1]) : -1;
-  const gaps =
-    highest >= 0 && Number.isFinite(highest)
-      ? Math.max(0, highest + 1 - keys.length)
-      : 0;
-
-  return {
-    data: `[${parts.join(",")}]`,
-    trialCount: parts.length,
-    skipped,
-    truncated,
-    gaps,
-  };
+  return assembleTrials(snap.val() as Record<string, string>);
 }
 
 /**

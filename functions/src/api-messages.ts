@@ -138,6 +138,16 @@ const MESSAGES = {
     error: null,
     message: "Data received. OSF upload will be retried automatically.",
   },
+  // The experiment was open and the session was admissible, but the staging
+  // tier itself could not be written -- no RTDB instance provisioned, or the
+  // service is unreachable. Distinct from every gate above, because the
+  // researcher's experiment is fine and the participant should simply fall
+  // back to submitting once at the end (which the plugin does automatically).
+  SESSION_START_ERROR: {
+    error: "SESSION_START_ERROR",
+    message:
+      "Could not start an incremental upload session. Data can still be submitted at the end of the experiment.",
+  },
   SUCCESS: {
     message: "Success",
   }

@@ -69,7 +69,17 @@ import { StorageProviderId } from "./providers/types.js";
 // ATTEMPTS: `saveData` is incremented after the experiment document is
 // confirmed to exist, so a request carrying a garbage experiment ID no longer
 // inflates the count (or creates a log document that nobody can ever read).
-export type LogCounter = "saveData" | "saveBase64Data" | "getCondition";
+// `startSession` counts admissions to the RTDB staging tier
+// (api-session-start.ts), which is an attempt in exactly the same sense as
+// the three above: the experiment was confirmed to exist and open before it
+// was counted. It is NOT an outcome -- a started session that is abandoned
+// still has no outcome, and comparing it against saveData is how an operator
+// sees the abandonment rate this whole feature exists to address.
+export type LogCounter =
+  | "saveData"
+  | "saveBase64Data"
+  | "getCondition"
+  | "startSession";
 
 // One increment per request that reached a definite non-failure outcome.
 // "Succeeded" means the file is in the researcher's storage now; "Queued"
