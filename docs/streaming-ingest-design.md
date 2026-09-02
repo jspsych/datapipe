@@ -1,8 +1,32 @@
 # Incremental Session Upload — Design Doc
 
-Status: **proposed, not built** (2026-09-02). Nothing in this document has
-shipped. The cost figures were measured against production; the architecture
-has not been spiked.
+Status: **built** (2026-09-02), on `feat/streaming-ingest` and, for the client
+half, `feat/pipe-streaming` in `jspsych-contrib`. The cost figures below were
+measured against production before implementation and are unchanged.
+
+**Four decisions differ from the design as originally written**, and the
+sections they affect are annotated inline. In summary:
+
+1. **Session ids are minted server-side** by `POST /api/session`
+   (`functions/src/api-session-start.ts`), which runs the same four gates
+   `api-data.ts` runs. This ANSWERS open question 1 and **deletes the
+   `openExperiments` mirror and its reconciliation pass** from the design. Cost:
+   a second function invocation per session (~20,000/month against a
+   2,000,000/month free tier).
+2. **No assembly on the happy path.** A clean completion still POSTs the whole
+   dataset, because the browser still has it; `sessionId` only names the staged
+   copy to discard. This removes the only line item in the cost table below and
+   keeps validation, CSV support and the metadata pipeline byte-identical.
+3. **Partial sessions** upload as `<name>.partial.json`, do not increment
+   `sessions`, and do not arm the upload-failure notifier. This answers open
+   question 2.
+4. **Staged trials are not encrypted at the application layer**, contrary to
+   this document's "safe default" in open question 4. The writer is the
+   participant's browser: it has no key, and a key shipped in a plugin bundle
+   is a key every participant holds. They get unreadability by rule
+   (`.read` is granted to nobody at any depth), Google's default at-rest
+   encryption, and a window of minutes. `pages/docs/privacy.js` was corrected
+   to say so rather than leave its "two copies" claim standing.
 
 ## Background
 
@@ -154,7 +178,22 @@ That last one is the problem: **RTDB rules cannot read Firestore.** They cannot
 see `active`, `finalized`, or `limitSessions`/`maxSessions` — the four gates
 `api-data.ts` checks today before accepting anything.
 
-The fix is a mirror. A small node, written only by existing server code:
+> **SUPERSEDED (decision 1).** The mirror below was NOT built. `POST
+> /api/session` runs the four gates in a function, against Firestore, and
+> writes `openSessions/{sessionId}`; rules gate on that node existing. A session
+> id that no function minted is worth nothing, which is what closes open
+> question 1 — the mirror left the tier writable by anyone holding an
+> experiment id, which is public by construction.
+>
+> Two other things the mirror got wrong, worth recording: it needed a
+> reconciliation pass or a half-failed toggle left an experiment permanently
+> open, and it could not have been written where this section assumes. The
+> researcher's active toggle is a CLIENT-SIDE Firestore write
+> (`components/dashboard/ExperimentActive.js:91`), not server code, so it would
+> have needed an `onDocumentWritten` trigger as well.
+
+The rejected fix was a mirror. A small node, written only by existing server
+code:
 
 ```
 openExperiments/{experimentId} : true | absent
@@ -180,10 +219,15 @@ into data that must stay unreadable.
 2. **Each trial.** Client writes `trials/{seq}`. No function call. Batched
    client-side (see below) so this is every few trials, not literally every one.
 3. **Clean completion.** Client cancels the `onDisconnect`, then calls
-   `/api/data` **once** with `sessionId` in place of the payload. The function
-   reads the session node, assembles the dataset, and runs the existing
-   pipeline unchanged — validation, `persistPending`, `queueUpload`, metadata,
-   compaction. Then it deletes the staging node.
+   `/api/data` **once** with `sessionId` **alongside** the payload — not in
+   place of it (decision 2). The browser still holds the dataset, so the
+   request is what it always was and the whole existing pipeline runs on it
+   untouched: validation, `persistPending`, `queueUpload`, metadata,
+   compaction. `sessionId` only names the staging node to delete afterwards.
+   Reading the session back would have cost the one billed operation in the
+   table below, and assembling it server-side would have meant reimplementing
+   jsPsych's CSV serializer in `functions/` — a silent-corruption risk on the
+   path 100% of sessions take, to save work the client had already done.
 4. **Abandonment.** `meta/abandonedAt` is set by Firebase's servers. A scheduled
    sweep — modelled on `scheduled-pending-recovery.ts`, including its
    `MAX_FILES_PER_RUN` batching — picks up sessions abandoned longer than some
@@ -215,8 +259,11 @@ exist on any production experiment document. They are written by
 finding" below.
 
 Billing model: participant writes are **free** (RTDB does not bill operations,
-and uploads are not downloads). The billed download is the function reading each
-session back once. Storage is transient — staged data is deleted at completion.
+and uploads are not downloads). The billed download was to be the function
+reading each session back once. **Decision 2 removed it**: a completed session
+is never read back, so the only downloads are the sweep reading abandoned
+sessions — a fraction of the table below. Storage is transient — staged data is
+deleted at completion.
 
 ```
   volume/mo              |  data through staging       | RTDB   | Firestore-staging
@@ -259,7 +306,8 @@ option here ships as a coordinated pair of releases.
 
 ## Risks and open questions
 
-1. **The unauthenticated write path is the main risk.** Today `api-data.ts`
+1. **ANSWERED (decision 1).** ~~The unauthenticated write path is the main
+   risk.~~ Today `api-data.ts`
    gates submissions on experiment existence, `active`, `finalized`, and session
    limits before anything is persisted. Rules plus the `openExperiments` mirror
    are a weaker gate, and the staging tier is writable by anyone who can read an
@@ -267,7 +315,11 @@ option here ships as a coordinated pair of releases.
    badly with experiments served from arbitrary hosts. **Unresolved — this needs
    an answer before the spike, not after.**
 
-2. **What a partial session *is*.** Recovered fragments become files in the
+2. **ANSWERED (decision 3): `<name>.partial.json`, uncounted, no notification.**
+   The sweep re-checks `finalized` and `active` before queueing, because a
+   researcher can seal an experiment between staging and recovery, and a file
+   landing outside a merged archive is exactly what `docs/finalization-spec.md`
+   prevents. ~~What a partial session *is*.~~ Recovered fragments become files in the
    researcher's Drive/OSF/Zenodo. They need a distinct marker or path, or
    DataPipe quietly makes datasets non-Psych-DS — the same class of problem
    `docs/finalization-spec.md` addresses for archives. Does a partial session
@@ -279,7 +331,7 @@ option here ships as a coordinated pair of releases.
    applies to a sweep threshold here, and the answer is a policy decision, not
    a constant.
 
-4. **Encryption at rest.** `persist-pending.ts` encrypts pending payloads
+4. **ANSWERED, AGAINST THE SAFE DEFAULT (decision 4).** ~~Encryption at rest.~~ `persist-pending.ts` encrypts pending payloads
    because they hold raw submissions for up to seven days. Staged trials hold
    the same data for minutes to hours. Whether that shorter window changes the
    answer is undecided; the safe default is that it does not.
@@ -306,6 +358,28 @@ Deployment surface, none of which exists yet:
 Suggested order: **client-side batching first** (cheap, independently useful,
 and may settle the requirement) → RTDB spike behind a flag on the test site →
 the sweep → the `openExperiments` mirror and its reconciliation → cut over.
+
+**As built**, all of the above exists except the mirror, plus:
+
+- `functions/src/staging.ts` and `staging-assembly.ts` (the RTDB half and the
+  pure half, split so trial ordering, gap tolerance and filename sanitisation
+  are testable without an emulator).
+- `functions/src/api-session-start.ts`, `scheduled-staging-sweep.ts`.
+- `systemStatus/staging`, written on every sweep run including a no-op one —
+  the monitored metric this document asks for. A stale `lastRunAt` is the alarm.
+- `__tests__/database-rules.test.js` (30), `staging-assembly.test.js` (16),
+  `staging-emulator.test.js` (22), and 23 in the plugin.
+
+**Batching was not tested as a standalone alternative first**, contrary to the
+suggestion above. A POST per flush is a provider write per flush, which is the
+condition §2 says compaction exists to undo; batching lives inside the client's
+`record()` instead.
+
+Two prerequisites that are NOT code and are easy to miss:
+
+1. **An RTDB instance must be created in each Firebase project** before
+   `firebase deploy --only database` will work. It is not auto-provisioned.
+2. The deploy line in both workflows now includes `database`.
 
 ## Related finding (2026-09-02)
 

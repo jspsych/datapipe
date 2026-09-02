@@ -1,4 +1,4 @@
-import { Text, Table, Code, Box, Heading } from "@chakra-ui/react";
+import { Text, Table, Code, Box, Heading, Link as ChakraLink } from "@chakra-ui/react";
 import PageHeader from "../../components/ui/PageHeader";
 import GuidanceLine from "../../components/ui/GuidanceLine";
 import CodeBlock from "../../components/CodeBlock";
@@ -10,6 +10,24 @@ import {
   Param,
   ErrorRow,
 } from "../../components/docs/ApiPrimitives";
+
+// Prose link, per DESIGN.md 5: brandGreen.fg with a persistent underline, so a
+// link is never signalled by color alone. Local to this page for the same
+// reason pages/docs/experiments/sending-data.js keeps its own -- there is no
+// shared prose-link primitive yet.
+function ProseLink({ href, external, children }) {
+  return (
+    <ChakraLink
+      href={href}
+      color="brandGreen.fg"
+      textDecoration="underline"
+      textUnderlineOffset="2px"
+      {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+    >
+      {children}
+    </ChakraLink>
+  );
+}
 
 export default function ApiReferencePage() {
   return (
@@ -98,6 +116,13 @@ export default function ApiReferencePage() {
               dataset description. Ignored unless metadata is switched on for
               the experiment.
             </Param>
+            <Param name="sessionId" type="string (optional)">
+              The session returned by <Code>/api/session/</Code>, if this
+              experiment staged its trials as it went. It carries no data — the{" "}
+              <Code>data</Code> field above is still the submission — and only
+              tells DataPipe which staged copy this request supersedes, so it
+              can be discarded.
+            </Param>
           </ParamTable>
         </Box>
         <Box>
@@ -112,6 +137,78 @@ export default function ApiReferencePage() {
 }`}
           </CodeBlock>
         </Box>
+      </DocsSection>
+
+      <DocsSection id="start-session" title="Start an incremental session">
+        <EndpointHeading method="POST" path="/api/session/">
+          Start an incremental session
+        </EndpointHeading>
+        <Text maxW="70ch">
+          Open a session so an experiment can send trials as they are produced,
+          rather than only at the end. A participant who abandons the experiment
+          partway then leaves behind a recoverable partial session instead of
+          nothing at all.
+        </Text>
+        <Text maxW="70ch">
+          You will not usually call this directly — the{" "}
+          <ProseLink
+            href="https://github.com/jspsych/jspsych-contrib/tree/main/packages/plugin-pipe"
+            external
+          >
+            jsPsychPipe plugin
+          </ProseLink>{" "}
+          does it for you, along with the staging writes that follow. It is
+          documented because those writes go to a Firebase Realtime Database
+          rather than to this API, and this response is what tells a client
+          where.
+        </Text>
+        <Box overflowX="auto" w="100%">
+          <ParamTable>
+            <Param name="experimentID" type="string">
+              Your experiment ID, found on the experiment dashboard.
+            </Param>
+            <Param name="filename" type="string (optional)">
+              The name this participant will submit under. Used only to name a
+              recovered partial session, so an abandoned run is identifiable
+              rather than opaque. A completed submission always uses the
+              filename sent to <Code>/api/data/</Code>.
+            </Param>
+          </ParamTable>
+        </Box>
+        <Text maxW="70ch">
+          The same checks as <Code>/api/data/</Code> run here, with the same
+          error codes: the experiment must exist, not be finalized, be accepting
+          data, and be under its session limit. Starting a session does{" "}
+          <strong>not</strong> consume one from that limit — the count is still
+          taken when a submission completes. A <Code>503</Code> with{" "}
+          <Code>SESSION_START_ERROR</Code> means incremental upload is
+          unavailable and the experiment should simply submit at the end, as it
+          would otherwise.
+        </Text>
+        <Box>
+          <Text fontSize="sm" color="fg.muted" mb={2}>
+            Example response
+          </Text>
+          <CodeBlock>
+            {`{
+  "sessionId": "8fKq2mXpR7vNwLzB4cTy1dHs",
+  "databaseURL": "https://<project>-default-rtdb.firebaseio.com",
+  "maxTrialBytes": 65536,
+  "maxTrials": 10000,
+  "flushIntervalMs": 10000,
+  "flushEveryNTrials": 10
+}`}
+          </CodeBlock>
+        </Box>
+        <Text maxW="70ch">
+          Trials are then written to{" "}
+          <Code>staging/&lt;sessionId&gt;/trials/&lt;n&gt;</Code> in that
+          database, each one a JSON string, numbered from zero and never
+          rewritten. The session is write-only: nothing can read it back, and a
+          missing number is tolerated rather than treated as an error. Send{" "}
+          <Code>sessionId</Code> with the final <Code>/api/data/</Code> request
+          to close it.
+        </Text>
       </DocsSection>
 
       <DocsSection id="save-base64-data" title="Save base64-encoded data">

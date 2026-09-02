@@ -75,6 +75,7 @@ export default function CodeHints({ expId }) {
         <Tabs.Root variant="enclosed" colorPalette="brandGreen" defaultValue="send-data" size="sm">
           <Tabs.List>
             <Tabs.Trigger value="send-data">Save data</Tabs.Trigger>
+            <Tabs.Trigger value="stream-data">Save as you go</Tabs.Trigger>
             <Tabs.Trigger value="send-base64">Save file</Tabs.Trigger>
             <Tabs.Trigger value="get-condition">Conditions</Tabs.Trigger>
           </Tabs.List>
@@ -102,6 +103,44 @@ export default function CodeHints({ expId }) {
               </CodeBlock>
               <Text fontSize="sm" color="fg.muted">
                 Use .json() and a .json filename to save as JSON instead of CSV.
+              </Text>
+            </VStack>
+          </Tabs.Content>
+
+          {/* Incremental upload. Deliberately a separate tab rather than a
+              replacement for "Save data": it needs a newer plugin version, it
+              adds a second file type to the researcher's dataset, and the
+              plain path stays correct and recommended for most studies. */}
+          <Tabs.Content value="stream-data">
+            <VStack alignItems={"start"} gap={3}>
+              <Text fontSize="sm" color="fg.muted">
+                Send each trial as it happens, so a participant who closes the tab partway through does not take all of their data with them. Requires plugin version 0.7 or later.
+              </Text>
+              <CodeBlock language="html">
+                {`<script src="https://unpkg.com/@jspsych-contrib/plugin-pipe"></script>`}
+              </CodeBlock>
+              <CodeBlock>
+                {`
+              const subject_id = jsPsych.randomization.randomID(10);
+              const filename = \`\${subject_id}.csv\`;
+
+              const session = await jsPsychPipe.startSession("${expId}", { filename });
+
+              const jsPsych = initJsPsych({
+                on_data_update: (data) => session.record(data)
+              });
+
+              const save_data = {
+                type: jsPsychPipe,
+                action: "save",
+                experiment_id: "${expId}",
+                filename: filename,
+                data_string: ()=>jsPsych.data.get().csv(),
+                session: session
+              };`}
+              </CodeBlock>
+              <Text fontSize="sm" color="fg.muted">
+                A participant who finishes produces the same file as before. One who quits partway produces a separate JSON file ending in .partial.json, holding the trials they completed. Partial sessions do not count toward your session limit.
               </Text>
             </VStack>
           </Tabs.Content>

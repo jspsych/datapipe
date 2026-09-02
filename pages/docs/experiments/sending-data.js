@@ -88,6 +88,60 @@ export default function SendingDataPage() {
         </GuidanceLine>
       </DocsSection>
 
+      <DocsSection id="saving-as-you-go" title="Saving as you go">
+        <Text maxW="70ch">
+          By default DataPipe sees a session&apos;s data exactly once, when the
+          experiment finishes. If a participant closes the tab, loses their
+          connection, or their browser crashes at trial 199 of 200,{" "}
+          <strong>all 199 trials are lost</strong> — DataPipe never saw any of
+          them. On an online panel that is not a rare event.
+        </Text>
+        <Text maxW="70ch">
+          Version 0.7 of the plugin can send each trial as it is produced. The{" "}
+          <strong>Save as you go</strong> tab in the panel above has the code:
+          start a session before the timeline runs, hand each trial to it from{" "}
+          <Code>on_data_update</Code>, and pass the session to your save trial.
+        </Text>
+        <Text maxW="70ch">
+          Three things to know before switching a live study over:
+        </Text>
+        <List.Root maxW="70ch" gap={2} ps={6}>
+          <List.Item>
+            <strong>A completed session is unchanged.</strong> The save trial
+            still sends your whole dataset, in your chosen format, stored under
+            the filename you gave it. What DataPipe held during the session is
+            deleted as soon as your submission lands.
+          </List.Item>
+          <List.Item>
+            <strong>An abandoned session becomes a second kind of file.</strong>{" "}
+            DataPipe assembles the trials it received and stores them as{" "}
+            <Code>&lt;your filename&gt;.partial.json</Code> — JSON even if your
+            experiment submits CSV, because it is rebuilt from individual trials
+            rather than from the string your experiment would have sent. Plan
+            for that in your analysis, and treat a partial file as a participant
+            who did not finish. Partial sessions do not count toward your
+            session limit.
+          </List.Item>
+          <List.Item>
+            <strong>It cannot break your experiment.</strong> If a session
+            cannot be started — the experiment is switched off, the participant
+            is offline — the experiment runs and submits exactly as it would
+            without it. The same is true of every individual trial write.
+          </List.Item>
+        </List.Root>
+        <Text maxW="70ch">
+          The trade is size: the browser build of the plugin grows from about
+          1 KB to about 53 KB compressed, because it carries the database client
+          that makes this work. If your participants are on slow connections and
+          you do not need this, the plain <strong>Save data</strong> path is
+          still the right one.
+        </Text>
+        <GuidanceLine href="/docs/privacy#what-we-store" linkText="What DataPipe stores">
+          Where staged trials live while a session is running, and how they
+          differ from the copies DataPipe encrypts.
+        </GuidanceLine>
+      </DocsSection>
+
       <DocsSection id="filenames-must-be-unique" title="Filenames must be unique">
         <Text maxW="70ch">
           Two submissions to the same experiment can never share a filename:
