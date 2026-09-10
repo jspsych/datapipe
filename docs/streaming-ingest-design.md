@@ -375,6 +375,13 @@ suggestion above. A POST per flush is a provider write per flush, which is the
 condition §2 says compaction exists to undo; batching lives inside the client's
 `record()` instead.
 
+The staging database's address is resolved at runtime, not assumed:
+`STAGING_DATABASE_URL` if set, else `FIREBASE_CONFIG.databaseURL` (which
+`firebase deploy` fills from the Management API, so any region works), else
+derived from the project id, which is right only for us-central1.
+`functions/.env.local` pins it for the emulator, which otherwise puts functions
+and rules in different namespaces while a project has no instance.
+
 Two prerequisites that are NOT code and are easy to miss:
 
 1. **An RTDB instance must be created in each Firebase project** before

@@ -85,24 +85,75 @@ let cachedDb: Database | null = null;
  * datapipe-test and to production without a `NEXT_PUBLIC`-style build flag on
  * the participant's side.
  *
- * FIREBASE_DATABASE_URL wins when set (an explicit override, and what the test
- * suites use); otherwise the default instance name is derived from the project
- * id. Under the emulator the host portion is ignored -- the Admin SDK routes
- * by the `?ns=` namespace it appends -- so any well-formed URL naming the
- * right project works.
+ * Resolved in this order:
+ *
+ *  1. STAGING_DATABASE_URL -- an explicit override, and the escape hatch if
+ *     the resolution below is ever wrong for a project: set it in
+ *     functions/.env.<project> to take effect on a deploy. No deployment sets
+ *     it today. functions/.env.local sets it for the emulator (see the comment
+ *     there for why the emulator needs pinning), and staging-emulator.test.js
+ *     sets it in-process to whatever the endpoint reports. NOT named
+ *     FIREBASE_DATABASE_URL, which is what this was first called: firebase-tools
+ *     reserves the FIREBASE_ prefix and rejects any .env key using it, so an
+ *     escape hatch by that name could never actually have been opened.
+ *  2. FIREBASE_CONFIG.databaseURL -- the REAL address of the project's default
+ *     instance. `firebase deploy` fills it from the Firebase Management API
+ *     (projects/{id}/adminSdkConfig), so it is right for an instance in any
+ *     region, and the functions emulator fills it with the emulator's own
+ *     `http://127.0.0.1:9000/?ns=<instance>` URL. Both were checked against
+ *     firebase-tools' source (emulator/adminSdkConfig.js,
+ *     emulator/functionsEmulator.js getFirebaseConfig).
+ *  3. Derived from the project id. Correct ONLY for a default instance created
+ *     in us-central1: an instance in any other region lives at
+ *     `<name>.<region>.firebasedatabase.app` instead, and a guess of
+ *     `<project>-default-rtdb.firebaseio.com` would fail every session start.
+ *     This used to be the only rule. It is kept as the last resort for a
+ *     process with no FIREBASE_CONFIG at all -- a Jest suite importing this
+ *     module directly.
+ *
+ * FIREBASE_CONFIG is captured at DEPLOY time. An instance created after the
+ * last deploy is invisible to (2) until the next one; the deploy workflows
+ * include `--only database`, which fails outright without an instance, so in
+ * practice the instance always exists before the functions that need it.
  */
 export function stagingDatabaseURL(): string {
-  const explicit = process.env.FIREBASE_DATABASE_URL;
+  const explicit = process.env.STAGING_DATABASE_URL;
   if (explicit) return explicit;
+
+  const fromConfig = databaseURLFromFirebaseConfig();
+  if (fromConfig) return fromConfig;
+
   const project =
     process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT;
   if (!project) {
     throw new Error(
-      "Cannot determine the staging database URL: neither FIREBASE_DATABASE_URL " +
-        "nor GCLOUD_PROJECT is set."
+      "Cannot determine the staging database URL: none of STAGING_DATABASE_URL, " +
+        "FIREBASE_CONFIG.databaseURL or GCLOUD_PROJECT is set."
     );
   }
   return `https://${project}-default-rtdb.firebaseio.com`;
+}
+
+/**
+ * FIREBASE_CONFIG's databaseURL, or undefined.
+ *
+ * Tolerant by design: FIREBASE_CONFIG may be absent (Jest), may be a path to a
+ * JSON file rather than JSON (the Admin SDK accepts both), may be malformed, or
+ * may carry an empty databaseURL -- which is exactly what the Management API
+ * reports for a project with no RTDB instance. Every one of those falls
+ * through to the next rule instead of throwing, because this runs on the
+ * session-start path and a throw there is a 503 for a reason that has nothing
+ * to do with the database.
+ */
+function databaseURLFromFirebaseConfig(): string | undefined {
+  const raw = process.env.FIREBASE_CONFIG;
+  if (!raw || !raw.trim().startsWith("{")) return undefined;
+  try {
+    const url = (JSON.parse(raw) as { databaseURL?: unknown }).databaseURL;
+    return typeof url === "string" && url.length > 0 ? url : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**

@@ -11,6 +11,7 @@ import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 
 import CodeBlock from "../CodeBlock";
+import { streamingSnippet } from "./streaming-snippet";
 
 export default function CodeHints({ expId }) {
   const [language, setLanguage] = useState("jsPsych v8");
@@ -119,26 +120,7 @@ export default function CodeHints({ expId }) {
               <CodeBlock language="html">
                 {`<script src="https://unpkg.com/@jspsych-contrib/plugin-pipe"></script>`}
               </CodeBlock>
-              <CodeBlock>
-                {`
-              const subject_id = jsPsych.randomization.randomID(10);
-              const filename = \`\${subject_id}.csv\`;
-
-              const session = await jsPsychPipe.startSession("${expId}", { filename });
-
-              const jsPsych = initJsPsych({
-                on_data_update: (data) => session.record(data)
-              });
-
-              const save_data = {
-                type: jsPsychPipe,
-                action: "save",
-                experiment_id: "${expId}",
-                filename: filename,
-                data_string: ()=>jsPsych.data.get().csv(),
-                session: session
-              };`}
-              </CodeBlock>
+              <CodeBlock>{streamingSnippet(expId)}</CodeBlock>
               <Text fontSize="sm" color="fg.muted">
                 A participant who finishes produces the same file as before. One who quits partway produces a separate JSON file ending in .partial.json, holding the trials they completed. Partial sessions do not count toward your session limit.
               </Text>

@@ -46,7 +46,9 @@ const PROJECT_ID = "datapipe-test";
 jest.setTimeout(30000);
 
 const db = getFirestore();
-const rtdb = getDatabaseWithUrl(`https://${PROJECT_ID}-default-rtdb.firebaseio.com`);
+// Assigned in beforeAll from the URL the session endpoint itself reports --
+// see the comment there.
+let rtdb;
 
 async function post(fn, body) {
   const response = await fetch(
@@ -124,7 +126,7 @@ afterAll(async () => {
     batch.delete(db.collection("experiments").doc(id));
   }
   await batch.commit();
-  await rtdb.goOffline();
+  if (rtdb) await rtdb.goOffline();
 });
 
 beforeAll(async () => {
@@ -134,6 +136,29 @@ beforeAll(async () => {
     experiments: [],
     connectedAccounts: { gdrive: { accessToken: "fake", refreshToken: "fake" } },
   });
+
+  // WHICH DATABASE NAMESPACE. Learned from the endpoint, not repeated here.
+  //
+  // The emulated functions take it from STAGING_DATABASE_URL in
+  // functions/.env.local, which pins them to the namespace the emulator loads
+  // database.rules.json into (see the comment there: left to FIREBASE_CONFIG,
+  // an unprovisioned project gets functions and rules in DIFFERENT namespaces,
+  // and the sweep's `.indexOn` query fails). This suite asks the endpoint
+  // rather than copying that value, so the two cannot drift -- and whatever
+  // the endpoint tells a real plugin to connect to is what this suite
+  // connects to, which makes the returned databaseURL something exercised
+  // here, not just a field whose type is checked. The in-process sweep is
+  // pointed at the same place through the same override.
+  const probe = await makeExperiment();
+  const { status, body } = await startSession({ experimentID: probe });
+  if (status !== 200 || !body.databaseURL) {
+    throw new Error(
+      `Session endpoint unavailable (HTTP ${status}); is the functions emulator warm? ` +
+        JSON.stringify(body)
+    );
+  }
+  process.env.STAGING_DATABASE_URL = body.databaseURL;
+  rtdb = getDatabaseWithUrl(body.databaseURL);
 });
 
 describe("POST /api/session", () => {
