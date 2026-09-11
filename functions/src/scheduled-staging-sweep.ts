@@ -12,7 +12,14 @@
 // per-trial function invocation the design exists to avoid -- twenty in-flight
 // requests globally (index.ts's maxInstances: 20 against api-data.ts's
 // concurrency: 1), one provider write per trial, and logs/{experimentId}
-// multiplied by ~100x. Do not add a trigger to this tree.
+// multiplied by ~100x. Do not add a trigger on this tree's trial writes.
+//
+// (There is exactly one trigger on the tree, and it is not per trial:
+// staging-disconnect-trigger.ts, scoped to the per-connection disconnect and
+// reconnect slots, which database.rules.json caps at 40 writes per session.
+// It keeps the researcher's live-sessions dashboard current; this sweep is
+// what corrects that mirror when anything along the way was lost. Read its
+// header before adding another.)
 //
 // Modelled on scheduled-pending-recovery.ts throughout, including its
 // promote-into-the-existing-queue approach and its batching. It does NOT do
@@ -42,13 +49,16 @@ import {
   assembleSession,
   countOpenSessions,
   discardSession,
+  getOpenSession,
   getSessionMeta,
   listOldestOpenSessions,
+  listOpenSessions,
   partialFilenameFor,
   OpenSession,
   ABANDON_GRACE_MS,
   disconnectedSince,
 } from "./staging.js";
+import { reconcileLiveSessions, MAX_RECONCILE } from "./live-sessions.js";
 
 // Re-exported for the emulator suite, which ages its fixtures against it.
 // Defined in staging-assembly.ts, next to the other limits the plugin and the
@@ -73,6 +83,12 @@ export interface SweepStats {
   discarded: number;
   skippedLive: number;
   errors: number;
+  /**
+   * Live-sessions mirror documents this run had to create, correct or delete.
+   * Should be zero: each one is a write on the session lifecycle that failed or
+   * was lost. A value that stays non-zero run after run is a broken write path.
+   */
+  mirrorFixed: number;
 }
 
 export const scheduledStagingSweep = onSchedule(
@@ -108,8 +124,11 @@ export async function sweepAbandonedSessions(
     discarded: 0,
     skippedLive: 0,
     errors: 0,
+    mirrorFixed: 0,
   };
   let lastError: string | null = null;
+  let openSessionCount: number | null = null;
+  let mirror = { created: 0, updated: 0, deleted: 0 };
 
   try {
     const candidates = (await listOldestOpenSessions(CANDIDATES_PER_RUN)).filter(
@@ -159,7 +178,46 @@ export async function sweepAbandonedSessions(
     stats.errors++;
   }
 
-  await recordSweepHealth(stats, lastError);
+  // Reconcile the live-sessions mirror against the truth. AFTER recovery, so
+  // the sessions just recovered or discarded are already gone from both sides
+  // and are not counted as fixes. A separate try: a mirror failure must not
+  // be what stops abandoned sessions being recovered, and vice versa.
+  try {
+    const readAt = Date.now();
+    const open = await listOpenSessions();
+    openSessionCount = open.length;
+    const inScope = (only ? open.filter((s) => only.has(s.sessionId)) : open).slice(0, MAX_RECONCILE);
+    const entries = await Promise.all(
+      inScope.map(async (session) => ({ session, meta: await getSessionMeta(session.sessionId) }))
+    );
+
+    // Only for sessions opened before owner was recorded on openSessions; one
+    // read per experiment per run.
+    const owners = new Map<string, string | null>();
+    const ownerOf = async (experimentId: string) => {
+      if (!owners.has(experimentId)) {
+        const doc = await db.collection("experiments").doc(experimentId).get();
+        owners.set(experimentId, doc.exists ? ((doc.data() as ExperimentData).owner ?? null) : null);
+      }
+      return owners.get(experimentId) ?? null;
+    };
+    const stillOpen = async (sessionId: string) => (await getOpenSession(sessionId)) !== null;
+
+    mirror = await reconcileLiveSessions(entries, readAt, ownerOf, stillOpen, only);
+    stats.mirrorFixed = mirror.created + mirror.updated + mirror.deleted;
+    if (stats.mirrorFixed > 0) {
+      console.warn(
+        `Live-sessions mirror needed ${stats.mirrorFixed} fix(es): ` +
+          `${mirror.created} created, ${mirror.updated} corrected, ${mirror.deleted} removed.`
+      );
+    }
+  } catch (e) {
+    lastError = e instanceof Error ? e.message : "Unknown error";
+    console.error(`Live-sessions reconciliation failed: ${lastError}`);
+    stats.errors++;
+  }
+
+  await recordSweepHealth(stats, lastError, openSessionCount, mirror);
 
   if (stats.recovered > 0 || stats.discarded > 0) {
     console.log(
@@ -301,13 +359,16 @@ export async function recoverSession(
  */
 async function recordSweepHealth(
   stats: SweepStats,
-  lastError: string | null
+  lastError: string | null,
+  openSessionCountAfterRun: number | null,
+  mirror: { created: number; updated: number; deleted: number }
 ): Promise<void> {
   try {
-    // Read back AFTER the run, so the number reflects what is still sitting in
+    // Read AFTER the run, so the number reflects what is still sitting in
     // RTDB rather than what was there when the run started. This is the figure
-    // that grows without bound when the sweep is broken.
-    const openSessionCount = await countOpenSessions();
+    // that grows without bound when the sweep is broken. The reconciliation
+    // pass already read it; only a run whose reconciliation failed reads again.
+    const openSessionCount = openSessionCountAfterRun ?? (await countOpenSessions());
     await db
       .collection("systemStatus")
       .doc("staging")
@@ -320,6 +381,8 @@ async function recordSweepHealth(
           discarded: stats.discarded,
           skippedLive: stats.skippedLive,
           errors: stats.errors,
+          mirrorFixed: stats.mirrorFixed,
+          mirror,
           lastError,
         },
         { merge: true }

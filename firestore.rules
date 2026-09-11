@@ -221,5 +221,17 @@ service cloud.firestore {
       allow read: if(request.auth.uid != null) &&
         resource.data.owner == request.auth.uid;
     }
+    // One document per in-progress streaming session, for the live-sessions
+    // panel on the experiment dashboard (functions/src/live-sessions.ts).
+    // Readable only by the experiment's owner, the same shape as uploadQueue,
+    // and WRITABLE BY NO CLIENT: every write is server code keeping it in step
+    // with the Realtime Database staging tier. The document id is a one-way
+    // hash of the session id, never the id itself -- a session id is a write
+    // capability into a participant's session, and this is the copy a
+    // researcher's browser is allowed to see.
+    match /liveSessions/{publicId} {
+      allow read: if(request.auth.uid != null) &&
+        resource.data.owner == request.auth.uid;
+    }
   }
 }

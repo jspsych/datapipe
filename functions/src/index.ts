@@ -15,10 +15,14 @@ import { scheduledTokenRefresh } from "./scheduled-token-refresh.js";
 import { scheduledUploadRetry } from "./scheduled-upload-retry.js";
 import { scheduledPendingRecovery } from "./scheduled-pending-recovery.js";
 // Recovers sessions that were staged but never completed. ONE invocation per
-// sweep, not per session -- attaching an onDocumentCreated/onValueWritten
-// trigger to the staging tier would silently reinstate the per-trial
-// invocation this whole design exists to avoid.
+// sweep, not per session -- a trigger on the staging tier's TRIAL writes would
+// silently reinstate the per-trial invocation this whole design exists to
+// avoid.
 import { scheduledStagingSweep } from "./scheduled-staging-sweep.js";
+// The one exception, and it is not per trial: scoped to the per-connection
+// disconnect/reconnect slots, which the rules cap at 40 writes per session.
+// Keeps the researcher's live-sessions dashboard current. See its header.
+import { onStagingDisconnect } from "./staging-disconnect-trigger.js";
 import { onExperimentGrew, onUploadQueueChanged } from "./compaction-triggers.js";
 // A SECOND trigger on uploadQueue/{docId}, deliberately not folded into
 // onUploadQueueChanged above -- see the header of upload-failure-notify.ts.
@@ -66,6 +70,7 @@ export {
   scheduledUploadRetry as scheduleduploadretry,
   scheduledPendingRecovery as scheduledpendingrecovery,
   scheduledStagingSweep as scheduledstagingsweep,
+  onStagingDisconnect as onstagingdisconnect,
   onExperimentGrew as onexperimentgrew,
   onUploadQueueChanged as onuploadqueuechanged,
   onUploadFailure as onuploadfailure,

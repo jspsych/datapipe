@@ -95,6 +95,12 @@ export interface OpenSession {
    * carries its own filename on the /api/data request, as it always has.
    */
   filename?: string;
+  /**
+   * The experiment owner's uid, recorded at session start so the live-sessions
+   * mirror can be rebuilt from this record alone. Absent on sessions opened
+   * before it was recorded; live-sessions.ts falls back to the experiment.
+   */
+  owner?: string;
 }
 
 /**

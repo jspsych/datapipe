@@ -32,7 +32,7 @@ process.env.FIREBASE_CONFIG = JSON.stringify({
   storageBucket: "datapipe-test.appspot.com",
 });
 
-const { randomUUID } = require("crypto");
+const { randomUUID, createHash } = require("crypto");
 const { getFirestore } = require("firebase-admin/firestore");
 const { getDatabaseWithUrl } = require("firebase-admin/database");
 const {
@@ -135,6 +135,8 @@ afterAll(async () => {
       .where("experimentID", "==", id)
       .get();
     entries.docs.forEach((d) => batch.delete(d.ref));
+    const rows = await db.collection("liveSessions").where("experimentID", "==", id).get();
+    rows.docs.forEach((d) => batch.delete(d.ref));
     batch.delete(db.collection("experiments").doc(id));
   }
   await batch.commit();
@@ -485,3 +487,213 @@ describe("the abandonment sweep", () => {
     expect(status.data().lastError).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// The live-sessions mirror (functions/src/live-sessions.ts)
+// ---------------------------------------------------------------------------
+
+/**
+ * The mirror document id for a session, recomputed here rather than imported:
+ * it is the only thing between a researcher's browser and a write capability,
+ * so the suite checks the rule, not the module's opinion of it.
+ */
+const publicId = (sessionId) =>
+  createHash("sha256").update(sessionId).digest("hex").slice(0, 32);
+const mirrorRef = (sessionId) => db.collection("liveSessions").doc(publicId(sessionId));
+
+/** Poll until `check` returns truthy -- the trigger runs asynchronously. */
+async function eventually(check, { timeoutMs = 15000, intervalMs = 200 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  let last;
+  while (Date.now() < deadline) {
+    last = await check();
+    if (last) return last;
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  return last;
+}
+
+describe("the live-sessions mirror", () => {
+  it("writes a row the owner can see when a session starts, holding no session id", async () => {
+    const experimentID = await makeExperiment();
+    const { body } = await startSession({ experimentID, filename: "p01.csv" });
+
+    const snap = await mirrorRef(body.sessionId).get();
+    expect(snap.exists).toBe(true);
+    expect(snap.data()).toMatchObject({
+      experimentID,
+      owner: "staging-testuser",
+      state: "active",
+      disconnectedAt: null,
+      recoverAfter: null,
+    });
+    expect(snap.data().startedAt.toMillis()).toBeGreaterThan(Date.now() - 60000);
+    // The session id is a write capability; the filename was deliberately
+    // left off the dashboard.
+    const raw = JSON.stringify(snap.data());
+    expect(raw).not.toContain(body.sessionId);
+    expect(raw).not.toContain("p01");
+  });
+
+  it("removes the row when a gate refuses the submission", async () => {
+    const experimentID = await makeExperiment();
+    const { body } = await startSession({ experimentID });
+    await db.collection("experiments").doc(experimentID).update({ finalized: true });
+
+    await saveData({
+      experimentID,
+      filename: "p01.csv",
+      data: "trial_type\nhtml-keyboard-response\n",
+      sessionId: body.sessionId,
+    });
+
+    expect((await mirrorRef(body.sessionId).get()).exists).toBe(false);
+  });
+
+  it("keeps the row when DataPipe itself fails, since the session is still recoverable", async () => {
+    const experimentID = await makeExperiment({ owner: "no-such-user" });
+    const { body } = await startSession({ experimentID });
+
+    await saveData({
+      experimentID,
+      filename: "p01.csv",
+      data: "trial_type\nhtml-keyboard-response\n",
+      sessionId: body.sessionId,
+    });
+
+    expect((await mirrorRef(body.sessionId).get()).exists).toBe(true);
+  });
+
+  it("removes the row when the sweep recovers the session", async () => {
+    const experimentID = await makeExperiment();
+    const { body } = await startSession({ experimentID });
+    await stageTrials(body.sessionId, 2);
+    await markAbandoned(body.sessionId);
+
+    await sweepAbandonedSessions(new Set([body.sessionId]));
+
+    expect((await mirrorRef(body.sessionId).get()).exists).toBe(false);
+  });
+
+  it("shows a dropout within seconds, and clears it when the participant returns", async () => {
+    // Through the real trigger, running in the functions emulator.
+    const experimentID = await makeExperiment();
+    const { body } = await startSession({ experimentID });
+    await stageTrials(body.sessionId, 2);
+
+    await markAbandoned(body.sessionId, 1000);
+    const dropped = await eventually(async () => {
+      const d = (await mirrorRef(body.sessionId).get()).data();
+      return d?.state === "disconnected" ? d : null;
+    });
+    expect(dropped).toBeTruthy();
+    // When "may resume" becomes "being recovered", so the dashboard never
+    // needs its own copy of the grace period.
+    expect(dropped.recoverAfter.toMillis() - dropped.disconnectedAt.toMillis()).toBe(
+      ABANDON_GRACE_MS
+    );
+
+    await rtdb.ref(`staging/${body.sessionId}/meta/reconnects/1`).set(Date.now());
+    const back = await eventually(async () => {
+      const d = (await mirrorRef(body.sessionId).get()).data();
+      return d?.state === "active" ? d : null;
+    });
+    expect(back).toMatchObject({ disconnectedAt: null, recoverAfter: null });
+  });
+
+  it("never brings back a finished session's row on a late dropout event", async () => {
+    // The trigger uses update(), not set(), for exactly this: completion
+    // deleted the row, and a disconnect event arriving afterwards must not
+    // leave a ghost on the researcher's dashboard.
+    const experimentID = await makeExperiment();
+    const { body } = await startSession({ experimentID });
+    await db.collection("experiments").doc(experimentID).update({ finalized: true });
+    await saveData({
+      experimentID,
+      filename: "p01.csv",
+      data: "trial_type\nhtml-keyboard-response\n",
+      sessionId: body.sessionId,
+    });
+    expect((await mirrorRef(body.sessionId).get()).exists).toBe(false);
+
+    // A stamp landing after the session is gone (written as admin: the rules
+    // would refuse a client, which is the other half of the protection).
+    await rtdb.ref(`staging/${body.sessionId}/meta/disconnects/1`).set(Date.now());
+    // Waiting for an absence: give the trigger well over the ~100ms it takes.
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+
+    expect((await mirrorRef(body.sessionId).get()).exists).toBe(false);
+    await rtdb.ref(`staging/${body.sessionId}`).remove();
+  });
+
+  describe("reconciliation, every sweep run", () => {
+    it("rebuilds a row whose write at session start was lost", async () => {
+      const experimentID = await makeExperiment();
+      const { body } = await startSession({ experimentID });
+      await mirrorRef(body.sessionId).delete();
+
+      const stats = await sweepAbandonedSessions(new Set([body.sessionId]));
+
+      expect(stats.mirrorFixed).toBeGreaterThanOrEqual(1);
+      expect((await mirrorRef(body.sessionId).get()).data()).toMatchObject({
+        experimentID,
+        owner: "staging-testuser",
+        state: "active",
+      });
+    });
+
+    it("corrects a row whose dropout event was lost", async () => {
+      const experimentID = await makeExperiment();
+      const { body } = await startSession({ experimentID });
+      await mirrorRef(body.sessionId).update({ state: "disconnected" });
+
+      const stats = await sweepAbandonedSessions(new Set([body.sessionId]));
+
+      expect(stats.mirrorFixed).toBeGreaterThanOrEqual(1);
+      expect((await mirrorRef(body.sessionId).get()).data().state).toBe("active");
+    });
+
+    it("removes a ghost row for a session that has ended", async () => {
+      const experimentID = await makeExperiment();
+      const ghost = `ghost-${randomUUID()}`;
+      await mirrorRef(ghost).set({
+        experimentID,
+        owner: "staging-testuser",
+        state: "active",
+        startedAt: new Date(Date.now() - 10 * 60000),
+      });
+
+      const stats = await sweepAbandonedSessions(new Set([ghost]));
+
+      expect(stats.mirrorFixed).toBe(1);
+      expect((await mirrorRef(ghost).get()).exists).toBe(false);
+    });
+
+    it("leaves alone a row created after the sweep read the open sessions", async () => {
+      // Otherwise a participant who started a second ago vanishes from the
+      // dashboard until the next run.
+      const experimentID = await makeExperiment();
+      const fresh = `fresh-${randomUUID()}`;
+      await mirrorRef(fresh).set({
+        experimentID,
+        owner: "staging-testuser",
+        state: "active",
+        startedAt: new Date(Date.now() + 5000),
+      });
+
+      await sweepAbandonedSessions(new Set([fresh]));
+
+      expect((await mirrorRef(fresh).get()).exists).toBe(true);
+      await mirrorRef(fresh).delete();
+    });
+
+    it("reports how many fixes it needed", async () => {
+      await sweepAbandonedSessions(new Set());
+
+      const status = await db.collection("systemStatus").doc("staging").get();
+      expect(status.data().mirrorFixed).toBe(0);
+      expect(status.data().mirror).toEqual({ created: 0, updated: 0, deleted: 0 });
+    });
+  });
+});
+

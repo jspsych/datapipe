@@ -130,6 +130,15 @@ export default function SendingDataPage() {
           </List.Item>
         </List.Root>
         <Text maxW="70ch">
+          While a study is running, your experiment&apos;s dashboard shows how
+          many participants are part-way through and how long each has been
+          going, updating as they start, finish, or lose their connection. A
+          participant whose connection drops is shown as{" "}
+          <strong>Connection lost — may resume</strong> for 10 minutes, then{" "}
+          <strong>Stopped — being recovered</strong> once DataPipe begins turning
+          what they did into a partial file.
+        </Text>
+        <Text maxW="70ch">
           The trade is size: the browser build of the plugin grows from about
           1 KB to about 53 KB compressed, because it carries the database client
           that makes this work. If your participants are on slow connections and

@@ -91,14 +91,20 @@ describe("purgeUserData", () => {
       .doc(uid)
       .set({ emailHash: "h", codeHash: "h", expiresAt: Date.now(), attempts: 0, sentAt: Date.now() });
 
+    // A live-sessions dashboard row: keyed by a session hash, found by owner.
+    const liveRef = db.collection("liveSessions").doc(`purge-${uid}`);
+    await liveRef.set({ owner: uid, experimentID: "x", state: "active" });
+
     const counts = await purgeUserData(uid);
 
+    expect(await exists(liveRef)).toBe(false);
     expect(counts).toMatchObject({
       experiments: 1,
       filenameClaims: 1,
       metadata: 1,
       logs: 1,
       queueEntries: 1,
+      liveSessions: 1,
       pendingFiles: 1,
       userDocument: 1,
       mailDocuments: 1,
@@ -228,6 +234,7 @@ describe("purgeUserData", () => {
       metadata: 0,
       logs: 0,
       queueEntries: 0,
+      liveSessions: 0,
       pendingFiles: 0,
       userDocument: 0,
       mailDocuments: 0,

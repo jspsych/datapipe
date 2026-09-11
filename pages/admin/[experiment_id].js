@@ -27,6 +27,7 @@ import MetadataControl from "../../components/dashboard/MetadataControl";
 import FinalizeControl from "../../components/dashboard/FinalizeControl";
 import CodeHints from "../../components/dashboard/CodeHints";
 import ErrorPanel from "../../components/dashboard/ErrorPanel";
+import LiveSessionsPanel from "../../components/dashboard/LiveSessionsPanel";
 import QueuePanel, {
   UploadsResolvedNotice,
 } from "../../components/dashboard/QueuePanel";
@@ -71,6 +72,19 @@ function ExperimentPageDashboard({ experiment_id }) {
           orderBy("createdAt", "desc")
         )
       : null;
+  // Participants part-way through a streaming session, kept current by the
+  // server (functions/src/live-sessions.ts). Equality filters only, sorted in
+  // LiveSessionsPanel, so no composite index is needed -- and `owner == uid`
+  // is not optional: firestore.rules is checked against the query, and
+  // without it the listener is refused outright.
+  const liveRef =
+    experiment_id && uid
+      ? query(
+          collection(db, "liveSessions"),
+          where("experimentID", "==", experiment_id),
+          where("owner", "==", uid)
+        )
+      : null;
   const [data, loading, error, snapshot] = useDocumentData(experimentRef);
   const logs = useDocumentData(logsRef)?.[0] || null;
   // The error slot used to be discarded here. This query needs a composite
@@ -82,6 +96,11 @@ function ExperimentPageDashboard({ experiment_id }) {
   const [, , queueError, queueSnapshot] = useCollectionData(queueRef);
   const queueEntries =
     queueSnapshot?.docs.map((d) => ({ id: d.id, ...d.data() })) || [];
+  // Same reasoning as queueError above: a refused or failing listener must say
+  // so, not render as "nobody is in the middle of this experiment".
+  const [, , liveError, liveSnapshot] = useCollectionData(liveRef);
+  const liveSessions =
+    liveSnapshot?.docs.map((d) => ({ id: d.id, ...d.data() })) || [];
 
   const uploadError = logs?.logError;
   const errorLog = logs?.errors;
@@ -161,8 +180,22 @@ function ExperimentPageDashboard({ experiment_id }) {
   // header and a panel below it.
   const showErrorPanel =
     !!uploadError && queueEntries.length === 0 && !showResolved;
+  // "N sessions in progress" is only a claim the page can back for an
+  // experiment that streams (logs.startSession counts admissions). For one
+  // that submits once at the end there is no such thing as in progress, and
+  // "0 in progress" would be false reassurance; for a closed or finalized one
+  // it is noise. A non-zero count is always shown.
+  const inProgressCount = liveSessions.length;
+  const showInProgress =
+    inProgressCount > 0 ||
+    ((logs?.startSession ?? 0) > 0 && data.active && !data.finalized);
   const hasNotices =
-    !!queueError || showResolved || showErrorPanel || queueEntries.length > 0;
+    !!queueError ||
+    showResolved ||
+    showErrorPanel ||
+    queueEntries.length > 0 ||
+    !!liveError ||
+    inProgressCount > 0;
 
   return (
     <VStack
@@ -211,6 +244,12 @@ function ExperimentPageDashboard({ experiment_id }) {
               <Text fontSize="sm" color="fg.muted">
                 {plural(data.sessions || 0, "completed session")}
               </Text>
+              {showInProgress && (
+                <Text fontSize="sm" color="fg.muted">
+                  {inProgressCount} {inProgressCount === 1 ? "session" : "sessions"} in
+                  progress
+                </Text>
+              )}
               {queueEntries.length > 0 && (
                 <StatusIndicator
                   status={
@@ -270,6 +309,24 @@ function ExperimentPageDashboard({ experiment_id }) {
           {queueEntries.length > 0 && (
             <QueuePanel entries={queueEntries} experimentId={experiment_id} />
           )}
+
+          {liveError && (
+            <SectionPanel>
+              <StatusIndicator
+                status="warning"
+                label="DataPipe could not check for sessions in progress."
+              />
+              <GuidanceLine mt={2}>
+                Participants may be part-way through this experiment without
+                this page being able to show them. Their data is unaffected.
+                Reload to try again.
+              </GuidanceLine>
+            </SectionPanel>
+          )}
+
+          {/* Last in the group: everything above may need acting on, this is
+              what is happening right now. */}
+          {inProgressCount > 0 && <LiveSessionsPanel sessions={liveSessions} />}
         </Stack>
       )}
 

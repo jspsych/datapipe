@@ -7,7 +7,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, collection, getDoc, getDocs, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { doc, collection, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where } from 'firebase/firestore';
 import { readFileSync } from 'fs';
 let testEnv;
 
@@ -1011,3 +1011,78 @@ describe('/experiments — uploadFailure is server-managed (P0)', () => {
     );
   });
 });
+
+describe('/liveSessions', () => {
+  // The live-sessions panel on the experiment dashboard. Server-written only;
+  // each researcher may read the rows for their own experiments and nothing
+  // else. The id is a hash of the session id, never the id itself.
+  const ROW = 'a3f1c2d4e5b60718293a4b5c6d7e8f90';
+
+  beforeEach(async () => {
+    await seedDB({
+      [`liveSessions/${ROW}`]: {
+        experimentID: 'live-exp',
+        owner: 'live-owner',
+        state: 'active',
+        startedAt: new Date(),
+        expiresAt: new Date(Date.now() + 86400000),
+        disconnectedAt: null,
+        recoverAfter: null,
+      },
+    });
+  });
+
+  it('lets the owner read a row', async () => {
+    const ctx = testEnv.authenticatedContext('live-owner');
+    await assertSucceeds(getDoc(doc(ctx.firestore(), `liveSessions/${ROW}`)));
+  });
+
+  it('lets the owner run the dashboard\'s exact query', async () => {
+    const ctx = testEnv.authenticatedContext('live-owner');
+    await assertSucceeds(
+      getDocs(
+        query(
+          collection(ctx.firestore(), 'liveSessions'),
+          where('experimentID', '==', 'live-exp'),
+          where('owner', '==', 'live-owner')
+        )
+      )
+    );
+  });
+
+  it('refuses the same query without the owner filter', async () => {
+    // Rules are checked against the query, not the results: without an owner
+    // constraint Firestore cannot prove every row belongs to the caller. This
+    // is why the dashboard query carries `owner == uid`.
+    const ctx = testEnv.authenticatedContext('live-owner');
+    await assertFails(
+      getDocs(query(collection(ctx.firestore(), 'liveSessions'), where('experimentID', '==', 'live-exp')))
+    );
+  });
+
+  it('refuses another researcher', async () => {
+    const ctx = testEnv.authenticatedContext('someone-else');
+    await assertFails(getDoc(doc(ctx.firestore(), `liveSessions/${ROW}`)));
+  });
+
+  it('refuses an unauthenticated reader', async () => {
+    await assertFails(getDoc(doc(testEnv.unauthenticatedContext().firestore(), `liveSessions/${ROW}`)));
+  });
+
+  it('refuses every client write, including the owner\'s', async () => {
+    // Every write is server code keeping the row in step with the staging
+    // tier. A client that could write here could fake or hide a session.
+    const ctx = testEnv.authenticatedContext('live-owner');
+    const ref = doc(ctx.firestore(), `liveSessions/${ROW}`);
+    await assertFails(updateDoc(ref, { state: 'disconnected' }));
+    await assertFails(deleteDoc(ref));
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'liveSessions/new-row'), {
+        experimentID: 'live-exp',
+        owner: 'live-owner',
+        state: 'active',
+      })
+    );
+  });
+});
+

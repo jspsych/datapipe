@@ -206,6 +206,17 @@ export default function PrivacyPage() {
           </List.Item>
           <List.Item>
             <Text as="span" fontWeight="semibold">
+              A record of each session in progress, for your dashboard.
+            </Text>{" "}
+            While a participant is part-way through a streaming experiment,
+            DataPipe keeps a small record of when their session started and
+            whether their connection is live, so your experiment&apos;s
+            dashboard can show it. It holds no participant data and no
+            filename, only you can read it, and it is deleted when the session
+            ends.
+          </List.Item>
+          <List.Item>
+            <Text as="span" fontWeight="semibold">
               Queued submissions.
             </Text>{" "}
             If your provider is unavailable, too busy to accept the file, or
@@ -283,6 +294,10 @@ export default function PrivacyPage() {
             twenty-four hours after it started.
           </List.Item>
           <List.Item>
+            Record of a session in progress: deleted with the session, on the
+            same schedule as its staged trials.
+          </List.Item>
+          <List.Item>
             Queued submission: deleted seven days after it was queued.
           </List.Item>
           <List.Item>
@@ -300,8 +315,8 @@ export default function PrivacyPage() {
         <Text maxW="70ch">
           Deleting your account removes all of the above in one pass —
           experiments, metadata documents, logs, queued submissions and their
-          stored files, filename records, notification records, and the account
-          itself. It removes nothing from your storage provider; your data stays
+          stored files, filename records, records of sessions in progress,
+          notification records, and the account itself. It removes nothing from your storage provider; your data stays
           where you sent it.
         </Text>
         <Text maxW="70ch">
