@@ -16,7 +16,7 @@ import { getProviderForExperiment, claimNameFor } from "./providers/index.js";
 import { WriteResult, ResolvedAuth } from "./providers/types.js";
 import { claimFilename, confirmClaim, CollisionCacheUnavailableError } from "./collision-cache.js";
 import { isCompactionInFlight, COMPACTION_HOLD_REASON } from "./compaction-gate.js";
-import { discardSession } from "./staging.js";
+import { discardSession, isValidSessionId } from "./staging.js";
 import { ExperimentData, UserData, RequestBody } from './interfaces';
 
 export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 }, async (req, res) => {
@@ -73,8 +73,20 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
   // scaled down the moment the response is flushed. Same reasoning as the
   // "logs are written BEFORE the response here" note on the NAME_CONFLICT
   // branch below.
+  //
+  // isValidSessionId, not a truthiness check: sessionId is whatever the
+  // request body claimed, unauthenticated and unchecked by anything ahead of
+  // this point, and discardSession splices it straight into an RTDB path. A
+  // body of `{"sessionId": "/"}` is truthy and, once the Admin SDK normalizes
+  // away the empty path segments, resolves to "/staging" and "/openSessions"
+  // themselves -- wiping every in-progress session for every experiment. This
+  // gate runs on every request that reaches discardStaging, including the
+  // four unauthenticated ones above (finalized / inactive / session-cap /
+  // validation), so a closed experiment id was, before this check, enough to
+  // reach it. discardSession guards the same thing again on its own input;
+  // this is the first of the two doors, not the only one.
   const discardStaging = async () => {
-    if (sessionId) await discardSession(sessionId);
+    if (isValidSessionId(sessionId)) await discardSession(sessionId);
   };
 
   const exp_doc_ref: DocumentReference<DocumentData> = db.collection("experiments").doc(experimentID);

@@ -67,10 +67,38 @@ export * from "./staging-assembly.js";
 // length. This id is a BEARER CAPABILITY -- whoever holds it can write to the
 // session -- so unguessability is the security property, not just collision
 // avoidance. 24 chars of a 62-symbol alphabet is ~143 bits.
-const generateSessionId = customAlphabet(
-  "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
-  24
-);
+//
+// Kept as named constants, rather than inlined into generateSessionId below,
+// because isValidSessionId has to accept EXACTLY this format: a validator
+// hand-copied from the generator can silently drift from it, and the two
+// disagreeing is exactly the kind of gap a client-supplied id is built to
+// find. Sharing the constants makes that impossible instead of merely
+// unlikely.
+const SESSION_ID_ALPHABET =
+  "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+const SESSION_ID_LENGTH = 24;
+
+// Exported for staging-session-id.test.js: the shared constants above are
+// what keep this and isValidSessionId in agreement, but the pure test still
+// generates through this function rather than the constants directly, so it
+// exercises the same code path openSession does.
+export const generateSessionId = customAlphabet(SESSION_ID_ALPHABET, SESSION_ID_LENGTH);
+
+// Anchored, fixed-length, alphabet-only: no "/", no ".", no empty string. The
+// RTDB paths this id is spliced into (`staging/${sessionId}`,
+// `openSessions/${sessionId}`) are built by ordinary template-string
+// concatenation, and the Admin SDK normalizes a path by DROPPING empty
+// segments before it ever reaches the wire -- so a sessionId of "/" resolves
+// to "/staging" and "/openSessions" themselves, "//" or "../x" do something
+// just as wrong, and a non-string reaches here only because a caller skipped
+// this check. This pattern is the one gate a value has to clear before it is
+// trusted as a path segment rather than a client-controlled string.
+const SESSION_ID_PATTERN = new RegExp(`^[${SESSION_ID_ALPHABET}]{${SESSION_ID_LENGTH}}$`);
+
+/** Whether `value` is exactly the format generateSessionId mints -- nothing else. */
+export function isValidSessionId(value: unknown): value is string {
+  return typeof value === "string" && SESSION_ID_PATTERN.test(value);
+}
 
 // ---------------------------------------------------------------------------
 // Lazy database handle
@@ -333,8 +361,22 @@ export async function assembleSession(
  * somewhere durable by the time it calls this, so a failure here is orphaned
  * staging data (which the sweep collects on its next pass) rather than lost
  * data. It must never turn a successful submission into an error response.
+ *
+ * Guards its own input, in addition to every caller checking first: this is
+ * exported and called from several places (api-data.ts, the sweep), and it is
+ * the function that actually splices sessionId into an RTDB path. A value
+ * that fails isValidSessionId is refused here even if some future caller
+ * forgets to -- logged and returned, never thrown, matching the best-effort
+ * contract above. See isValidSessionId for why this matters: "/", "//", and
+ * "../x" all normalize to paths this function must never touch.
  */
 export async function discardSession(sessionId: string): Promise<void> {
+  if (!isValidSessionId(sessionId)) {
+    console.warn(
+      `Refusing to discard session with an invalid id: ${JSON.stringify(sessionId)}`
+    );
+    return;
+  }
   try {
     await rtdb()
       .ref()
