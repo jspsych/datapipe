@@ -1056,6 +1056,52 @@ describe("8b. resolveServerUrl SSRF allowlist enforcement", () => {
   });
 });
 
+// isAllowedMockOrigin (dataverse.ts) is the seam dataverse-emulator.test.js
+// relies on to reach its local mock without weakening the allowlist itself --
+// it exempts exactly one origin, named by DATAVERSE_MOCK_ORIGIN, and only
+// while FUNCTIONS_EMULATOR is "true" (the value the Firebase emulator sets
+// and a deployed function never does). What matters here is that the seam is
+// genuinely inert outside the emulator: a bare loopback origin must still be
+// refused even when DATAVERSE_MOCK_ORIGIN happens to name it, if
+// FUNCTIONS_EMULATOR is not set.
+describe("8c. isAllowedMockOrigin test seam is gated on FUNCTIONS_EMULATOR", () => {
+  const originalFunctionsEmulator = process.env.FUNCTIONS_EMULATOR;
+  const originalMockOrigin = process.env.DATAVERSE_MOCK_ORIGIN;
+  const MOCK_ORIGIN = "http://127.0.0.1:3582";
+
+  afterEach(() => {
+    if (originalFunctionsEmulator === undefined) delete process.env.FUNCTIONS_EMULATOR;
+    else process.env.FUNCTIONS_EMULATOR = originalFunctionsEmulator;
+    if (originalMockOrigin === undefined) delete process.env.DATAVERSE_MOCK_ORIGIN;
+    else process.env.DATAVERSE_MOCK_ORIGIN = originalMockOrigin;
+  });
+
+  it("still refuses a loopback serverUrl matching DATAVERSE_MOCK_ORIGIN when FUNCTIONS_EMULATOR is unset", async () => {
+    delete process.env.FUNCTIONS_EMULATOR;
+    process.env.DATAVERSE_MOCK_ORIGIN = MOCK_ORIGIN;
+
+    const container = { provider: "dataverse", datasetId: 7, persistentId: "doi:10/abc", serverUrl: MOCK_ORIGIN };
+
+    await expect(
+      dataverseProvider.downloadFile(auth, container, { id: "42", name: "data.json" })
+    ).rejects.toThrow(/allowed Dataverse server/i);
+
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("allows that same loopback serverUrl through once FUNCTIONS_EMULATOR is \"true\" (positive control)", async () => {
+    process.env.FUNCTIONS_EMULATOR = "true";
+    process.env.DATAVERSE_MOCK_ORIGIN = MOCK_ORIGIN;
+    mockFetch.mockResolvedValueOnce(mockResponse({ status: 200, statusText: "OK", textBody: "content" }));
+
+    const container = { provider: "dataverse", datasetId: 7, persistentId: "doi:10/abc", serverUrl: MOCK_ORIGIN };
+    const result = await dataverseProvider.downloadFile(auth, container, { id: "42", name: "data.json" });
+
+    expect(callArgs(0).url).toBe(`${MOCK_ORIGIN}/api/access/datafile/42`);
+    expect(result).toEqual({ success: true, content: "content" });
+  });
+});
+
 describe("10. supportsTabIngest (version parsing, lenient by design)", () => {
   // tabIngest was added in Dataverse 5.11. Real installations return version
   // strings in inconsistent shapes -- verified live, 2026-07-26 -- so parsing

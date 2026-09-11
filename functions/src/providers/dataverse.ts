@@ -59,6 +59,39 @@ function authHeaders(auth: ResolvedAuth): Record<string, string> {
   return { "X-Dataverse-key": auth.token };
 }
 
+// TEST-ONLY TRANSPORT SEAM. Lets exactly one origin bypass isAllowedServerUrl,
+// gated on FUNCTIONS_EMULATOR, which the Firebase emulator sets to "true" and
+// a deployed function never sets -- so in production this reads an unset
+// variable and returns false no matter what DATAVERSE_MOCK_ORIGIN holds.
+//
+// This is NOT zenodo.ts's emulatorServerOverride (see resolveServerUrl
+// there): that helper REPLACES the resolved serverUrl outright, because
+// Zenodo's serverUrl is a provider-wide constant with nowhere else to carry a
+// redirect. Dataverse is federated -- serverUrl is per-connection/per-
+// container data that dataverse-emulator.test.js seeds directly into the
+// experiment doc and the stored connection -- so there is no single call site
+// to redirect. What that suite needs instead is for its seeded loopback
+// origin specifically to clear the allowlist it would otherwise fail (bare
+// loopback host, no ".": see isAllowedServerUrl), while every other origin --
+// real or malicious -- is still checked exactly as before. Comparing against
+// DATAVERSE_MOCK_ORIGIN rather than accepting any loopback address is what
+// keeps this from becoming a second, quieter allowlist bypass: only the one
+// origin the emulator's own env file names can ever pass.
+function isAllowedMockOrigin(serverUrl: string): boolean {
+  if (process.env.FUNCTIONS_EMULATOR !== "true") {
+    return false;
+  }
+  const mockOrigin = process.env.DATAVERSE_MOCK_ORIGIN;
+  if (!mockOrigin) {
+    return false;
+  }
+  try {
+    return new URL(serverUrl).origin === mockOrigin;
+  } catch {
+    return false;
+  }
+}
+
 // serverUrl is federated: it can come from the container (an already-created
 // dataset knows exactly which installation it lives on) or from auth (the
 // researcher's current connection). The container wins when both are present
@@ -86,7 +119,7 @@ function resolveServerUrl(auth: ResolvedAuth, container?: ContainerRef): string 
   if (!serverUrl) {
     throw new Error("Dataverse serverUrl is missing from both the container and the resolved auth");
   }
-  if (!isAllowedServerUrl(serverUrl)) {
+  if (!isAllowedServerUrl(serverUrl) && !isAllowedMockOrigin(serverUrl)) {
     throw new Error(`Not an allowed Dataverse server URL: ${serverUrl}`);
   }
   return new URL(serverUrl).origin;
