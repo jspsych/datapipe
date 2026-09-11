@@ -133,6 +133,10 @@ export async function promoteToQueue(
   }
 
   const { experimentID, filename, data } = envelope;
+  // Missing on envelopes persisted before this field existed -- those were
+  // always plain data/CSV submissions (base64 uploads are the newer path,
+  // api-base64.ts), so "data" is the correct default, not just a fallback.
+  const dataType = envelope.dataType ?? "data";
 
   // Look up the experiment to get owner and osfFilesLink
   const expDoc = await db.collection("experiments").doc(experimentID).get();
@@ -151,12 +155,20 @@ export async function promoteToQueue(
   }
 
   // Layout-aware upload path: metadata-active experiments store their raw
-  // file at data/raw/, same as api-data.ts's live-submission path. Recovered
-  // sessions get no metadata/derived files regenerated here (recovery has no
-  // metadata pipeline and the raw file is the source of truth; the next live
-  // submission re-merges Firestore metadata into dataset_description.json
-  // anyway) — full parity would be separate work.
-  const uploadFilename = uploadPathFor(expData.metadataActive, filename);
+  // *data* file at data/raw/, same as api-data.ts's live-submission path.
+  // Recovered sessions get no metadata/derived files regenerated here
+  // (recovery has no metadata pipeline and the raw file is the source of
+  // truth; the next live submission re-merges Firestore metadata into
+  // dataset_description.json anyway) — full parity would be separate work.
+  //
+  // A base64 upload is NEVER placed under data/raw/, metadata-active or not
+  // -- api-base64.ts has no metadata block at all and uploads media under its
+  // bare `filename` unconditionally (see the comment on its collision-claim
+  // call). Recovery has to match that exactly, or a media file recovered from
+  // a metadata-active experiment would land at data/raw/<name> live traffic
+  // never puts it at, and get treated as this dataset's Psych-DS raw data.
+  const uploadFilename =
+    dataType === "base64" ? filename : uploadPathFor(expData.metadataActive, filename);
 
   // Check for deduplication and atomically create the queue entry via transaction.
   // This prevents duplicate entries if two recovery runs overlap. Keyed off
@@ -195,7 +207,13 @@ export async function promoteToQueue(
       owner: expData.owner,
       filename: uploadFilename,
       storagePath,
-      dataType: "data",
+      // Propagated from the envelope (defaulted above), not hardcoded --
+      // scheduled-upload-retry.ts branches on this to decide whether to
+      // base64-decode the cached payload before writing it to the provider.
+      // A recovered base64 upload stuck at "data" would have its ASCII
+      // base64 text written verbatim as the file body instead of the decoded
+      // binary, with no error anywhere to surface it.
+      dataType,
       status: "pending",
       errorCode: 0,
       retryCount: 0,
@@ -342,6 +360,13 @@ async function reportUndecryptable(
     owner,
     filename,
     storagePath,
+    // Left hardcoded, deliberately, unlike promoteToQueue's queueDocData
+    // above: the envelope's real dataType lives inside the ciphertext this
+    // branch could not decrypt, so it is genuinely unknowable here -- and
+    // inert, since this entry is written straight to "failed" and
+    // scheduled-upload-retry.ts's query only ever picks up status ==
+    // "pending". Nothing downstream reads dataType off a terminally failed
+    // entry.
     dataType: "data",
     status: "failed",
     errorCode: 0,
