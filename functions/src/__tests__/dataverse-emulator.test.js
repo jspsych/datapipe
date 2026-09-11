@@ -7,15 +7,31 @@
 // self-contained mock Dataverse installation -- the house pattern established
 // by gdrive-emulator.test.js.
 //
-// HOW THE MOCK IS REACHED, AND WHY NO ENV WIRING IS NEEDED. Dataverse is
-// federated, so serverUrl is per-connection data rather than a provider
-// constant: dataverse.ts's resolveServerUrl reads it off the container first
-// and the connection second, and (unlike connect-provider.ts, which gates
-// researcher-supplied URLs through isAllowedServerUrl at CONNECT time) it
-// does not re-validate. Seeding http://127.0.0.1:3582 straight into the
-// experiment's providerContainer is therefore all it takes to point the
-// adapter at this file's mock. Zenodo needed an env-gated override for
-// exactly the reason Dataverse does not -- see zenodo-emulator.test.js.
+// HOW THE MOCK IS REACHED. Dataverse is federated, so serverUrl is
+// per-connection/per-container data rather than a provider constant:
+// dataverse.ts's resolveServerUrl reads it off the container first and the
+// connection second. Seeding http://127.0.0.1:3582 straight into the
+// experiment's providerContainer and the stored connection is what points the
+// adapter at this file's mock, the same way it would point at a real
+// installation.
+//
+// resolveServerUrl DOES re-validate that value against isAllowedServerUrl,
+// the same SSRF allowlist connect-provider.ts enforces at CONNECT time --
+// providerContainer.serverUrl is owner-writable Firestore data, and trusting
+// it unchecked on every hot-path call was exactly the bypass this suite's
+// comment used to describe as the status quo. A bare loopback host like
+// 127.0.0.1 fails that allowlist (no ".", the same rule that rejects
+// "https://dataverse/"), so this suite's mock port is allowed through only
+// via a narrow, explicit exception: dataverse.ts's isAllowedMockOrigin
+// compares the resolved serverUrl's origin against DATAVERSE_MOCK_ORIGIN
+// (functions/.env.local) and is gated on FUNCTIONS_EMULATOR=true, so it can
+// never fire against a deployed function. Every other loopback/private
+// address is still refused -- see providers-dataverse.test.js's SSRF suite
+// and the regression case asserting the seam is inert when FUNCTIONS_EMULATOR
+// is unset. Zenodo's env-gated override in zenodo-emulator.test.js works
+// differently (it REPLACES the resolved serverUrl outright, since Zenodo's is
+// a single provider-wide constant); see isAllowedMockOrigin's comment in
+// dataverse.ts for why Dataverse's seam is narrower.
 //
 // TOKENS ARE PLAINTEXT (no "v1:" prefix -> crypto-utils.ts's decrypt() passes
 // them through), so this jest process and the separate Functions-emulator

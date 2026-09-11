@@ -1012,6 +1012,110 @@ describe('/experiments — uploadFailure is server-managed (P0)', () => {
   });
 });
 
+// experiments/{id}.storageProvider / .providerContainer -- joined
+// serverManagedFieldsUntouched() because providerContainer.serverUrl is an
+// SSRF surface, not just bookkeeping: dataverse.ts's resolveServerUrl prefers
+// it over the researcher's connected auth on every provider call. Before this
+// lock, an owner could repoint an existing experiment's
+// providerContainer.serverUrl at an internal address from the browser and
+// every subsequent write/list/download would carry the researcher's own
+// decrypted API token to it. What is being tested here is that the CLIENT SDK
+// path cannot rewrite either field once the experiment exists -- creation
+// (isCreatableProvider(), tested above under "step 7a") is unaffected.
+describe('/experiments — storageProvider/providerContainer are server-managed (SSRF lock)', () => {
+  function experimentFields(overrides = {}) {
+    return {
+      active: true,
+      activeBase64: false,
+      activeConditionAssignment: false,
+      id: overrides.id,
+      owner: overrides.owner,
+      title: 'Test experiment',
+      sessions: 0,
+      nConditions: 1,
+      currentCondition: 0,
+      useValidation: true,
+      allowJSON: true,
+      allowCSV: true,
+      requiredFields: [],
+      maxSessions: 1,
+      limitSessions: false,
+      storageProvider: 'dataverse',
+      providerContainer: {
+        provider: 'dataverse',
+        datasetId: 7,
+        persistentId: 'doi:10/abc',
+        serverUrl: 'https://demo.dataverse.org',
+      },
+      ...overrides,
+    };
+  }
+
+  it('DENIES a client update that repoints providerContainer.serverUrl (the SSRF attempt itself)', async () => {
+    const docId = 'exp-provider-container-ssrf';
+    await seedDB({
+      [`experiments/${docId}`]: experimentFields({ id: docId, owner: 'pc-user' }),
+    });
+
+    const ctx = testEnv.authenticatedContext('pc-user');
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), `experiments/${docId}`), {
+        providerContainer: {
+          provider: 'dataverse',
+          datasetId: 7,
+          persistentId: 'doi:10/abc',
+          serverUrl: 'http://169.254.169.254',
+        },
+      })
+    );
+  });
+
+  it('DENIES a client update that touches providerContainer via a dotted field path', async () => {
+    // affectedKeys() reports the TOP-LEVEL key, so a dotted-path write is
+    // caught by the same list entry as a whole-map replace.
+    const docId = 'exp-provider-container-dotted';
+    await seedDB({
+      [`experiments/${docId}`]: experimentFields({ id: docId, owner: 'pc-user' }),
+    });
+
+    const ctx = testEnv.authenticatedContext('pc-user');
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), `experiments/${docId}`), {
+        'providerContainer.serverUrl': 'http://10.0.0.5:8080',
+      })
+    );
+  });
+
+  it('DENIES a client update that swaps storageProvider on an existing experiment', async () => {
+    const docId = 'exp-storage-provider-swap';
+    await seedDB({
+      [`experiments/${docId}`]: experimentFields({ id: docId, owner: 'pc-user' }),
+    });
+
+    const ctx = testEnv.authenticatedContext('pc-user');
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), `experiments/${docId}`), { storageProvider: 'gdrive' })
+    );
+  });
+
+  it('ALLOWS ordinary edits on an experiment that has storageProvider + providerContainer', async () => {
+    // Regression guard for the rule change itself: the dashboard's writers
+    // (ExperimentActive.js, ExperimentValidation.js, Title.js,
+    // MetadataControl.js) are narrow merge writes that never touch either
+    // field, so their existing behavior (e.g. toggling `active`) must keep
+    // working.
+    const docId = 'exp-provider-container-ordinary-edit';
+    await seedDB({
+      [`experiments/${docId}`]: experimentFields({ id: docId, owner: 'pc-user' }),
+    });
+
+    const ctx = testEnv.authenticatedContext('pc-user');
+    await assertSucceeds(
+      updateDoc(doc(ctx.firestore(), `experiments/${docId}`), { active: false })
+    );
+  });
+});
+
 describe('/liveSessions', () => {
   // The live-sessions panel on the experiment dashboard. Server-written only;
   // each researcher may read the rows for their own experiments and nothing
