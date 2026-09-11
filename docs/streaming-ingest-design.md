@@ -392,6 +392,20 @@ disconnected when its highest stamped slot is unanswered
   multi-field `onDisconnect` update against rules whose clauses depend on each
   other (verified in the emulator).
 
+**The live-sessions dashboard** (`feat/live-sessions`) shows researchers who is
+mid-experiment, live. Browsers cannot read the staging tier -- a session id is a
+write capability -- so the server keeps a Firestore mirror,
+`liveSessions/{sha256(sessionId)[:32]}`, holding only start/expiry times,
+owner, experiment and connection state (`functions/src/live-sessions.ts`). It is
+written at session start, deleted by `discardSession()`, and updated by the
+**one function triggered by the staging tree**, `onstagingdisconnect`, scoped to
+`staging/{sid}/meta/{kind}/{n}` so no trial or `lastFlushAt` write reaches it.
+That trigger is safe only because of the slot cap above: a participant-writable
+path with no bound would let one session id buy millions of invocations. Every
+sweep reconciles the mirror against RTDB and records the number of fixes in
+`systemStatus/staging.mirrorFixed`, so the mirror is wrong for at most one sweep
+interval and a failing write path is visible.
+
 The staging database's address is resolved at runtime, not assumed:
 `STAGING_DATABASE_URL` if set, else `FIREBASE_CONFIG.databaseURL` (which
 `firebase deploy` fills from the Management API, so any region works), else
