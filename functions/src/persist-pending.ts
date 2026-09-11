@@ -12,6 +12,17 @@ interface PendingEnvelope {
   filename: string;
   data: string;
   metadataOptions?: object;
+  // What kind of string `data` is: "data" for a JSON/CSV submission (api-data.ts),
+  // "base64" for a base64-encoded media upload (api-base64.ts). Read by
+  // scheduled-pending-recovery.ts's promoteToQueue so a recovered entry takes
+  // the same branch in scheduled-upload-retry.ts that the live path would have
+  // -- without it, a recovered base64 upload gets written to the provider as
+  // literal base64 ASCII text instead of the decoded binary (see
+  // scheduled-upload-retry.ts's dataType branch). Optional, and missing is
+  // treated as "data": envelopes persisted before this field existed carry no
+  // marker and were always plain data/CSV submissions (base64 uploads are the
+  // newer path), so that default keeps them promoting correctly.
+  dataType?: "data" | "base64";
 }
 
 /**
@@ -25,13 +36,14 @@ export async function persistPending(
   experimentID: string,
   filename: string,
   data: string,
-  metadataOptions?: object
+  metadataOptions?: object,
+  dataType?: "data" | "base64"
 ): Promise<string> {
   const timestamp = Date.now();
   const safeName = filename.replace(/[/\\]/g, "_");
   const storagePath = `${PENDING_PREFIX}/${experimentID}/${safeName}_${timestamp}`;
 
-  const envelope: PendingEnvelope = { experimentID, filename, data, metadataOptions };
+  const envelope: PendingEnvelope = { experimentID, filename, data, metadataOptions, dataType };
 
   const bucket = storage.bucket();
   const file = bucket.file(storagePath);

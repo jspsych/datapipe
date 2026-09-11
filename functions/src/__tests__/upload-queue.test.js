@@ -735,4 +735,91 @@ describe("tiered backoff, exercised through the real retry worker", () => {
     const delayMs = after.nextRetryAt.toMillis() - Date.now();
     expect(delayMs).toBeGreaterThan(60 * 60 * 1000);
   });
+
+  // Corruption regression: a queue entry recovered by
+  // scheduled-pending-recovery.ts's promoteToQueue for a base64 media upload
+  // must carry dataType: "base64" (see scheduled-pending-recovery-emulator.test.js
+  // for that half). This test proves the OTHER half of the bug is closed --
+  // that this worker, reading such an entry, base64-DECODES the cached
+  // payload before handing it to the provider, rather than writing the
+  // base64 ASCII text itself as the file's bytes.
+  it("dataType: base64 entries are decoded before being written to the provider", async () => {
+    const owner = `base64-retry-owner-${randomUUID()}`;
+    const experimentID = `base64-retry-exp-${randomUUID()}`;
+    // Base64 uploads are never placed under data/raw/ (api-base64.ts has no
+    // metadata block), so the queued filename is the bare name.
+    const filename = "recording.webm";
+    const docId = `${experimentID}:${filename}`.replace(/[/\\]/g, "_");
+    const storagePath = `upload-queue/${docId}`;
+
+    await db.collection("users").doc(owner).set({
+      email: `${owner}@example.test`,
+      connectedAccounts: {
+        dataverse: {
+          authMethod: "static-token",
+          encryptedToken: "plaintext-token",
+          serverUrl: "https://example.test",
+        },
+      },
+    });
+    await db.collection("experiments").doc(experimentID).set({
+      active: true,
+      owner,
+      storageProvider: "dataverse",
+      providerContainer: { provider: "dataverse", datasetId: 1, persistentId: "doi:x/y", serverUrl: "https://example.test" },
+    });
+
+    const decodedText = "not really webm bytes, just a marker";
+    const base64Payload = Buffer.from(decodedText).toString("base64");
+    // Plaintext, unencrypted, like seedDueItem's cached payloads above --
+    // decryptPayload passes an unmarked object through unchanged.
+    await bucket.file(storagePath).save(base64Payload, { contentType: "text/plain" });
+
+    await queueDoc(docId).set({
+      experimentID,
+      owner,
+      filename,
+      storagePath,
+      dataType: "base64",
+      status: "pending",
+      errorCode: 0,
+      retryCount: 0,
+      maxRetries: 5,
+      createdAt: Timestamp.now(),
+      lastAttemptAt: null,
+      nextRetryAt: Timestamp.fromMillis(Date.now() - 1000),
+      completedAt: null,
+      failureReason: "Recovered from interrupted upload (server restart or memory limit)",
+      deduplicationKey: `${experimentID}:${filename}`,
+      sessionIncremented: false,
+      storageProvider: "dataverse",
+      providerContainer: { provider: "dataverse", datasetId: 1, persistentId: "doi:x/y", serverUrl: "https://example.test" },
+    });
+
+    mockFetch.mockResolvedValueOnce({
+      status: 200,
+      statusText: "OK",
+      json: () =>
+        Promise.resolve({
+          status: "OK",
+          data: { files: [{ label: filename, dataFile: { id: 1 } }] },
+        }),
+    });
+
+    await retryPendingUploads(owner);
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [, options] = mockFetch.mock.calls[0];
+    const body = Buffer.isBuffer(options.body) ? options.body : Buffer.from(options.body);
+
+    // The fix: the request body carries the DECODED bytes...
+    expect(body.includes(Buffer.from(decodedText))).toBe(true);
+    // ...not the base64 TEXT -- which is exactly what a hardcoded
+    // dataType: "data" used to cause (see scheduled-upload-retry.ts's
+    // dataType branch: "data" skips the base64 decode entirely).
+    expect(body.includes(Buffer.from(base64Payload))).toBe(false);
+
+    const after = (await db.collection("uploadQueue").doc(docId).get()).data();
+    expect(after.status).toBe("completed");
+  });
 });

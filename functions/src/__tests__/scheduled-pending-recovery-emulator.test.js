@@ -107,3 +107,75 @@ describe("scheduled-pending-recovery layout awareness", () => {
     expect(doc.data().deduplicationKey).toBe(expectedDedupKey);
   });
 });
+
+// Regression coverage for the corruption bug: a pending envelope for a base64
+// media upload (api-base64.ts) carries no data-type marker of its own, so
+// promoteToQueue used to hardcode `dataType: "data"` on every recovered
+// entry. scheduled-upload-retry.ts branches on that field to decide whether
+// to base64-decode the cached payload before writing it -- stuck at "data",
+// a recovered .webm/.png lands in the researcher's storage as base64 ASCII
+// text, with no error anywhere. It also used to run every recovered file
+// (base64 included) through uploadPathFor, which places it at data/raw/ for
+// a metadata-active experiment -- a location the live base64 path
+// (api-base64.ts) never uses, since it has no metadata block at all.
+describe("scheduled-pending-recovery propagates the envelope's dataType", () => {
+  it("promotes a base64 envelope with dataType: base64, and does NOT place it under data/raw/ even when metadata is active", async () => {
+    const experimentID = `recovery-test-base64-${randomUUID()}`;
+    // metadataActive: true is the crux of the path half of this regression --
+    // a base64 upload must still land at the bare filename, not data/raw/.
+    await seedExperiment(experimentID, true);
+
+    const filename = "recording.webm";
+    const base64Payload = Buffer.from("not really webm bytes, just a marker").toString("base64");
+
+    const storagePath = await persistPending(
+      experimentID,
+      filename,
+      base64Payload,
+      undefined,
+      "base64"
+    );
+    const file = bucket.file(storagePath);
+
+    await promoteToQueue(file);
+
+    // Base64 uploads are keyed on the bare filename (see api-base64.ts),
+    // never on uploadPathFor's data/raw/ placement.
+    const expectedDedupKey = `${experimentID}:${filename}`;
+    const docId = expectedDedupKey.replace(/[/\\]/g, "_");
+    createdQueueDocIds.push(docId);
+    const doc = await db.collection("uploadQueue").doc(docId).get();
+
+    expect(doc.exists).toBe(true);
+    const data = doc.data();
+    expect(data.dataType).toBe("base64");
+    expect(data.filename).toBe(filename);
+    expect(data.filename).not.toMatch(/^data\/raw\//);
+    expect(data.deduplicationKey).toBe(expectedDedupKey);
+  });
+
+  it("promotes a legacy envelope with no dataType field as dataType: data", async () => {
+    const experimentID = `recovery-test-legacy-${randomUUID()}`;
+    await seedExperiment(experimentID, false);
+
+    // Bypass persistPending's dataType parameter entirely to reproduce an
+    // envelope written before this field existed. persistPending still
+    // JSON.stringifies an envelope missing the key when dataType is
+    // undefined (JSON.stringify drops undefined properties), which is
+    // exactly this shape -- so this call is representative of every object
+    // already sitting in pending-data/ before this fix shipped.
+    const filename = "legacy-data.json";
+    const storagePath = await persistPending(experimentID, filename, "[]");
+    const file = bucket.file(storagePath);
+
+    await promoteToQueue(file);
+
+    const expectedDedupKey = `${experimentID}:${filename}`;
+    const docId = expectedDedupKey.replace(/[/\\]/g, "_");
+    createdQueueDocIds.push(docId);
+    const doc = await db.collection("uploadQueue").doc(docId).get();
+
+    expect(doc.exists).toBe(true);
+    expect(doc.data().dataType).toBe("data");
+  });
+});
