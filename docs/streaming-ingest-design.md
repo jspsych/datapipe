@@ -375,6 +375,23 @@ suggestion above. A POST per flush is a provider write per flush, which is the
 condition §2 says compaction exists to undo; batching lives inside the client's
 `record()` instead.
 
+**Abandonment is recorded per connection, not in one `meta/abandonedAt`
+field** as the data model above shows. Each connection *n* the plugin opens gets
+a write-once `meta/disconnects/{n}` stamp (armed via `onDisconnect`) and a
+write-once `meta/reconnects/{n}` mark when it comes back; a session is
+disconnected when its highest stamped slot is unanswered
+(`disconnectedSince()` in `functions/src/staging-assembly.ts`). Two reasons:
+
+- A single field is wrong under a network switch. The old socket can stay
+  half-open until the server times it out, so its stamp can land after the
+  participant has reconnected. A per-connection slot is already answered.
+- The slots are capped at 20 of each kind, write-once, server-timestamped. That
+  bounds every write under them to 40 per session, which is what makes it safe
+  for the live-sessions dashboard to run a function on them. A counter beside
+  a single field was tried first and does not work: RTDB refuses to register a
+  multi-field `onDisconnect` update against rules whose clauses depend on each
+  other (verified in the emulator).
+
 The staging database's address is resolved at runtime, not assumed:
 `STAGING_DATABASE_URL` if set, else `FIREBASE_CONFIG.databaseURL` (which
 `firebase deploy` fills from the Management API, so any region works), else

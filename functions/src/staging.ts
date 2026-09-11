@@ -11,7 +11,7 @@
 // WHAT LIVES IN RTDB, AND WHAT DOES NOT
 //
 //   openSessions/{sessionId}       { experimentId, startedAt, expiresAt }
-//   staging/{sessionId}/meta       { startedAt, lastFlushAt, abandonedAt? }
+//   staging/{sessionId}/meta       { startedAt, lastFlushAt, disconnects/{n}, reconnects/{n} }
 //   staging/{sessionId}/trials/{seq}   one trial's JSON, as a string
 //
 // openSessions is the capability table: a session id is admitted to the

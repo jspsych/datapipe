@@ -10,6 +10,7 @@
 import {
   assembleTrials,
   partialFilenameFor,
+  disconnectedSince,
   MAX_ASSEMBLED_BYTES,
 } from '../../lib/staging-assembly.js';
 
@@ -186,5 +187,70 @@ describe('partialFilenameFor', () => {
     expect(partialFilenameFor(session({ filename: '.csv' }))).toBe(
       'session-abc123.partial.json'
     );
+  });
+});
+
+describe('disconnectedSince', () => {
+  // Shared by the sweep and the dashboard's live view, so a wrong answer here
+  // is either a participant recovered as a partial file while still working,
+  // or a dropout the researcher never sees.
+
+  it('reports a connected session with no stamps as connected', () => {
+    expect(disconnectedSince({ startedAt: 1, lastFlushAt: 2 })).toBeNull();
+  });
+
+  it('reports the stamp time for an unanswered drop', () => {
+    expect(disconnectedSince({ disconnects: { 1: 5000 } })).toBe(5000);
+  });
+
+  it('reads the sparse array RTDB returns for small integer keys', () => {
+    // {"1": 5000} comes back from RTDB as a SPARSE array -- a hole at index 0,
+    // not a null. Both are tested because only the hole broke anything: .map
+    // skips holes, and the first version threw on every real dropout while a
+    // test written with `[null, 5000]` passed.
+    // eslint-disable-next-line no-sparse-arrays
+    const sparse = [, 5000];
+    expect(0 in sparse).toBe(false);
+    expect(disconnectedSince({ disconnects: sparse })).toBe(5000);
+    // eslint-disable-next-line no-sparse-arrays
+    expect(disconnectedSince({ disconnects: [, 5000], reconnects: [, 6000] })).toBeNull();
+    expect(disconnectedSince({ disconnects: [null, 5000] })).toBe(5000);
+  });
+
+  it('treats a reconnect mark as answering its slot', () => {
+    expect(disconnectedSince({ disconnects: { 1: 5000 }, reconnects: { 1: 6000 } })).toBeNull();
+  });
+
+  it('answers a late stamp from an old connection by slot, not by arrival order', () => {
+    // The reconnect mark for connection 1 was written BEFORE connection 1's
+    // stamp landed (half-open socket after a network switch): its timestamp
+    // is earlier. Order-by-time would call this a live dropout.
+    expect(disconnectedSince({ disconnects: { 1: 9000 }, reconnects: { 1: 7000 } })).toBeNull();
+  });
+
+  it('judges by the highest stamped slot', () => {
+    // Connection 1 dropped and came back; connection 2 dropped and did not.
+    expect(
+      disconnectedSince({ disconnects: { 1: 1000, 2: 8000 }, reconnects: { 1: 2000 } })
+    ).toBe(8000);
+  });
+
+  it('ignores an unanswered old slot once a higher slot has been answered', () => {
+    // Slot 1's reconnect mark was lost, but slot 2 was later stamped and
+    // answered: the participant has been back since.
+    expect(
+      disconnectedSince({ disconnects: { 1: 1000, 2: 3000 }, reconnects: { 2: 4000 } })
+    ).toBeNull();
+  });
+
+  it('treats trials flushed after the stamp as proof the participant is back', () => {
+    // The backstop for a lost reconnect mark: without it one dropped write
+    // gets a working participant recovered as a partial session.
+    expect(disconnectedSince({ disconnects: { 1: 5000 }, lastFlushAt: 6000 })).toBeNull();
+    expect(disconnectedSince({ disconnects: { 1: 5000 }, lastFlushAt: 4000 })).toBe(5000);
+  });
+
+  it('ignores malformed slots rather than throwing', () => {
+    expect(disconnectedSince({ disconnects: { 0: 5, x: 9, 3: 'soon' } })).toBeNull();
   });
 });

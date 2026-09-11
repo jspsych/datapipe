@@ -119,19 +119,62 @@
             ".write": "root.child('openSessions').child($sessionId).exists()",
             ".validate": "newData.isNumber()"
           },
-          // Set by Firebase's servers via the client's registered
-          // onDisconnect(), not by the client itself.
+          // ABANDONMENT: one write-once slot per connection, the standard
+          // Firebase presence pattern.
           //
-          // Overwritable, and CLEARABLE (newData null), which is the one thing
-          // that keeps this from misfiring constantly: an online participant
-          // on hotel wifi drops and reconnects routinely, and on reconnect the
-          // plugin clears this and re-arms the onDisconnect. Without the clear
-          // path, a single 5-second blip would permanently mark a session
-          // abandoned and the sweep would write a partial file for a
-          // participant who is still sitting there doing trials.
-          "abandonedAt": {
-            ".write": "root.child('openSessions').child($sessionId).exists()",
-            ".validate": "newData.isNumber() || !newData.exists()"
+          //   disconnects/{n}  stamped by Firebase's servers when connection n
+          //                    drops, via the onDisconnect the plugin armed for
+          //                    that connection
+          //   reconnects/{n}   written by the plugin when it is back online
+          //                    after connection n dropped
+          //
+          // A session is disconnected when its highest stamped slot has no
+          // matching reconnect mark (disconnectedSince() in
+          // functions/src/staging-assembly.ts). Slots are compared by number,
+          // not by arrival order, and that is the point: a network switch can
+          // leave the old socket half-open until the server times it out, so
+          // connection n's stamp may land AFTER the participant has reconnected
+          // and written reconnects/n. Keyed per connection, that late stamp is
+          // already answered. A single shared `abandonedAt` field -- which is
+          // what this was at first -- would have marked a participant still
+          // doing trials as abandoned, and the sweep would have written a
+          // partial file for them.
+          //
+          // WRITE-ONCE, 1..20, SERVER TIME -- and that is a cost control, not
+          // tidiness. staging-disconnect-trigger.ts runs a function on every
+          // write under these two nodes, to show dropouts live on the
+          // researcher's dashboard, and these writes carry the participant's
+          // permissions: the rules cannot tell Firebase's onDisconnect apart
+          // from a direct write. Rules cannot count either, so the bound is
+          // structural. Twenty slots of each kind, each writable once, is at
+          // most 40 trigger calls per session id, however the id is used. A
+          // participant who genuinely drops more than 20 times is still
+          // recovered, by the sweep's 24-hour expiry rather than the 10-minute
+          // path; the plugin stops arming at MAX_DISCONNECTS.
+          //
+          // Why not one field plus a counter: the counter has to rise in the
+          // same write as the stamp, which makes the stamp a multi-field
+          // write, and RTDB refuses to register a multi-field onDisconnect
+          // update against rules whose clauses depend on each other --
+          // verified against the emulator. A single-leaf write-once slot
+          // registers and executes cleanly.
+          //
+          // `== now` also refuses a client-chosen time, so nobody can backdate
+          // a stamp to push a live session past the sweep's grace period.
+          "disconnects": {
+            "$n": {
+              ".write": "root.child('openSessions').child($sessionId).exists() && !data.exists()",
+              ".validate": "$n.matches(/^([1-9]|1[0-9]|20)$/) && newData.val() == now"
+            }
+          },
+          // No existence check against disconnects/{n}: the reconnect mark may
+          // legitimately arrive first (see above), and it is still write-once
+          // and still 1..20, so it cannot widen the bound.
+          "reconnects": {
+            "$n": {
+              ".write": "root.child('openSessions').child($sessionId).exists() && !data.exists()",
+              ".validate": "$n.matches(/^([1-9]|1[0-9]|20)$/) && newData.val() == now"
+            }
           },
           // No other key belongs under meta.
           //

@@ -56,6 +56,7 @@ import {
   MAX_TRIALS_PER_SESSION,
   FLUSH_INTERVAL_MS,
   FLUSH_EVERY_N_TRIALS,
+  MAX_DISCONNECTS,
 } from "./staging.js";
 
 export const apiSessionStart = onRequest({ cors: true }, async (req, res) => {
@@ -165,6 +166,8 @@ export const apiSessionStart = onRequest({ cors: true }, async (req, res) => {
   //                        that actually rejects the write.
   //   flush cadence     -- tunable from the server, without a coordinated
   //                        plugin release.
+  //   maxDisconnects    -- the rules' cap on abandonment stamps, for the same
+  //                        reason as maxTrialBytes.
   res.status(200).json({
     sessionId,
     databaseURL,
@@ -172,5 +175,8 @@ export const apiSessionStart = onRequest({ cors: true }, async (req, res) => {
     maxTrials: MAX_TRIALS_PER_SESSION,
     flushIntervalMs: FLUSH_INTERVAL_MS,
     flushEveryNTrials: FLUSH_EVERY_N_TRIALS,
+    // The rules' cap on abandonment stamps. The plugin stops re-arming its
+    // onDisconnect when it reaches this, rather than having stamps refused.
+    maxDisconnects: MAX_DISCONNECTS,
   });
 });

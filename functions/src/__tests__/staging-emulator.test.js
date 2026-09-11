@@ -101,9 +101,21 @@ async function stageTrials(sessionId, count, from = 0) {
   await rtdb.ref(`staging/${sessionId}`).update(updates);
 }
 
-/** What Firebase's servers do when the participant's socket drops. */
-async function markAbandoned(sessionId, ageMs = ABANDON_GRACE_MS + 60000) {
-  await rtdb.ref(`staging/${sessionId}/meta/abandonedAt`).set(Date.now() - ageMs);
+/**
+ * What Firebase's servers do when the participant's socket drops: stamp the
+ * current connection's disconnect slot. Written with the Admin SDK so the
+ * fixture can be backdated, which the rules (rightly) refuse a client.
+ */
+async function markAbandoned(sessionId, ageMs = ABANDON_GRACE_MS + 60000, slot = 1) {
+  const droppedAt = Date.now() - ageMs;
+  // The last flush came before the drop, as it does in reality. Left at "now"
+  // (where stageTrials put it) it would read as trials arriving AFTER the
+  // stamp -- which disconnectedSince() rightly treats as the participant
+  // being back -- and every abandonment fixture would look like a live session.
+  await rtdb.ref(`staging/${sessionId}/meta`).update({
+    [`disconnects/${slot}`]: droppedAt,
+    lastFlushAt: droppedAt - 1000,
+  });
 }
 
 const queueEntriesFor = async (experimentID) =>
@@ -174,6 +186,9 @@ describe("POST /api/session", () => {
     // build can talk to both datapipe-test and production.
     expect(body.databaseURL).toEqual(expect.any(String));
     expect(body.maxTrialBytes).toBe(65536);
+    // The disconnect-slot cap the rules enforce, so the plugin stops arming at
+    // it instead of having stamps refused.
+    expect(body.maxDisconnects).toBe(20);
     expect(body.flushEveryNTrials).toBeGreaterThan(0);
 
     const record = (await rtdb.ref(`openSessions/${body.sessionId}`).get()).val();
@@ -358,6 +373,22 @@ describe("the abandonment sweep", () => {
     const { body } = await startSession({ experimentID });
     await stageTrials(body.sessionId, 2);
     await markAbandoned(body.sessionId, ABANDON_GRACE_MS / 2);
+
+    const stats = await sweepAbandonedSessions(new Set([body.sessionId]));
+
+    expect(stats.skippedLive).toBe(1);
+    expect(await queueEntriesFor(experimentID)).toHaveLength(0);
+  });
+
+  it("leaves a session alone once its dropout has been answered", async () => {
+    // The participant's wifi dropped long ago and they came back: slot 1 has
+    // its reconnect mark. Recovering this would write a partial file for
+    // someone still doing trials.
+    const experimentID = await makeExperiment();
+    const { body } = await startSession({ experimentID });
+    await stageTrials(body.sessionId, 2);
+    await markAbandoned(body.sessionId);
+    await rtdb.ref(`staging/${body.sessionId}/meta/reconnects/1`).set(Date.now());
 
     const stats = await sweepAbandonedSessions(new Set([body.sessionId]));
 

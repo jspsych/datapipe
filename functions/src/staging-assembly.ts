@@ -31,6 +31,31 @@ export const MAX_TRIALS_PER_SESSION = 10000;
 export const FLUSH_INTERVAL_MS = 10000;
 export const FLUSH_EVERY_N_TRIALS = 10;
 
+// How long after Firebase stamps a disconnect before the session is
+// treated as really gone.
+//
+// This is NOT a formality, and it is why every disconnect slot has a matching
+// reconnect slot in database.rules.json. onDisconnect fires on any socket drop -- a participant
+// on hotel wifi, a laptop lid closed for a minute, a phone switching from wifi
+// to cellular. The plugin clears the stamp and re-arms when it reconnects, so
+// the grace period is the window in which that can happen. Ten minutes is long
+// enough to cover a reconnect and short enough that a genuinely abandoned
+// session is recovered while the study is still running.
+//
+// Lives here rather than in the sweep because the disconnect trigger needs it
+// too (to tell the dashboard when a dropout stops being a possible reconnect),
+// and the trigger has no business importing the sweep's upload machinery.
+export const ABANDON_GRACE_MS = 10 * 60 * 1000;
+
+// The number of per-connection disconnect slots a session has. Mirrors the
+// 1..20 slot pattern on staging/$sid/meta/{disconnects,reconnects} in
+// database.rules.json, and is sent to the plugin by api-session-start.ts so it
+// stops arming at the cap instead of having its stamps refused. The cap exists
+// because every write to those slots runs a function (the dashboard's live
+// dropout view) and they are participant-writable; see the rules for why the
+// bound has to be structural.
+export const MAX_DISCONNECTS = 20;
+
 // How long an admitted session may stay open. Past this the sweep treats it as
 // abandoned regardless of what meta says -- the backstop for a client that
 // died before it could register an onDisconnect, or one whose onDisconnect
@@ -72,10 +97,18 @@ export interface OpenSession {
   filename?: string;
 }
 
+/**
+ * Per-connection slots, keyed 1..20. RTDB hands back small integer keys as an
+ * ARRAY (index 0 empty) rather than an object, so both shapes must be read --
+ * see slotEntries().
+ */
+export type SlotMap = Record<string, number> | Array<number | null | undefined>;
+
 export interface SessionMeta {
   startedAt?: number;
   lastFlushAt?: number;
-  abandonedAt?: number;
+  disconnects?: SlotMap;
+  reconnects?: SlotMap;
 }
 
 export interface AssembledSession {
@@ -190,3 +223,58 @@ export function assembleTrials(
     gaps,
   };
 }
+
+/** [slot number, timestamp] pairs from either shape RTDB may return. */
+function slotEntries(slots: SlotMap | undefined): Array<[number, number]> {
+  if (!slots) return [];
+  const pairs: Array<[number, number]> = [];
+  // Array.from, not .map: RTDB's arrays are SPARSE -- index 0 is a hole, not
+  // a null -- and .map skips holes, leaving `undefined` entries that the
+  // destructuring loop below throws on ("for is not iterable"). Array.from
+  // visits every index. Found by the emulator suite; a unit test written with
+  // `[null, 5000]` passed, because that is not the shape RTDB returns.
+  const entries = Array.isArray(slots)
+    ? Array.from(slots, (value, index) => [String(index), value] as const)
+    : Object.entries(slots);
+  for (const [key, value] of entries) {
+    const n = Number(key);
+    if (Number.isInteger(n) && n >= 1 && typeof value === "number") {
+      pairs.push([n, value]);
+    }
+  }
+  return pairs;
+}
+
+/**
+ * When the session's current connection dropped, or null if it is connected.
+ *
+ * The session is disconnected when its HIGHEST stamped disconnect slot has no
+ * matching reconnect mark. Two rules make that honest rather than merely
+ * plausible:
+ *
+ *  - SLOTS, NOT ARRIVAL ORDER. The plugin arms slot n+1 only after it is back
+ *    online from slot n, so the highest stamped slot is the most recent drop
+ *    Firebase has reported. A stamp for an old connection that lands late --
+ *    a network switch can leave the old socket half-open until the server
+ *    times it out -- is either already answered by its reconnect mark or
+ *    superseded by a higher slot.
+ *  - A FLUSH AFTER THE STAMP WINS. If the reconnect mark itself was lost (the
+ *    one write here that can fail without anyone noticing), trials arriving
+ *    after the stamp are proof the participant is still there. Without this, a
+ *    single dropped write would get a working participant recovered as a
+ *    partial session ten minutes later.
+ *
+ * Shared by the sweep (is it past the grace period?) and the live-sessions
+ * mirror (what should the dashboard say?), so the two can never disagree.
+ */
+export function disconnectedSince(meta: SessionMeta): number | null {
+  const stamps = slotEntries(meta.disconnects);
+  if (stamps.length === 0) return null;
+
+  const [latestSlot, stampedAt] = stamps.reduce((a, b) => (b[0] > a[0] ? b : a));
+  const healed = slotEntries(meta.reconnects).some(([n]) => n === latestSlot);
+  if (healed) return null;
+  if (typeof meta.lastFlushAt === "number" && meta.lastFlushAt > stampedAt) return null;
+  return stampedAt;
+}
+

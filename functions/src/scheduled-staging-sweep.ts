@@ -2,7 +2,7 @@
 // (docs/streaming-ingest-design.md, "Abandonment").
 //
 // A participant closes the tab at trial 199 of 200. Their trials are in the
-// RTDB staging tier, Firebase's servers have stamped meta/abandonedAt via the
+// RTDB staging tier, Firebase's servers have stamped a disconnect slot via the
 // onDisconnect the plugin registered, and nothing else will ever happen to
 // them. This sweep is what turns that into a file in the researcher's storage.
 //
@@ -46,19 +46,15 @@ import {
   listOldestOpenSessions,
   partialFilenameFor,
   OpenSession,
+  ABANDON_GRACE_MS,
+  disconnectedSince,
 } from "./staging.js";
 
-// How long after Firebase stamps meta/abandonedAt before the session is
-// treated as really gone.
-//
-// This is NOT a formality, and it is why abandonedAt is clearable in
-// database.rules.json. onDisconnect fires on any socket drop -- a participant
-// on hotel wifi, a laptop lid closed for a minute, a phone switching from wifi
-// to cellular. The plugin clears the stamp and re-arms when it reconnects, so
-// the grace period is the window in which that can happen. Ten minutes is long
-// enough to cover a reconnect and short enough that a genuinely abandoned
-// session is recovered while the study is still running.
-export const ABANDON_GRACE_MS = 10 * 60 * 1000;
+// Re-exported for the emulator suite, which ages its fixtures against it.
+// Defined in staging-assembly.ts, next to the other limits the plugin and the
+// rules have to agree with.
+export { ABANDON_GRACE_MS };
+
 
 // Process at most this many sessions per run, to stay inside the time and
 // memory limits. Same constant and same reasoning as
@@ -129,9 +125,8 @@ export async function sweepAbandonedSessions(
       try {
         const meta = await getSessionMeta(session.sessionId);
 
-        const abandoned =
-          typeof meta.abandonedAt === "number" &&
-          now - meta.abandonedAt >= ABANDON_GRACE_MS;
+        const since = disconnectedSince(meta);
+        const abandoned = since !== null && now - since >= ABANDON_GRACE_MS;
         // The backstop, for a client that died before it could register an
         // onDisconnect at all, or one whose onDisconnect Firebase never ran.
         // Without it such a session would sit in RTDB forever, being paid for.

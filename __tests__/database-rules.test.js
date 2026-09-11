@@ -45,6 +45,20 @@ async function seedTrial(sessionId, seq, value) {
   });
 }
 
+// What serverTimestamp() sends over the wire. The rules require a disconnect
+// or reconnect slot to equal `now`, which only a server-resolved timestamp can.
+const SERVER_TIME = { '.sv': 'timestamp' };
+
+/** Connection n's disconnect stamp, as Firebase writes it via onDisconnect. */
+function stamp(sessionId, n) {
+  return client().ref(`staging/${sessionId}/meta/disconnects/${n}`).set(SERVER_TIME);
+}
+
+/** The plugin's mark that it is back online after connection n dropped. */
+function reconnect(sessionId, n) {
+  return client().ref(`staging/${sessionId}/meta/reconnects/${n}`).set(SERVER_TIME);
+}
+
 /** The participant's view: unauthenticated, exactly as an experiment page is. */
 function client() {
   return testEnv.unauthenticatedContext().database();
@@ -120,7 +134,9 @@ describe('the openSessions gate', () => {
       await context.database().ref(`openSessions/${OPEN}`).remove();
     });
     await assertFails(client().ref(`staging/${OPEN}/trials/1`).set('{"a":2}'));
-    await assertFails(client().ref(`staging/${OPEN}/meta/abandonedAt`).set(Date.now()));
+    // A stamp that would otherwise be valid, so this proves the capability
+    // check and not the cap's shape rules.
+    await assertFails(stamp(OPEN, 1));
   });
 
   it('denies a client writing its own openSessions entry', async () => {
@@ -212,12 +228,12 @@ describe('meta', () => {
     await assertSucceeds(client().ref(`staging/${OPEN}/meta/lastFlushAt`).set(Date.now() + 1));
   });
 
-  it('allows abandonedAt to be set and then cleared on reconnect', async () => {
-    // The clear path is not a nicety: without it one wifi blip permanently
+  it('allows a disconnect stamp to be answered by a reconnect mark', async () => {
+    // The reconnect path is not a nicety: without it one wifi blip permanently
     // marks a running session abandoned and the sweep writes a partial file
     // for a participant who is still doing trials.
-    await assertSucceeds(client().ref(`staging/${OPEN}/meta/abandonedAt`).set(Date.now()));
-    await assertSucceeds(client().ref(`staging/${OPEN}/meta/abandonedAt`).set(null));
+    await assertSucceeds(stamp(OPEN, 1));
+    await assertSucceeds(reconnect(OPEN, 1));
   });
 
   it('denies a non-numeric timestamp', async () => {
@@ -268,5 +284,73 @@ describe('the real flush shape', () => {
         'meta/injected': 'x',
       })
     );
+  });
+});
+
+describe('the disconnect slots and their cap', () => {
+  // Every write under meta/disconnects and meta/reconnects runs a function
+  // (the dashboard's live dropout view), and those writes carry the
+  // participant's permissions. Rules cannot count, so the bound is structural:
+  // twenty write-once slots of each kind. These tests are the whole of the
+  // cost control on that trigger.
+
+  it('makes every slot write-once', async () => {
+    // Otherwise one slot could be rewritten in a loop, firing the trigger on
+    // each write.
+    await assertSucceeds(stamp(OPEN, 1));
+    await assertFails(stamp(OPEN, 1));
+    await assertSucceeds(reconnect(OPEN, 1));
+    await assertFails(reconnect(OPEN, 1));
+  });
+
+  it('refuses deleting a slot, which would reopen it', async () => {
+    await assertSucceeds(stamp(OPEN, 1));
+    await assertFails(client().ref(`staging/${OPEN}/meta/disconnects/1`).set(null));
+  });
+
+  it('allows exactly slots 1 to 20', async () => {
+    for (let n = 1; n <= 20; n++) {
+      await assertSucceeds(stamp(OPEN, n));
+      await assertSucceeds(reconnect(OPEN, n));
+    }
+    await assertFails(stamp(OPEN, 21));
+    await assertFails(reconnect(OPEN, 21));
+  });
+
+  it('refuses slot 0 and non-numeric slots', async () => {
+    await assertFails(stamp(OPEN, 0));
+    await assertFails(stamp(OPEN, '01'));
+    await assertFails(stamp(OPEN, 'x'));
+  });
+
+  it('refuses a client-chosen time', async () => {
+    // A backdated stamp could push a live session past the sweep's grace
+    // period and get it recovered as a partial file while still running.
+    await assertFails(client().ref(`staging/${OPEN}/meta/disconnects/1`).set(Date.now() - 3600000));
+  });
+
+  it('accepts a reconnect mark that arrives before its stamp', async () => {
+    // A network switch can leave the old socket half-open, so connection 1's
+    // stamp may land after the participant is already back. The mark must be
+    // writable first, or that participant is stuck "disconnected".
+    await assertSucceeds(reconnect(OPEN, 1));
+    await assertSucceeds(stamp(OPEN, 1));
+  });
+
+  it('accepts the stamp as an onDisconnect registration', async () => {
+    // How the plugin actually arms it, and the case a multi-field design
+    // failed: RTDB checks rules when the operation is registered and again
+    // when it executes.
+    await assertSucceeds(
+      client().ref(`staging/${OPEN}/meta/disconnects/1`).onDisconnect().set(SERVER_TIME)
+    );
+  });
+
+  it('refuses slot writes for a discarded session', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.database().ref(`openSessions/${OPEN}`).remove();
+    });
+    await assertFails(stamp(OPEN, 1));
+    await assertFails(reconnect(OPEN, 1));
   });
 });
