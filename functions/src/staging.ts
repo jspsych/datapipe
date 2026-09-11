@@ -47,6 +47,7 @@
 import { getDatabaseWithUrl, Database } from "firebase-admin/database";
 import { customAlphabet } from "nanoid";
 import { app } from "./app.js";
+import { mirrorStart, removeLiveSession, connectionState } from "./live-sessions.js";
 import {
   AssembledSession,
   MAX_FILENAME_LENGTH,
@@ -194,12 +195,14 @@ export function resetStagingHandleForTests(): void {
  */
 export async function openSession(
   experimentId: string,
-  filename?: string
+  filename: string | undefined,
+  owner: string
 ): Promise<string> {
   const sessionId = generateSessionId();
   const now = Date.now();
   const record: Record<string, unknown> = {
     experimentId,
+    owner,
     startedAt: now,
     expiresAt: now + SESSION_TTL_MS,
   };
@@ -207,6 +210,17 @@ export async function openSession(
   // the same way Firestore does, and an absent filename is a normal state.
   if (filename) record.filename = filename.slice(0, MAX_FILENAME_LENGTH);
   await rtdb().ref(`openSessions/${sessionId}`).set(record);
+
+  // The researcher's live dashboard copy (live-sessions.ts). Awaited, so it is
+  // written before the participant's page gets its response, but best-effort:
+  // mirrorStart swallows its own failure, and the sweep backfills a miss.
+  await mirrorStart(sessionId, {
+    experimentID: experimentId,
+    owner,
+    startedAt: now,
+    expiresAt: now + SESSION_TTL_MS,
+    ...connectionState({}),
+  });
   return sessionId;
 }
 
@@ -261,8 +275,24 @@ export async function listOldestOpenSessions(
 
 /** How many sessions are currently admitted. Diagnostic, for sweep health. */
 export async function countOpenSessions(): Promise<number> {
+  return (await listOpenSessions()).length;
+}
+
+/**
+ * Every admitted session. One read of the whole capability table, which is
+ * small -- one short record per participant currently mid-experiment, deleted
+ * the moment they finish. The sweep uses it for its health count and for
+ * reconciling the live-sessions mirror, so it is read once per run for both.
+ */
+export async function listOpenSessions(): Promise<OpenSession[]> {
   const snap = await rtdb().ref("openSessions").get();
-  return snap.exists() ? snap.numChildren() : 0;
+  if (!snap.exists()) return [];
+  const rows: OpenSession[] = [];
+  snap.forEach((child) => {
+    rows.push({ sessionId: child.key as string, ...(child.val() as Omit<OpenSession, "sessionId">) });
+    return false;
+  });
+  return rows;
 }
 
 /**
@@ -316,4 +346,10 @@ export async function discardSession(sessionId: string): Promise<void> {
     const detail = e instanceof Error ? e.message : "Unknown error";
     console.error(`Failed to discard staging session ${sessionId}: ${detail}`);
   }
+  // And the researcher's dashboard row. Every way a session ends -- clean
+  // completion, a gate refusing it, the sweep recovering or discarding it --
+  // comes through here, which is why this is the one place that removes it.
+  // Separate from the RTDB update on purpose: either can fail without the
+  // other being skipped, and the sweep's reconciliation collects what is left.
+  await removeLiveSession(sessionId);
 }

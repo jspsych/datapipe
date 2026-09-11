@@ -32,6 +32,8 @@ export interface PurgeCounts {
   metadata: number;
   logs: number;
   queueEntries: number;
+  // Live-sessions dashboard rows (functions/src/live-sessions.ts).
+  liveSessions: number;
   pendingFiles: number;
   userDocument: number;
   // Contact-email additions (functions/src/mail.ts, lib/contact-email.js).
@@ -68,6 +70,7 @@ export async function purgeUserData(uid: string): Promise<PurgeCounts> {
     metadata: 0,
     logs: 0,
     queueEntries: 0,
+    liveSessions: 0,
     pendingFiles: 0,
     userDocument: 0,
     mailDocuments: 0,
@@ -125,6 +128,16 @@ export async function purgeUserData(uid: string): Promise<PurgeCounts> {
     .where("owner", "==", uid)
     .get();
   counts.queueEntries = await deleteInBatches(queued.docs.map((doc) => doc.ref));
+
+  // liveSessions is keyed by a hash of a session id and carries the owner, so
+  // it is found the same way. Short-lived -- each is deleted when its session
+  // ends -- but a researcher deleting their account mid-study must not leave
+  // rows behind naming their uid.
+  const live = await db
+    .collection("liveSessions")
+    .where("owner", "==", uid)
+    .get();
+  counts.liveSessions = await deleteInBatches(live.docs.map((doc) => doc.ref));
 
   // mail/ docs carry the researcher's contactEmail in their `to` field and are
   // otherwise keyed by an autoId, so datapipe.owner == uid (an automatic

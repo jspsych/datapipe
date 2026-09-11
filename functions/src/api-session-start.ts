@@ -136,7 +136,7 @@ export const apiSessionStart = onRequest({ cors: true }, async (req, res) => {
   let databaseURL: string;
   try {
     databaseURL = stagingDatabaseURL();
-    sessionId = await openSession(experimentID, filename);
+    sessionId = await openSession(experimentID, filename, exp_data.owner);
   } catch (e) {
     const detail = e instanceof Error ? e.message : "Unknown error";
     // A 503, not a 500, and the message says the experiment can still submit
