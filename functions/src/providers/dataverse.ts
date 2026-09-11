@@ -2,6 +2,7 @@ import fetch from "node-fetch";
 import { randomBytes } from "crypto";
 import { decrypt } from "../crypto-utils.js";
 import { UserData } from "../interfaces.js";
+import { isAllowedServerUrl } from "./server-url.js";
 import {
   StorageProvider,
   ResolvedAuth,
@@ -63,13 +64,32 @@ function authHeaders(auth: ResolvedAuth): Record<string, string> {
 // researcher's current connection). The container wins when both are present
 // since that's the installation the dataset actually lives on; auth is the
 // fallback for calls that don't yet have a container (e.g. createDataContainer).
+//
+// Both sources are RE-VALIDATED here, every call, not just at connect time.
+// connect-static-token-provider.ts's isAllowedServerUrl gate only runs when a
+// researcher first connects their account -- but providerContainer.serverUrl
+// is a field on experiments/{id}, and until firestore.rules explicitly locks
+// it down (see serverManagedFieldsUntouched), an experiment owner can rewrite
+// it directly from the browser, after setup, to any string at all. Trusting
+// it unchecked here would let that rewrite turn every subsequent write into
+// an SSRF primitive against the private network, carrying the researcher's
+// real (decrypted) Dataverse API token in the X-Dataverse-key header --
+// exactly the class of attack isAllowedServerUrl exists to close, and exactly
+// the re-pin zenodo.ts's resolveBucketUrl already does for its own stored
+// container field. Normalizing to `new URL(x).origin` (scheme+host only, no
+// path/query/fragment/trailing slash) matches connect-static-token-provider's
+// own normalization, so the `${serverUrl}/api/...` string concatenation below
+// can never inherit a stray path or produce a double slash.
 function resolveServerUrl(auth: ResolvedAuth, container?: ContainerRef): string {
   const fromContainer = (container as DataverseContainerRef | undefined)?.serverUrl;
   const serverUrl = fromContainer ?? auth.serverUrl;
   if (!serverUrl) {
     throw new Error("Dataverse serverUrl is missing from both the container and the resolved auth");
   }
-  return serverUrl;
+  if (!isAllowedServerUrl(serverUrl)) {
+    throw new Error(`Not an allowed Dataverse server URL: ${serverUrl}`);
+  }
+  return new URL(serverUrl).origin;
 }
 
 function isSuccessStatus(status: number): boolean {

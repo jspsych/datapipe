@@ -123,16 +123,45 @@ service cloud.firestore {
       // FILE instead of once per episode -- one participant submission can
       // produce twenty queue entries.
       //
+      // `storageProvider` and `providerContainer` join them for a THIRD,
+      // sharper reason: they are not just server-managed bookkeeping, they are
+      // an SSRF surface. dataverse.ts's resolveServerUrl prefers
+      // providerContainer.serverUrl over the researcher's connected auth on
+      // every write/list/download call, and re-validates it against
+      // isAllowedServerUrl (functions/src/providers/server-url.ts) -- but that
+      // re-validation was added precisely BECAUSE this field was reachable
+      // from the browser: before it, an owner could repoint an existing
+      // experiment's providerContainer.serverUrl at an internal address
+      // (169.254.169.254, 10.x.x.x, ...) and every subsequent Dataverse call
+      // would carry the researcher's own decrypted API token, in the
+      // X-Dataverse-key header, straight to it. isAllowedServerUrl is defense
+      // in depth for the connect flow and for a corrupted/legacy container --
+      // it is not a substitute for closing the write path a researcher's own
+      // browser has to an already-created experiment. `storageProvider` is
+      // included alongside it because the two travel together: swapping the
+      // provider out from under an existing providerContainer would let a
+      // stale container shape (e.g. a Zenodo bucketUrl) be reinterpreted by a
+      // different adapter's fetch calls. Neither field is meant to change
+      // after creation -- isCreatableProvider() below is the only place a
+      // researcher chooses a provider, and reconnecting an account (
+      // connect-provider.ts) never touches the experiment document, only
+      // users/{uid}.connectedAccounts.
+      //
       // DEPLOY ORDER: this file ships BEFORE the functions, and it is not
       // optional. The notifier writes uploadFailure with the Admin SDK, which
       // these rules never see -- so if the functions land first, every
       // experiment starts carrying a field that the deployed rules still do
       // not protect, and any client merge-write can clear notifiedAt for the
       // duration of the gap. Nothing breaks loudly; the notifier just quietly
-      // re-arms on demand. Rules first closes the window before it opens.
+      // re-arms on demand. Rules first closes the window before it opens. The
+      // same ordering requirement now also applies to storageProvider /
+      // providerContainer: until this rules file is live, an owner can still
+      // rewrite either field on an existing experiment and reach the
+      // SSRF-affected code path on the currently-deployed functions.
       function serverManagedFieldsUntouched() {
         return !request.resource.data.diff(resource.data).affectedKeys()
-          .hasAny(['finalized', 'finalizedAt', 'finalization', 'compaction', 'collisionCache', 'uploadFailure']);
+          .hasAny(['finalized', 'finalizedAt', 'finalization', 'compaction', 'collisionCache', 'uploadFailure',
+            'storageProvider', 'providerContainer']);
       }
       // metadataActive decides WHERE a submission is stored -- container root
       // with it off, data/raw/<flattened name> with it on (uploadPathFor in

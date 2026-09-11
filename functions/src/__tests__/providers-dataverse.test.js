@@ -984,6 +984,78 @@ describe("8. federated serverUrl resolution", () => {
   });
 });
 
+// resolveServerUrl re-validates whichever serverUrl it picks against the same
+// SSRF allowlist connect-static-token-provider.ts enforces at connect time
+// (isAllowedServerUrl, moved to providers/server-url.ts). This closes the
+// bypass a compromised/tampered providerContainer.serverUrl on
+// experiments/{id} would otherwise open: that field is Firestore data an
+// experiment owner can currently rewrite from the browser after setup (see
+// firestore.rules' serverManagedFieldsUntouched), and the container wins over
+// auth.serverUrl in resolveServerUrl's own precedence -- so an unvalidated
+// container field would carry every subsequent Dataverse call, including the
+// researcher's real decrypted API token in X-Dataverse-key, straight past the
+// gate that exists specifically to stop this.
+describe("8b. resolveServerUrl SSRF allowlist enforcement", () => {
+  const maliciousContainerServerUrls = [
+    ["cloud metadata IP literal", "http://169.254.169.254"],
+    ["private IPv4 literal with a non-default port", "http://10.0.0.5:8080"],
+    ["localhost", "http://localhost"],
+    // https, syntactically fine, but rejected by the allowlist's own rules
+    // (non-443 port) -- not every https host is a real institutional
+    // installation.
+    ["https host not accepted by the allowlist (non-443 port)", "https://dataverse.harvard.edu:8443"],
+  ];
+
+  it.each(maliciousContainerServerUrls)(
+    "refuses a container serverUrl of %s (%s) before any fetch is made",
+    async (_label, badUrl) => {
+      const container = { provider: "dataverse", datasetId: 7, persistentId: "doi:10/abc", serverUrl: badUrl };
+
+      await expect(
+        dataverseProvider.downloadFile(auth, container, { id: "42", name: "data.json" })
+      ).rejects.toThrow(/allowed Dataverse server/i);
+
+      expect(mockFetch).not.toHaveBeenCalled();
+    }
+  );
+
+  it("refuses a malicious container serverUrl on the write path too, before any fetch is made", async () => {
+    const container = {
+      provider: "dataverse",
+      datasetId: 7,
+      persistentId: "doi:10/abc",
+      serverUrl: "http://169.254.169.254",
+    };
+
+    await expect(
+      dataverseProvider.writeSessionFile(auth, container, "data.json", '{"a":1}', {
+        size: 8,
+        contentType: "application/json",
+      })
+    ).rejects.toThrow(/allowed Dataverse server/i);
+
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("normalizes a legitimate container serverUrl with a path to its bare origin", async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse({ status: 200, statusText: "OK", textBody: "content" }));
+
+    const container = {
+      provider: "dataverse",
+      datasetId: 7,
+      persistentId: "doi:10/abc",
+      serverUrl: "https://demo.dataverse.org/some/path",
+    };
+    const result = await dataverseProvider.downloadFile(auth, container, { id: "42", name: "data.json" });
+
+    // Request goes to the origin only -- the container's stray path is
+    // dropped, matching connect-static-token-provider.ts's own
+    // `new URL(serverUrl).origin` normalization at connect time.
+    expect(callArgs(0).url).toBe("https://demo.dataverse.org/api/access/datafile/42");
+    expect(result).toEqual({ success: true, content: "content" });
+  });
+});
+
 describe("10. supportsTabIngest (version parsing, lenient by design)", () => {
   // tabIngest was added in Dataverse 5.11. Real installations return version
   // strings in inconsistent shapes -- verified live, 2026-07-26 -- so parsing
