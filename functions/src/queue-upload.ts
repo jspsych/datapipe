@@ -29,6 +29,12 @@ interface QueueUploadParams {
   // the Firestore write below when undefined, same convention as
   // osfFilesLink/storageProvider/providerContainer.
   providerErrorCode?: ProviderErrorCode;
+  // Set only by scheduled-staging-sweep.ts: this entry is a session recovered
+  // from the RTDB staging tier after the participant abandoned it, not a
+  // submission anyone made. upload-failure-notify.ts refuses to open a
+  // notification episode on one -- see the comment there. Omitted from the
+  // Firestore write when undefined, same convention as the fields above.
+  partial?: boolean;
 }
 
 const MAX_RETRIES = 5;
@@ -200,6 +206,9 @@ export default async function queueUpload(params: QueueUploadParams): Promise<st
   }
   if (params.providerErrorCode !== undefined) {
     queueDocData.providerErrorCode = params.providerErrorCode;
+  }
+  if (params.partial !== undefined) {
+    queueDocData.partial = params.partial;
   }
 
   await docRef.set(queueDocData);

@@ -1,6 +1,11 @@
 import { setGlobalOptions } from "firebase-functions/v2";
 
 import { apiData } from "./api-data.js";
+// POST /api/session -- admits a participant to the RTDB staging tier
+// (docs/streaming-ingest-design.md). Replaces the design's openExperiments
+// mirror: the four submission gates run here, against Firestore, and only an
+// unforgeable server-minted session id reaches RTDB.
+import { apiSessionStart } from "./api-session-start.js";
 import { apiCondition } from "./api-condition.js";
 import { apiBase64 } from "./api-base64.js";
 import { oauth2Callback } from "./oauth2-callback.js";
@@ -9,6 +14,11 @@ import { checkEmailConflict } from "./check-email-conflict.js";
 import { scheduledTokenRefresh } from "./scheduled-token-refresh.js";
 import { scheduledUploadRetry } from "./scheduled-upload-retry.js";
 import { scheduledPendingRecovery } from "./scheduled-pending-recovery.js";
+// Recovers sessions that were staged but never completed. ONE invocation per
+// sweep, not per session -- attaching an onDocumentCreated/onValueWritten
+// trigger to the staging tier would silently reinstate the per-trial
+// invocation this whole design exists to avoid.
+import { scheduledStagingSweep } from "./scheduled-staging-sweep.js";
 import { onExperimentGrew, onUploadQueueChanged } from "./compaction-triggers.js";
 // A SECOND trigger on uploadQueue/{docId}, deliberately not folded into
 // onUploadQueueChanged above -- see the header of upload-failure-notify.ts.
@@ -46,6 +56,7 @@ setGlobalOptions({
 
 export {
   apiData as apidata,
+  apiSessionStart as apisessionstart,
   apiCondition as apicondition,
   apiBase64 as apibase64,
   oauth2Callback as oauth2callback,
@@ -54,6 +65,7 @@ export {
   scheduledTokenRefresh as scheduledtokenrefresh,
   scheduledUploadRetry as scheduleduploadretry,
   scheduledPendingRecovery as scheduledpendingrecovery,
+  scheduledStagingSweep as scheduledstagingsweep,
   onExperimentGrew as onexperimentgrew,
   onUploadQueueChanged as onuploadqueuechanged,
   onUploadFailure as onuploadfailure,

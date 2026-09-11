@@ -236,6 +236,7 @@ export const createExperiment = onRequest({ cors: true }, async (req, res) => {
       saveData: 0,
       saveBase64Data: 0,
       getCondition: 0,
+      startSession: 0,
       logError: 0,
     });
     // set+merge (not update) -- a freshly-signed-up user may have no

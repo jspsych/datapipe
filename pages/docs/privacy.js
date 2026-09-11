@@ -186,6 +186,26 @@ export default function PrivacyPage() {
           </List.Item>
           <List.Item>
             <Text as="span" fontWeight="semibold">
+              Trials staged during a session, if your experiment uses
+              incremental upload.
+            </Text>{" "}
+            Experiments that switch this on send each trial to DataPipe as it
+            is produced, so that a participant who closes the tab partway
+            through does not lose everything they did. Those trials are held in
+            a private database, unreadable by any browser — including the one
+            that wrote them — and are deleted the moment the participant&apos;s
+            submission completes, normally within minutes.{" "}
+            <strong>
+              If the participant never finishes, DataPipe stores what it
+              received as a separate partial file in your storage
+            </strong>{" "}
+            and then deletes the staged copy. Unlike the two copies above,
+            these trials are not encrypted by DataPipe itself — see{" "}
+            <ProseLink href="#encryption">Encryption</ProseLink>. Incremental
+            upload is off unless your experiment&apos;s code asks for it.
+          </List.Item>
+          <List.Item>
+            <Text as="span" fontWeight="semibold">
               Queued submissions.
             </Text>{" "}
             If your provider is unavailable, too busy to accept the file, or
@@ -256,6 +276,13 @@ export default function PrivacyPage() {
             up within about fifteen minutes and moved into the upload queue.
           </List.Item>
           <List.Item>
+            Trials staged during a session: deleted when the session&apos;s
+            submission completes. An abandoned session is collected within about
+            fifteen minutes, stored as a partial file in your storage, and the
+            staged copy deleted. Any session that is never collected is removed
+            twenty-four hours after it started.
+          </List.Item>
+          <List.Item>
             Queued submission: deleted seven days after it was queued.
           </List.Item>
           <List.Item>
@@ -291,12 +318,24 @@ export default function PrivacyPage() {
           unless its address uses <Code>https</Code>.
         </Text>
         <Text maxW="70ch">
-          <strong>At rest, by DataPipe.</strong> The two copies of participant
-          data DataPipe ever holds — the temporary copy and a queued submission
-          — are encrypted with AES-256-GCM before being written, using a key
-          held only by DataPipe&apos;s server. Your storage provider credentials
-          — the tokens that let DataPipe write to your storage — are also
-          encrypted with AES-256-GCM before being written to the database.
+          <strong>At rest, by DataPipe.</strong> The copies of a completed
+          submission that DataPipe holds — the temporary copy and a queued
+          submission — are encrypted with AES-256-GCM before being written,
+          using a key held only by DataPipe&apos;s server. Your storage provider
+          credentials — the tokens that let DataPipe write to your storage — are
+          also encrypted with AES-256-GCM before being written to the database.
+        </Text>
+        <Text maxW="70ch">
+          <strong>Trials staged during a session are the exception</strong>, and
+          it is worth being plain about why. They are written by the
+          participant&apos;s own browser, which has no key and cannot be given
+          one — a key shipped inside an experiment&apos;s JavaScript is a key
+          every participant holds, which is not encryption. So those trials rely
+          on the platform encryption below plus access rules: no browser can
+          read that database at any depth, not even the one that wrote the
+          session, and each session is reachable only through an unguessable
+          identifier that DataPipe issues. They are deleted as soon as the
+          session completes.
         </Text>
         <Text maxW="70ch">
           <strong>At rest, by the platform.</strong> DataPipe runs on Google

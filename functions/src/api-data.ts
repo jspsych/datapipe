@@ -16,15 +16,66 @@ import { getProviderForExperiment, claimNameFor } from "./providers/index.js";
 import { WriteResult, ResolvedAuth } from "./providers/types.js";
 import { claimFilename, confirmClaim, CollisionCacheUnavailableError } from "./collision-cache.js";
 import { isCompactionInFlight, COMPACTION_HOLD_REASON } from "./compaction-gate.js";
+import { discardSession } from "./staging.js";
 import { ExperimentData, UserData, RequestBody } from './interfaces';
 
 export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 }, async (req, res) => {
-  const { experimentID, data, filename, metadataOptions }: RequestBody = req.body;
+  const { experimentID, data, filename, metadataOptions, sessionId }: RequestBody = req.body;
 
   if (!experimentID || !data || !filename) {
     res.status(400).json(MESSAGES.MISSING_PARAMETER);
     return;
   }
+
+  // Drop this submission's staged trials, if it streamed
+  // (docs/streaming-ingest-design.md). A no-op for every request that did not
+  // -- the plugin's non-streaming path, and anything written by hand against
+  // this endpoint -- which is what keeps the change below to one line per
+  // branch instead of a second code path through the handler.
+  //
+  // WHERE THIS IS CALLED, AND WHY THERE
+  //
+  // Exactly where cleanupPending() is called, plus the four gates above that
+  // reject before a pending copy exists. Both sets are the same predicate:
+  // DataPipe either HAS the data somewhere durable (uploaded, or in the
+  // encrypted upload queue) or has DEFINITIVELY REFUSED this session.
+  //
+  // Both halves matter, and for opposite reasons.
+  //
+  //  - Missing the durable half duplicates data. A 202 means queue-upload.ts
+  //    holds an encrypted copy and the retry worker will write it; leaving the
+  //    staged copy behind means the sweep later writes the SAME session again
+  //    as a .partial.json, and the researcher gets both.
+  //  - Missing the refusal half breaks finalization. A submission rejected
+  //    with EXPERIMENT_FINALIZED that stayed staged would come back through
+  //    the sweep as a file landing outside the merged archive -- exactly the
+  //    non-Psych-DS state docs/finalization-spec.md exists to prevent. (The
+  //    sweep re-checks the gates itself, so this is the first of two doors,
+  //    not the only one.)
+  //
+  // It is deliberately NOT called on DataPipe's own failures -- a persist
+  // error, a token failure, a metadata error, an exception path that could not
+  // even queue. Those are the cases the staging tier is FOR: the participant
+  // is gone, DataPipe dropped the ball, and the staged copy is the last thing
+  // standing between that and lost data. Same reasoning as the "pending-data
+  // copy is deliberately kept" note in the metadata branch below.
+  //
+  // Never throws: discardSession swallows its own errors, because orphaned
+  // staging data is a sweep's problem and must never turn a 201 into a 500.
+  //
+  // ORDERING: always awaited BEFORE res.json(), never after. On the branches
+  // that reach cleanupPending() that is already true, because those clean up
+  // ahead of responding. On the four gates above it is a deliberate departure
+  // from the surrounding style -- writeLog() there runs AFTER the response --
+  // and the difference is that a log write losing a race costs a log line,
+  // while this one leaves a participant's trials sitting in RTDB. Work queued
+  // after a response is not guaranteed to run: the instance can be frozen or
+  // scaled down the moment the response is flushed. Same reasoning as the
+  // "logs are written BEFORE the response here" note on the NAME_CONFLICT
+  // branch below.
+  const discardStaging = async () => {
+    if (sessionId) await discardSession(sessionId);
+  };
 
   const exp_doc_ref: DocumentReference<DocumentData> = db.collection("experiments").doc(experimentID);
   const exp_doc: DocumentSnapshot = await exp_doc_ref.get();
@@ -64,12 +115,14 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
   // finalizing does not require a researcher to also turn data collection
   // off, and this message is the one that should surface either way.
   if (exp_data.finalized) {
+    await discardStaging();
     res.status(400).json(MESSAGES.EXPERIMENT_FINALIZED);
     await writeLog(experimentID, "logError", MESSAGES.EXPERIMENT_FINALIZED, logContext);
     return;
   }
 
   if (!exp_data.active) {
+    await discardStaging();
     res.status(400).json(MESSAGES.DATA_COLLECTION_NOT_ACTIVE);
     await writeLog(experimentID, "logError", MESSAGES.DATA_COLLECTION_NOT_ACTIVE, logContext);
     return;
@@ -77,6 +130,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
 
   if (exp_data.limitSessions) {
     if (exp_data.sessions >= exp_data.maxSessions) {
+      await discardStaging();
       res.status(400).json(MESSAGES.SESSION_LIMIT_REACHED);
       await writeLog(experimentID, "logError", MESSAGES.SESSION_LIMIT_REACHED, logContext);
       return;
@@ -98,6 +152,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
       }
     }
     if (!valid) {
+      await discardStaging();
       res.status(400).json(MESSAGES.INVALID_DATA);
       await writeLog(experimentID, "logError", MESSAGES.INVALID_DATA, logContext);
       return;
@@ -235,6 +290,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
         });
         await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
         await cleanupPending(pendingPath); // queue-upload has its own copy
+        await discardStaging();
         res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
         // The submission is safe (queue-upload.ts holds an encrypted copy) but
         // is not in the researcher's storage yet. Counted apart from both
@@ -256,6 +312,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
   if (!claimResult.claimed) {
     if (claimResult.reason === "duplicate") {
       await cleanupPending(pendingPath);
+      await discardStaging();
       res.status(400).json({...MESSAGES.OSF_FILE_EXISTS, metadataMessage});
       await writeLog(experimentID, "logError", MESSAGES.OSF_FILE_EXISTS, logContext);
       return;
@@ -276,6 +333,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
       });
       await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
       await cleanupPending(pendingPath); // queue-upload has its own copy
+      await discardStaging();
       // Same reasoning as the compaction-gate branch below: without this the
       // session's derived tables are never generated at all. Pre-dates the
       // gate and is far rarer (a rehydration lease lasts 60 seconds), but it
@@ -314,6 +372,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
       });
       await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
       await cleanupPending(pendingPath); // queue-upload has its own copy
+      await discardStaging();
       // The derived Psych-DS tables have to be queued too. The retry worker
       // only writes back what is in the queue -- it never re-runs the metadata
       // pipeline -- so queueing the raw file alone means this session's
@@ -356,6 +415,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
       });
       await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
       await cleanupPending(pendingPath); // queue-upload has its own copy
+      await discardStaging();
       // OSF is unreachable, so queue the derived files alongside the raw data.
       await queueDerivedFiles(derivedFiles, derivedTarget, `Queued alongside data file: ${detail}`);
       res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
@@ -389,6 +449,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
         direction: "cache-free-provider-conflict",
       }, logContext);
       await cleanupPending(pendingPath);
+      await discardStaging();
       res.status(400).json({...MESSAGES.OSF_FILE_EXISTS, metadataMessage});
       return;
     }
@@ -405,6 +466,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
       });
       await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
       await cleanupPending(pendingPath); // queue-upload has its own copy
+      await discardStaging();
       // OSF is failing, so queue the derived files alongside the raw data —
       // same provider error code, since it's the same provider write path.
       await queueDerivedFiles(derivedFiles, derivedTarget, `Queued alongside data file: OSF error ${result.providerStatus}`, result.error);
@@ -431,6 +493,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
 
   // Data successfully uploaded to OSF — clean up the pending copy.
   await cleanupPending(pendingPath);
+  await discardStaging();
 
   // The raw data file is safely in OSF; upload the files derived from it
   // (main data CSV, sidecar CSVs, .psychds-ignore — best-effort: failures are

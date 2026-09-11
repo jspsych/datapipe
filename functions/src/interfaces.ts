@@ -185,6 +185,18 @@ export interface ExperimentData {
     data: string; // Consider specifying a more detailed type
     filename: string;
     metadataOptions: object; // Consider specifying a more detailed type
+    // RTDB staging session this submission completes
+    // (docs/streaming-ingest-design.md). Absent for every submission that did
+    // not stream -- the plugin's non-streaming path, and every request written
+    // by hand against /api/data -- which is why nothing downstream may require
+    // it.
+    //
+    // It does NOT carry the data. A clean completion still sends the full
+    // `data` string above, exactly as before, because the browser still has
+    // the dataset in memory; the staged copy exists for the sessions that
+    // never get here. All this does is tell api-data.ts which staging node to
+    // drop once the submission is safe.
+    sessionId?: string;
   }
 
   export interface Variable {
@@ -254,6 +266,12 @@ export interface ExperimentData {
     // which falls back to the osfFilesLink-based container above).
     storageProvider?: StorageProviderId;
     providerContainer?: ContainerRef;
+    // True for a session recovered from the RTDB staging tier after the
+    // participant abandoned it (functions/src/scheduled-staging-sweep.ts).
+    // Absent on every entry written by a real submission. Read by
+    // upload-failure-notify.ts, which will not open a notification episode on
+    // one.
+    partial?: boolean;
   }
 
   /**
@@ -277,6 +295,10 @@ export interface ExperimentData {
     saveData?: number;
     saveBase64Data?: number;
     getCondition?: number;
+    // Sessions admitted to the RTDB staging tier. Absent on every experiment
+    // that predates incremental upload, and on any experiment whose
+    // participants use the plugin's non-streaming path.
+    startSession?: number;
 
     // Outcomes. There is no ...Failed counter by design:
     //   failed = saveData - saveDataSucceeded - saveDataQueued
