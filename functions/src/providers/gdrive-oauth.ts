@@ -73,3 +73,66 @@ export async function refreshGdriveToken(
 
   return { success: true, accessToken: tokenData.access_token };
 }
+
+export interface GdriveRevokeResult {
+  ok: boolean;
+  status?: number;
+  error?: string;
+}
+
+/**
+ * Revokes a gdrive OAuth grant by revoking its refresh token, via Google's
+ * token revocation endpoint. Revoking a refresh token revokes the whole
+ * grant (access token included), so there is no separate access-token call.
+ *
+ * Never throws -- callers (disconnectProvider, purge-user-data) treat
+ * revocation as best-effort and must not fail the caller's own operation
+ * over it. A 400 invalid_token means Google already considers the grant
+ * gone (already revoked, or unknown token), which is the end state we
+ * wanted, so that case is reported as `ok: true`.
+ *
+ * Never logs the token itself -- only status/error, at warn level, on
+ * unexpected failures.
+ */
+export async function revokeGdriveToken(refreshToken: string): Promise<GdriveRevokeResult> {
+  const revokeUrl = process.env.GDRIVE_REVOKE_URL || "https://oauth2.googleapis.com/revoke";
+  const params = new URLSearchParams({ token: refreshToken });
+
+  let response: Response;
+  try {
+    response = await fetch(revokeUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: params.toString(),
+    });
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : "Unknown network error";
+    console.warn(`revokeGdriveToken: network error contacting revocation endpoint: ${detail}`);
+    return { ok: false, error: "NETWORK_ERROR" };
+  }
+
+  if (response.ok) {
+    return { ok: true, status: response.status };
+  }
+
+  // Google returns 400 invalid_token for an already-revoked or unknown
+  // token -- the grant is already gone, which is the outcome we wanted.
+  if (response.status === 400) {
+    let body = "";
+    try {
+      body = await response.text();
+    } catch {
+      // ignore -- fall through to the invalid_token treatment below
+    }
+    if (body.includes("invalid_token")) {
+      return { ok: true, status: response.status };
+    }
+    console.warn(`revokeGdriveToken: revocation endpoint returned 400: ${body || "(no body)"}`);
+    return { ok: false, status: response.status, error: "REVOKE_FAILED" };
+  }
+
+  console.warn(`revokeGdriveToken: revocation endpoint returned ${response.status}`);
+  return { ok: false, status: response.status, error: "REVOKE_FAILED" };
+}

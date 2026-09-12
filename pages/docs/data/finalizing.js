@@ -119,7 +119,8 @@ export default function FinishingAStudyPage() {
           it was queued, and{" "}
           <strong>
             the file stays downloadable from the queued files panel until seven
-            days after it was queued
+            days after it was queued — or up to fourteen if DataPipe could not
+            deliver the failure notification about it
           </strong>
           . Download it and add it to your Zenodo deposition by hand.
         </Text>

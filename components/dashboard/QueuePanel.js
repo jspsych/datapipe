@@ -377,7 +377,8 @@ export default function QueuePanel({ entries, experimentId }) {
                 </Box>
               </Box>
               <Text fontSize="sm" pb={3}>
-                Files are stored for up to 7 days. If retries don&apos;t succeed,
+                Files are stored for seven days, or up to fourteen if we couldn&apos;t
+                deliver a failure notification to you. If retries don&apos;t succeed,
                 download the files and upload them to your storage provider manually.
               </Text>
             </Accordion.ItemContent>

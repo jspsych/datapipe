@@ -10,9 +10,10 @@
 import { onRequest } from "firebase-functions/v2/https";
 import { FieldValue } from "firebase-admin/firestore";
 import { db, auth } from "./app.js";
-import { encrypt } from "./crypto-utils.js";
+import { decrypt, encrypt } from "./crypto-utils.js";
 import { getOAuthConfig, getProvider } from "./providers/index.js";
-import { StorageProviderId } from "./providers/types.js";
+import { revokeGdriveToken } from "./providers/gdrive-oauth.js";
+import { OAuth2AccountConnection, StorageProviderId } from "./providers/types.js";
 import { isAllowedServerUrl } from "./providers/server-url.js";
 
 export type AuthCheckResult =
@@ -342,11 +343,57 @@ export const disconnectProvider = onRequest({ cors: true }, async (req, res) => 
       return;
     }
 
-    await db.doc(`users/${uid}`).update({
-      [`connectedAccounts.${provider}`]: FieldValue.delete(),
-    });
+    // gdrive is the only provider with a real revocation endpoint today --
+    // Dataverse tokens are institution-issued personal access tokens with no
+    // documented revoke call, and Zenodo (see zenodo-oauth.ts) has none
+    // either, so both keep the old delete-only behavior unchanged.
+    //
+    // Revocation is best-effort: it must never fail this request, and the
+    // stored copy is deleted regardless of whether Google's revoke call
+    // succeeded (a failed revoke still means DataPipe no longer holds a
+    // token, which is the property that matters most). `revoked` is surfaced
+    // in the response so a future UI can tell the difference, but nothing
+    // today reads it as an error signal.
+    let revoked: boolean | undefined;
+    if (provider === 'gdrive') {
+      revoked = false;
+      try {
+        const userSnap = await db.doc(`users/${uid}`).get();
+        const gdriveConnection = userSnap.data()?.connectedAccounts?.gdrive as
+          | OAuth2AccountConnection
+          | undefined;
+        if (gdriveConnection?.encryptedRefreshToken) {
+          const refreshToken = decrypt(gdriveConnection.encryptedRefreshToken);
+          const result = await revokeGdriveToken(refreshToken);
+          revoked = result.ok;
+        }
+      } catch (e) {
+        console.warn(
+          'disconnectProvider: failed to read/decrypt gdrive connection for revocation:',
+          e instanceof Error ? e.message : 'Unknown error'
+        );
+      }
+    }
 
-    res.status(200).json({ success: true });
+    try {
+      await db.doc(`users/${uid}`).update({
+        [`connectedAccounts.${provider}`]: FieldValue.delete(),
+      });
+    } catch (e) {
+      // NOT_FOUND: the user document doesn't exist at all (e.g. it was
+      // already purged, or never fully created). There is nothing left to
+      // disconnect, which is the same end state this call is trying to
+      // reach, so treat it as success rather than a 500.
+      if ((e as { code?: number }).code !== 5) {
+        throw e;
+      }
+    }
+
+    const responseBody: Record<string, unknown> = { success: true };
+    if (provider === 'gdrive') {
+      responseBody.revoked = revoked;
+    }
+    res.status(200).json(responseBody);
   } catch (error) {
     console.error('Error disconnecting provider:', error instanceof Error ? error.message : 'Unknown error');
     res.status(500).json({ error: 'Failed to disconnect provider' });

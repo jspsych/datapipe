@@ -130,9 +130,12 @@ export default function WhenAnUploadFailsPage() {
           <strong>
             Running out of retries is not the same as losing the file.
           </strong>{" "}
-          DataPipe keeps the file for seven days from the moment it was queued,
-          so a permanently failed upload stays downloadable from your dashboard
-          for roughly five and a half more days after the last attempt.
+          DataPipe keeps the file for seven days from the moment it was
+          queued — or up to fourteen if it could not deliver the failure
+          notification about it — so a permanently failed upload stays
+          downloadable from your dashboard for roughly five and a half more
+          days after the last attempt, longer still if that notification is
+          undelivered.
         </Text>
 
         <Heading as="h3" fontSize="md" fontWeight="600" color="fg" mt={2}>
@@ -214,7 +217,8 @@ export default function WhenAnUploadFailsPage() {
           </Box>
           <Box as="li" mb={2}>
             <strong>Stored for</strong> — how much of the seven days since
-            queueing is left.
+            queueing is left (up to fourteen if a failure notification about
+            the file could not be delivered).
           </Box>
         </Box>
         <Text maxW="70ch">
@@ -240,8 +244,9 @@ export default function WhenAnUploadFailsPage() {
         </Text>
         <Text maxW="70ch">
           If a download fails, nothing has been lost — DataPipe still holds the
-          file for the rest of its seven days. Try the single-file buttons if
-          the ZIP will not build.
+          file for the rest of its retention window (seven days, or up to
+          fourteen if a failure notification about it could not be delivered).
+          Try the single-file buttons if the ZIP will not build.
         </Text>
         <GuidanceLine href="/docs/api#queue-status" linkText="Queue status">
           The endpoint behind these buttons is documented, if you want to
@@ -255,7 +260,8 @@ export default function WhenAnUploadFailsPage() {
           tried again. Download it from the dashboard and add it to your{" "}
           Drive folder, Dataverse dataset, or Zenodo deposition by hand. It is
           worth doing promptly: <strong>the file is deleted seven days after
-          it was queued</strong>, failed or not.
+          it was queued</strong> — or up to fourteen if DataPipe could not
+          deliver the failure notification about it — failed or not.
         </Text>
         <Text maxW="70ch">
           Some failures are permanent immediately, because retrying could never

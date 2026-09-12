@@ -1,5 +1,8 @@
 import { db, storage } from "./app.js";
 import { mailCollection } from "./mail.js";
+import { decrypt } from "./crypto-utils.js";
+import { revokeGdriveToken } from "./providers/gdrive-oauth.js";
+import { OAuth2AccountConnection } from "./providers/types.js";
 
 // Everything that belongs to one researcher, removed in one pass.
 //
@@ -39,6 +42,11 @@ export interface PurgeCounts {
   // Contact-email additions (functions/src/mail.ts, lib/contact-email.js).
   mailDocuments: number;
   contactEmailVerification: number;
+  // Whether a connected Google Drive grant was successfully revoked with
+  // Google (see revokeGdriveToken, functions/src/providers/gdrive-oauth.ts).
+  // Best-effort: false covers both "nothing to revoke" and "revocation
+  // failed" -- either way it never blocks the rest of the purge.
+  gdriveRevoked: boolean;
 }
 
 async function deleteInBatches(
@@ -75,6 +83,7 @@ export async function purgeUserData(uid: string): Promise<PurgeCounts> {
     userDocument: 0,
     mailDocuments: 0,
     contactEmailVerification: 0,
+    gdriveRevoked: false,
   };
 
   const ownedExperiments = await db
@@ -166,7 +175,30 @@ export async function purgeUserData(uid: string): Promise<PurgeCounts> {
   // provider credentials. If an earlier step throws, the researcher still
   // owns a coherent account.
   const userDocRef = db.collection("users").doc(uid);
-  if ((await userDocRef.get()).exists) {
+  const userSnap = await userDocRef.get();
+  if (userSnap.exists) {
+    // Best-effort: tell Google the grant is done with before the document
+    // that names it is gone. Revocation failing (network blip, already-
+    // revoked token) must not stop the account from being deleted -- an
+    // un-revoked grant the researcher can still clear from
+    // myaccount.google.com/permissions is a far smaller problem than a
+    // deletion request that silently does nothing.
+    const gdriveConnection = userSnap.data()?.connectedAccounts?.gdrive as
+      | OAuth2AccountConnection
+      | undefined;
+    if (gdriveConnection?.encryptedRefreshToken) {
+      try {
+        const refreshToken = decrypt(gdriveConnection.encryptedRefreshToken);
+        const result = await revokeGdriveToken(refreshToken);
+        counts.gdriveRevoked = result.ok;
+      } catch (e) {
+        console.warn(
+          `purgeUserData: failed to revoke gdrive grant for ${uid}:`,
+          e instanceof Error ? e.message : "Unknown error"
+        );
+      }
+    }
+
     await userDocRef.delete();
     counts.userDocument = 1;
   }

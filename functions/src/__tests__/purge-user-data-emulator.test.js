@@ -15,6 +15,7 @@ process.env.FIREBASE_CONFIG = JSON.stringify({
 });
 
 const { randomUUID } = require("crypto");
+const express = require("express");
 const { getFirestore } = require("firebase-admin/firestore");
 const { getStorage } = require("firebase-admin/storage");
 const { purgeUserData } = require("../../lib/purge-user-data.js");
@@ -23,6 +24,50 @@ jest.setTimeout(30000);
 
 const db = getFirestore();
 const bucket = getStorage().bucket();
+
+// purgeUserData is called in-process (not through the Functions emulator's
+// HTTP listener), so GDRIVE_REVOKE_URL only needs to be readable by THIS
+// process at call time -- an OS-assigned port (listen(0)) is fine here, same
+// pattern as metadata-emulator.test.js's createMockOSFServer, unlike
+// oauth-connect-emulator.test.js's fixed port (which a separately-spawned
+// Functions-emulator process has to be told about ahead of time).
+function createMockRevokeServer() {
+  const app = express();
+  app.use(express.urlencoded({ extended: false }));
+  const receivedTokens = [];
+
+  app.post("/revoke", (req, res) => {
+    receivedTokens.push(req.body.token);
+    if (req.body.token === "revoke-should-fail") {
+      res.status(500).send("mock revoke failure");
+      return;
+    }
+    res.status(200).send("");
+  });
+
+  return new Promise((resolve) => {
+    const server = app.listen(0, () => {
+      resolve({
+        server,
+        port: server.address().port,
+        getReceivedTokens: () => receivedTokens.slice(),
+      });
+    });
+  });
+}
+
+let mockRevokeServer;
+const ORIGINAL_GDRIVE_REVOKE_URL = process.env.GDRIVE_REVOKE_URL;
+
+beforeAll(async () => {
+  mockRevokeServer = await createMockRevokeServer();
+  process.env.GDRIVE_REVOKE_URL = `http://127.0.0.1:${mockRevokeServer.port}/revoke`;
+});
+
+afterAll(() => {
+  mockRevokeServer.server.close();
+  process.env.GDRIVE_REVOKE_URL = ORIGINAL_GDRIVE_REVOKE_URL;
+});
 
 // Every document this suite creates is namespaced by a per-run uid so it can
 // never collide with, or delete, anything belonging to a suite running in
@@ -200,6 +245,61 @@ describe("purgeUserData", () => {
 
     expect(counts.experiments).toBe(1);
     expect(counts.userDocument).toBe(0);
+  });
+
+  // Best-effort Google Drive grant revocation (functions/src/providers/
+  // gdrive-oauth.ts's revokeGdriveToken), run before the user document that
+  // names the connection is deleted.
+  it("revokes a connected gdrive grant with Google before deleting the account", async () => {
+    const uid = makeUid();
+    const refreshToken = `purge-refresh-${randomUUID()}`;
+    await db
+      .collection("users")
+      .doc(uid)
+      .set({
+        uid,
+        connectedAccounts: {
+          gdrive: {
+            authMethod: "oauth2",
+            encryptedToken: "purge-access-token-placeholder",
+            encryptedRefreshToken: refreshToken,
+            tokenExpiresAt: Date.now() + 60 * 60 * 1000,
+          },
+        },
+      });
+
+    const counts = await purgeUserData(uid);
+
+    expect(counts.gdriveRevoked).toBe(true);
+    expect(counts.userDocument).toBe(1);
+    expect(mockRevokeServer.getReceivedTokens()).toContain(refreshToken);
+    expect(await exists(db.collection("users").doc(uid))).toBe(false);
+  });
+
+  // Revocation failing must not stop the rest of the purge -- the account is
+  // still deleted, just with gdriveRevoked: false to report it.
+  it("still deletes the account when gdrive revocation fails", async () => {
+    const uid = makeUid();
+    await db
+      .collection("users")
+      .doc(uid)
+      .set({
+        uid,
+        connectedAccounts: {
+          gdrive: {
+            authMethod: "oauth2",
+            encryptedToken: "purge-access-token-placeholder",
+            encryptedRefreshToken: "revoke-should-fail",
+            tokenExpiresAt: Date.now() + 60 * 60 * 1000,
+          },
+        },
+      });
+
+    const counts = await purgeUserData(uid);
+
+    expect(counts.gdriveRevoked).toBe(false);
+    expect(counts.userDocument).toBe(1);
+    expect(await exists(db.collection("users").doc(uid))).toBe(false);
   });
 
   // deleteAccount purges and then deletes the auth record, which fires
