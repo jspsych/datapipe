@@ -77,6 +77,10 @@ jobs:
           # Google Drive client secret for production. Client id and redirect
           # uri are non-secret and live in functions/.env.osf-relay.
           echo "GDRIVE_CLIENT_SECRET=${{ secrets.PROD_GDRIVE_CLIENT_SECRET }}" >> .env
+          # Zenodo OAuth client secret for production. Client id and redirect
+          # uri are non-secret and live in functions/.env.osf-relay; ZENODO_ENV
+          # stays unset there so the flow runs against the real zenodo.org.
+          echo "ZENODO_CLIENT_SECRET=${{ secrets.PROD_ZENODO_CLIENT_SECRET }}" >> .env
           # Resend. functions/src/mail-delivery.ts delivers everything mail.ts
           # queues into the `mail` collection; without this key the
           # onmailcreated trigger writes a terminal MailConfigMissingError on
