@@ -190,3 +190,26 @@ export function hasContactEmail(
 ): boolean {
   return contactEmailRecipient(userData) !== null;
 }
+
+// ---------------------------------------------------------------------------
+// Retention's handle onto a mail document.
+// ---------------------------------------------------------------------------
+
+/**
+ * The experiment this mail is about, if it is an upload-failure notification.
+ *
+ * Shared by mail-delivery.ts (a terminal failure on the mail's very first
+ * attempt) and scheduled-mail-retry.ts (a retry that fails, or that the sweep
+ * gives up on) so there is exactly one definition of "the researcher was not
+ * told" for upload-retention.ts's extendRetentionForExperiment to key on.
+ * Verification codes -- and any future kind that is not about queued data --
+ * have no data behind them to keep, so this returns null for everything but
+ * "upload-failure".
+ */
+export function uploadFailureExperimentID(
+  mailData: FirebaseFirestore.DocumentData | undefined
+): string | null {
+  const meta = (mailData?.datapipe ?? {}) as Record<string, unknown>;
+  if (meta.kind !== "upload-failure") return null;
+  return typeof meta.experimentID === "string" ? meta.experimentID : null;
+}

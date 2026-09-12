@@ -94,6 +94,7 @@ let _setMailSenderForTests;
 let LEASE_MS;
 let MAX_ATTEMPTS;
 let CONFIG_MISSING_ERROR;
+let RETENTION_GRACE_MS;
 
 beforeAll(async () => {
   let app;
@@ -111,6 +112,7 @@ beforeAll(async () => {
     MAX_ATTEMPTS,
     CONFIG_MISSING_ERROR,
   } = await import("../../lib/mail-delivery.js"));
+  ({ RETENTION_GRACE_MS } = await import("../../lib/upload-retention.js"));
 });
 
 // ---------------------------------------------------------------------------
@@ -148,6 +150,27 @@ async function seedMail(overrides = {}) {
 async function deliveryOf(ref) {
   const snap = await ref.get();
   return snap.exists ? snap.data().delivery : undefined;
+}
+
+// An unresolved uploadQueue entry, as upload-retention.ts's
+// unresolvedQueueEntriesQuery would find it -- what extendRetentionForExperiment
+// extends. uploadQueue is shared with every other suite, but these fixtures are
+// scoped to a per-test experimentID, so nothing here can be picked up by
+// another suite's query.
+async function seedQueueEntry(experimentID, overrides = {}) {
+  const ref = db.collection("uploadQueue").doc();
+  created.push(ref);
+  await ref.set({
+    experimentID,
+    owner: `md-user-${randomUUID()}`,
+    status: "failed",
+    retryCount: 5,
+    maxRetries: 5,
+    storagePath: `pending-data/${experimentID}/subject-1.json`,
+    createdAt: Timestamp.now(),
+    ...overrides,
+  });
+  return ref;
 }
 
 // A sender that resolves with a Resend message id, or one that rejects with a
@@ -661,5 +684,127 @@ describe("purge-user-data compatibility", () => {
     expect(after.message).toEqual(before.message);
     expect(after.datapipe.owner).toBe(owner);
     expect(after.datapipe.kind).toBe(before.datapipe.kind);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 7. Retention while the researcher was never told
+// ---------------------------------------------------------------------------
+//
+// scheduled-mail-retry.ts's sweep is the only OTHER place
+// extendRetentionForExperiment is called, and its queries only ever see a
+// document that reached ERROR+retryable or was abandoned mid-send
+// (PROCESSING). A mail that fails TERMINALLY on its very first attempt --
+// finish() called with retryable: false straight out of deliverMailDocument,
+// never having passed through ERROR+retryable at all -- is invisible to that
+// sweep. Without the fix these tests cover, that researcher's uploadQueue
+// entries would age out on the plain seven-day clock while the mail document
+// records that they were told.
+
+describe("retention on a terminal failure", () => {
+  test("a rejected sending domain (403, terminal on the first attempt) extends retention", async () => {
+    // The motivating case from the review: an unverified sending domain comes
+    // back as validation_error/403, exactly like a bad recipient address, and
+    // is terminal with no retry ever attempted.
+    _setMailSenderForTests(
+      sendingError("validation_error", {
+        message: "The gmail.com domain is not verified.",
+        status: 403,
+      })
+    );
+    const { ref, id } = await seedMail();
+    const experimentID = (await ref.get()).data().datapipe.experimentID;
+    const entry = await seedQueueEntry(experimentID);
+
+    expect(await deliverMailDocument(id)).toBe("terminal-error");
+    expect((await deliveryOf(ref)).retryable).toBe(false);
+
+    const retainUntil = (await entry.get()).data().retainUntil;
+    expect(retainUntil).toBeDefined();
+    // Same clock extendRetentionForExperiment itself would set: now + the
+    // seven-day grace window, not the plain seven days from createdAt.
+    expect(retainUntil.toMillis()).toBeCloseTo(Date.now() + RETENTION_GRACE_MS, -4);
+  });
+
+  test("holds back EVERY unresolved entry for the experiment, not just one", async () => {
+    _setMailSenderForTests(sendingError("validation_error", { status: 422 }));
+    const { ref, id } = await seedMail();
+    const experimentID = (await ref.get()).data().datapipe.experimentID;
+    const entries = [
+      await seedQueueEntry(experimentID),
+      await seedQueueEntry(experimentID),
+      await seedQueueEntry(experimentID, { status: "pending", retryCount: 0 }),
+    ];
+
+    expect(await deliverMailDocument(id)).toBe("terminal-error");
+
+    for (const entry of entries) {
+      expect((await entry.get()).data().retainUntil.toMillis()).toBeGreaterThan(
+        Date.now()
+      );
+    }
+  });
+
+  test("a missing RESEND_API_KEY (config-missing, also terminal on the first attempt) extends retention", async () => {
+    const { ref, id } = await seedMail();
+    const experimentID = (await ref.get()).data().datapipe.experimentID;
+    const entry = await seedQueueEntry(experimentID);
+
+    const saved = process.env.RESEND_API_KEY;
+    delete process.env.RESEND_API_KEY;
+    let outcome;
+    try {
+      outcome = await deliverMailDocument(id);
+    } finally {
+      process.env.RESEND_API_KEY = saved;
+    }
+
+    expect(outcome).toBe("terminal-error");
+    expect((await entry.get()).data().retainUntil.toMillis()).toBeGreaterThan(
+      Date.now()
+    );
+  });
+
+  test("a retryable failure on the first attempt does not itself extend retention -- that stays the sweep's job", async () => {
+    // The contrast that proves this is scoped to TERMINAL outcomes: a
+    // still-deliverable document is exactly what scheduled-mail-retry.ts's
+    // sweep exists to keep extending on its own ten-minute cadence.
+    _setMailSenderForTests(sendingError("daily_quota_exceeded", { status: 429 }));
+    const { ref, id } = await seedMail();
+    const experimentID = (await ref.get()).data().datapipe.experimentID;
+    const entry = await seedQueueEntry(experimentID);
+
+    expect(await deliverMailDocument(id)).toBe("retryable-error");
+    expect((await entry.get()).data().retainUntil).toBeUndefined();
+  });
+
+  test("a terminal failure on mail that is not an upload-failure notification touches no queue entry", async () => {
+    // Verification codes have no data behind them to keep --
+    // uploadFailureExperimentID returns null for anything but "upload-failure",
+    // so this must not throw and must not query uploadQueue at all.
+    _setMailSenderForTests(sendingError("validation_error", { status: 422 }));
+    const { id } = await seedMail({
+      datapipe: {
+        kind: "contact-email-verification",
+        owner: `md-user-${randomUUID()}`,
+        queuedAt: Timestamp.now(),
+      },
+    });
+
+    expect(await deliverMailDocument(id)).toBe("terminal-error");
+  });
+
+  test("a terminal failure on an upload-failure document with no experimentID does not throw", async () => {
+    // Defensive: a hand-edited or malformed document must not crash delivery.
+    _setMailSenderForTests(sendingError("validation_error", { status: 422 }));
+    const { id } = await seedMail({
+      datapipe: {
+        kind: "upload-failure",
+        owner: `md-user-${randomUUID()}`,
+        queuedAt: Timestamp.now(),
+      },
+    });
+
+    expect(await deliverMailDocument(id)).toBe("terminal-error");
   });
 });

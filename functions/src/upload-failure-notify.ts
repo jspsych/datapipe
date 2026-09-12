@@ -47,7 +47,10 @@ import { contactEmailRecipient, enqueueMail, newMailRef } from "./mail.js";
 import type { MailMeta } from "./mail.js";
 import { buildUploadFailureEmail } from "./email/upload-failure-copy.js";
 import type { UploadFailureState } from "./interfaces.js";
-import { unresolvedQueueEntriesQuery } from "./upload-retention.js";
+import {
+  extendRetentionForExperiment,
+  unresolvedQueueEntriesQuery,
+} from "./upload-retention.js";
 
 // One mail per experiment per 24 hours, maximum, no matter how often the queue
 // flaps clear->fail. A study that breaks every hour for a week produces seven
@@ -215,7 +218,19 @@ async function notifyFailure(
   // never committed, so the ref is still unwritten and tx.create still holds.
   const mailRef = newMailRef();
 
-  return db.runTransaction<QueueWriteOutcome>(async (tx) => {
+  // Set inside the transaction when this attempt suppresses the researcher's
+  // notification for a reason other than "there is nobody to tell"
+  // (no-contact-email is the one upload-retention.ts's header documents as
+  // deliberately NOT extending). A rate-limited suppression -- including a
+  // later failure landing on an episode that is still only rate-limited and
+  // was never actually mailed -- means the researcher genuinely has not been
+  // told about THIS problem, so their data earns the same grace period an
+  // undelivered mail would give it. Reset on every transaction attempt so a
+  // retried run cannot leave a stale value from a prior, uncommitted attempt.
+  let extendFor: string | null = null;
+
+  const outcome = await db.runTransaction<QueueWriteOutcome>(async (tx) => {
+    extendFor = null;
     // ---------------- ALL READS FIRST (Firestore transaction law) ----------
     const expSnap = await tx.get(experimentRef);
     const userSnap = userRef ? await tx.get(userRef) : null;
@@ -250,6 +265,15 @@ async function notifyFailure(
     // episode was armed to suppress a burst). Count and stop.
     if (state.notifiedAt != null) {
       tx.update(experimentRef, updates);
+      // Armed but never actually mailed: nothing will ever re-decide this
+      // episode (that is what "armed" means), so nothing else will ever
+      // extend retention for it either. Re-extend on every subsequent
+      // failure so entries created after the original suppression are
+      // covered too -- exactly what the mail-retry sweep's periodic pass
+      // gives a real notification for free.
+      if (state.suppressedReason === "rate-limited") {
+        extendFor = experimentID;
+      }
       return "counted";
     }
 
@@ -264,6 +288,10 @@ async function notifyFailure(
     if (now.toMillis() - millisOrZero(state.lastNotifiedAt) < RATE_LIMIT_MS) {
       updates["uploadFailure.suppressedReason"] = "rate-limited";
       tx.update(experimentRef, updates);
+      // Nothing was enqueued and nothing will be re-decided (notifiedAt is
+      // now armed), so this is not "the researcher was told" from
+      // upload-retention.ts's point of view -- see extendFor above.
+      extendFor = experimentID;
       return "rate-limited";
     }
 
@@ -313,6 +341,24 @@ async function notifyFailure(
     tx.update(experimentRef, updates);
     return "mailed";
   }, { maxAttempts: TRANSACTION_ATTEMPTS });
+
+  // Outside the transaction, and only once it has actually committed: this is
+  // the same shape scheduled-mail-retry.ts's sweep uses (extend, then write),
+  // and the same helper -- so there is exactly one definition of "the
+  // researcher was not told". Never fatal: failing to extend costs this
+  // experiment a grace period, not the rest of the write.
+  if (extendFor) {
+    try {
+      await extendRetentionForExperiment(extendFor, Date.now());
+    } catch (error) {
+      console.error(
+        `upload-failure-notify: could not extend retention for ${extendFor}:`,
+        error instanceof Error ? error.message : "Unknown error"
+      );
+    }
+  }
+
+  return outcome;
 }
 
 /**

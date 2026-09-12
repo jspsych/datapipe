@@ -66,7 +66,7 @@
 
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { Timestamp } from "firebase-admin/firestore";
-import { mailCollection } from "./mail.js";
+import { mailCollection, uploadFailureExperimentID } from "./mail.js";
 import {
   deliverMailDocument,
   isInline,
@@ -198,17 +198,6 @@ export function sweepDecision(
   return "age-out";
 }
 
-/**
- * The experiment whose data this notification is about, if it is about any.
- *
- * Verification codes have no data behind them to keep.
- */
-function retentionTargetOf(mailData: FirebaseFirestore.DocumentData): string | null {
-  const meta = (mailData.datapipe ?? {}) as Record<string, unknown>;
-  if (meta.kind !== "upload-failure") return null;
-  return typeof meta.experimentID === "string" ? meta.experimentID : null;
-}
-
 /** The terminal write. Takes the document out of both sweep queries. */
 function ageOutUpdates(
   data: FirebaseFirestore.DocumentData,
@@ -313,7 +302,7 @@ export async function sweepRetryableMail(nowMs = Date.now()): Promise<SweepRepor
   const extended = new Set<string>();
   for (const [doc, decision] of decisions) {
     if (decision === "skip") continue;
-    const experimentID = retentionTargetOf(doc.data());
+    const experimentID = uploadFailureExperimentID(doc.data());
     if (experimentID) extended.add(experimentID);
   }
   await Promise.all(

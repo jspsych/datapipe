@@ -93,6 +93,7 @@ let handleQueueWrite;
 // the constant changes.
 let RATE_LIMIT_MS;
 let COMPACTION_HOLD_REASON;
+let RETENTION_GRACE_MS;
 
 beforeAll(async () => {
   let app;
@@ -105,6 +106,7 @@ beforeAll(async () => {
 
   ({ handleQueueWrite, RATE_LIMIT_MS } = await import("../../lib/upload-failure-notify.js"));
   ({ COMPACTION_HOLD_REASON } = await import("../../lib/compaction-gate.js"));
+  ({ RETENTION_GRACE_MS } = await import("../../lib/upload-retention.js"));
 });
 
 // ---------------------------------------------------------------------------
@@ -627,6 +629,66 @@ describe("rate limit", () => {
     }
 
     expect(await mailFor(experimentID)).toHaveLength(2);
+  });
+
+  test("a rate-limited suppression extends retention for the experiment's unresolved entries", async () => {
+    // The bug this covers: suppressing for the flap backstop still ARMS
+    // notifiedAt, which reads exactly like "the researcher was told" to
+    // upload-retention.ts -- but nothing was sent and nothing else will ever
+    // extend this episode's retention (mail-delivery.ts and
+    // scheduled-mail-retry.ts only ever see a real mail document, and none
+    // exists here). Without the fix, this experiment's failing file would age
+    // out on the plain seven-day clock while the flag says otherwise.
+    const owner = await seedOwner();
+    const experimentID = await seedExperiment({ owner });
+
+    expect(await failOnce(experimentID, owner, "rl-1")).toBe("mailed");
+    expect(await drain(experimentID, owner, "rl-1")).toBe("cleared");
+
+    // The file that is actually failing right now, for real -- seeded only
+    // after the drain so the drain above still finds an empty queue and
+    // actually clears.
+    const { docId } = await seedQueueDoc(experimentID, owner, { status: "failed" });
+    const entryRef = db.doc(`uploadQueue/${docId}`);
+
+    // Within the 24-hour floor from rl-1's mail, so this suppresses rather
+    // than sending. (In CI the live trigger may independently reach the same
+    // "rate-limited"/"counted" decision on the seedQueueDoc write above;
+    // either way this call's own transaction extends retention before it
+    // returns -- see notifyFailure's extendFor.)
+    await failOnce(experimentID, owner, "rl-2");
+
+    const state = await uploadFailureState(experimentID);
+    expect(state.suppressedReason).toBe("rate-limited");
+    // No second mail: the suppression sent nothing.
+    expect(await mailFor(experimentID)).toHaveLength(1);
+
+    const retainUntil = (await entryRef.get()).data().retainUntil;
+    expect(retainUntil).toBeDefined();
+    expect(retainUntil.toMillis()).toBeCloseTo(Date.now() + RETENTION_GRACE_MS, -4);
+  });
+
+  test("a later failure on an episode that is still only rate-limited keeps extending retention", async () => {
+    // The episode never actually gets mailed (see the header's "counted"
+    // branch), so nothing but this repeated re-extension keeps a file that
+    // starts failing AFTER the initial suppression from ageing out unseen.
+    const owner = await seedOwner();
+    const experimentID = await seedExperiment({ owner });
+
+    expect(await failOnce(experimentID, owner, "rl2-1")).toBe("mailed");
+    expect(await drain(experimentID, owner, "rl2-1")).toBe("cleared");
+    await failOnce(experimentID, owner, "rl2-2"); // arms suppressedReason: rate-limited
+
+    // A second, independent file in the same still-suppressed episode.
+    const { docId } = await seedQueueDoc(experimentID, owner, { status: "failed" });
+    const entryRef = db.doc(`uploadQueue/${docId}`);
+
+    const outcome = await failOnce(experimentID, owner, "rl2-3");
+    expect(outcome).toBe("counted");
+
+    const retainUntil = (await entryRef.get()).data().retainUntil;
+    expect(retainUntil).toBeDefined();
+    expect(retainUntil.toMillis()).toBeGreaterThan(Date.now());
   });
 });
 
