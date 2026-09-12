@@ -245,7 +245,11 @@ export default function ProviderConnections({ data }) {
     // breaks those too the moment they are re-enabled. The copy must not
     // claim less than the count covers.
     const noun = experimentCount === 1 ? "experiment is" : "experiments are";
-    return `${experimentCount} ${noun} set up to send data to ${provider.name}. Disconnecting stops them from receiving new data. Data already written to ${provider.name} stays there.`;
+    const revokeNote =
+      provider.id === "gdrive"
+        ? " Disconnecting also revokes DataPipe's access in your Google account."
+        : "";
+    return `${experimentCount} ${noun} set up to send data to ${provider.name}. Disconnecting stops them from receiving new data. Data already written to ${provider.name} stays there.${revokeNote}`;
   };
 
   const handleDisconnect = async (providerId) => {

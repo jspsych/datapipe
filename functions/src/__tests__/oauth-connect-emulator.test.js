@@ -124,6 +124,25 @@ function createMockTokenServer() {
     res.status(nextResponse.status).json(nextResponse.body);
   });
 
+  // Google's revocation endpoint (GDRIVE_REVOKE_URL, same host:port as
+  // GDRIVE_TOKEN_URL above -- see functions/.env.local). Records every
+  // received token so disconnectProvider/purgeUserData tests can assert on
+  // what was actually sent, and lets a test force a failure response for one
+  // specific token value without disturbing every other test sharing this
+  // server.
+  const receivedRevokeRequests = [];
+  const revokeResponseByToken = {};
+
+  app.post("/revoke", (req, res) => {
+    receivedRevokeRequests.push({ ...req.body });
+    const override = revokeResponseByToken[req.body.token];
+    if (override) {
+      res.status(override.status).send(override.body ?? "");
+      return;
+    }
+    res.status(200).send("");
+  });
+
   return new Promise((resolve) => {
     const server = app.listen(TOKEN_PORT, () => {
       resolve({
@@ -134,8 +153,18 @@ function createMockTokenServer() {
         getLastRequest() {
           return receivedRequests[receivedRequests.length - 1];
         },
+        getLastRevokeRequest() {
+          return receivedRevokeRequests[receivedRevokeRequests.length - 1];
+        },
+        setRevokeResponseForToken(token, status, body) {
+          revokeResponseByToken[token] = { status, body };
+        },
         reset() {
           receivedRequests.length = 0;
+          receivedRevokeRequests.length = 0;
+          for (const key of Object.keys(revokeResponseByToken)) {
+            delete revokeResponseByToken[key];
+          }
           nextResponse = defaultResponse();
         },
       });
@@ -476,11 +505,55 @@ describe("9. disconnectProvider", () => {
     const { status, body } = await callDisconnectProvider({ provider: "gdrive", uid, idToken });
 
     expect(status).toBe(200);
-    expect(body).toEqual({ success: true });
+    expect(body).toEqual({ success: true, revoked: true });
 
     const userData = await getUserData(uid);
     expect(userData.connectedAccounts.gdrive).toBeUndefined();
     expect(userData.connectedAccounts.dataverse).toEqual(dataverseEntry);
+
+    // The stored refresh token -- plaintext here, so decrypt() returns it
+    // unchanged via its migration-period fallback -- reached the mock
+    // revocation endpoint.
+    const revokeRequest = mockTokenServer.getLastRevokeRequest();
+    expect(revokeRequest.token).toBe("pre-existing-gdrive-refresh");
+  });
+
+  it("still deletes the field and returns revoked:false when Google's revocation call fails", async () => {
+    const { uid, idToken } = await signUpEmulatorUser();
+    const refreshToken = `revoke-fails-${randomUUID()}`;
+    mockTokenServer.setRevokeResponseForToken(refreshToken, 500, "internal error");
+    await db
+      .collection("users")
+      .doc(uid)
+      .set({
+        connectedAccounts: {
+          gdrive: {
+            authMethod: "oauth2",
+            encryptedToken: "token-placeholder",
+            encryptedRefreshToken: refreshToken,
+            tokenExpiresAt: Date.now() + 60 * 60 * 1000,
+          },
+        },
+      });
+
+    const { status, body } = await callDisconnectProvider({ provider: "gdrive", uid, idToken });
+
+    expect(status).toBe(200);
+    expect(body).toEqual({ success: true, revoked: false });
+
+    const userData = await getUserData(uid);
+    expect(userData.connectedAccounts.gdrive).toBeUndefined();
+  });
+
+  it("returns 200 (not 500) disconnecting gdrive for a uid with no user document", async () => {
+    const { uid, idToken } = await signUpEmulatorUser();
+    // Deliberately no users/{uid} doc at all -- .update() on a missing
+    // document throws NOT_FOUND, which this path must tolerate.
+
+    const { status, body } = await callDisconnectProvider({ provider: "gdrive", uid, idToken });
+
+    expect(status).toBe(200);
+    expect(body).toEqual({ success: true, revoked: false });
   });
 
   it("returns 403 for a wrong-user idToken and leaves the entry untouched", async () => {

@@ -19,8 +19,11 @@ import DocsSection from "../../components/docs/DocsSection";
 //
 //   pass-through flow ......... functions/src/api-data.ts, firebase.json rewrites
 //   transient copy ............ functions/src/persist-pending.ts
-//   queued copy + 7 days ...... functions/src/queue-upload.ts,
-//                               functions/src/scheduled-upload-retry.ts (SEVEN_DAYS_MS)
+//   queued copy, 7d/14d ....... functions/src/queue-upload.ts,
+//                               functions/src/scheduled-upload-retry.ts (candidate sweep, SEVEN_DAYS_MS),
+//                               functions/src/upload-retention.ts (retentionDecision,
+//                               RETENTION_GRACE_MS, ABSOLUTE_MAX_RETENTION_MS -- the
+//                               14-day ceiling)
 //   payload encryption ........ functions/src/payload-crypto.ts (AES-256-GCM)
 //   token encryption .......... functions/src/crypto-utils.ts (AES-256-GCM)
 //   metadata `levels` ......... functions/src/metadata-production.ts,
@@ -30,6 +33,8 @@ import DocsSection from "../../components/docs/DocsSection";
 //   bucket/db access .......... storage.rules, firestore.rules
 //   account deletion .......... functions/src/purge-user-data.ts
 //   drive.file scope .......... functions/src/providers/gdrive.ts
+//   drive grant revocation .... functions/src/providers/gdrive-oauth.ts (revokeGdriveToken),
+//                               functions/src/connect-provider.ts, functions/src/purge-user-data.ts
 //   https-only providers ...... functions/src/connect-provider.ts
 //
 // Rendered as a normal /docs page: DocsLayout shell via getLayout (docs IA
@@ -224,7 +229,9 @@ export default function PrivacyPage() {
             encrypted, and retried on a schedule. You can download it from your
             dashboard in the meantime.{" "}
             <strong>
-              A queued submission is deleted seven days after it was queued
+              A queued submission is deleted seven days after it was queued —
+              or up to fourteen if DataPipe could not deliver the failure
+              notification to you
             </strong>
             , whether or not the retries succeeded, along with its queue record.
           </List.Item>
@@ -240,7 +247,7 @@ export default function PrivacyPage() {
             recorded. So if a column holds free text, an email address, or a
             participant identifier, those values are recorded in the metadata
             document, which persists for the life of the experiment rather than
-            for seven days. Psych-DS metadata is off unless you switch it on per
+            for a matter of days. Psych-DS metadata is off unless you switch it on per
             experiment.
           </List.Item>
           <List.Item>
@@ -298,7 +305,9 @@ export default function PrivacyPage() {
             same schedule as its staged trials.
           </List.Item>
           <List.Item>
-            Queued submission: deleted seven days after it was queued.
+            Queued submission: deleted seven days after it was queued,
+            extended to at most fourteen while a failure notification is
+            undelivered.
           </List.Item>
           <List.Item>
             Psych-DS metadata document, experiment configuration, session count,
@@ -384,8 +393,8 @@ export default function PrivacyPage() {
         <Text maxW="70ch">
           DataPipe is operated by the developers of jsPsych and hosted on Google
           Cloud through Firebase. Google Cloud is DataPipe&apos;s infrastructure
-          provider; DataPipe uses Amazon&apos;s email service (SES) to send
-          notification email to researchers — never to participants.
+          provider; DataPipe uses Resend to send notification email to
+          researchers — never to participants.
         </Text>
         <Text maxW="70ch">
           <strong>
@@ -407,10 +416,34 @@ export default function PrivacyPage() {
           disconnect any provider from your account settings at any time.
         </Text>
         <Text maxW="70ch">
+          For a Google Drive connection specifically, what DataPipe keeps is an
+          OAuth refresh token, encrypted at rest, and the identifier of the
+          folder you picked — nothing else about your Drive. Disconnecting
+          Drive from account settings deletes that token and asks Google to
+          revoke DataPipe&apos;s authorization; deleting your account does the
+          same. You can also remove DataPipe from your Google Account at any
+          time, independent of DataPipe, from{" "}
+          <ProseLink href="https://myaccount.google.com/permissions" external>
+            your Google Account permissions page
+          </ProseLink>
+          .
+        </Text>
+        <Text maxW="70ch">
           Who can <em>see</em> the data at rest is set by your provider, and
           DataPipe changes none of those settings: a Drive folder is private
           until you share it, a Zenodo deposition is a private draft until you
           publish it, a Dataverse dataset is a draft until you publish it.
+        </Text>
+        <Text maxW="70ch">
+          DataPipe&apos;s use and transfer of information received from Google
+          APIs adheres to the{" "}
+          <ProseLink
+            href="https://developers.google.com/terms/api-services-user-data-policy"
+            external
+          >
+            Google API Services User Data Policy
+          </ProseLink>
+          , including the Limited Use requirements.
         </Text>
       </DocsSection>
 
@@ -591,7 +624,7 @@ export default function PrivacyPage() {
             encrypted copy exists only for the duration of the transfer. If the
             storage provider is temporarily unreachable, the submission is held
             encrypted (AES-256-GCM) in a private, non-public cloud storage
-            bucket for a maximum of seven days while delivery is retried, and is
+            bucket for a maximum of fourteen days while delivery is retried, and is
             then deleted. DataPipe does not analyze, sell, share, or otherwise
             make use of the data, and claims no rights over it. The data will
             come to rest in [provider], where access is controlled by [the PI]

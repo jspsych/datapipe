@@ -36,7 +36,8 @@ export default function WhatDataPipeStoresPage() {
         <Text maxW="70ch">
           A queued upload is encrypted at rest with AES-256-GCM, lives in a
           private storage bucket no browser or client can read, and is deleted
-          seven days after it was queued.
+          seven days after it was queued — or up to fourteen if DataPipe could
+          not deliver the failure notification about it.
         </Text>
         <GuidanceLine
           href="/docs/data/failures"
@@ -111,13 +112,15 @@ export default function WhatDataPipeStoresPage() {
         </Text>
         <Text maxW="70ch">
           <strong>
-            A queued upload is deleted seven days after it was queued
+            A queued upload is deleted seven days after it was queued — or up
+            to fourteen if DataPipe could not deliver the failure notification
+            about it
           </strong>
           , together with its queue entry. That clock starts when the upload was
           queued, not when the last retry ran, and it applies to permanently
           failed uploads exactly as it does to ones still waiting. So an upload
           that exhausts its retries after about 31 hours still stays downloadable
-          from your dashboard for the rest of the seven days, and then it is
+          from your dashboard for the rest of that window, and then it is
           gone.
         </Text>
         <Text maxW="70ch">
