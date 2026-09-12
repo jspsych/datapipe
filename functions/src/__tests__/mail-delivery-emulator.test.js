@@ -95,6 +95,15 @@ let LEASE_MS;
 let MAX_ATTEMPTS;
 let CONFIG_MISSING_ERROR;
 let RETENTION_GRACE_MS;
+let _setMailStatusDocForTests;
+
+// The breaker (`systemStatus/mail`) is a SINGLETON shared by every suite the
+// emulator is running at once. The config-missing and quota cases below trip
+// it, and a tripped breaker makes send-contact-email-verification answer 503
+// -- so without this, contact-email-verify-emulator.test.js fails whenever it
+// happens to overlap with this file. Same seam mail-retry-emulator.test.js
+// uses, for the same reason.
+const STATUS_DOC_ID = `mail-delivery-test-${randomUUID()}`;
 
 beforeAll(async () => {
   let app;
@@ -113,6 +122,13 @@ beforeAll(async () => {
     CONFIG_MISSING_ERROR,
   } = await import("../../lib/mail-delivery.js"));
   ({ RETENTION_GRACE_MS } = await import("../../lib/upload-retention.js"));
+  ({ _setMailStatusDocForTests } = await import("../../lib/mail-availability.js"));
+  _setMailStatusDocForTests(STATUS_DOC_ID);
+});
+
+afterAll(async () => {
+  _setMailStatusDocForTests(null);
+  await db.collection("systemStatus").doc(STATUS_DOC_ID).delete().catch(() => {});
 });
 
 // ---------------------------------------------------------------------------
