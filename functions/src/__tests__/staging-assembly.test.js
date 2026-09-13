@@ -7,6 +7,7 @@
  * to exercise.
  */
 
+import { createHash } from 'crypto';
 import {
   assembleTrials,
   assembleTrialsPaged,
@@ -15,6 +16,11 @@ import {
   streamingEnabled,
   MAX_ASSEMBLED_BYTES,
 } from '../../lib/staging-assembly.js';
+
+// Computed here rather than imported, the same way staging-emulator.test.js
+// recomputes the live-sessions mirror id: the suite should check the actual
+// hash a session id produces, not the module's opinion of it.
+const shortHash = (sessionId) => createHash('sha256').update(sessionId).digest('hex').slice(0, 8);
 
 /** The shape RTDB hands back: a map of sequence key -> trial JSON string. */
 function staged(...jsonStrings) {
@@ -279,18 +285,34 @@ describe('partialFilenameFor', () => {
     // submitted, so a recovered fragment of a CSV study is a .json file and
     // has to say so.
     expect(partialFilenameFor(session({ filename: 'subject42.csv' }))).toBe(
-      'subject42.partial.json'
+      `subject42-${shortHash('abc123')}.partial.json`
     );
   });
 
   it('replaces an existing json extension rather than doubling it', () => {
     expect(partialFilenameFor(session({ filename: 'subject42.json' }))).toBe(
-      'subject42.partial.json'
+      `subject42-${shortHash('abc123')}.partial.json`
     );
   });
 
   it('falls back to the session id when no filename was captured', () => {
+    // No hash appended here: the fallback name already contains the full
+    // session id and is unique on its own.
     expect(partialFilenameFor(session())).toBe('session-abc123.partial.json');
+  });
+
+  it('gives two sessions with the same client-supplied filename distinct names', () => {
+    // The bug this exists to prevent: without a per-session suffix, two
+    // abandoned sessions named "data.csv" would collide on the same
+    // `experimentID:filename` deduplication key in queue-upload.ts and the
+    // second recovery would silently overwrite the first's payload in Cloud
+    // Storage.
+    const a = partialFilenameFor(session({ sessionId: 'session-aaa', filename: 'data.csv' }));
+    const b = partialFilenameFor(session({ sessionId: 'session-bbb', filename: 'data.csv' }));
+
+    expect(a).not.toBe(b);
+    expect(a).toBe(`data-${shortHash('session-aaa')}.partial.json`);
+    expect(b).toBe(`data-${shortHash('session-bbb')}.partial.json`);
   });
 
   it('neutralises path separators in a client-supplied name', () => {
@@ -305,7 +327,7 @@ describe('partialFilenameFor', () => {
     expect(result.endsWith('.partial.json')).toBe(true);
 
     expect(partialFilenameFor(session({ filename: 'a/b\\c.csv' }))).toBe(
-      'a_b_c.partial.json'
+      `a_b_c-${shortHash('abc123')}.partial.json`
     );
   });
 
@@ -313,11 +335,11 @@ describe('partialFilenameFor', () => {
     // `\.[^.]*$` looks correct and is not: on a name with embedded dots but no
     // extension it eats the last segment.
     expect(partialFilenameFor(session({ filename: 'etc.d/passwd' }))).toBe(
-      'etc.d_passwd.partial.json'
+      `etc.d_passwd-${shortHash('abc123')}.partial.json`
     );
     // A version-style name keeps the version.
     expect(partialFilenameFor(session({ filename: 'data.2026.csv' }))).toBe(
-      'data.2026.partial.json'
+      `data.2026-${shortHash('abc123')}.partial.json`
     );
   });
 

@@ -17,9 +17,11 @@ sections they affect are annotated inline. In summary:
    dataset, because the browser still has it; `sessionId` only names the staged
    copy to discard. This removes the only line item in the cost table below and
    keeps validation, CSV support and the metadata pipeline byte-identical.
-3. **Partial sessions** upload as `<name>.partial.json`, do not increment
-   `sessions`, and do not arm the upload-failure notifier. This answers open
-   question 2.
+3. **Partial sessions** upload as `<name>-<hash>.partial.json` (the hash is a
+   short digest of the session id, added so two sessions that happen to share
+   a client-supplied filename cannot collide on the same recovered file), do
+   not increment `sessions`, and do not arm the upload-failure notifier. This
+   answers open question 2.
 4. **Staged trials are not encrypted at the application layer**, contrary to
    this document's "safe default" in open question 4. The writer is the
    participant's browser: it has no key, and a key shipped in a plugin bundle
@@ -315,7 +317,7 @@ option here ships as a coordinated pair of releases.
    badly with experiments served from arbitrary hosts. **Unresolved — this needs
    an answer before the spike, not after.**
 
-2. **ANSWERED (decision 3): `<name>.partial.json`, uncounted, no notification.**
+2. **ANSWERED (decision 3): `<name>-<hash>.partial.json`, uncounted, no notification.**
    The sweep re-checks `finalized` and `active` before queueing, because a
    researcher can seal an experiment between staging and recovery, and a file
    landing outside a merged archive is exactly what `docs/finalization-spec.md`

@@ -412,28 +412,39 @@ export async function getSessionMeta(sessionId: string): Promise<SessionMeta> {
   return snap.exists() ? (snap.val() as SessionMeta) : {};
 }
 
+/** Where a page of `listOldestOpenSessions` left off, for the next page. */
+export interface OpenSessionsCursor {
+  expiresAt: number;
+  sessionId: string;
+}
+
 /**
- * Oldest-first candidates for the sweep.
+ * Oldest-first candidates for the sweep, one page at a time.
  *
  * Ordered by `expiresAt`, which for a fixed TTL is the same order as
- * `startedAt` -- so the sessions most likely to be abandoned surface first,
- * and the read is bounded regardless of how many sessions are in flight. The
- * caller filters live ones out by reading each candidate's meta; this only has
- * to make sure it never reads the whole table.
+ * `startedAt` -- so the sessions most likely to be abandoned surface first.
+ * The caller filters live ones out by reading each candidate's meta; this only
+ * has to make sure it never reads the whole table in one request.
+ *
+ * `after`, when given, resumes past the last row of a previous page rather
+ * than re-reading from the top -- this is what lets the sweep keep paging
+ * instead of being stuck re-fetching the same `limit` oldest sessions every
+ * run. RTDB's `startAfter(value, key)` breaks ties on the key, which is why
+ * the cursor carries the session id alongside `expiresAt`: two sessions can
+ * share an `expiresAt` (same TTL, same millisecond), and a cursor keyed on
+ * `expiresAt` alone could skip or repeat a row at that boundary.
  *
  * Requires the `.indexOn: ["expiresAt"]` directive in database.rules.json --
  * without it RTDB still answers, but by downloading the entire node and
- * sorting in the client, which is precisely what the bound above exists to
- * avoid.
+ * sorting in the client, which is precisely what paging exists to avoid.
  */
 export async function listOldestOpenSessions(
-  limit: number
+  limit: number,
+  after?: OpenSessionsCursor
 ): Promise<OpenSession[]> {
-  const snap = await rtdb()
-    .ref("openSessions")
-    .orderByChild("expiresAt")
-    .limitToFirst(limit)
-    .get();
+  const ordered = rtdb().ref("openSessions").orderByChild("expiresAt");
+  const query = after ? ordered.startAfter(after.expiresAt, after.sessionId) : ordered;
+  const snap = await query.limitToFirst(limit).get();
   if (!snap.exists()) return [];
   const rows: OpenSession[] = [];
   snap.forEach((child) => {
@@ -536,25 +547,39 @@ export async function assembleSession(
  * gone -- so a completed session cannot later be marked abandoned by a socket
  * closing.
  *
- * Best-effort by contract. Every caller has already got the participant's data
- * somewhere durable by the time it calls this, so a failure here is orphaned
- * staging data (which the sweep collects on its next pass) rather than lost
- * data. It must never turn a successful submission into an error response.
+ * Best-effort by contract: NEVER THROWS. Every caller has already got the
+ * participant's data somewhere durable by the time it calls this, so a
+ * failure here is orphaned staging data rather than lost data, and it must
+ * never turn a successful submission into an error response.
+ *
+ * Returns whether the RTDB removal actually happened, so callers that matter
+ * -- scheduled-staging-sweep.ts, specifically -- can tell "gone" from
+ * "still there, try again next run" instead of assuming success. This is not
+ * a formality: the sweep hands a recovered session's data to queueUpload
+ * BEFORE calling this, so a discard that fails silently after that write
+ * leaves the staging node in place. The next run would otherwise reassemble
+ * and re-queue the same session under the same deterministic filename
+ * (partialFilenameFor is a pure function of the session), and if the first
+ * queue entry had already reached the provider by then, that re-queue lands a
+ * second copy of the same partial. api-data.ts's call sites ignore the return
+ * value -- a completion response was already sent by the time discardStaging
+ * runs there, so there is nothing left to condition on.
  *
  * Guards its own input, in addition to every caller checking first: this is
  * exported and called from several places (api-data.ts, the sweep), and it is
  * the function that actually splices sessionId into an RTDB path. A value
  * that fails isValidSessionId is refused here even if some future caller
- * forgets to -- logged and returned, never thrown, matching the best-effort
- * contract above. See isValidSessionId for why this matters: "/", "//", and
- * "../x" all normalize to paths this function must never touch.
+ * forgets to -- logged and reported as a failed discard, never thrown,
+ * matching the best-effort contract above. See isValidSessionId for why this
+ * matters: "/", "//", and "../x" all normalize to paths this function must
+ * never touch.
  */
-export async function discardSession(sessionId: string): Promise<void> {
+export async function discardSession(sessionId: string): Promise<boolean> {
   if (!isValidSessionId(sessionId)) {
     console.warn(
       `Refusing to discard session with an invalid id: ${JSON.stringify(sessionId)}`
     );
-    return;
+    return false;
   }
 
   // Read BEFORE the delete below removes it: releasing this session's
@@ -574,6 +599,7 @@ export async function discardSession(sessionId: string): Promise<void> {
     );
   }
 
+  let removed = true;
   try {
     await rtdb()
       .ref()
@@ -584,14 +610,24 @@ export async function discardSession(sessionId: string): Promise<void> {
   } catch (e) {
     const detail = e instanceof Error ? e.message : "Unknown error";
     console.error(`Failed to discard staging session ${sessionId}: ${detail}`);
+    removed = false;
   }
 
-  if (experimentId) await releaseOpenSessionSlot(experimentId);
+  // Only release the concurrency slot if the removal actually happened: a
+  // failed delete leaves openSessions/{sessionId} in place, so the session is
+  // still real and releasing here would undercount against it. A successful
+  // removal whose release itself then fails is the ordinary drift
+  // reconcileOpenSessionCounts corrects on the sweep's next run.
+  if (removed && experimentId) await releaseOpenSessionSlot(experimentId);
 
   // And the researcher's dashboard row. Every way a session ends -- clean
   // completion, a gate refusing it, the sweep recovering or discarding it --
   // comes through here, which is why this is the one place that removes it.
   // Separate from the RTDB update on purpose: either can fail without the
   // other being skipped, and the sweep's reconciliation collects what is left.
+  // Not reflected in the return value: it is the RTDB removal above that a
+  // caller needs to know about to avoid re-queueing, and a mirror-delete
+  // failure alone cannot cause that.
   await removeLiveSession(sessionId);
+  return removed;
 }
