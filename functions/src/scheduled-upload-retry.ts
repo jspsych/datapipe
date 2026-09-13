@@ -6,17 +6,12 @@ import { ContainerRef, StorageProviderId, ResolvedAuth, ProviderErrorCode } from
 import resolveToken from "./resolve-token.js";
 import { claimFilename, confirmClaim, CollisionCacheUnavailableError } from "./collision-cache.js";
 import { ExperimentData, UserData } from "./interfaces.js";
-import { isFastRetry } from "./queue-upload.js";
 import { isCompactionInFlight, COMPACTION_HOLD_REASON } from "./compaction-gate.js";
 import { decryptPayload } from "./payload-crypto.js";
 import { retentionDecision } from "./upload-retention.js";
+import { computeBackoffMs } from "./upload-backoff.js";
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-const MAX_BACKOFF_MS = 24 * 60 * 60 * 1000; // 24 hours (slow tier cap, unchanged)
-// Fast tier (CONTENTION, see queue-upload.ts's isFastRetry): a much shorter
-// cap, since write contention clears in seconds rather than needing an outage
-// to end.
-const FAST_MAX_BACKOFF_MS = 30 * 60 * 1000; // 30 minutes
 
 /**
  * Scheduled function that runs every 5 minutes to retry failed uploads.
@@ -370,29 +365,15 @@ async function handleRetryFailure(
   }
 
   // Tier the backoff by the provider error code from the attempt that just
-  // failed. CONTENTION is "another write to this container is in flight" and
-  // resolves in seconds, unlike AUTH_EXPIRED / QUOTA_EXCEEDED / RATE_LIMITED /
-  // UNAVAILABLE (or no code at all), which need human action, a rate-limit
-  // window, or an outage to end — so the fast tier gets a minutes-scale
-  // base/cap (~2, 4, 8, 16, 30 minutes) instead of the hours-scale one (~2, 4,
-  // 8, 16, 24 hours, unchanged).
+  // failed — see computeBackoffMs's doc comment (upload-backoff.ts) for the
+  // full tiering rationale and the Retry-After clamping rule.
   //
   // Reading the CURRENT code rather than the stored one is load-bearing: an
   // item queued on a one-off CONTENTION whose provider then went down for
   // maintenance used to stay pinned to the fast tier for the rest of its life,
   // burning all five attempts in ~31 minutes against an installation that was
   // still hours from coming back.
-  const fastTier = isFastRetry(currentErrorCode);
-  const baseMs = fastTier ? 60 * 1000 : 60 * 60 * 1000;
-  const capMs = fastTier ? FAST_MAX_BACKOFF_MS : MAX_BACKOFF_MS;
-
-  // Honor Retry-After where the provider sent one. Clamped to MAX_BACKOFF_MS,
-  // never to the item's tier cap: the header is the provider stating how long
-  // it will keep refusing, so clamping it DOWN to the fast tier's 30 minutes
-  // would schedule a retry the provider already told us would fail.
-  const backoffMs = retryAfterSeconds
-    ? Math.min(retryAfterSeconds * 1000, MAX_BACKOFF_MS)
-    : Math.min(Math.pow(2, newRetryCount) * baseMs, capMs);
+  const backoffMs = computeBackoffMs(newRetryCount, currentErrorCode, retryAfterSeconds);
   const nextRetryAt = Timestamp.fromMillis(Date.now() + backoffMs);
 
   console.log(`Upload ${docRef.id} retry ${newRetryCount} failed: ${reason}. Next retry at ${nextRetryAt.toDate().toISOString()}`);
