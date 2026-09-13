@@ -235,6 +235,86 @@ describe("purgeUserData", () => {
     expect(claims.empty).toBe(true);
   });
 
+  // Two more gaps this module used to have (module header, defects 2 and 3):
+  // compactionBatches/finalizationRuns (compaction.ts/finalization.ts) were
+  // missing from the named subcollection sweep, and the Cloud Storage object
+  // an uploadQueue document points at (storagePath, under upload-queue/) was
+  // never deleted, so the encrypted payload outlived the account.
+  it("deletes upload-queue Storage payloads and every experiment subcollection", async () => {
+    const uid = makeUid();
+    const experimentID = `exp-${randomUUID()}`;
+    await seedExperiment(uid, experimentID);
+    await db
+      .collection("experiments")
+      .doc(experimentID)
+      .collection("compactionBatches")
+      .doc("batch-1")
+      .set({ createdAt: Date.now() });
+    await db
+      .collection("experiments")
+      .doc(experimentID)
+      .collection("finalizationRuns")
+      .doc("current")
+      .set({ startedAt: Date.now() });
+
+    const queueDocId = `queue-${randomUUID()}`;
+    const storagePath = `upload-queue/${queueDocId}`;
+    await bucket
+      .file(storagePath)
+      .save(JSON.stringify({ ciphertext: "does-not-matter" }), {
+        contentType: "application/octet-stream",
+      });
+    await db
+      .collection("uploadQueue")
+      .doc(queueDocId)
+      .set({ owner: uid, experimentID, status: "pending", storagePath });
+
+    const counts = await purgeUserData(uid);
+
+    expect(counts.queuePayloadObjects).toBe(1);
+    expect(counts.compactionBatches).toBe(1);
+    expect(counts.finalizationRuns).toBe(1);
+
+    const [remaining] = await bucket.getFiles({ prefix: storagePath });
+    expect(remaining).toHaveLength(0);
+
+    const compactionBatches = await db
+      .collection("experiments")
+      .doc(experimentID)
+      .collection("compactionBatches")
+      .get();
+    expect(compactionBatches.empty).toBe(true);
+
+    const finalizationRuns = await db
+      .collection("experiments")
+      .doc(experimentID)
+      .collection("finalizationRuns")
+      .get();
+    expect(finalizationRuns.empty).toBe(true);
+  });
+
+  // A queue document whose payload was already removed (a prior sweep, or a
+  // write that never fully landed) must not stop the rest of the purge.
+  it("still succeeds when an upload-queue payload object is already missing", async () => {
+    const uid = makeUid();
+    const experimentID = `exp-${randomUUID()}`;
+    await seedExperiment(uid, experimentID);
+    const queueDocId = `queue-${randomUUID()}`;
+    const storagePath = `upload-queue/${queueDocId}`;
+    // No object written at storagePath.
+    await db
+      .collection("uploadQueue")
+      .doc(queueDocId)
+      .set({ owner: uid, experimentID, status: "pending", storagePath });
+
+    const counts = await purgeUserData(uid);
+
+    expect(counts.queueEntries).toBe(1);
+    expect(
+      await exists(db.collection("uploadQueue").doc(queueDocId))
+    ).toBe(false);
+  });
+
   it("works when the user document is already gone", async () => {
     const uid = makeUid();
     const experimentID = `exp-${randomUUID()}`;
