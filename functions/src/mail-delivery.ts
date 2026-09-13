@@ -73,9 +73,10 @@ import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { Timestamp } from "firebase-admin/firestore";
 import { randomUUID } from "crypto";
 import { db } from "./app.js";
-import { MAIL_COLLECTION, mailCollection } from "./mail.js";
+import { MAIL_COLLECTION, mailCollection, uploadFailureExperimentID } from "./mail.js";
 import { recordSendOutcome } from "./mail-availability.js";
 import type { PauseKind } from "./mail-availability.js";
+import { extendRetentionForExperiment } from "./upload-retention.js";
 
 // ---------------------------------------------------------------------------
 // Timings. The relationship between these three numbers is load-bearing.
@@ -1096,6 +1097,42 @@ async function finish(
     );
   }
   await writeIfStillOurs(ref, claim.leaseOwner, updates);
+
+  // A mail that dies TERMINALLY right here -- on its first attempt, before it
+  // ever reaches ERROR+retryable -- is invisible to scheduled-mail-retry.ts's
+  // queries (state == ERROR && retryable == true, or state == PROCESSING).
+  // That sweep is the only other place extendRetentionForExperiment is
+  // called, so without this, an unverified sending domain (403), a missing
+  // RESEND_API_KEY, or one invalid recipient address would finish() straight
+  // to terminal and the researcher's data would age out on the plain
+  // seven-day clock while the queue entry records they were told.
+  //
+  // Same helper, same arguments as the sweep's, so there is exactly one
+  // definition of "the researcher was not told" -- see upload-retention.ts's
+  // header. A no-op for anything that is not an upload-failure notification
+  // (uploadFailureExperimentID returns null), which covers both the
+  // configuration-missing and unsendable-document branches above as well as
+  // this one.
+  if (!classified.retryable) {
+    const experimentID = uploadFailureExperimentID(claim.data);
+    if (experimentID) {
+      try {
+        const retained = await extendRetentionForExperiment(experimentID, Date.now());
+        if (retained > 0) {
+          console.log(
+            `mail-delivery: extended retention for ${retained} uploadQueue entr${
+              retained === 1 ? "y" : "ies"
+            } -- ${experimentID}'s researcher was never told (terminal failure)`
+          );
+        }
+      } catch (error) {
+        console.error(
+          `mail-delivery: could not extend retention for ${experimentID}:`,
+          error instanceof Error ? error.message : "Unknown error"
+        );
+      }
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
