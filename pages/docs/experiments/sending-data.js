@@ -115,9 +115,11 @@ export default function SendingDataPage() {
           <List.Item>
             <strong>An abandoned session becomes a second kind of file.</strong>{" "}
             DataPipe assembles the trials it received and stores them as{" "}
-            <Code>&lt;your filename&gt;.partial.json</Code> — JSON even if your
-            experiment submits CSV, because it is rebuilt from individual trials
-            rather than from the string your experiment would have sent. Plan
+            <Code>&lt;your filename&gt;-&lt;id&gt;.partial.json</Code> — JSON
+            even if your experiment submits CSV, because it is rebuilt from
+            individual trials rather than from the string your experiment would
+            have sent. The short id keeps two participants who happened to use
+            the same filename from colliding on the same recovered file. Plan
             for that in your analysis, and treat a partial file as a participant
             who did not finish. Partial sessions do not count toward your
             session limit.

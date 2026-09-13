@@ -16,6 +16,11 @@
 // See functions/src/staging.ts for the Realtime Database half, and
 // docs/streaming-ingest-design.md for the design.
 
+// crypto is a Node builtin, not an ESM-only package like nanoid -- importing
+// it here does not reintroduce the problem staging.ts's module boundary
+// exists to avoid (see the module comment above).
+import { createHash } from "crypto";
+
 // Mirrors the `newData.val().length <= 65536` cap in database.rules.json.
 // Exported so api-session-start.ts can tell the client the number rather than
 // letting the plugin carry its own copy that could drift out of sync with the
@@ -132,7 +137,7 @@ export interface AssembledSession {
 /**
  * The name a recovered partial session is stored under.
  *
- * Three things happen here, and each one is load-bearing:
+ * Four things happen here, and each one is load-bearing:
  *
  *  - `/` and `\` are replaced, exactly as persistPending does. The base name
  *    is CLIENT-SUPPLIED, and it becomes a path in a researcher's Drive, OSF or
@@ -147,13 +152,25 @@ export interface AssembledSession {
  *    storage. A recovered fragment sitting in a dataset under an ordinary name
  *    would quietly make the record non-Psych-DS -- the same class of problem
  *    docs/finalization-spec.md addresses for archives.
+ *  - A SHORT HASH OF THE SESSION ID is appended to a client-supplied name,
+ *    unconditionally. Two participants in the same experiment can supply the
+ *    same filename -- "data.csv" is a common default -- and without this both
+ *    abandoned sessions produce the identical `experimentID:filename`
+ *    deduplication key in queue-upload.ts. That is not a queueing conflict:
+ *    the second recovery silently OVERWRITES the first session's payload in
+ *    Cloud Storage before it is ever delivered, so one participant's data is
+ *    destroyed with no error anywhere. The session id is unforgeable and
+ *    unique by construction (staging.ts), so hashing it is enough to make
+ *    every recovered filename unique regardless of what the browser sent --
+ *    without the hash needing to be reversible or human-legible.
  *
- * Falls back to the session id when no filename was captured. Opaque, but
- * unique and traceable back to a sweep log line.
+ * Falls back to the session id (with no hash appended -- it is already
+ * unique) when no filename was captured. Opaque, but unique and traceable
+ * back to a sweep log line.
  */
 export function partialFilenameFor(session: OpenSession): string {
   const fallback = `session-${session.sessionId}`;
-  const base = (session.filename || fallback)
+  const sanitized = (session.filename || "")
     // Path separators first: the name becomes a path in a researcher's Drive,
     // OSF or Zenodo container, and nothing downstream re-checks it.
     .replace(/[/\\]/g, "_")
@@ -168,7 +185,11 @@ export function partialFilenameFor(session: OpenSession): string {
     // A leading dot makes a hidden file on every POSIX system, and would hide
     // a participant's recovered data from the researcher looking for it.
     .replace(/^\.+/, "");
-  return `${base || fallback}.partial.json`;
+
+  if (!sanitized) return `${fallback}.partial.json`;
+
+  const suffix = createHash("sha256").update(session.sessionId).digest("hex").slice(0, 8);
+  return `${sanitized}-${suffix}.partial.json`;
 }
 
 /**

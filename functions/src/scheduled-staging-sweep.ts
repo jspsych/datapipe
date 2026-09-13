@@ -42,9 +42,10 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { Timestamp } from "firebase-admin/firestore";
 import { db } from "./app.js";
-import queueUpload from "./queue-upload.js";
+import queueUpload, { queueDocIdFor } from "./queue-upload.js";
 import { uploadPathFor } from "./metadata-derived-files.js";
 import { ExperimentData } from "./interfaces.js";
+import { mapWithConcurrency } from "./concurrency-limit.js";
 import {
   assembleSession,
   countOpenSessions,
@@ -55,6 +56,7 @@ import {
   listOpenSessions,
   partialFilenameFor,
   OpenSession,
+  OpenSessionsCursor,
   ABANDON_GRACE_MS,
   disconnectedSince,
 } from "./staging.js";
@@ -71,11 +73,37 @@ export { ABANDON_GRACE_MS };
 // scheduled-pending-recovery.ts's MAX_FILES_PER_RUN.
 const MAX_SESSIONS_PER_RUN = 10;
 
-// Candidates read per run. More than can be processed, because most of the
-// oldest open sessions on a busy deployment are LIVE rather than abandoned and
-// are skipped without costing anything but a meta read. Mirrors the
-// `maxResults: MAX_FILES_PER_RUN * 2` in the pending sweep.
-const CANDIDATES_PER_RUN = MAX_SESSIONS_PER_RUN * 3;
+// Candidates read PER PAGE. More than can be processed from a single page,
+// because most of the oldest open sessions on a busy deployment are LIVE
+// rather than abandoned and are skipped without costing anything but a meta
+// read. Mirrors the `maxResults: MAX_FILES_PER_RUN * 2` in the pending sweep.
+//
+// THIS IS A PAGE SIZE, NOT A PER-RUN CAP. A single page used to be the whole
+// candidate set: if the CANDIDATES_PER_PAGE oldest open sessions were all
+// long-lived or zombie (their onDisconnect never fired, their tab is still
+// technically open, whatever the reason), every one of them was skipped as
+// live, the cursor never advanced, and everything ABANDONED behind them in
+// the queue waited -- potentially for the full 24-hour TTL -- because nothing
+// ever looked past position CANDIDATES_PER_PAGE. Paging past a skipped page is
+// what fixes that; see the loop in sweepAbandonedSessions.
+const CANDIDATES_PER_PAGE = MAX_SESSIONS_PER_RUN * 3;
+
+// Hard ceiling on pages fetched in one run, independent of how many sessions
+// get skipped as live. Without this, a deployment with thousands of
+// simultaneously live (not abandoned) sessions would have the sweep page
+// through the entire table every five minutes looking for the few that are
+// actually abandoned -- bounded work turning unbounded. 20 pages of
+// CANDIDATES_PER_PAGE (30) is 600 sessions inspected per run at the most, which
+// keeps a run's RTDB reads bounded the same way MAX_SESSIONS_PER_RUN bounds
+// its writes.
+const MAX_PAGES_PER_RUN = 20;
+
+// How many getSessionMeta calls the live-sessions reconciliation pass runs at
+// once. Was an unbounded `Promise.all` over up to MAX_RECONCILE (500) open
+// sessions; RTDB does not bill operations, so this was never a cost problem,
+// but nothing bounded how many reads one 256MiB instance had in flight
+// together. See concurrency-limit.ts.
+const RECONCILE_CONCURRENCY = 20;
 
 export interface SweepStats {
   candidates: number;
@@ -83,6 +111,8 @@ export interface SweepStats {
   discarded: number;
   skippedLive: number;
   errors: number;
+  /** Candidate pages fetched this run (see CANDIDATES_PER_PAGE / MAX_PAGES_PER_RUN). */
+  pages: number;
   /**
    * Live-sessions mirror documents this run had to create, correct or delete.
    * Should be zero: each one is a write on the session lifecycle that failed or
@@ -124,53 +154,96 @@ export async function sweepAbandonedSessions(
     discarded: 0,
     skippedLive: 0,
     errors: 0,
+    pages: 0,
     mirrorFixed: 0,
   };
   let lastError: string | null = null;
   let openSessionCount: number | null = null;
   let mirror = { created: 0, updated: 0, deleted: 0 };
 
+  // `only`-scoped runs (tests) can stop as soon as every id they care about
+  // has been seen, rather than paging until the whole (possibly large, shared
+  // emulator) table is exhausted. Production runs (`only` undefined) always
+  // page until one of the other three stopping conditions below fires.
+  const pending = only ? new Set(only) : null;
+
   try {
-    const candidates = (await listOldestOpenSessions(CANDIDATES_PER_RUN)).filter(
-      (s) => !only || only.has(s.sessionId)
-    );
-    stats.candidates = candidates.length;
-
     const now = Date.now();
+    let cursor: OpenSessionsCursor | undefined;
 
-    for (const session of candidates) {
-      if (stats.recovered + stats.discarded >= MAX_SESSIONS_PER_RUN) break;
+    pageLoop: for (let page = 0; page < MAX_PAGES_PER_RUN; page++) {
+      const rawPage = await listOldestOpenSessions(CANDIDATES_PER_PAGE, cursor);
+      if (rawPage.length === 0) break;
+      stats.pages++;
 
-      try {
-        const meta = await getSessionMeta(session.sessionId);
+      // Advance the cursor off the RAW page (not the `only`-filtered one)
+      // regardless of whether anything on it matched -- this is what lets a
+      // wall of skipped-or-out-of-scope candidates be paged PAST instead of
+      // re-read forever. See CANDIDATES_PER_PAGE's comment.
+      const lastRow = rawPage[rawPage.length - 1];
+      cursor = { expiresAt: lastRow.expiresAt, sessionId: lastRow.sessionId };
 
-        const since = disconnectedSince(meta);
-        const abandoned = since !== null && now - since >= ABANDON_GRACE_MS;
-        // The backstop, for a client that died before it could register an
-        // onDisconnect at all, or one whose onDisconnect Firebase never ran.
-        // Without it such a session would sit in RTDB forever, being paid for.
-        const expired =
-          typeof session.expiresAt === "number" && now >= session.expiresAt;
+      const pageCandidates = only ? rawPage.filter((s) => only.has(s.sessionId)) : rawPage;
+      stats.candidates += pageCandidates.length;
 
-        if (!abandoned && !expired) {
-          stats.skippedLive++;
-          continue;
+      for (const session of pageCandidates) {
+        if (stats.recovered + stats.discarded >= MAX_SESSIONS_PER_RUN) break pageLoop;
+
+        try {
+          const meta = await getSessionMeta(session.sessionId);
+
+          const since = disconnectedSince(meta);
+          const abandoned = since !== null && now - since >= ABANDON_GRACE_MS;
+          // The backstop, for a client that died before it could register an
+          // onDisconnect at all, or one whose onDisconnect Firebase never ran.
+          // Without it such a session would sit in RTDB forever, being paid for.
+          const expired =
+            typeof session.expiresAt === "number" && now >= session.expiresAt;
+
+          if (!abandoned && !expired) {
+            stats.skippedLive++;
+            pending?.delete(session.sessionId);
+            continue;
+          }
+
+          const result = await recoverSession(session);
+          if (result.discardOk) {
+            if (result.status === "recovered") stats.recovered++;
+            else stats.discarded++;
+          } else {
+            // The queue write (if any) happened, but the staging node is
+            // STILL THERE -- discardSession returned false rather than
+            // throwing. Reporting this as "recovered" or "discarded" would
+            // describe cleanup that has not actually happened: the session
+            // will surface again as a candidate next run (still open, still
+            // abandoned) and, if it was already queued, recoverSession's own
+            // dedup check is what stops that from becoming a duplicate
+            // delivery -- not this branch. Counted as an error so a discard
+            // path that is silently and persistently failing is visible in
+            // systemStatus/staging instead of being folded into "recovered".
+            console.error(
+              `Staging session ${session.sessionId} was ${result.status} but its RTDB node ` +
+                `could not be removed; it remains staged and will be retried next run.`
+            );
+            stats.errors++;
+          }
+          pending?.delete(session.sessionId);
+        } catch (e) {
+          const detail = e instanceof Error ? e.message : "Unknown error";
+          // One bad session must not stop the run: the others behind it are
+          // accruing storage cost, and a session that throws every time would
+          // otherwise block the queue permanently.
+          console.error(
+            `Failed to recover staging session ${session.sessionId}: ${detail}`
+          );
+          lastError = detail;
+          stats.errors++;
+          pending?.delete(session.sessionId);
         }
-
-        const outcome = await recoverSession(session);
-        if (outcome === "recovered") stats.recovered++;
-        else stats.discarded++;
-      } catch (e) {
-        const detail = e instanceof Error ? e.message : "Unknown error";
-        // One bad session must not stop the run: the others behind it are
-        // accruing storage cost, and a session that throws every time would
-        // otherwise block the queue permanently.
-        console.error(
-          `Failed to recover staging session ${session.sessionId}: ${detail}`
-        );
-        lastError = detail;
-        stats.errors++;
       }
+
+      if (rawPage.length < CANDIDATES_PER_PAGE) break; // table exhausted
+      if (pending && pending.size === 0) break; // everything in scope was found
     }
   } catch (e) {
     lastError = e instanceof Error ? e.message : "Unknown error";
@@ -187,9 +260,13 @@ export async function sweepAbandonedSessions(
     const open = await listOpenSessions();
     openSessionCount = open.length;
     const inScope = (only ? open.filter((s) => only.has(s.sessionId)) : open).slice(0, MAX_RECONCILE);
-    const entries = await Promise.all(
-      inScope.map(async (session) => ({ session, meta: await getSessionMeta(session.sessionId) }))
-    );
+    // Bounded, not `Promise.all`: up to MAX_RECONCILE (500) sessions here, and
+    // nothing should put 500 concurrent RTDB reads in flight from one 256MiB
+    // instance at once. See concurrency-limit.ts.
+    const entries = await mapWithConcurrency(inScope, RECONCILE_CONCURRENCY, async (session) => ({
+      session,
+      meta: await getSessionMeta(session.sessionId),
+    }));
 
     // Only for sessions opened before owner was recorded on openSessions; one
     // read per experiment per run.
@@ -229,18 +306,33 @@ export async function sweepAbandonedSessions(
   return stats;
 }
 
+/** What became of one candidate session, and whether its RTDB node is actually gone. */
+export interface RecoverResult {
+  /** "recovered" when a queue entry was written this run, "discarded" otherwise. */
+  status: "recovered" | "discarded";
+  /**
+   * Whether discardSession actually removed the staging node. When false, the
+   * session is still open and will reappear as a candidate next run -- see
+   * discardSession's own doc comment for why this matters more for
+   * "recovered" than for "discarded".
+   */
+  discardOk: boolean;
+}
+
 /**
  * Turn one abandoned session into a queued partial upload, or discard it.
  *
- * Returns "recovered" when a queue entry was written, "discarded" when the
- * session was dropped without one. Either way the staging node is gone
- * afterwards -- this function never leaves data behind for the next run to
- * rediscover, because a session that cannot be recovered is a session that
- * would otherwise be paid for forever.
+ * "Discarded" means the session was dropped without a queue entry.
+ * "Recovered" means one was written. Either way this function ATTEMPTS to
+ * remove the staging node before returning, but does not assume it succeeded
+ * -- see `discardOk` and discardSession's doc comment. A session whose discard
+ * failed is not lost: it stays in openSessions and is picked up again next
+ * run, and the completed-queue-entry check below is what makes that safe to
+ * retry rather than a source of duplicate deliveries.
  */
 export async function recoverSession(
   session: OpenSession
-): Promise<"recovered" | "discarded"> {
+): Promise<RecoverResult> {
   const { sessionId, experimentId } = session;
 
   const expDoc = await db.collection("experiments").doc(experimentId).get();
@@ -248,8 +340,7 @@ export async function recoverSession(
     console.warn(
       `Staging session ${sessionId} belongs to missing experiment ${experimentId}; discarding.`
     );
-    await discardSession(sessionId);
-    return "discarded";
+    return { status: "discarded", discardOk: await discardSession(sessionId) };
   }
 
   const expData = expDoc.data() as ExperimentData;
@@ -258,8 +349,7 @@ export async function recoverSession(
     console.warn(
       `Experiment ${experimentId} has no owner; discarding staging session ${sessionId}.`
     );
-    await discardSession(sessionId);
-    return "discarded";
+    return { status: "discarded", discardOk: await discardSession(sessionId) };
   }
 
   // THE SECOND DOOR. api-session-start.ts checked these gates when the session
@@ -277,16 +367,14 @@ export async function recoverSession(
     console.log(
       `Experiment ${experimentId} is finalized; discarding staging session ${sessionId}.`
     );
-    await discardSession(sessionId);
-    return "discarded";
+    return { status: "discarded", discardOk: await discardSession(sessionId) };
   }
 
   if (!expData.active) {
     console.log(
       `Experiment ${experimentId} is not collecting; discarding staging session ${sessionId}.`
     );
-    await discardSession(sessionId);
-    return "discarded";
+    return { status: "discarded", discardOk: await discardSession(sessionId) };
   }
 
   const assembled = await assembleSession(sessionId);
@@ -296,8 +384,7 @@ export async function recoverSession(
   // left. There is no data to recover and an empty file would be noise in the
   // researcher's dataset.
   if (assembled.trialCount === 0) {
-    await discardSession(sessionId);
-    return "discarded";
+    return { status: "discarded", discardOk: await discardSession(sessionId) };
   }
 
   const filename = partialFilenameFor(session);
@@ -307,6 +394,25 @@ export async function recoverSession(
   // raw file is the source of truth -- the same documented limitation the
   // pending-recovery sweep carries.
   const uploadFilename = uploadPathFor(expData.metadataActive, filename);
+
+  // partialFilenameFor is a PURE function of the session -- same session id,
+  // same filename, every time. So if an earlier run already queued this exact
+  // session and that entry has since COMPLETED (the retry worker delivered
+  // it), the only reason this session is still here to be recovered again is
+  // that its discardSession call failed afterwards (see discardSession's doc
+  // comment). Re-queueing would land a second copy of the same partial with
+  // the provider: queueUpload's own dedup logic only special-cases "pending"
+  // and "processing" entries, and a "completed" one falls through and gets
+  // freshly re-queued. Checking here, before the call, is what stops that.
+  const docId = queueDocIdFor(experimentId, uploadFilename);
+  const existing = await db.collection("uploadQueue").doc(docId).get();
+  if (existing.exists && existing.data()?.status === "completed") {
+    console.warn(
+      `Staging session ${sessionId} already delivered as uploadQueue/${docId}; ` +
+        `skipping re-queue and just clearing the leftover staging node.`
+    );
+    return { status: "discarded", discardOk: await discardSession(sessionId) };
+  }
 
   const notes: string[] = [`${assembled.trialCount} trials`];
   if (assembled.gaps > 0) notes.push(`${assembled.gaps} missing`);
@@ -341,8 +447,7 @@ export async function recoverSession(
     failureReason: `Recovered from an abandoned session (${notes.join(", ")})`,
   });
 
-  await discardSession(sessionId);
-  return "recovered";
+  return { status: "recovered", discardOk: await discardSession(sessionId) };
 }
 
 /**
@@ -377,6 +482,7 @@ async function recordSweepHealth(
           lastRunAt: Timestamp.now(),
           openSessionCount,
           candidates: stats.candidates,
+          pages: stats.pages,
           recovered: stats.recovered,
           discarded: stats.discarded,
           skippedLive: stats.skippedLive,
