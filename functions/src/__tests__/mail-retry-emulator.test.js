@@ -51,6 +51,7 @@ process.env.MAIL_FROM = "DataPipe (test) <datapipe-notifications@jspsych.org>";
 
 import { initializeApp, getApp } from "firebase-admin/app";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
 import { randomUUID } from "crypto";
 
 // Block 4 imports the compiled scheduled-upload-retry.js, which pulls in every
@@ -66,6 +67,7 @@ jest.mock("node-fetch", () => ({
 jest.setTimeout(30000);
 
 let db;
+let bucket;
 let deliverMailDocument;
 let _setMailSenderForTests;
 let sweepRetryableMail;
@@ -104,6 +106,13 @@ beforeAll(async () => {
   ({ _setMailCollectionForTests } = await import("../../lib/mail.js"));
   ({ cleanupOldEntries } = await import("../../lib/scheduled-upload-retry.js"));
   ({ RETENTION_GRACE_MS } = await import("../../lib/upload-retention.js"));
+
+  // The DEFAULT app, not "mail-retry-test" -- app.js (pulled in by the import
+  // above) calls initializeApp() with no name, and that is the app
+  // cleanupOldEntries' `storage.bucket()` resolves against. Using the named
+  // app here would silently point this suite's writes at a different
+  // bucket handle than the one the sweep reads from.
+  bucket = getStorage().bucket();
 
   _setMailStatusDocForTests(STATUS_DOC_ID);
   _setMailCollectionForTests(MAIL_COLLECTION_ID);
@@ -734,32 +743,106 @@ describe("cleanupOldEntries", () => {
     const deletable = `mr-exp-${randomUUID()}`;
 
     // 55 older entries that must be kept: still pending, with retries left.
+    const retained = [];
+    let retainedSamplePath;
     const batch = db.batch();
     for (let i = 0; i < 55; i += 1) {
       const ref = db.collection("uploadQueue").doc();
       created.push(ref);
+      retained.push(ref);
+      const storagePath = `pending-data/${blocked}/subject-${i}.json`;
+      if (i === 0) retainedSamplePath = storagePath;
       batch.set(ref, {
         experimentID: blocked,
         owner: OWNER_ID,
         status: "pending",
         retryCount: 0,
         maxRetries: 5,
-        storagePath: `pending-data/${blocked}/subject-${i}.json`,
+        storagePath,
         createdAt: Timestamp.fromMillis(Date.now() - 10 * 24 * 60 * 60 * 1000),
       });
     }
     await batch.commit();
+
+    // A real object behind one retained entry -- the sweep must not touch it.
+    await bucket
+      .file(retainedSamplePath)
+      .save("[]", { contentType: "application/json" });
 
     // ...and behind them, younger but still aged out, five that may go.
     const doomed = [];
     for (let i = 0; i < 5; i += 1) {
       doomed.push(await seedQueueEntry(deletable));
     }
+    // All five share seedQueueEntry's default storagePath (it does not vary
+    // by index), so one real object stands in for all of them.
+    const doomedPath = (await doomed[0].get()).data().storagePath;
+    await bucket.file(doomedPath).save("[]", { contentType: "application/json" });
 
     await cleanupOldEntries(OWNER_ID);
 
     for (const entry of doomed) {
       expect((await entry.get()).exists).toBe(false);
     }
+    const [doomedObjectExists] = await bucket.file(doomedPath).exists();
+    expect(doomedObjectExists).toBe(false);
+
+    // THE ACTUAL FIX, not just the starvation workaround: the 55 blockers, and
+    // the payload behind one of them, must come through the sweep untouched.
+    for (const entry of retained) {
+      const snap = await entry.get();
+      expect(snap.exists).toBe(true);
+      expect(snap.data().status).toBe("pending");
+    }
+    const [retainedObjectExists] = await bucket.file(retainedSamplePath).exists();
+    expect(retainedObjectExists).toBe(true);
+  });
+
+  test("keeps an entry an undelivered notification extended, deletes one past the absolute ceiling despite retainUntil", async () => {
+    // The two halves of upload-retention.ts's retentionDecision that this
+    // suite's only other cleanupOldEntries test never exercised: the
+    // extension itself, and the ceiling that wins even over a live
+    // extension. Both entries are past the plain seven days (so the age
+    // query in cleanupOldEntries finds them at all) and have retryCount ==
+    // maxRetries and status "failed", so neither can be retained by the
+    // "still live work" branch -- retainUntil is the only thing keeping the
+    // first one.
+    const extendedExperiment = `mr-exp-${randomUUID()}`;
+    const ceilingExperiment = `mr-exp-${randomUUID()}`;
+
+    // 8 days old: past the plain window, but a notification about it is
+    // still undelivered, so retainUntil reaches into the future.
+    const extended = await seedQueueEntry(extendedExperiment, {
+      ageMs: 8 * 24 * 60 * 60 * 1000,
+      retainUntil: Timestamp.fromMillis(Date.now() + 2 * 24 * 60 * 60 * 1000),
+    });
+    const extendedPath = (await extended.get()).data().storagePath;
+    await bucket
+      .file(extendedPath)
+      .save("[]", { contentType: "application/json" });
+
+    // 15 days old: past ABSOLUTE_MAX_RETENTION_MS (14 days), so the ceiling
+    // deletes it even though retainUntil is ALSO still in the future -- the
+    // ceiling is checked first and wins regardless.
+    const atCeiling = await seedQueueEntry(ceilingExperiment, {
+      ageMs: 15 * 24 * 60 * 60 * 1000,
+      retainUntil: Timestamp.fromMillis(Date.now() + 2 * 24 * 60 * 60 * 1000),
+    });
+    const ceilingPath = (await atCeiling.get()).data().storagePath;
+    await bucket
+      .file(ceilingPath)
+      .save("[]", { contentType: "application/json" });
+
+    await cleanupOldEntries(OWNER_ID);
+
+    const extendedSnap = await extended.get();
+    expect(extendedSnap.exists).toBe(true);
+    expect(extendedSnap.data().status).toBe("failed");
+    const [extendedObjectExists] = await bucket.file(extendedPath).exists();
+    expect(extendedObjectExists).toBe(true);
+
+    expect((await atCeiling.get()).exists).toBe(false);
+    const [ceilingObjectExists] = await bucket.file(ceilingPath).exists();
+    expect(ceilingObjectExists).toBe(false);
   });
 });
