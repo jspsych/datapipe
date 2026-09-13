@@ -54,6 +54,7 @@ import {
   listOldestOpenSessions,
   listOpenSessions,
   partialFilenameFor,
+  reconcileOpenSessionCounts,
   OpenSession,
   ABANDON_GRACE_MS,
   disconnectedSince,
@@ -89,6 +90,14 @@ export interface SweepStats {
    * was lost. A value that stays non-zero run after run is a broken write path.
    */
   mirrorFixed: number;
+  /**
+   * openSessionCounts entries this run had to correct against the RTDB ground
+   * truth -- the per-experiment concurrency cap's drift-tolerance backstop
+   * (see reconcileOpenSessionCounts in staging.ts). Should be zero for the
+   * same reason mirrorFixed should: each fix is evidence a decrement was
+   * missed somewhere upstream.
+   */
+  countersFixed: number;
 }
 
 export const scheduledStagingSweep = onSchedule(
@@ -125,16 +134,25 @@ export async function sweepAbandonedSessions(
     skippedLive: 0,
     errors: 0,
     mirrorFixed: 0,
+    countersFixed: 0,
   };
   let lastError: string | null = null;
   let openSessionCount: number | null = null;
   let mirror = { created: 0, updated: 0, deleted: 0 };
+  // The experiments this run's candidates belong to -- the scope for
+  // reconcileOpenSessionCounts below. Populated even for candidates that turn
+  // out to be live and get skipped: a live session still proves its
+  // experiment's counter is worth checking this run, on the same
+  // rotating-window logic CANDIDATES_PER_RUN already applies to the sessions
+  // themselves.
+  const candidateExperimentIds = new Set<string>();
 
   try {
     const candidates = (await listOldestOpenSessions(CANDIDATES_PER_RUN)).filter(
       (s) => !only || only.has(s.sessionId)
     );
     stats.candidates = candidates.length;
+    for (const s of candidates) candidateExperimentIds.add(s.experimentId);
 
     const now = Date.now();
 
@@ -182,10 +200,12 @@ export async function sweepAbandonedSessions(
   // the sessions just recovered or discarded are already gone from both sides
   // and are not counted as fixes. A separate try: a mirror failure must not
   // be what stops abandoned sessions being recovered, and vice versa.
+  let openSessionsForCounters: OpenSession[] = [];
   try {
     const readAt = Date.now();
     const open = await listOpenSessions();
     openSessionCount = open.length;
+    openSessionsForCounters = open;
     const inScope = (only ? open.filter((s) => only.has(s.sessionId)) : open).slice(0, MAX_RECONCILE);
     const entries = await Promise.all(
       inScope.map(async (session) => ({ session, meta: await getSessionMeta(session.sessionId) }))
@@ -214,6 +234,30 @@ export async function sweepAbandonedSessions(
   } catch (e) {
     lastError = e instanceof Error ? e.message : "Unknown error";
     console.error(`Live-sessions reconciliation failed: ${lastError}`);
+    stats.errors++;
+  }
+
+  // Correct the per-experiment concurrency counters (staging.ts's
+  // openSessionCounts) for the experiments touched this run. A separate try,
+  // for the same reason as the mirror above: a counter-reconciliation failure
+  // must not be what stops the mirror or the recovery pass, or vice versa.
+  // Scoped to candidateExperimentIds rather than every experiment with an open
+  // session, both to keep this bounded (the same rotating-window reasoning as
+  // CANDIDATES_PER_RUN) and to keep a test's scoped sweep run from correcting
+  // a counter belonging to a different, concurrently-running test.
+  try {
+    stats.countersFixed = await reconcileOpenSessionCounts(
+      candidateExperimentIds,
+      openSessionsForCounters
+    );
+    if (stats.countersFixed > 0) {
+      console.warn(
+        `Open-session concurrency counters needed ${stats.countersFixed} fix(es).`
+      );
+    }
+  } catch (e) {
+    lastError = e instanceof Error ? e.message : "Unknown error";
+    console.error(`Open-session counter reconciliation failed: ${lastError}`);
     stats.errors++;
   }
 
@@ -382,6 +426,7 @@ async function recordSweepHealth(
           skippedLive: stats.skippedLive,
           errors: stats.errors,
           mirrorFixed: stats.mirrorFixed,
+          countersFixed: stats.countersFixed,
           mirror,
           lastError,
         },

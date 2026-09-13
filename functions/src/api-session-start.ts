@@ -57,11 +57,26 @@ import {
   FLUSH_INTERVAL_MS,
   FLUSH_EVERY_N_TRIALS,
   MAX_DISCONNECTS,
+  streamingEnabled,
 } from "./staging.js";
 
 export const apiSessionStart = onRequest({ cors: true }, async (req, res) => {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+
+  // THE KILL SWITCH. Checked before anything else touches Firestore or RTDB:
+  // an incident where the staging tier itself is the problem (a runaway
+  // write pattern, an RTDB-side outage, a bug in this endpoint) needs a lever
+  // that does not depend on the thing that might be broken. Same response
+  // shape as an unprovisioned RTDB instance below, because the plugin's
+  // documented behaviour for it is already exactly right: fall back to
+  // submitting once at the end. Default (unset) is enabled, so no existing
+  // deployment changes behaviour; set STREAMING_ENABLED=false in
+  // functions/.env.<project> to flip it off.
+  if (!streamingEnabled(process.env)) {
+    res.status(503).json(MESSAGES.SESSION_START_ERROR);
     return;
   }
 

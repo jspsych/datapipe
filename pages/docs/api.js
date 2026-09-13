@@ -182,8 +182,10 @@ export default function ApiReferencePage() {
           <strong>not</strong> consume one from that limit — the count is still
           taken when a submission completes. A <Code>503</Code> with{" "}
           <Code>SESSION_START_ERROR</Code> means incremental upload is
-          unavailable and the experiment should simply submit at the end, as it
-          would otherwise.
+          unavailable — because the service is unreachable, because an
+          experiment already has an unusually large number of sessions open at
+          once, or because it has been switched off entirely — and the
+          experiment should simply submit at the end, as it would otherwise.
         </Text>
         <Box>
           <Text fontSize="sm" color="fg.muted" mb={2}>
@@ -193,8 +195,8 @@ export default function ApiReferencePage() {
             {`{
   "sessionId": "8fKq2mXpR7vNwLzB4cTy1dHs",
   "databaseURL": "https://<project>-default-rtdb.firebaseio.com",
-  "maxTrialBytes": 65536,
-  "maxTrials": 10000,
+  "maxTrialBytes": 16384,
+  "maxTrials": 1000,
   "flushIntervalMs": 10000,
   "flushEveryNTrials": 10
 }`}

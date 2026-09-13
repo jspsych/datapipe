@@ -29,10 +29,34 @@
 //     retrying client idempotent: re-flushing the same seq is a no-op refusal,
 //     not a corruption. See "ORDERING AND DUPLICATES" below.
 //
-//  3. SIZE-CAPPED. 64 KiB per trial, and a sequence number of at most four
-//     digits (10,000 trials). Rules cannot count children, so this is the only
+//  3. SIZE-CAPPED. 16 KiB per trial, and a sequence number of at most three
+//     digits (1,000 trials). Rules cannot count children, so this is the only
 //     bound expressible here; the sweep enforces a total-bytes ceiling of its
-//     own when it assembles a session (functions/src/staging.ts).
+//     own when it assembles a session, reading it in PAGES rather than in one
+//     piece so an over-cap session is never pulled into memory whole
+//     (functions/src/staging.ts, functions/src/staging-assembly.ts).
+//
+//     THE SHARED CONSTANT MODULE. 16384 and the 3-digit pattern below are
+//     hand-copies of functions/src/staging-assembly.ts's MAX_TRIAL_BYTES and
+//     MAX_TRIALS_PER_SESSION -- rules cannot import a TypeScript module, so
+//     there is no way to make this file read them directly.
+//     __tests__/rules-constants.test.js parses this file and asserts the two
+//     literals still match those constants; api-session-start.ts sends the
+//     same constants to the client, so the rules, the endpoint's response and
+//     this comment cannot silently drift apart. Change a cap in ONE place
+//     (staging-assembly.ts) and update this file's regex / `.length` literal
+//     in the same commit, or that test fails.
+//
+//     UNITS: `newData.val().length` below counts UTF-16 CODE UNITS, not
+//     bytes -- a JS/RTDB string-length primitive, not a byte count. A trial
+//     that is plain ASCII costs one byte per unit; a trial full of multibyte
+//     content (CJK, emoji, most non-Latin scripts) can cost up to ~3 bytes per
+//     unit for the same `.length`. So 16384 is a UTF-16 ceiling, and the real
+//     byte ceiling for an adversarial payload is up to ~3x that. This rule is
+//     still worth having -- it is the only bound RTDB can enforce before a
+//     byte ever reaches a function -- but it is NOT the byte-accurate cap.
+//     staging-assembly.ts's MAX_ASSEMBLED_BYTES, measured with
+//     Buffer.byteLength against the real read, is the byte-accurate backstop.
 //
 //  4. GATED ON AN OPEN SESSION. Every write requires
 //     openSessions/{sessionId} to exist, and only POST /api/session
@@ -102,6 +126,22 @@
       ".indexOn": ["expiresAt"]
     },
 
+    // openSessionCounts/{experimentId} = number of that experiment's
+    // currently-open sessions.
+    //
+    // The per-experiment concurrency cap's ground truth (tryAdmitSession,
+    // releaseOpenSessionSlot, reconcileOpenSessionCounts in
+    // functions/src/staging.ts), bounding what one experiment id -- public,
+    // by construction, in the experiment's own JavaScript -- can cost in
+    // staged RTDB storage no matter how many times POST /api/session is
+    // called for it. Written and read only by the Admin SDK, via
+    // transactions, exactly like openSessions above: no block here carries a
+    // `.read` or `.write`, so it inherits the root deny and stays invisible
+    // and unwritable to every client. Written down for the same reason as
+    // openSessions -- so nobody later "fixes" this absence by adding a rule,
+    // which could only weaken it.
+    "openSessionCounts": {},
+
     "staging": {
       "$sessionId": {
         "meta": {
@@ -114,10 +154,22 @@
           // Refreshed on every flush, in the same multi-path update that
           // carries the trials, so it costs nothing extra. It is the sweep's
           // backstop liveness signal for a client that died before
-          // onDisconnect could fire.
+          // onDisconnect could fire -- disconnectedSince() (staging-assembly.ts)
+          // treats a flush timestamped after a disconnect stamp as proof the
+          // participant is back.
+          //
+          // `== now`, not `isNumber()`: a client that could write ANY number
+          // could write one far in the future, and disconnectedSince() would
+          // then treat every later disconnect stamp as already answered --
+          // the session would NEVER be markable abandoned, no matter how long
+          // the socket stayed dropped, because lastFlushAt would always sort
+          // after it. Requiring the server-resolved value (the same
+          // ServerValue.TIMESTAMP placeholder disconnects/reconnects already
+          // require) closes that off the same way it closes off a backdated
+          // disconnect stamp below.
           "lastFlushAt": {
             ".write": "root.child('openSessions').child($sessionId).exists()",
-            ".validate": "newData.isNumber()"
+            ".validate": "newData.val() == now"
           },
           // ABANDONMENT: one write-once slot per connection, the standard
           // Firebase presence pattern.
@@ -200,11 +252,15 @@
             // no way to bound nesting, and the size cap below then means
             // exactly what it says.
             //
-            // 64 KiB is roughly 13x the top of the design doc's 0.5-5 KB
-            // per-trial range -- generous enough for a trial carrying an
-            // embedded response blob, tight enough that the 10,000-key
-            // ceiling is a real bound rather than a formality.
-            ".validate": "$seq.matches(/^[0-9]{1,4}$/) && newData.isString() && newData.val().length <= 65536"
+            // 16 KiB is roughly 3x the top of the design doc's 0.5-5 KB
+            // per-trial range -- generous enough for a trial carrying a small
+            // embedded response blob, tight enough that the 1,000-key ceiling
+            // below is a real structural bound: MAX_TRIALS_PER_SESSION x
+            // MAX_TRIAL_BYTES x the up-to-3x UTF-16-to-byte multiplier
+            // documented above stays well inside the sweep's memory
+            // allocation, which the previous 10,000 x 64 KiB combination did
+            // not (functions/src/staging-assembly.ts has the arithmetic).
+            ".validate": "$seq.matches(/^[0-9]{1,3}$/) && newData.isString() && newData.val().length <= 16384"
           }
         },
         // Nothing but meta/ and trials/ may exist under a session. Defence in

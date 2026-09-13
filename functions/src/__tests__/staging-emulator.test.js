@@ -187,7 +187,7 @@ describe("POST /api/session", () => {
     // The plugin gets its configuration from the server, so one published
     // build can talk to both datapipe-test and production.
     expect(body.databaseURL).toEqual(expect.any(String));
-    expect(body.maxTrialBytes).toBe(65536);
+    expect(body.maxTrialBytes).toBe(16384);
     // The disconnect-slot cap the rules enforce, so the plugin stops arming at
     // it instead of having stamps refused.
     expect(body.maxDisconnects).toBe(20);
@@ -264,6 +264,100 @@ describe("POST /api/session", () => {
       `http://${FUNCTIONS_HOST}/${PROJECT_ID}/us-central1/apisessionstart`
     );
     expect(response.status).toBe(405);
+  });
+});
+
+describe("the per-experiment concurrency cap", () => {
+  // MAX_OPEN_SESSIONS_PER_EXPERIMENT (functions/src/staging-assembly.ts).
+  // Seeded directly rather than opened by minting 500 real sessions: the
+  // mechanism under test is tryAdmitSession's transaction reading and
+  // bounding openSessionCounts/{experimentId}, not the accumulation of 500
+  // HTTP round trips to get there.
+  const CAP = 500;
+
+  it("refuses the (cap+1)th session and leaves the counter untouched", async () => {
+    const experimentID = await makeExperiment();
+    await rtdb.ref(`openSessionCounts/${experimentID}`).set(CAP);
+
+    const { status, body } = await startSession({ experimentID });
+
+    expect(status).toBe(503);
+    expect(body.error).toBe("SESSION_START_ERROR");
+    // The transaction must abort without writing -- a refused admission must
+    // not itself be what pushes a counter around.
+    expect((await rtdb.ref(`openSessionCounts/${experimentID}`).get()).val()).toBe(CAP);
+    // And no capability record was minted for the refused attempt.
+    const record = (await rtdb.ref("openSessions").get()).val() || {};
+    expect(Object.values(record).some((r) => r.experimentId === experimentID)).toBe(false);
+  });
+
+  it("admits the cap-th session and then refuses the next one", async () => {
+    const experimentID = await makeExperiment();
+    await rtdb.ref(`openSessionCounts/${experimentID}`).set(CAP - 1);
+
+    const { status: admitted } = await startSession({ experimentID });
+    expect(admitted).toBe(200);
+    expect((await rtdb.ref(`openSessionCounts/${experimentID}`).get()).val()).toBe(CAP);
+
+    const { status: refused, body } = await startSession({ experimentID });
+    expect(refused).toBe(503);
+    expect(body.error).toBe("SESSION_START_ERROR");
+  });
+
+  it("lets a new session in once a prior one completes and frees its slot", async () => {
+    const experimentID = await makeExperiment();
+    await rtdb.ref(`openSessionCounts/${experimentID}`).set(CAP - 1);
+
+    const { status: firstStatus, body: first } = await startSession({ experimentID });
+    expect(firstStatus).toBe(200);
+
+    const { status: refused } = await startSession({ experimentID });
+    expect(refused).toBe(503);
+
+    // Completion runs discardSession(), which must release the slot the first
+    // session reserved at admission.
+    await saveData({
+      experimentID,
+      filename: "p01.csv",
+      data: "trial_type\nhtml-keyboard-response\n",
+      sessionId: first.sessionId,
+    });
+    expect((await rtdb.ref(`openSessionCounts/${experimentID}`).get()).val()).toBe(CAP - 1);
+
+    const { status: secondStatus } = await startSession({ experimentID });
+    expect(secondStatus).toBe(200);
+  });
+
+  it("lets a new session in once an abandoned one is swept, freeing its slot", async () => {
+    const experimentID = await makeExperiment();
+    await rtdb.ref(`openSessionCounts/${experimentID}`).set(CAP - 1);
+
+    const { body: first } = await startSession({ experimentID });
+    await markAbandoned(first.sessionId);
+
+    const stats = await sweepAbandonedSessions(new Set([first.sessionId]));
+    expect(stats.discarded).toBe(1); // nothing was staged, so it is discarded not recovered
+    expect((await rtdb.ref(`openSessionCounts/${experimentID}`).get()).val()).toBe(CAP - 1);
+
+    const { status } = await startSession({ experimentID });
+    expect(status).toBe(200);
+  });
+});
+
+describe("the streaming kill switch", () => {
+  // STREAMING_ENABLED=false is a pure predicate (streamingEnabled(), unit
+  // tested in staging-assembly.test.js) precisely because the functions
+  // emulator cannot be re-configured mid-suite to exercise the disabled
+  // branch here. What this suite CAN pin is the other half: every deployment
+  // today has STREAMING_ENABLED unset, and that must keep minting sessions
+  // exactly as it always has.
+  it("is enabled by default", async () => {
+    const experimentID = await makeExperiment();
+
+    const { status, body } = await startSession({ experimentID });
+
+    expect(status).toBe(200);
+    expect(body.sessionId).toEqual(expect.any(String));
   });
 });
 
@@ -472,6 +566,27 @@ describe("the abandonment sweep", () => {
     const [entry] = await queueEntriesFor(experimentID);
     expect(entry.failureReason).toContain("12 trials");
     expect(entry.failureReason).not.toContain("missing");
+  });
+
+  it("recovers a session with more trials than fit in one assembly page, in full", async () => {
+    // assembleSession (staging.ts) reads the staging tree in pages of 200 --
+    // this is the one thing the pure paging tests (staging-assembly.test.js)
+    // cannot cover, because they fake the page fetcher rather than exercising
+    // RTDB's own orderByKey().startAfter() pagination. 250 trials forces a
+    // second page.
+    const experimentID = await makeExperiment();
+    const { body } = await startSession({ experimentID, filename: "p20.csv" });
+    await stageTrials(body.sessionId, 250);
+    await markAbandoned(body.sessionId);
+
+    const stats = await sweepAbandonedSessions(new Set([body.sessionId]));
+
+    expect(stats.recovered).toBe(1);
+    const entries = await queueEntriesFor(experimentID);
+    expect(entries).toHaveLength(1);
+    expect(entries[0].failureReason).toContain("250 trials");
+    expect(entries[0].failureReason).not.toContain("missing");
+    expect(entries[0].failureReason).not.toContain("truncated");
   });
 
   it("records sweep health on every run, including one that did nothing", async () => {

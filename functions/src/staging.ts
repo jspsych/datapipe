@@ -51,10 +51,12 @@ import { mirrorStart, removeLiveSession, connectionState } from "./live-sessions
 import {
   AssembledSession,
   MAX_FILENAME_LENGTH,
+  MAX_OPEN_SESSIONS_PER_EXPERIMENT,
   OpenSession,
   SessionMeta,
   SESSION_TTL_MS,
-  assembleTrials,
+  TrialPage,
+  assembleTrialsPaged,
 } from "./staging-assembly.js";
 
 // Re-exported so callers have ONE import for the staging tier and do not have
@@ -210,6 +212,125 @@ export function resetStagingHandleForTests(): void {
 }
 
 // ---------------------------------------------------------------------------
+// Per-experiment concurrency cap
+// ---------------------------------------------------------------------------
+//
+// openSessionCounts/{experimentId} : number of currently-open sessions.
+//
+// A REVIEW FINDING THIS ANSWERS: one anonymous POST /api/session mints one
+// session id, and nothing before this counter existed stopped that call being
+// looped -- an experiment id is public (it ships in the experiment's own
+// JavaScript), so the cost of an unbounded loop was 640MB-per-session-id of
+// RTDB storage, times however many times it was called. The counter below
+// bounds it to MAX_OPEN_SESSIONS_PER_EXPERIMENT sessions per experiment,
+// however many times the endpoint is called.
+//
+// Deliberately NOT a per-IP counter: DataPipe's own code must never read or
+// store a participant's IP address (pages/docs/privacy.js). This counts
+// SESSIONS for an EXPERIMENT, the same unit maxSessions already limits, and
+// carries no information about who is opening them.
+
+const OPEN_SESSION_COUNTS_PATH = "openSessionCounts";
+
+/**
+ * Reserve one of MAX_OPEN_SESSIONS_PER_EXPERIMENT concurrent staging slots.
+ * Returns false, without writing anything else, once the experiment is at
+ * its cap.
+ *
+ * A TRANSACTION, not a read-then-write: two POST /api/session calls for the
+ * same experiment arriving together must not both read "499" and both
+ * proceed. RTDB retries a transaction against the server's current value on
+ * a conflicting write, which a plain get()-then-set() cannot do.
+ *
+ * SELF-HEALING ON NEGATIVE OR MALFORMED DRIFT: a stored value that is
+ * missing, not a number, or negative -- which releaseOpenSessionSlot's own
+ * floor should make impossible, but a hand edit or a bug predating this code
+ * could still produce -- is treated as zero rather than compounding the error
+ * into a cap that can never again be satisfied. This is the "recomputing when
+ * the counter goes negative" half of tolerating drift; reconcileOpenSessionCounts
+ * below is the other half, for drift that is positive (a missed decrement)
+ * rather than negative.
+ */
+export async function tryAdmitSession(experimentId: string): Promise<boolean> {
+  const ref = rtdb().ref(`${OPEN_SESSION_COUNTS_PATH}/${experimentId}`);
+  const result = await ref.transaction((current: unknown) => {
+    const count = typeof current === "number" && current > 0 ? current : 0;
+    if (count >= MAX_OPEN_SESSIONS_PER_EXPERIMENT) return; // undefined aborts the transaction, writing nothing
+    return count + 1;
+  });
+  return result.committed;
+}
+
+/**
+ * Release a concurrency slot for an experiment. Floored at zero: a decrement
+ * that ever ran without (or twice for) a matching increment must not push the
+ * counter negative, which would then let in extra sessions until the count
+ * climbed back to zero on its own.
+ */
+export async function releaseOpenSessionSlot(experimentId: string): Promise<void> {
+  const ref = rtdb().ref(`${OPEN_SESSION_COUNTS_PATH}/${experimentId}`);
+  await ref.transaction((current: unknown) => {
+    const count = typeof current === "number" ? current : 0;
+    return Math.max(0, count - 1);
+  });
+}
+
+/**
+ * Correct openSessionCounts for a scoped set of experiments against the RTDB
+ * ground truth (POSITIVE drift: a missed decrement -- see
+ * tryAdmitSession's doc for the negative-drift half of this).
+ *
+ * Scoped to `experimentIds`, not every counter that has ever existed: the
+ * sweep calls this once per run with the experiments its own candidates
+ * belong to, which is the same rotating-window approach
+ * CANDIDATES_PER_RUN already takes for the sessions themselves -- a
+ * stuck-too-high counter is corrected within a few runs rather than this
+ * needing an unbounded read of every experiment that has ever streamed. It
+ * also keeps a test that scopes a sweep run to its own experiment id (the
+ * `only` seam) from correcting -- or racing against -- a counter that
+ * belongs to a different, concurrently-running test.
+ *
+ * `openSessions` is the caller's already-fetched list of every currently-open
+ * session (listOpenSessions()), so this performs no additional read of the
+ * staging tier itself -- only of the small openSessionCounts table, and only
+ * for the experiment ids in scope.
+ */
+export async function reconcileOpenSessionCounts(
+  experimentIds: Iterable<string>,
+  openSessions: OpenSession[]
+): Promise<number> {
+  const ids = [...new Set(experimentIds)];
+  if (ids.length === 0) return 0;
+
+  const trueCounts = new Map<string, number>(ids.map((id) => [id, 0]));
+  for (const session of openSessions) {
+    if (trueCounts.has(session.experimentId)) {
+      trueCounts.set(session.experimentId, (trueCounts.get(session.experimentId) as number) + 1);
+    }
+  }
+
+  const stored = await Promise.all(
+    ids.map((id) => rtdb().ref(`${OPEN_SESSION_COUNTS_PATH}/${id}`).get())
+  );
+
+  const updates: Record<string, number | null> = {};
+  ids.forEach((id, i) => {
+    const storedValue = stored[i].exists() ? stored[i].val() : 0;
+    const storedCount = typeof storedValue === "number" ? storedValue : 0;
+    const truth = trueCounts.get(id) as number;
+    if (storedCount !== truth) {
+      updates[id] = truth === 0 ? null : truth;
+    }
+  });
+
+  const fixed = Object.keys(updates).length;
+  if (fixed > 0) {
+    await rtdb().ref(OPEN_SESSION_COUNTS_PATH).update(updates);
+  }
+  return fixed;
+}
+
+// ---------------------------------------------------------------------------
 // Session lifecycle
 // ---------------------------------------------------------------------------
 
@@ -220,36 +341,59 @@ export function resetStagingHandleForTests(): void {
  * experiment is open. This function does not re-check, because it cannot: RTDB
  * has no view of Firestore, and that asymmetry is the whole reason session ids
  * are minted server-side.
+ *
+ * Throws (rather than returning a sentinel) when the experiment is at its
+ * concurrency cap. api-session-start.ts's existing try/catch around this call
+ * turns that into the same 503 SESSION_START_ERROR shape it already returns
+ * for an unprovisioned RTDB instance -- the plugin's documented fallback is
+ * to submit once at the end, which is the right behaviour here too.
  */
 export async function openSession(
   experimentId: string,
   filename: string | undefined,
   owner: string
 ): Promise<string> {
-  const sessionId = generateSessionId();
-  const now = Date.now();
-  const record: Record<string, unknown> = {
-    experimentId,
-    owner,
-    startedAt: now,
-    expiresAt: now + SESSION_TTL_MS,
-  };
-  // Omitted rather than written as undefined: RTDB rejects undefined values
-  // the same way Firestore does, and an absent filename is a normal state.
-  if (filename) record.filename = filename.slice(0, MAX_FILENAME_LENGTH);
-  await rtdb().ref(`openSessions/${sessionId}`).set(record);
+  const admitted = await tryAdmitSession(experimentId);
+  if (!admitted) {
+    throw new Error(
+      `Experiment ${experimentId} already has ${MAX_OPEN_SESSIONS_PER_EXPERIMENT} sessions open; ` +
+        "refusing another until one completes or is recovered."
+    );
+  }
 
-  // The researcher's live dashboard copy (live-sessions.ts). Awaited, so it is
-  // written before the participant's page gets its response, but best-effort:
-  // mirrorStart swallows its own failure, and the sweep backfills a miss.
-  await mirrorStart(sessionId, {
-    experimentID: experimentId,
-    owner,
-    startedAt: now,
-    expiresAt: now + SESSION_TTL_MS,
-    ...connectionState({}),
-  });
-  return sessionId;
+  try {
+    const sessionId = generateSessionId();
+    const now = Date.now();
+    const record: Record<string, unknown> = {
+      experimentId,
+      owner,
+      startedAt: now,
+      expiresAt: now + SESSION_TTL_MS,
+    };
+    // Omitted rather than written as undefined: RTDB rejects undefined values
+    // the same way Firestore does, and an absent filename is a normal state.
+    if (filename) record.filename = filename.slice(0, MAX_FILENAME_LENGTH);
+    await rtdb().ref(`openSessions/${sessionId}`).set(record);
+
+    // The researcher's live dashboard copy (live-sessions.ts). Awaited, so it is
+    // written before the participant's page gets its response, but best-effort:
+    // mirrorStart swallows its own failure, and the sweep backfills a miss.
+    await mirrorStart(sessionId, {
+      experimentID: experimentId,
+      owner,
+      startedAt: now,
+      expiresAt: now + SESSION_TTL_MS,
+      ...connectionState({}),
+    });
+    return sessionId;
+  } catch (e) {
+    // The slot was reserved above but nothing that would need its own
+    // teardown got written (or mirrorStart already swallowed its failure), so
+    // releasing it here is the only cleanup needed to avoid leaking a
+    // permanently-reserved slot on a failed admission.
+    await releaseOpenSessionSlot(experimentId);
+    throw e;
+  }
 }
 
 /** The capability record for a session id, or null if it is not open. */
@@ -323,8 +467,26 @@ export async function listOpenSessions(): Promise<OpenSession[]> {
   return rows;
 }
 
+// Trials fetched per RTDB round trip during assembly. Small enough that one
+// page (ASSEMBLY_PAGE_SIZE x MAX_TRIAL_BYTES, worst case) is a fraction of
+// MAX_ASSEMBLED_BYTES, so assembly can stop mid-page without having pulled
+// anything close to a full session into memory first -- which is the whole
+// point of paging the read at all (see the review finding at the top of this
+// file: assembleSession used to `.get()` the entire trials node before its
+// size cap applied).
+const ASSEMBLY_PAGE_SIZE = 200;
+
 /**
  * Read and assemble a session's staged trials.
+ *
+ * READ IN PAGES, not one `.get()` of the whole node. `orderByKey()` gives
+ * RTDB's native ordering for integer-valued keys, which is numeric ascending
+ * -- the same order assembleTrials produces by sorting -- so
+ * `.startAfter(lastKey)` resumes exactly where the previous page left off
+ * with no re-sorting required. assembleTrialsPaged stops calling this fetcher
+ * the moment the accumulated byte size would cross MAX_ASSEMBLED_BYTES, so an
+ * over-cap session is truncated without this function ever holding more than
+ * one page in memory.
  *
  * GAPS ARE TOLERATED, NOT REJECTED (design doc risk #5). A missing sequence
  * number means one flush never landed -- a dropped request, a tab closed
@@ -341,11 +503,28 @@ export async function listOpenSessions(): Promise<OpenSession[]> {
 export async function assembleSession(
   sessionId: string
 ): Promise<AssembledSession> {
-  const snap = await rtdb().ref(`staging/${sessionId}/trials`).get();
-  if (!snap.exists()) {
-    return { data: "[]", trialCount: 0, skipped: 0, truncated: false, gaps: 0 };
-  }
-  return assembleTrials(snap.val() as Record<string, string>);
+  const trialsRef = rtdb().ref(`staging/${sessionId}/trials`);
+
+  const fetchPage = async (afterKey: string | null): Promise<TrialPage> => {
+    const query =
+      afterKey === null
+        ? trialsRef.orderByKey().limitToFirst(ASSEMBLY_PAGE_SIZE)
+        : trialsRef.orderByKey().startAfter(afterKey).limitToFirst(ASSEMBLY_PAGE_SIZE);
+    const snap = await query.get();
+    if (!snap.exists()) return { entries: [], done: true };
+    const entries: Array<[string, unknown]> = [];
+    snap.forEach((child) => {
+      entries.push([child.key as string, child.val()]);
+      return false; // keep iterating (forEach cancels on `true`)
+    });
+    return { entries, done: entries.length < ASSEMBLY_PAGE_SIZE };
+  };
+
+  // pagesFetched is a diagnostic for the caller's own tests, not part of the
+  // durable result -- discard it here so AssembledSession stays the one shape
+  // every caller (the sweep, its tests) already knows.
+  const { pagesFetched: _pagesFetched, ...assembled } = await assembleTrialsPaged(fetchPage);
+  return assembled;
 }
 
 /**
@@ -377,6 +556,24 @@ export async function discardSession(sessionId: string): Promise<void> {
     );
     return;
   }
+
+  // Read BEFORE the delete below removes it: releasing this session's
+  // concurrency slot needs to know which experiment it belonged to, and
+  // openSessions/{sessionId} is the only place that is recorded. Best-effort
+  // like everything else here -- a failed read just skips the release, and
+  // reconcileOpenSessionCounts corrects the resulting drift on the sweep's
+  // next run rather than this turning into a failed discard.
+  let experimentId: string | undefined;
+  try {
+    const snap = await rtdb().ref(`openSessions/${sessionId}/experimentId`).get();
+    if (snap.exists()) experimentId = snap.val() as string;
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : "Unknown error";
+    console.error(
+      `Failed to read experimentId while discarding staging session ${sessionId}: ${detail}`
+    );
+  }
+
   try {
     await rtdb()
       .ref()
@@ -388,6 +585,9 @@ export async function discardSession(sessionId: string): Promise<void> {
     const detail = e instanceof Error ? e.message : "Unknown error";
     console.error(`Failed to discard staging session ${sessionId}: ${detail}`);
   }
+
+  if (experimentId) await releaseOpenSessionSlot(experimentId);
+
   // And the researcher's dashboard row. Every way a session ends -- clean
   // completion, a gate refusing it, the sweep recovering or discarding it --
   // comes through here, which is why this is the one place that removes it.
