@@ -6,8 +6,34 @@ const clientId = process.env.CLIENT_ID as string;
 const clientSecret = process.env.CLIENT_SECRET as string; // Remove NEXT_PUBLIC_ prefix for security
 const redirectUri = process.env.REDIRECT_URI as string;
 
+// TEST-ONLY TRANSPORT SEAM. Returns a replacement origin for every OSF
+// accounts.*/api.* call this function makes, or undefined in any real
+// deployment.
+//
+// Without this there is no way to exercise this callback -- which talks to
+// OSF over several real fetch() calls (token exchange, profile, user, emails)
+// -- against a local mock: this handler runs inside the Functions emulator's
+// own process, a separate process from the jest test file that calls it over
+// HTTP, so there is no in-process fetch/nock seam reachable from a test. Same
+// wall providers/zenodo.ts's emulatorServerOverride documents, and the same
+// pattern: GDRIVE_API_BASE for gdrive, ZENODO_API_BASE for zenodo, this for
+// OSF.
+//
+// Gated on FUNCTIONS_EMULATOR, which the Firebase emulator sets to "true" and
+// a DEPLOYED function never sets -- so in production this reads an unset
+// variable and returns undefined no matter what OSF_API_BASE_OVERRIDE holds.
+// The one mock server a test starts serves both the accounts.osf.io and
+// api.osf.io paths this file hits, so a single override origin covers both.
+function osfBaseOverride(): string | undefined {
+  if (process.env.FUNCTIONS_EMULATOR !== "true") {
+    return undefined;
+  }
+  const override = process.env.OSF_API_BASE_OVERRIDE;
+  return override ? override.replace(/\/+$/, "") : undefined;
+}
+
 // Use Map to track processed codes with timestamp for cleanup
-const processedCodes = new Map(); 
+const processedCodes = new Map();
 
 // Clean up old processed codes (older than 10 minutes)
 const cleanupProcessedCodes = () => {
@@ -96,7 +122,10 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
       grant_type: 'authorization_code',
     });
 
-    const tokenUrl = `https://accounts.${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/oauth2/token`;
+    const accountsBase = osfBaseOverride() ?? `https://accounts.${process.env.NEXT_PUBLIC_OSF_ENV}osf.io`;
+    const apiBase = osfBaseOverride() ?? `https://api.${process.env.NEXT_PUBLIC_OSF_ENV}osf.io`;
+
+    const tokenUrl = `${accountsBase}/oauth2/token`;
     // Exchange authorization code for access token
     const tokenResponse = await fetch(tokenUrl, {
       method: 'POST',
@@ -124,7 +153,7 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
     }
 
     // Fetch user profile from OSF OAuth endpoint
-    const profileResponse = await fetch(`https://accounts.${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/oauth2/profile`, {
+    const profileResponse = await fetch(`${accountsBase}/oauth2/profile`, {
       headers: {
         'Authorization': `Bearer ${tokenData.access_token}`,
         'Accept': 'application/json'
@@ -158,7 +187,7 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
     }
     
     // OAuth profile doesn't include email, so we'll use the full API
-    const userApiResponse = await fetch(`https://api.${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/v2/users/${osfUserId}/`, {
+    const userApiResponse = await fetch(`${apiBase}/v2/users/${osfUserId}/`, {
       headers: {
         'Authorization': `Bearer ${tokenData.access_token}`,
         'Accept': 'application/vnd.api+json'
@@ -176,7 +205,7 @@ export const oauth2Callback = onRequest({ cors: true }, async (req, res) => {
                    'OSF User';
 
       // Try to fetch email from the emails endpoint
-      const emailsResponse = await fetch(`https://api.${process.env.NEXT_PUBLIC_OSF_ENV}osf.io/v2/users/${osfUserId}/settings/emails/`, {
+      const emailsResponse = await fetch(`${apiBase}/v2/users/${osfUserId}/settings/emails/`, {
         headers: {
           'Authorization': `Bearer ${tokenData.access_token}`,
           'Accept': 'application/vnd.api+json'
