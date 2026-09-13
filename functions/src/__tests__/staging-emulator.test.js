@@ -425,6 +425,89 @@ describe("the streaming kill switch", () => {
 });
 
 describe("completion", () => {
+  it("releases the concurrency-cap slot on a genuine, non-refused completion", async () => {
+    // THE GAP THIS CLOSES: an earlier version of "lets a new session in once
+    // a prior one completes" (the per-experiment concurrency cap tests above)
+    // routed through a real /api/data completion and read
+    // openSessionCounts/<experimentID> as 500 instead of 499 afterwards. That
+    // test was rewritten to call discardSession() directly, which proves
+    // discardSession releases a slot but nothing end-to-end proved that a
+    // real completion actually REACHES discardSession.
+    //
+    // ROOT CAUSE, FOUND HERE: "staging-testuser" (this file's shared owner
+    // fixture, set up in the top-level beforeAll) has
+    // connectedAccounts.gdrive = { accessToken, refreshToken }.
+    // providers/gdrive.ts's resolveToken() reads
+    // connectedAccounts.gdrive.encryptedToken and .tokenExpiresAt -- neither
+    // of which that fixture sets -- so EVERY completion attempt against it
+    // fails at token resolution, before ever reaching discardStaging. That is
+    // the "DataPipe itself fails" branch ("keeps the staged copy when
+    // DataPipe itself fails", below), which by design leaves the staged copy
+    // AND its counter slot in place for the sweep to recover. The original
+    // 500-instead-of-499 reading was that correct, intentional behaviour,
+    // not a bug -- it just meant the test believed it was exercising a real
+    // completion when it was actually exercising a token failure.
+    //
+    // This test uses its OWN owner, with a token shape resolveToken() can
+    // actually resolve, so the request clears every gate and reaches the
+    // provider. It still cannot get a literal 201: this file has no mock
+    // Google Drive server listening on GDRIVE_API_BASE (gdrive-emulator.test.js
+    // owns that fixed port, 127.0.0.1:3579, for the whole test run, and two
+    // listeners on it would collide). The unreachable host makes
+    // claimFilename's cold-cache rehydration throw, which api-data.ts treats
+    // as a retryable provider failure -- queued (202), not refused -- and
+    // that branch calls discardStaging on the way to responding, exactly as
+    // a real 201 would. That is the property this test actually needs: a
+    // genuine, accepted completion, not a specific status code.
+    const ownerId = `staging-token-ok-${randomUUID()}`;
+    await db.collection("users").doc(ownerId).set({
+      uid: ownerId,
+      email: "staging-token-ok@example.com",
+      experiments: [],
+      connectedAccounts: {
+        gdrive: {
+          // decrypt()'s plaintext fallback (crypto-utils.ts): any string
+          // without the "v1:" version prefix round-trips unchanged, so this
+          // does not need TOKEN_ENCRYPTION_KEY to agree between this process
+          // and the functions emulator's.
+          encryptedToken: "fake-access-token",
+          tokenExpiresAt: Date.now() + 60 * 60 * 1000,
+        },
+      },
+    });
+
+    const experimentID = await makeExperiment({ owner: ownerId });
+    const { body } = await startSession({ experimentID });
+    await stageTrials(body.sessionId, 3);
+
+    expect((await rtdb.ref(`openSessionCounts/${experimentID}`).get()).val()).toBe(1);
+
+    const { status, body: response } = await saveData({
+      experimentID,
+      filename: "p01.csv",
+      data: "trial_type\nhtml-keyboard-response\n",
+      sessionId: body.sessionId,
+    });
+
+    // A genuine, accepted completion -- not a gate refusal (400) and not a
+    // DataPipe-side failure (400) -- so discardStaging is reached exactly as
+    // it would be for a real 201.
+    expect(status).toBe(202);
+    expect(response.error).toBeNull();
+    expect((await rtdb.ref(`staging/${body.sessionId}`).get()).exists()).toBe(false);
+    expect((await rtdb.ref(`openSessions/${body.sessionId}`).get()).exists()).toBe(false);
+
+    // THE ASSERTION THE ORIGINAL REGRESSION NEEDED: the slot this session
+    // reserved at admission is released once its completion -- discardStaging,
+    // running inside apidata's real handler -- has actually happened. Absent
+    // or 0 either way: releaseOpenSessionSlot always writes 0 rather than
+    // deleting the node, but nothing here depends on which.
+    const counter = (await rtdb.ref(`openSessionCounts/${experimentID}`).get()).val();
+    expect(counter === null || counter === 0).toBe(true);
+
+    await db.collection("users").doc(ownerId).delete();
+  });
+
   it("drops the staged copy once a gate refuses the submission", async () => {
     // Keeping it would let the sweep re-offer the session as a .partial.json,
     // producing a file the gate just refused -- and, for a finalized
