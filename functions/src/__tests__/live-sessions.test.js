@@ -12,6 +12,9 @@ import {
   connectionState,
   desiredMirror,
   mirrorDiff,
+  readWasTruncated,
+  idsToDelete,
+  MAX_RECONCILE,
 } from '../../lib/live-sessions.js';
 import { ABANDON_GRACE_MS } from '../../lib/staging-assembly.js';
 
@@ -119,5 +122,80 @@ describe('mirrorDiff', () => {
     expect(mirrorDiff(partial, desired)).toEqual({});
     const { owner, ...noOwner } = desired;
     expect(mirrorDiff(noOwner, desired)).toEqual({ owner });
+  });
+});
+
+describe('readWasTruncated', () => {
+  // The cap is passed explicitly rather than exercised at its production size
+  // (500): the comparison is a one-line arithmetic check, and a fake cap
+  // proves the same logic without spending the test on building 500 fixtures.
+  it('is false while the read came in under the cap', () => {
+    expect(readWasTruncated(3, 5)).toBe(false);
+  });
+
+  it('is true at the cap, even though that could just mean an exact count', () => {
+    // Indistinguishable from inside this module -- see the header. Treating
+    // it as truncated is the conservative side of that ambiguity.
+    expect(readWasTruncated(5, 5)).toBe(true);
+  });
+
+  it('is true past the cap', () => {
+    expect(readWasTruncated(6, 5)).toBe(true);
+  });
+
+  it('defaults to MAX_RECONCILE, matching production wiring', () => {
+    expect(readWasTruncated(MAX_RECONCILE - 1)).toBe(false);
+    expect(readWasTruncated(MAX_RECONCILE)).toBe(true);
+  });
+});
+
+describe('idsToDelete', () => {
+  const readAt = 10_000_000;
+  const oldDoc = { startedAt: readAt - 10 * 60_000 };
+
+  it('deletes a mirror doc whose session is genuinely gone, when the read was not truncated', () => {
+    const existing = new Map([['gone-1', oldDoc]]);
+    const wanted = new Set(); // nothing open claims this id
+
+    expect(idsToDelete(existing, wanted, readAt, false)).toEqual(['gone-1']);
+  });
+
+  it('never deletes a session present in the wanted set', () => {
+    const existing = new Map([['open-1', oldDoc]]);
+    const wanted = new Set(['open-1']);
+
+    expect(idsToDelete(existing, wanted, readAt, false)).toEqual([]);
+  });
+
+  it('leaves alone a doc created after the read, regardless of the wanted set', () => {
+    const fresh = { startedAt: readAt + 5000 };
+    const existing = new Map([['fresh-1', fresh]]);
+
+    expect(idsToDelete(existing, new Set(), readAt, false)).toEqual([]);
+  });
+
+  // The actual bug: with more open sessions than one run's read can cover,
+  // a genuinely open session can rank outside the cut. Its mirror doc must
+  // survive even though it is absent from `wanted` -- the case a truncated
+  // read can never rule out.
+  it('deletes nothing when the open-session read was truncated, even for real open sessions ranked outside the cut', () => {
+    // More mirror docs than one reconciliation pass's cap, all for sessions
+    // that are genuinely still open -- `wanted` below stands in for a
+    // MAX_RECONCILE-sized RTDB read that could not fit all of them.
+    const existing = new Map();
+    for (let i = 0; i < MAX_RECONCILE + 1; i++) {
+      existing.set(`session-${i}`, oldDoc);
+    }
+    // Only the first MAX_RECONCILE made it into this run's open-session read;
+    // session-500 ranked outside the cut but is just as open as the rest.
+    const wanted = new Set(Array.from({ length: MAX_RECONCILE }, (_, i) => `session-${i}`));
+    expect(wanted.has(`session-${MAX_RECONCILE}`)).toBe(false);
+
+    const deleted = idsToDelete(existing, wanted, readAt, true);
+
+    expect(deleted).toEqual([]);
+    for (let i = 0; i <= MAX_RECONCILE; i++) {
+      expect(deleted).not.toContain(`session-${i}`);
+    }
   });
 });
