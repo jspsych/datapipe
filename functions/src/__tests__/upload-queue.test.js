@@ -142,76 +142,15 @@ describe("queueUpload deduplication", () => {
   });
 });
 
-describe("handleRetryFailure backoff", () => {
-  test("exponential backoff doubles each retry", () => {
-    const MAX_BACKOFF_MS = 24 * 60 * 60 * 1000;
-
-    for (let retryCount = 1; retryCount <= 5; retryCount++) {
-      const backoffMs = Math.min(
-        Math.pow(2, retryCount) * 60 * 60 * 1000,
-        MAX_BACKOFF_MS
-      );
-      const expectedHours = Math.min(Math.pow(2, retryCount), 24);
-      expect(backoffMs).toBe(expectedHours * 60 * 60 * 1000);
-    }
-  });
-
-  test("backoff is capped at 24 hours", () => {
-    const MAX_BACKOFF_MS = 24 * 60 * 60 * 1000;
-    // retryCount = 5 => 2^5 = 32 hours, should cap at 24
-    const backoffMs = Math.min(
-      Math.pow(2, 5) * 60 * 60 * 1000,
-      MAX_BACKOFF_MS
-    );
-    expect(backoffMs).toBe(24 * 60 * 60 * 1000);
-  });
-
-  test("Retry-After header is honored when provided", () => {
-    const MAX_BACKOFF_MS = 24 * 60 * 60 * 1000;
-    const retryAfterSeconds = 120; // 2 minutes
-
-    const backoffMs = Math.min(retryAfterSeconds * 1000, MAX_BACKOFF_MS);
-    expect(backoffMs).toBe(120000);
-  });
-
-  test("Retry-After is capped at MAX_BACKOFF_MS", () => {
-    const MAX_BACKOFF_MS = 24 * 60 * 60 * 1000;
-    const retryAfterSeconds = 100000; // ~27 hours
-
-    const backoffMs = Math.min(retryAfterSeconds * 1000, MAX_BACKOFF_MS);
-    expect(backoffMs).toBe(MAX_BACKOFF_MS);
-  });
-
-  test("falls back to exponential backoff when no Retry-After", () => {
-    const MAX_BACKOFF_MS = 24 * 60 * 60 * 1000;
-    const retryAfterSeconds = null;
-    const retryCount = 2;
-
-    const backoffMs = retryAfterSeconds
-      ? Math.min(retryAfterSeconds * 1000, MAX_BACKOFF_MS)
-      : Math.min(Math.pow(2, retryCount) * 60 * 60 * 1000, MAX_BACKOFF_MS);
-
-    expect(backoffMs).toBe(4 * 60 * 60 * 1000); // 4 hours
-  });
-});
-
-// scheduled-upload-retry.ts's handleRetryFailure is not exported, so these
-// mirror the arithmetic (same convention as the "handleRetryFailure backoff"
-// describe block above, which also replicates the production formula rather
-// than calling it directly) instead of exercising the real function. See the
-// "queueUpload tiers the first nextRetryAt" describe block below for coverage
-// of the piece that IS reachable: isFastRetry and queueUpload's own tiering.
+// The real tiered backoff arithmetic (computeBackoffMs, formerly mirrored by
+// hand here across two describe blocks with their own local MAX_BACKOFF_MS /
+// FAST_MAX_BACKOFF_MS / SLOW_MAX_BACKOFF_MS constants -- which could not
+// catch a changed cap, base, or Math.min argument order) now lives in
+// functions/src/__tests__/backoff-arithmetic.test.js, against the real
+// exported function. What remains below is real coverage of isFastRetry /
+// isProbeRetry themselves.
 describe("scheduled-upload-retry tiered backoff arithmetic", () => {
-  const FAST_MAX_BACKOFF_MS = 30 * 60 * 1000; // 30 minutes
   const SLOW_MAX_BACKOFF_MS = 24 * 60 * 60 * 1000; // 24 hours, unchanged
-
-  test("fast tier (CONTENTION) produces ~2, 4, 8, 16, 30 minutes", () => {
-    const expectedMinutes = [2, 4, 8, 16, 30];
-    for (let retryCount = 1; retryCount <= 5; retryCount++) {
-      const backoffMs = Math.min(Math.pow(2, retryCount) * 60 * 1000, FAST_MAX_BACKOFF_MS);
-      expect(backoffMs).toBe(expectedMinutes[retryCount - 1] * 60 * 1000);
-    }
-  });
 
   // CONTENTION is the only member. RATE_LIMITED looks like it belongs but is
   // deliberately excluded: five fast-tier attempts are spent inside ~31
@@ -262,25 +201,6 @@ describe("scheduled-upload-retry tiered backoff arithmetic", () => {
     const baseMs = isFastRetry("AUTH_EXPIRED") ? 60 * 1000 : 60 * 60 * 1000;
     const afterProbe = Math.min(Math.pow(2, 1) * baseMs, SLOW_MAX_BACKOFF_MS);
     expect(afterProbe).toBe(2 * 60 * 60 * 1000);
-  });
-
-  test("slow tier (everything else) is unchanged: ~2, 4, 8, 16, 24 hours", () => {
-    const expectedHours = [2, 4, 8, 16, 24];
-    for (let retryCount = 1; retryCount <= 5; retryCount++) {
-      const backoffMs = Math.min(Math.pow(2, retryCount) * 60 * 60 * 1000, SLOW_MAX_BACKOFF_MS);
-      expect(backoffMs).toBe(expectedHours[retryCount - 1] * 60 * 60 * 1000);
-    }
-  });
-
-  // A Retry-After is the provider stating how long it will keep refusing, so
-  // it is clamped to MAX_BACKOFF_MS and NEVER to the item's tier cap.
-  // Clamping a fast-tier item's `Retry-After: 3600` down to 30 minutes
-  // scheduled a retry the provider had already said would fail.
-  test("a Retry-After header is clamped to the absolute cap, not the item's tier cap", () => {
-    const retryAfterSeconds = 3600; // 1 hour — larger than the fast cap, smaller than the slow cap
-    const backoffMs = Math.min(retryAfterSeconds * 1000, SLOW_MAX_BACKOFF_MS);
-    expect(backoffMs).toBe(retryAfterSeconds * 1000);
-    expect(backoffMs).toBeGreaterThan(FAST_MAX_BACKOFF_MS);
   });
 });
 

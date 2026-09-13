@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint pages components lib",
+    "pretest": "cd functions && npm run build",
+    "pretest-ci": "cd functions && npm run build",
     "test": "jest --watch",
     "test-ci": "jest --ci",
     "emulators": "firebase emulators:start --import=./.emulator-data --export-on-exit",
