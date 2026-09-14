@@ -421,6 +421,62 @@ Two prerequisites that are NOT code and are easy to miss:
    `firebase deploy --only database` will work. It is not auto-provisioned.
 2. The deploy line in both workflows now includes `database`.
 
+## Hardening pass (2026-09-13)
+
+A review of the built system found two gaps between what the rules and the
+sweep were assumed to bound and what they actually bounded, plus two missing
+operational controls. All four are answered here rather than in a new design:
+
+- **The rules caps were structurally too large.** 10,000 trials x 64 KiB was
+  the worst case one admitted session id could force the sweep to read --
+  640 MB before any UTF-16-to-byte multiplier, well past the sweep's 256MiB
+  allocation. Lowered to **1,000 trials x 16 KiB** (`$seq` is now 1-3 digits;
+  the per-trial `.length` cap is now 16384) in `database.rules.json`, and both
+  numbers are read from ONE constant module,
+  `functions/src/staging-assembly.ts` (`MAX_TRIALS_PER_SESSION`,
+  `MAX_TRIAL_BYTES`), which api-session-start.ts already used to answer the
+  client and which `__tests__/rules-constants.test.js` now asserts the rules
+  file's literals still match. RTDB's `.length` counts UTF-16 code units, not
+  bytes -- multibyte content can cost up to ~3x as many real bytes for the
+  same `.length` -- so the rules cap is a UTF-16 ceiling, not a byte ceiling;
+  `MAX_ASSEMBLED_BYTES`, measured with `Buffer.byteLength` against the real
+  read, is the byte-accurate backstop.
+
+- **The sweep read a whole session into memory before its size cap applied.**
+  `assembleSession` used to `.get()` the entire `staging/{id}/trials` node,
+  then apply `MAX_ASSEMBLED_BYTES` while walking the in-memory result -- so an
+  over-cap session was pulled into memory in full before being discarded.
+  `assembleSession` now pages the read (`orderByKey().startAfter(lastKey)`,
+  200 trials per page) through a new pure accumulator,
+  `assembleTrialsPaged` (`staging-assembly.ts`), which stops asking for
+  another page the moment the accumulated byte size would cross the cap. The
+  same review also found the existing byte-cap comparison used `raw.length`
+  (UTF-16 units) against a byte constant; both `assembleTrials` and
+  `assembleTrialsPaged` now cost each trial with `Buffer.byteLength`.
+
+- **One anonymous `POST /api/session` bought an unbounded write capability.**
+  Nothing stopped that call being looped for one experiment id, which is
+  public by construction. `openSessionCounts/{experimentId}`
+  (`functions/src/staging.ts`) is a transactional counter, incremented in
+  `openSession()` and decremented in `discardSession()`, capping an
+  experiment at `MAX_OPEN_SESSIONS_PER_EXPERIMENT` (500) concurrently open
+  sessions -- comfortably above any lecture-hall study, per the instance-
+  ceiling reasoning above. It self-heals negative drift (a stored value below
+  zero is treated as zero) and the sweep runs `reconcileOpenSessionCounts`
+  each pass, scoped to that run's candidate experiments, to correct positive
+  drift (a missed decrement) within a few runs. Deliberately **not** a per-IP
+  counter -- DataPipe's own code must never read or store a participant's IP
+  address (`pages/docs/privacy.js`) -- it counts sessions per experiment, the
+  same unit `maxSessions` already limits. A refused start returns the
+  existing `503 SESSION_START_ERROR` shape, so the plugin's documented
+  fallback (submit once at the end) applies unchanged.
+
+- **A kill switch.** `STREAMING_ENABLED=false` (checked first, before any
+  Firestore or RTDB access) makes `POST /api/session` return the same `503
+  SESSION_START_ERROR` shape without touching either store. Default (unset)
+  is enabled, so no existing deployment's behaviour changes. Documented as a
+  commented example in `functions/.env.datapipe-test`.
+
 ## Related finding (2026-09-02)
 
 While measuring production volume: **`createdAt` and `lastRequestAt` are absent

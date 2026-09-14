@@ -39,7 +39,7 @@ const {
   sweepAbandonedSessions,
   ABANDON_GRACE_MS,
 } = require("../../lib/scheduled-staging-sweep.js");
-const { generateSessionId, resetStagingHandleForTests } = require("../../lib/staging.js");
+const { discardSession, generateSessionId, resetStagingHandleForTests } = require("../../lib/staging.js");
 
 const FUNCTIONS_HOST = process.env.FUNCTIONS_EMULATOR_HOST || "localhost:5001";
 const PROJECT_ID = "datapipe-test";
@@ -123,6 +123,40 @@ const queueEntriesFor = async (experimentID) =>
   (await db.collection("uploadQueue").where("experimentID", "==", experimentID).get())
     .docs.map((d) => d.data());
 
+/**
+ * Seed `count` synthetic openSessions entries for `experimentID` -- fixtures
+ * for reconcileOpenSessionCounts's ground truth, not sessions admitted
+ * through tryAdmitSession.
+ *
+ * reconcileOpenSessionCounts (staging.ts) recomputes an experiment's counter
+ * from the REAL entries under openSessions on every sweep run; that is
+ * correct behaviour, not drift-tolerance gone wrong, since the counter has no
+ * legitimate reason to differ from what is actually open. A test that sets
+ * openSessionCounts/{id} directly without any matching openSessions entries
+ * is therefore asking the sweep to preserve a value ground truth does not
+ * support, and the sweep is right to overwrite it. Tests that seed the
+ * counter directly and then run a sweep must seed matching entries here too.
+ *
+ * expiresAt is set far in the future (a year out, vs. a real session's ~24h)
+ * on purpose: listOldestOpenSessions(CANDIDATES_PER_RUN) -- unlike
+ * listOpenSessions(), which reconcileOpenSessionCounts uses and does not
+ * care about ordering -- orders by expiresAt ascending and takes the
+ * OLDEST 30. Hundreds of fixtures at a real session's ~24h expiry would
+ * crowd a same-run real session out of that window and make the sweep skip
+ * it entirely; parked a year out, they never compete for those slots.
+ */
+async function seedOpenSessions(experimentID, count) {
+  const updates = {};
+  for (let i = 0; i < count; i++) {
+    updates[`openSessions/concurrency-fixture-${experimentID}-${i}`] = {
+      experimentId: experimentID,
+      startedAt: Date.now(),
+      expiresAt: Date.now() + 365 * 86400000,
+    };
+  }
+  await rtdb.ref().update(updates);
+}
+
 // Only the docs THIS suite created -- a collection-wide wipe here would delete
 // uploadQueue docs belonging to whatever suite is running in parallel, which is
 // half of the long-standing cross-suite flake documented in
@@ -188,7 +222,7 @@ describe("POST /api/session", () => {
     // The plugin gets its configuration from the server, so one published
     // build can talk to both datapipe-test and production.
     expect(body.databaseURL).toEqual(expect.any(String));
-    expect(body.maxTrialBytes).toBe(65536);
+    expect(body.maxTrialBytes).toBe(16384);
     // The disconnect-slot cap the rules enforce, so the plugin stops arming at
     // it instead of having stamps refused.
     expect(body.maxDisconnects).toBe(20);
@@ -268,7 +302,212 @@ describe("POST /api/session", () => {
   });
 });
 
+describe("the per-experiment concurrency cap", () => {
+  // MAX_OPEN_SESSIONS_PER_EXPERIMENT (functions/src/staging-assembly.ts).
+  // Seeded directly rather than opened by minting 500 real sessions: the
+  // mechanism under test is tryAdmitSession's transaction reading and
+  // bounding openSessionCounts/{experimentId}, not the accumulation of 500
+  // HTTP round trips to get there.
+  const CAP = 500;
+
+  it("refuses the (cap+1)th session and leaves the counter untouched", async () => {
+    const experimentID = await makeExperiment();
+    await rtdb.ref(`openSessionCounts/${experimentID}`).set(CAP);
+
+    const { status, body } = await startSession({ experimentID });
+
+    expect(status).toBe(503);
+    expect(body.error).toBe("SESSION_START_ERROR");
+    // The transaction must abort without writing -- a refused admission must
+    // not itself be what pushes a counter around.
+    expect((await rtdb.ref(`openSessionCounts/${experimentID}`).get()).val()).toBe(CAP);
+    // And no capability record was minted for the refused attempt.
+    const record = (await rtdb.ref("openSessions").get()).val() || {};
+    expect(Object.values(record).some((r) => r.experimentId === experimentID)).toBe(false);
+  });
+
+  it("admits the cap-th session and then refuses the next one", async () => {
+    const experimentID = await makeExperiment();
+    await rtdb.ref(`openSessionCounts/${experimentID}`).set(CAP - 1);
+
+    const { status: admitted } = await startSession({ experimentID });
+    expect(admitted).toBe(200);
+    expect((await rtdb.ref(`openSessionCounts/${experimentID}`).get()).val()).toBe(CAP);
+
+    const { status: refused, body } = await startSession({ experimentID });
+    expect(refused).toBe(503);
+    expect(body.error).toBe("SESSION_START_ERROR");
+  });
+
+  it("lets a new session in once a prior one is discarded, freeing its slot", async () => {
+    const experimentID = await makeExperiment();
+    await rtdb.ref(`openSessionCounts/${experimentID}`).set(CAP - 1);
+
+    const { status: firstStatus, body: first } = await startSession({ experimentID });
+    expect(firstStatus).toBe(200);
+
+    const { status: refused } = await startSession({ experimentID });
+    expect(refused).toBe(503);
+
+    // discardSession() is what every terminal path funnels through --
+    // completion, a gate refusal, the sweep -- and it is what must release
+    // the slot admission reserved. Called directly, the same way the sweep
+    // itself is exercised directly elsewhere in this file, rather than
+    // through a full /api/data completion: that path also runs validation,
+    // the provider write and the metadata pipeline, none of which this test
+    // is about, and routing through it would make this test's pass/fail
+    // depend on the mocked provider round trip instead of on the one thing
+    // it exists to check -- the counter release.
+    await discardSession(first.sessionId);
+    expect((await rtdb.ref(`openSessionCounts/${experimentID}`).get()).val()).toBe(CAP - 1);
+
+    const { status: secondStatus } = await startSession({ experimentID });
+    expect(secondStatus).toBe(200);
+  });
+
+  it("lets a new session in once an abandoned one is swept, freeing its slot", async () => {
+    const experimentID = await makeExperiment();
+    // A REALISTIC fixture, unlike the two tests above: this one runs a real
+    // sweep, and the sweep's reconcileOpenSessionCounts recomputes the
+    // counter from the real entries under openSessions every time it runs.
+    // A counter seeded without matching sessions behind it would just get
+    // corrected back to the true (lower) count -- rightly, since the counter
+    // has no legitimate reason to differ from what is actually open. Seeding
+    // CAP-1 other open sessions makes CAP-1 the true count once `first` is
+    // admitted and then swept away, so this test exercises "does completing
+    // one session let another in" rather than "does the sweep preserve an
+    // unsupported number".
+    await seedOpenSessions(experimentID, CAP - 1);
+    await rtdb.ref(`openSessionCounts/${experimentID}`).set(CAP - 1);
+
+    const { body: first } = await startSession({ experimentID }); // CAP-1 seeded + first = CAP real, counter CAP
+    expect((await rtdb.ref(`openSessionCounts/${experimentID}`).get()).val()).toBe(CAP);
+    await markAbandoned(first.sessionId);
+
+    const stats = await sweepAbandonedSessions(new Set([first.sessionId]));
+    expect(stats.discarded).toBe(1); // nothing was staged, so it is discarded not recovered
+    // True regardless of which mechanism produced it -- discardSession's own
+    // release, or the same run's counter reconciliation catching a missed
+    // one -- both are legitimate production paths to the same correct number.
+    expect((await rtdb.ref(`openSessionCounts/${experimentID}`).get()).val()).toBe(CAP - 1);
+
+    const { status } = await startSession({ experimentID });
+    expect(status).toBe(200);
+
+    // Fixtures only, never picked up by any candidate window (see
+    // seedOpenSessions) and so never cleaned up by anything under test --
+    // remove them rather than leaving 499 rows in the shared emulator.
+    await rtdb
+      .ref("openSessions")
+      .update(
+        Object.fromEntries(
+          Array.from({ length: CAP - 1 }, (_, i) => [`concurrency-fixture-${experimentID}-${i}`, null])
+        )
+      );
+  });
+});
+
+describe("the streaming kill switch", () => {
+  // STREAMING_ENABLED=false is a pure predicate (streamingEnabled(), unit
+  // tested in staging-assembly.test.js) precisely because the functions
+  // emulator cannot be re-configured mid-suite to exercise the disabled
+  // branch here. What this suite CAN pin is the other half: every deployment
+  // today has STREAMING_ENABLED unset, and that must keep minting sessions
+  // exactly as it always has.
+  it("is enabled by default", async () => {
+    const experimentID = await makeExperiment();
+
+    const { status, body } = await startSession({ experimentID });
+
+    expect(status).toBe(200);
+    expect(body.sessionId).toEqual(expect.any(String));
+  });
+});
+
 describe("completion", () => {
+  it("releases the concurrency-cap slot on a genuine, non-refused completion", async () => {
+    // THE GAP THIS CLOSES: an earlier version of "lets a new session in once
+    // a prior one completes" (the per-experiment concurrency cap tests above)
+    // routed through a real /api/data completion and read
+    // openSessionCounts/<experimentID> as 500 instead of 499 afterwards. That
+    // test was rewritten to call discardSession() directly, which proves
+    // discardSession releases a slot but nothing end-to-end proved that a
+    // real completion actually REACHES discardSession.
+    //
+    // ROOT CAUSE, FOUND HERE: "staging-testuser" (this file's shared owner
+    // fixture, set up in the top-level beforeAll) has
+    // connectedAccounts.gdrive = { accessToken, refreshToken }.
+    // providers/gdrive.ts's resolveToken() reads
+    // connectedAccounts.gdrive.encryptedToken and .tokenExpiresAt -- neither
+    // of which that fixture sets -- so EVERY completion attempt against it
+    // fails at token resolution, before ever reaching discardStaging. That is
+    // the "DataPipe itself fails" branch ("keeps the staged copy when
+    // DataPipe itself fails", below), which by design leaves the staged copy
+    // AND its counter slot in place for the sweep to recover. The original
+    // 500-instead-of-499 reading was that correct, intentional behaviour,
+    // not a bug -- it just meant the test believed it was exercising a real
+    // completion when it was actually exercising a token failure.
+    //
+    // This test uses its OWN owner, with a token shape resolveToken() can
+    // actually resolve, so the request clears every gate and reaches the
+    // provider. It still cannot get a literal 201: this file has no mock
+    // Google Drive server listening on GDRIVE_API_BASE (gdrive-emulator.test.js
+    // owns that fixed port, 127.0.0.1:3579, for the whole test run, and two
+    // listeners on it would collide). The unreachable host makes
+    // claimFilename's cold-cache rehydration throw, which api-data.ts treats
+    // as a retryable provider failure -- queued (202), not refused -- and
+    // that branch calls discardStaging on the way to responding, exactly as
+    // a real 201 would. That is the property this test actually needs: a
+    // genuine, accepted completion, not a specific status code.
+    const ownerId = `staging-token-ok-${randomUUID()}`;
+    await db.collection("users").doc(ownerId).set({
+      uid: ownerId,
+      email: "staging-token-ok@example.com",
+      experiments: [],
+      connectedAccounts: {
+        gdrive: {
+          // decrypt()'s plaintext fallback (crypto-utils.ts): any string
+          // without the "v1:" version prefix round-trips unchanged, so this
+          // does not need TOKEN_ENCRYPTION_KEY to agree between this process
+          // and the functions emulator's.
+          encryptedToken: "fake-access-token",
+          tokenExpiresAt: Date.now() + 60 * 60 * 1000,
+        },
+      },
+    });
+
+    const experimentID = await makeExperiment({ owner: ownerId });
+    const { body } = await startSession({ experimentID });
+    await stageTrials(body.sessionId, 3);
+
+    expect((await rtdb.ref(`openSessionCounts/${experimentID}`).get()).val()).toBe(1);
+
+    const { status, body: response } = await saveData({
+      experimentID,
+      filename: "p01.csv",
+      data: "trial_type\nhtml-keyboard-response\n",
+      sessionId: body.sessionId,
+    });
+
+    // A genuine, accepted completion -- not a gate refusal (400) and not a
+    // DataPipe-side failure (400) -- so discardStaging is reached exactly as
+    // it would be for a real 201.
+    expect(status).toBe(202);
+    expect(response.error).toBeNull();
+    expect((await rtdb.ref(`staging/${body.sessionId}`).get()).exists()).toBe(false);
+    expect((await rtdb.ref(`openSessions/${body.sessionId}`).get()).exists()).toBe(false);
+
+    // THE ASSERTION THE ORIGINAL REGRESSION NEEDED: the slot this session
+    // reserved at admission is released once its completion -- discardStaging,
+    // running inside apidata's real handler -- has actually happened. Absent
+    // or 0 either way: releaseOpenSessionSlot always writes 0 rather than
+    // deleting the node, but nothing here depends on which.
+    const counter = (await rtdb.ref(`openSessionCounts/${experimentID}`).get()).val();
+    expect(counter === null || counter === 0).toBe(true);
+
+    await db.collection("users").doc(ownerId).delete();
+  });
+
   it("drops the staged copy once a gate refuses the submission", async () => {
     // Keeping it would let the sweep re-offer the session as a .partial.json,
     // producing a file the gate just refused -- and, for a finalized
@@ -508,6 +747,27 @@ describe("the abandonment sweep", () => {
     const [entry] = await queueEntriesFor(experimentID);
     expect(entry.failureReason).toContain("12 trials");
     expect(entry.failureReason).not.toContain("missing");
+  });
+
+  it("recovers a session with more trials than fit in one assembly page, in full", async () => {
+    // assembleSession (staging.ts) reads the staging tree in pages of 200 --
+    // this is the one thing the pure paging tests (staging-assembly.test.js)
+    // cannot cover, because they fake the page fetcher rather than exercising
+    // RTDB's own orderByKey().startAfter() pagination. 250 trials forces a
+    // second page.
+    const experimentID = await makeExperiment();
+    const { body } = await startSession({ experimentID, filename: "p20.csv" });
+    await stageTrials(body.sessionId, 250);
+    await markAbandoned(body.sessionId);
+
+    const stats = await sweepAbandonedSessions(new Set([body.sessionId]));
+
+    expect(stats.recovered).toBe(1);
+    const entries = await queueEntriesFor(experimentID);
+    expect(entries).toHaveLength(1);
+    expect(entries[0].failureReason).toContain("250 trials");
+    expect(entries[0].failureReason).not.toContain("missing");
+    expect(entries[0].failureReason).not.toContain("truncated");
   });
 
   it("records sweep health on every run, including one that did nothing", async () => {

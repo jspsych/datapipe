@@ -87,6 +87,13 @@ export default function ApiReferencePage() {
           Compressing a request body yourself, and what the size limit means in
           practice.
         </GuidanceLine>
+        <GuidanceLine
+          href="/docs/experiments/sending-data#streaming-limits"
+          linkText="Save-as-you-go limits"
+        >
+          The trial size, session, abandonment and file-size limits that apply
+          only to incremental sessions.
+        </GuidanceLine>
       </DocsSection>
 
       <DocsSection id="save-text-data" title="Save text data">
@@ -182,8 +189,10 @@ export default function ApiReferencePage() {
           <strong>not</strong> consume one from that limit — the count is still
           taken when a submission completes. A <Code>503</Code> with{" "}
           <Code>SESSION_START_ERROR</Code> means incremental upload is
-          unavailable and the experiment should simply submit at the end, as it
-          would otherwise.
+          unavailable — because the service is unreachable, because an
+          experiment already has an unusually large number of sessions open at
+          once, or because it has been switched off entirely — and the
+          experiment should simply submit at the end, as it would otherwise.
         </Text>
         <Box>
           <Text fontSize="sm" color="fg.muted" mb={2}>
@@ -193,10 +202,11 @@ export default function ApiReferencePage() {
             {`{
   "sessionId": "8fKq2mXpR7vNwLzB4cTy1dHs",
   "databaseURL": "https://<project>-default-rtdb.firebaseio.com",
-  "maxTrialBytes": 65536,
-  "maxTrials": 10000,
+  "maxTrialBytes": 16384,
+  "maxTrials": 1000,
   "flushIntervalMs": 10000,
-  "flushEveryNTrials": 10
+  "flushEveryNTrials": 10,
+  "maxDisconnects": 20
 }`}
           </CodeBlock>
         </Box>

@@ -55,6 +55,7 @@ import {
   listOldestOpenSessions,
   listOpenSessions,
   partialFilenameFor,
+  reconcileOpenSessionCounts,
   OpenSession,
   OpenSessionsCursor,
   ABANDON_GRACE_MS,
@@ -119,6 +120,14 @@ export interface SweepStats {
    * was lost. A value that stays non-zero run after run is a broken write path.
    */
   mirrorFixed: number;
+  /**
+   * openSessionCounts entries this run had to correct against the RTDB ground
+   * truth -- the per-experiment concurrency cap's drift-tolerance backstop
+   * (see reconcileOpenSessionCounts in staging.ts). Should be zero for the
+   * same reason mirrorFixed should: each fix is evidence a decrement was
+   * missed somewhere upstream.
+   */
+  countersFixed: number;
 }
 
 export const scheduledStagingSweep = onSchedule(
@@ -156,10 +165,18 @@ export async function sweepAbandonedSessions(
     errors: 0,
     pages: 0,
     mirrorFixed: 0,
+    countersFixed: 0,
   };
   let lastError: string | null = null;
   let openSessionCount: number | null = null;
   let mirror = { created: 0, updated: 0, deleted: 0 };
+  // The experiments this run's candidates belong to -- the scope for
+  // reconcileOpenSessionCounts below. Populated even for candidates that turn
+  // out to be live and get skipped: a live session still proves its
+  // experiment's counter is worth checking this run, on the same paged,
+  // bounded-per-run window the candidate loop below already applies to the
+  // sessions themselves (CANDIDATES_PER_PAGE / MAX_PAGES_PER_RUN).
+  const candidateExperimentIds = new Set<string>();
 
   // `only`-scoped runs (tests) can stop as soon as every id they care about
   // has been seen, rather than paging until the whole (possibly large, shared
@@ -185,6 +202,11 @@ export async function sweepAbandonedSessions(
 
       const pageCandidates = only ? rawPage.filter((s) => only.has(s.sessionId)) : rawPage;
       stats.candidates += pageCandidates.length;
+      // Populated even for candidates that turn out to be live and get
+      // skipped below: a live session still proves its experiment's counter
+      // is worth checking this run, on the same rotating (page-at-a-time)
+      // window this loop already applies to the sessions themselves.
+      for (const s of pageCandidates) candidateExperimentIds.add(s.experimentId);
 
       for (const session of pageCandidates) {
         if (stats.recovered + stats.discarded >= MAX_SESSIONS_PER_RUN) break pageLoop;
@@ -255,10 +277,12 @@ export async function sweepAbandonedSessions(
   // the sessions just recovered or discarded are already gone from both sides
   // and are not counted as fixes. A separate try: a mirror failure must not
   // be what stops abandoned sessions being recovered, and vice versa.
+  let openSessionsForCounters: OpenSession[] = [];
   try {
     const readAt = Date.now();
     const open = await listOpenSessions();
     openSessionCount = open.length;
+    openSessionsForCounters = open;
     const inScope = (only ? open.filter((s) => only.has(s.sessionId)) : open).slice(0, MAX_RECONCILE);
     // Bounded, not `Promise.all`: up to MAX_RECONCILE (500) sessions here, and
     // nothing should put 500 concurrent RTDB reads in flight from one 256MiB
@@ -291,6 +315,31 @@ export async function sweepAbandonedSessions(
   } catch (e) {
     lastError = e instanceof Error ? e.message : "Unknown error";
     console.error(`Live-sessions reconciliation failed: ${lastError}`);
+    stats.errors++;
+  }
+
+  // Correct the per-experiment concurrency counters (staging.ts's
+  // openSessionCounts) for the experiments touched this run. A separate try,
+  // for the same reason as the mirror above: a counter-reconciliation failure
+  // must not be what stops the mirror or the recovery pass, or vice versa.
+  // Scoped to candidateExperimentIds rather than every experiment with an open
+  // session, both to keep this bounded (the same paged, bounded-per-run
+  // reasoning as CANDIDATES_PER_PAGE / MAX_PAGES_PER_RUN) and to keep a
+  // test's scoped sweep run from correcting a counter belonging to a
+  // different, concurrently-running test.
+  try {
+    stats.countersFixed = await reconcileOpenSessionCounts(
+      candidateExperimentIds,
+      openSessionsForCounters
+    );
+    if (stats.countersFixed > 0) {
+      console.warn(
+        `Open-session concurrency counters needed ${stats.countersFixed} fix(es).`
+      );
+    }
+  } catch (e) {
+    lastError = e instanceof Error ? e.message : "Unknown error";
+    console.error(`Open-session counter reconciliation failed: ${lastError}`);
     stats.errors++;
   }
 
@@ -488,6 +537,7 @@ async function recordSweepHealth(
           skippedLive: stats.skippedLive,
           errors: stats.errors,
           mirrorFixed: stats.mirrorFixed,
+          countersFixed: stats.countersFixed,
           mirror,
           lastError,
         },

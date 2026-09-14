@@ -153,6 +153,83 @@ export default function SendingDataPage() {
         </GuidanceLine>
       </DocsSection>
 
+      <DocsSection id="streaming-limits" title="Limits">
+        <Text maxW="70ch">
+          Save as you go enforces the limits below on every request. None of
+          them is configurable, and hitting one never breaks your
+          experiment — the plugin carries on and a completed submission is
+          unaffected. What each one actually costs a participant is the
+          partial-file safety net for someone who never finishes, not the
+          data your experiment collects.
+        </Text>
+        <List.Root maxW="70ch" gap={2} ps={6}>
+          {/* MAX_TRIAL_BYTES, functions/src/staging-assembly.ts (mirrored in
+              database.rules.json's per-trial `.length` cap) */}
+          <List.Item>
+            <strong>16 KiB per trial.</strong> A trial larger than that is
+            refused by the database — the write for that one trial fails, and
+            the plugin moves on to the next. A completed session still sends
+            your whole dataset in its final submission, so that trial is only
+            missing from the partial file DataPipe would recover if the
+            participant never finished.
+          </List.Item>
+          {/* MAX_TRIALS_PER_SESSION, functions/src/staging-assembly.ts
+              (mirrored in database.rules.json's `$seq` pattern) */}
+          <List.Item>
+            <strong>1,000 trials per session.</strong> The 1,001st trial and
+            every one after it are refused the same way an oversized trial
+            is. Again, only the partial-file safety net is affected — the
+            final submission is not built from staged trials, so it is
+            unaffected.
+          </List.Item>
+          {/* ABANDON_GRACE_MS and SESSION_TTL_MS,
+              functions/src/staging-assembly.ts */}
+          <List.Item>
+            <strong>10 minutes to reconnect, 24 hours to finish.</strong> If a
+            participant&apos;s connection drops and DataPipe sees no reconnect
+            and no further trial from them for 10 minutes, the session is
+            treated as abandoned and turned into a partial file the next time
+            the sweep runs. Reconnecting — or getting even one more trial
+            through — within that window keeps the session going as if
+            nothing happened. Regardless of any of that, every session
+            expires 24 hours after it started and is recovered the same way
+            whether or not a disconnect was ever recorded.
+          </List.Item>
+          {/* MAX_DISCONNECTS, functions/src/staging-assembly.ts (mirrored in
+              database.rules.json's 1..20 slot pattern) */}
+          <List.Item>
+            <strong>20 disconnects and 20 reconnects per session.</strong> A
+            participant whose connection drops and recovers more than 20
+            times stops having further drops recorded, so the 10-minute
+            abandonment clock keeps being measured from the last drop that
+            was recorded rather than the most recent real one. They are still
+            recovered eventually — at the 24-hour expiry if nothing else —
+            but the fast path may miss them.
+          </List.Item>
+          {/* MAX_OPEN_SESSIONS_PER_EXPERIMENT,
+              functions/src/staging-assembly.ts */}
+          <List.Item>
+            <strong>500 sessions open per experiment at once.</strong> A
+            participant who requests a session while 500 are already open for
+            your experiment gets none — the same response as when
+            incremental upload is switched off — and their experiment runs
+            and submits exactly as it would without it. Nothing about their
+            data is different.
+          </List.Item>
+          {/* MAX_ASSEMBLED_BYTES and MAX_FILENAME_LENGTH,
+              functions/src/staging-assembly.ts */}
+          <List.Item>
+            <strong>24 MiB per recovered file, 200-character filenames.</strong>{" "}
+            A recovered partial file stops growing at 24 MiB — trials beyond
+            that point are left out of the file DataPipe assembles. The
+            filename you give when starting a session is capped at 200
+            characters, and is silently shortened past that when used to name
+            a recovered file; it never affects the filename you submit on a
+            clean completion.
+          </List.Item>
+        </List.Root>
+      </DocsSection>
+
       <DocsSection id="filenames-must-be-unique" title="Filenames must be unique">
         <Text maxW="70ch">
           Two submissions to the same experiment can never share a filename:

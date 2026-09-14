@@ -10,8 +10,10 @@
 import { createHash } from 'crypto';
 import {
   assembleTrials,
+  assembleTrialsPaged,
   partialFilenameFor,
   disconnectedSince,
+  streamingEnabled,
   MAX_ASSEMBLED_BYTES,
 } from '../../lib/staging-assembly.js';
 
@@ -23,6 +25,23 @@ const shortHash = (sessionId) => createHash('sha256').update(sessionId).digest('
 /** The shape RTDB hands back: a map of sequence key -> trial JSON string. */
 function staged(...jsonStrings) {
   return Object.fromEntries(jsonStrings.map((s, i) => [String(i), s]));
+}
+
+/**
+ * An in-memory fetchPage for assembleTrialsPaged: pages through `entries`
+ * (already-sorted [key, value] pairs) `pageSize` at a time, and counts how
+ * many times it was called.
+ */
+function fakePager(entries, pageSize) {
+  const calls = { count: 0 };
+  const fetchPage = async (afterKey) => {
+    calls.count++;
+    const startIndex =
+      afterKey === null ? 0 : entries.findIndex(([k]) => k === afterKey) + 1;
+    const page = entries.slice(startIndex, startIndex + pageSize);
+    return { entries: page, done: startIndex + page.length >= entries.length };
+  };
+  return { fetchPage, calls };
 }
 
 describe('assembleTrials', () => {
@@ -106,9 +125,9 @@ describe('assembleTrials', () => {
   });
 
   it('truncates at the assembly ceiling rather than exhausting memory', () => {
-    // The rules permit 10,000 trials x 64 KiB. A crashed sweep is an outage
-    // that also lets every other abandoned session pile up behind it, so
-    // assembly stops and flags instead.
+    // The rules permit up to 1,000 trials x 16 KiB (functions/src/staging.ts).
+    // A crashed sweep is an outage that also lets every other abandoned
+    // session pile up behind it, so assembly stops and flags instead.
     const big = JSON.stringify({ v: 'x'.repeat(60000) });
     const trials = {};
     for (let i = 0; i < 500; i++) trials[String(i)] = big;
@@ -121,6 +140,134 @@ describe('assembleTrials', () => {
     // Still valid JSON -- a truncated recovery must be readable, not a
     // half-written array.
     expect(() => JSON.parse(result.data)).not.toThrow();
+  });
+
+  it('measures the cap in bytes, not UTF-16 length', () => {
+    // The review finding this closes: the old comparison used `raw.length`,
+    // which for multibyte content undercounts real bytes by up to ~3x (see
+    // MAX_TRIAL_BYTES's doc in staging-assembly.ts). A trial made entirely of
+    // a 3-byte-per-unit character has to be judged on its real byte size, not
+    // its (much smaller-looking) UTF-16 length.
+    const wide = 'あ'; // U+3042, 1 UTF-16 unit, 3 UTF-8 bytes
+    const trial = JSON.stringify({ v: wide.repeat(10000) }); // ~10,000 units, ~30,000 bytes
+    expect(Buffer.byteLength(trial, 'utf8')).toBeGreaterThan(trial.length * 2);
+
+    const trials = {};
+    for (let i = 0; i < 2000; i++) trials[String(i)] = trial;
+
+    const result = assembleTrials(trials);
+
+    // If the comparison still used `.length`, this would fit ~800 copies
+    // before crossing MAX_ASSEMBLED_BYTES (24 MiB / ~30,000). Measured in
+    // real bytes it fits far fewer.
+    expect(result.truncated).toBe(true);
+    expect(Buffer.byteLength(result.data, 'utf8')).toBeLessThanOrEqual(MAX_ASSEMBLED_BYTES);
+  });
+});
+
+describe('assembleTrialsPaged', () => {
+  it('produces the same result as assembleTrials for data that fits in one page', async () => {
+    const trials = staged('{"trial":0}', '{"trial":1}', '{"trial":2}');
+    const entries = Object.entries(trials);
+
+    const { fetchPage } = fakePager(entries, 10);
+    const result = await assembleTrialsPaged(fetchPage);
+
+    expect(result.data).toBe(assembleTrials(trials).data);
+    expect(JSON.parse(result.data)).toEqual([
+      { trial: 0 },
+      { trial: 1 },
+      { trial: 2 },
+    ]);
+    expect(result.trialCount).toBe(3);
+    expect(result.gaps).toBe(0);
+    expect(result.truncated).toBe(false);
+    expect(result.pagesFetched).toBe(1);
+  });
+
+  it('preserves ascending order across a page boundary', async () => {
+    const trials = {};
+    for (let i = 0; i < 25; i++) trials[String(i)] = `{"trial":${i}}`;
+    const entries = Object.keys(trials)
+      .sort((a, b) => Number(a) - Number(b))
+      .map((k) => [k, trials[k]]);
+
+    const { fetchPage, calls } = fakePager(entries, 10);
+    const result = await assembleTrialsPaged(fetchPage);
+
+    expect(JSON.parse(result.data).map((t) => t.trial)).toEqual(
+      Array.from({ length: 25 }, (_, i) => i)
+    );
+    expect(result.trialCount).toBe(25);
+    expect(calls.count).toBe(3); // 10 + 10 + 5
+    expect(result.pagesFetched).toBe(3);
+  });
+
+  it('tolerates gaps and counts skipped trials across pages', async () => {
+    const entries = [
+      ['0', '{"trial":0}'],
+      ['1', '{not json'],
+      ['4', '{"trial":4}'],
+    ];
+
+    const { fetchPage } = fakePager(entries, 2);
+    const result = await assembleTrialsPaged(fetchPage);
+
+    expect(JSON.parse(result.data)).toEqual([{ trial: 0 }, { trial: 4 }]);
+    expect(result.skipped).toBe(1);
+    expect(result.gaps).toBe(2); // sequence numbers 2 and 3 never arrived
+  });
+
+  it('returns an empty assembly when there is nothing staged, in one call', async () => {
+    const { fetchPage, calls } = fakePager([], 200);
+
+    const result = await assembleTrialsPaged(fetchPage);
+
+    expect(result.data).toBe('[]');
+    expect(result.trialCount).toBe(0);
+    expect(calls.count).toBe(1);
+    expect(result.pagesFetched).toBe(1);
+  });
+
+  it('stops fetching pages once the byte cap is crossed, without reading the rest', async () => {
+    // THE FIX THIS TEST PINS: the review found the sweep read a whole session
+    // into memory before its size cap applied. Here the fake backing store
+    // holds far more than fits under MAX_ASSEMBLED_BYTES, and the assertion
+    // is on `calls.count` -- proof the function stopped asking for more
+    // pages, not just that it stopped keeping what it already had.
+    const big = JSON.stringify({ v: 'x'.repeat(60000) }); // ~60KB/trial
+    const totalTrials = 1000; // ~60MB backing store if it were all read
+    const entries = Array.from({ length: totalTrials }, (_, i) => [String(i), big]);
+    const pageSize = 50; // ~3MB/page
+
+    const { fetchPage, calls } = fakePager(entries, pageSize);
+    const result = await assembleTrialsPaged(fetchPage);
+
+    expect(result.truncated).toBe(true);
+    expect(Buffer.byteLength(result.data, 'utf8')).toBeLessThanOrEqual(MAX_ASSEMBLED_BYTES);
+    // MAX_ASSEMBLED_BYTES (24MiB) / ~60KB per trial is ~400 trials, or 8
+    // pages of 50 -- nowhere near the 20 pages totalTrials/pageSize would take
+    // to read everything.
+    const pagesToReadEverything = totalTrials / pageSize;
+    expect(calls.count).toBeLessThan(pagesToReadEverything);
+    expect(result.pagesFetched).toBe(calls.count);
+  });
+});
+
+describe('streamingEnabled', () => {
+  it('defaults to enabled when unset', () => {
+    expect(streamingEnabled({})).toBe(true);
+  });
+
+  it('stays enabled for any value other than the literal string "false"', () => {
+    expect(streamingEnabled({ STREAMING_ENABLED: 'true' })).toBe(true);
+    expect(streamingEnabled({ STREAMING_ENABLED: '' })).toBe(true);
+    expect(streamingEnabled({ STREAMING_ENABLED: 'FALSE' })).toBe(true);
+    expect(streamingEnabled({ STREAMING_ENABLED: '0' })).toBe(true);
+  });
+
+  it('disables only on the exact string "false"', () => {
+    expect(streamingEnabled({ STREAMING_ENABLED: 'false' })).toBe(false);
   });
 });
 

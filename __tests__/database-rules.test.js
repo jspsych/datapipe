@@ -108,6 +108,26 @@ describe('reads', () => {
   it('denies reading a session meta node', async () => {
     await assertFails(client().ref(`staging/${OPEN}/meta`).once('value'));
   });
+
+  it('denies reading the per-experiment concurrency counter', async () => {
+    await assertFails(client().ref('openSessionCounts/exp123').once('value'));
+  });
+});
+
+describe('openSessionCounts', () => {
+  // The per-experiment concurrency cap's ground truth
+  // (functions/src/staging.ts). Admin-SDK-only, on the same terms as
+  // openSessions: no client write path exists, or should ever be added.
+  it('denies a client writing its own counter', async () => {
+    await assertFails(client().ref('openSessionCounts/exp123').set(0));
+  });
+
+  it('denies a client incrementing another experiment\'s counter', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.database().ref('openSessionCounts/exp123').set(499);
+    });
+    await assertFails(client().ref('openSessionCounts/exp123').set(500));
+  });
 });
 
 describe('the openSessions gate', () => {
@@ -185,15 +205,18 @@ describe('append-only trials', () => {
 
 describe('size and shape caps', () => {
   // Property 3. Rules cannot count children, so these two caps are the only
-  // bound expressible here.
-  it('accepts a trial at exactly the 64 KiB cap', async () => {
-    const atCap = JSON.stringify({ v: 'x'.repeat(65536 - 12) });
-    expect(atCap.length).toBeLessThanOrEqual(65536);
+  // bound expressible here. 16384 and 1,000 are MAX_TRIAL_BYTES and
+  // MAX_TRIALS_PER_SESSION (functions/src/staging-assembly.ts); see
+  // functions/src/__tests__/rules-constants.test.js for the test that keeps
+  // this file's literals from drifting away from those constants.
+  it('accepts a trial at exactly the 16 KiB cap', async () => {
+    const atCap = JSON.stringify({ v: 'x'.repeat(16384 - 12) });
+    expect(atCap.length).toBeLessThanOrEqual(16384);
     await assertSucceeds(client().ref(`staging/${OPEN}/trials/0`).set(atCap));
   });
 
   it('denies a trial one byte over the cap', async () => {
-    await assertFails(client().ref(`staging/${OPEN}/trials/0`).set('x'.repeat(65537)));
+    await assertFails(client().ref(`staging/${OPEN}/trials/0`).set('x'.repeat(16385)));
   });
 
   it('denies a non-string trial value', async () => {
@@ -204,11 +227,11 @@ describe('size and shape caps', () => {
   });
 
   it('accepts the highest permitted sequence number', async () => {
-    await assertSucceeds(client().ref(`staging/${OPEN}/trials/9999`).set('{"a":1}'));
+    await assertSucceeds(client().ref(`staging/${OPEN}/trials/999`).set('{"a":1}'));
   });
 
-  it('denies a sequence number past the 10,000-trial ceiling', async () => {
-    await assertFails(client().ref(`staging/${OPEN}/trials/10000`).set('{"a":1}'));
+  it('denies a sequence number past the 1,000-trial ceiling', async () => {
+    await assertFails(client().ref(`staging/${OPEN}/trials/1000`).set('{"a":1}'));
   });
 
   it('denies a non-numeric sequence key', async () => {
@@ -223,9 +246,30 @@ describe('meta', () => {
     await assertFails(client().ref(`staging/${OPEN}/meta/startedAt`).set(0));
   });
 
-  it('allows lastFlushAt to be refreshed on every flush', async () => {
-    await assertSucceeds(client().ref(`staging/${OPEN}/meta/lastFlushAt`).set(Date.now()));
-    await assertSucceeds(client().ref(`staging/${OPEN}/meta/lastFlushAt`).set(Date.now() + 1));
+  it('allows lastFlushAt to be refreshed on every flush, via the server timestamp placeholder', async () => {
+    await assertSucceeds(client().ref(`staging/${OPEN}/meta/lastFlushAt`).set(SERVER_TIME));
+    await assertSucceeds(client().ref(`staging/${OPEN}/meta/lastFlushAt`).set(SERVER_TIME));
+  });
+
+  it('denies a client-chosen lastFlushAt in the past', async () => {
+    // `newData.isNumber()` alone would accept any client clock. A stale value
+    // is not merely wrong, it is actively dangerous in the other direction
+    // from the future-dated case below: it could make a live participant's
+    // session look stalled if the plugin's own logic ever compared lastFlushAt
+    // against wall-clock time client-side, though today's exposure is smaller
+    // since disconnectedSince() only compares it against disconnect stamps.
+    await assertFails(client().ref(`staging/${OPEN}/meta/lastFlushAt`).set(Date.now() - 3600000));
+  });
+
+  it('denies a client-chosen lastFlushAt in the future', async () => {
+    // THE BUG THIS CLOSES. disconnectedSince() (staging-assembly.ts) treats a
+    // flush timestamped after a disconnect stamp as proof the participant
+    // reconnected. `newData.isNumber()` alone let a client write ANY number,
+    // including one far in the future -- which would make every later
+    // disconnect stamp look "already answered" forever, so the session could
+    // never be swept as abandoned no matter how long the socket stayed
+    // dropped.
+    await assertFails(client().ref(`staging/${OPEN}/meta/lastFlushAt`).set(Date.now() + 86400000));
   });
 
   it('allows a disconnect stamp to be answered by a reconnect mark', async () => {
@@ -259,7 +303,7 @@ describe('the real flush shape', () => {
         'trials/0': '{"trial":0}',
         'trials/1': '{"trial":1}',
         'trials/2': '{"trial":2}',
-        'meta/lastFlushAt': Date.now(),
+        'meta/lastFlushAt': SERVER_TIME,
       })
     );
   });
@@ -272,7 +316,7 @@ describe('the real flush shape', () => {
       client().ref(`staging/${OPEN}`).update({
         'trials/1': '{"trial":"rewritten"}',
         'trials/2': '{"trial":2}',
-        'meta/lastFlushAt': Date.now(),
+        'meta/lastFlushAt': SERVER_TIME,
       })
     );
   });
