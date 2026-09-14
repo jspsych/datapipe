@@ -43,7 +43,32 @@ import {
 
 export const LIVE_SESSIONS = "liveSessions";
 
-/** Most mirror documents one reconciliation pass will look at. */
+/**
+ * The bound on one reconciliation pass's read/write volume, on both sides:
+ * at most this many `liveSessions` documents are read back from Firestore,
+ * and the caller (scheduled-staging-sweep.ts) hands in at most this many open
+ * RTDB sessions (with their meta) to reconcile against.
+ *
+ * TWO SEPARATE CONSEQUENCES, not one:
+ *
+ * - CREATION is bounded by it: with more than MAX_RECONCILE sessions open at
+ *   once system-wide, a session ranking outside the cap in the caller's RTDB
+ *   read gets no mirror row this run. This is inherent to keeping the read
+ *   bounded, not a bug -- it self-corrects as older sessions in the cap close
+ *   out and free a slot for the rest, and every session still gets a row from
+ *   mirrorStart() at session start regardless of this cap; only a BACKFILL of
+ *   a lost write is subject to it.
+ * - DELETION must never be bounded by it in the same naive way. Comparing a
+ *   capped read of `liveSessions` against a capped read of open sessions,
+ *   ordered independently, is unsound: a mirror document can be absent from
+ *   the second read only because it ranked outside the cap, not because its
+ *   session ended, and deleting it on that basis erases a genuine
+ *   in-progress participant for the rest of their session (see
+ *   `readWasTruncated` and `idsToDelete` below). The fix is to never delete
+ *   anything on a run whose open-session read was itself capped -- correct
+ *   but incomplete beats fast but wrong for a pass that runs every five
+ *   minutes anyway.
+ */
 export const MAX_RECONCILE = 500;
 
 /**
@@ -202,6 +227,64 @@ export interface ReconcileResult {
 }
 
 /**
+ * Whether this run's open-session read had to be capped, and can therefore no
+ * longer stand in for "every session that is currently open".
+ *
+ * The caller (scheduled-staging-sweep.ts) always hands `reconcileLiveSessions`
+ * at most `cap` entries -- it slices its own RTDB read down to that many
+ * before fetching each one's meta, to bound per-run RTDB reads. So
+ * `entriesCount === cap` means the true open-session count that run MAY have
+ * been larger; there is no way, from inside this module, to tell that case
+ * apart from "there happen to be exactly `cap` open sessions". Treating both
+ * as truncated is the conservative choice: it costs at most one run's worth
+ * of a stale mirror doc sticking around one extra sweep, versus deleting a
+ * genuine in-progress participant's row.
+ *
+ * `cap` defaults to `MAX_RECONCILE` and is only ever overridden by tests, so
+ * production behaviour is exactly `entriesCount >= MAX_RECONCILE`.
+ */
+export function readWasTruncated(entriesCount: number, cap: number = MAX_RECONCILE): boolean {
+  return entriesCount >= cap;
+}
+
+/**
+ * Which existing mirror documents this run should delete.
+ *
+ * `existing` is every mirror document this run read (bounded by
+ * MAX_RECONCILE; see its header -- that bound only limits how many stale
+ * documents one run can clear, not whether a given deletion is safe).
+ * `wanted` is the id of every session `entries` said was open.
+ *
+ * THE INVARIANT THIS DEPENDS ON: `wanted` is a complete accounting of every
+ * currently open session (within whatever scope the caller is working in)
+ * whenever `truncated` is false. Under that invariant, a mirror id absent
+ * from `wanted` really did stop being open, and deleting it is safe. When
+ * `truncated` is true that invariant does not hold -- `wanted` may simply be
+ * missing sessions that ranked outside the read's cap -- so nothing is
+ * deleted at all: a capped read can prove a session is IN the wanted set, but
+ * never that one is truly absent from the whole open-session table.
+ */
+export function idsToDelete(
+  existing: Map<string, Partial<MirrorState>>,
+  wanted: Set<string>,
+  readAt: number,
+  truncated: boolean
+): string[] {
+  if (truncated) return [];
+  const out: string[] = [];
+  for (const [id, doc] of existing) {
+    if (wanted.has(id)) continue;
+    // A document created AFTER the open-session read belongs to a session this
+    // pass never saw, not to one that has ended. Deleting it would wipe a
+    // participant who started a second ago off the dashboard until the next
+    // run. A minute's margin covers clock skew between the two reads.
+    if ((doc.startedAt ?? 0) > readAt - 60_000) continue;
+    out.push(id);
+  }
+  return out;
+}
+
+/**
  * Make the mirror match the RTDB ground truth.
  *
  * `entries` is every open session (with its meta) as read at `readAt`.
@@ -214,6 +297,17 @@ export interface ReconcileResult {
  * sweepAbandonedSessions, for the same reason: this is destructive, and an
  * unscoped pass against the shared emulator would delete documents belonging
  * to whatever else is running.
+ *
+ * DELETION SOUNDNESS: see `idsToDelete` and `readWasTruncated`. Previously
+ * this compared the first MAX_RECONCILE `liveSessions` docs by document id
+ * (a content hash, effectively a random order) against the first
+ * MAX_RECONCILE open sessions in the caller's read order -- two independently
+ * truncated, unrelated orderings. With more than MAX_RECONCILE sessions open
+ * at once, a mirror document for a session that simply ranked outside the
+ * second cut looked identical to one whose session had ended, and got
+ * deleted. `entries.length` is exactly what the caller capped its read to, so
+ * checking it against the same cap here is enough to know whether `wanted`
+ * can be trusted as complete.
  */
 export async function reconcileLiveSessions(
   entries: ReconcileEntry[],
@@ -256,13 +350,8 @@ export async function reconcileLiveSessions(
     }
   }
 
-  for (const [id, doc] of existing) {
-    if (wanted.has(id)) continue;
-    // A document created AFTER the open-session read belongs to a session this
-    // pass never saw, not to one that has ended. Deleting it would wipe a
-    // participant who started a second ago off the dashboard until the next
-    // run. A minute's margin covers clock skew between the two reads.
-    if ((doc.startedAt ?? 0) > readAt - 60_000) continue;
+  const truncated = readWasTruncated(entries.length);
+  for (const id of idsToDelete(existing, wanted, readAt, truncated)) {
     await db.collection(LIVE_SESSIONS).doc(id).delete();
     result.deleted++;
   }
