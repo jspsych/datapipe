@@ -87,6 +87,13 @@ export default function ApiReferencePage() {
           Compressing a request body yourself, and what the size limit means in
           practice.
         </GuidanceLine>
+        <GuidanceLine
+          href="/docs/experiments/sending-data#streaming-limits"
+          linkText="Save-as-you-go limits"
+        >
+          The trial size, session, abandonment and file-size limits that apply
+          only to incremental sessions.
+        </GuidanceLine>
       </DocsSection>
 
       <DocsSection id="save-text-data" title="Save text data">
@@ -198,7 +205,8 @@ export default function ApiReferencePage() {
   "maxTrialBytes": 16384,
   "maxTrials": 1000,
   "flushIntervalMs": 10000,
-  "flushEveryNTrials": 10
+  "flushEveryNTrials": 10,
+  "maxDisconnects": 20
 }`}
           </CodeBlock>
         </Box>
