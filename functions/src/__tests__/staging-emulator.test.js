@@ -39,6 +39,7 @@ const {
   sweepAbandonedSessions,
   ABANDON_GRACE_MS,
 } = require("../../lib/scheduled-staging-sweep.js");
+const { generateSessionId, resetStagingHandleForTests } = require("../../lib/staging.js");
 
 const FUNCTIONS_HOST = process.env.FUNCTIONS_EMULATOR_HOST || "localhost:5001";
 const PROJECT_ID = "datapipe-test";
@@ -324,6 +325,37 @@ describe("completion", () => {
     expect(status).toBe(400);
     expect(body.error).toBe("EXPERIMENT_FINALIZED");
   });
+
+  it("leaves the staged copy in place when the submission itself is refused as invalid", async () => {
+    // INVALID_DATA is a refusal about THIS SUBMISSION -- this string failed
+    // validation -- not about whether the experiment accepts data at all. The
+    // participant's staged trials are unaffected by that verdict, and
+    // discarding them would destroy the one recoverable copy in exactly the
+    // case the staging tier exists for: a browser that is never coming back
+    // to retry with a better-formed payload. Contrast with the finalized-gate
+    // test above, which still discards.
+    const experimentID = await makeExperiment({
+      useValidation: true,
+      allowJSON: true,
+      allowCSV: false,
+      requiredFields: [],
+    });
+    const { body } = await startSession({ experimentID });
+    await stageTrials(body.sessionId, 3);
+
+    const { status, body: response } = await saveData({
+      experimentID,
+      filename: "p01.json",
+      data: "this is not valid json",
+      sessionId: body.sessionId,
+    });
+
+    expect(status).toBe(400);
+    expect(response.error).toBe("INVALID_DATA");
+    expect((await rtdb.ref(`staging/${body.sessionId}/trials`).get()).numChildren()).toBe(3);
+    expect((await rtdb.ref(`openSessions/${body.sessionId}`).get()).exists()).toBe(true);
+  });
+
 });
 
 describe("the abandonment sweep", () => {
@@ -340,8 +372,11 @@ describe("the abandonment sweep", () => {
     const entries = await queueEntriesFor(experimentID);
     expect(entries).toHaveLength(1);
     const [entry] = entries;
-    // Marked in the name, so a researcher can tell a fragment from a session.
-    expect(entry.filename).toBe("p07.partial.json");
+    // Marked in the name, so a researcher can tell a fragment from a session
+    // -- and suffixed with a hash of the session id, so two sessions named
+    // "p07.csv" cannot collide on the same recovered file.
+    const suffix = createHash("sha256").update(body.sessionId).digest("hex").slice(0, 8);
+    expect(entry.filename).toBe(`p07-${suffix}.partial.json`);
     expect(entry.partial).toBe(true);
     expect(entry.status).toBe("pending");
     expect(entry.failureReason).toContain("4 trials");
@@ -409,7 +444,8 @@ describe("the abandonment sweep", () => {
     const stats = await sweepAbandonedSessions(new Set([body.sessionId]));
 
     expect(stats.recovered).toBe(1);
-    expect((await queueEntriesFor(experimentID))[0].filename).toBe("p09.partial.json");
+    const suffix = createHash("sha256").update(body.sessionId).digest("hex").slice(0, 8);
+    expect((await queueEntriesFor(experimentID))[0].filename).toBe(`p09-${suffix}.partial.json`);
   });
 
   it("discards rather than uploads when the experiment was finalized meanwhile", async () => {
@@ -484,7 +520,208 @@ describe("the abandonment sweep", () => {
     expect(status.exists).toBe(true);
     expect(status.data().lastRunAt.toMillis()).toBeGreaterThan(Date.now() - 60000);
     expect(status.data().openSessionCount).toEqual(expect.any(Number));
+    expect(status.data().pages).toEqual(expect.any(Number));
     expect(status.data().lastError).toBeNull();
+  });
+
+  it("pages past a wall of live sessions to recover an abandoned one behind them", async () => {
+    // Regression for candidate starvation: sessions skipped as live used to
+    // consume candidate slots with no cursor advancing, so a page's worth of
+    // long-lived or zombie sessions at the head of the queue could block
+    // recovery of everything behind them for up to 24 hours.
+    const experimentID = await makeExperiment();
+    // Far enough out that these fixtures sort ahead of every other open
+    // session in the shared emulator (which default to ~24h out), but the
+    // exact value doesn't matter -- only the ordering between these fixtures
+    // does.
+    const base = Date.now() + 5 * 60000;
+
+    // More than one page (CANDIDATES_PER_PAGE = MAX_SESSIONS_PER_RUN * 3 = 30)
+    // of live sessions, each with a smaller `expiresAt` than the target below
+    // -- so they sort first and the target lands on a later page. Written
+    // directly to RTDB (bypassing the session-start endpoint) so the fixture
+    // stays fast: only the fields the sweep actually reads matter here.
+    const wallSize = 35;
+    for (let i = 0; i < wallSize; i++) {
+      const sessionId = generateSessionId();
+      await rtdb.ref(`openSessions/${sessionId}`).set({
+        experimentId: experimentID,
+        owner: "staging-testuser",
+        startedAt: Date.now(),
+        expiresAt: base + i,
+      });
+    }
+
+    const { body } = await startSession({ experimentID, filename: "behind-the-wall.csv" });
+    // Push this session's expiry behind the whole wall above.
+    await rtdb.ref(`openSessions/${body.sessionId}/expiresAt`).set(base + wallSize + 1000);
+    await stageTrials(body.sessionId, 3);
+    await markAbandoned(body.sessionId);
+
+    const stats = await sweepAbandonedSessions(new Set([body.sessionId]));
+
+    expect(stats.recovered).toBe(1);
+    // The whole point: more than one page had to be fetched to reach it.
+    expect(stats.pages).toBeGreaterThan(1);
+
+    const suffix = createHash("sha256").update(body.sessionId).digest("hex").slice(0, 8);
+    const entries = await queueEntriesFor(experimentID);
+    expect(entries.map((e) => e.filename)).toContain(`behind-the-wall-${suffix}.partial.json`);
+  });
+
+  it("keeps two abandoned sessions that share a client-supplied filename as distinct queue entries", async () => {
+    // Without a session-id suffix on the recovered filename, both sessions
+    // would compute the SAME `experimentID:filename` deduplication key in
+    // queue-upload.ts, and the second recovery would silently overwrite the
+    // first session's payload in Cloud Storage before either one is
+    // delivered.
+    const experimentID = await makeExperiment();
+
+    const first = await startSession({ experimentID, filename: "data.csv" });
+    await stageTrials(first.body.sessionId, 2);
+    await markAbandoned(first.body.sessionId);
+
+    const second = await startSession({ experimentID, filename: "data.csv" });
+    await stageTrials(second.body.sessionId, 5);
+    await markAbandoned(second.body.sessionId);
+
+    const stats = await sweepAbandonedSessions(
+      new Set([first.body.sessionId, second.body.sessionId])
+    );
+
+    expect(stats.recovered).toBe(2);
+    const entries = await queueEntriesFor(experimentID);
+    expect(entries).toHaveLength(2);
+    const filenames = entries.map((e) => e.filename);
+    // Distinct docs, distinct filenames -- not one overwriting the other.
+    expect(new Set(filenames).size).toBe(2);
+    filenames.forEach((f) => expect(f).toMatch(/^data-[0-9a-f]{8}\.partial\.json$/));
+  });
+
+  it("does not report a session as recovered when its discard fails", async () => {
+    // Regression: discardSession used to swallow its own RTDB error and the
+    // sweep reported "recovered" regardless of whether the staging node was
+    // actually removed. If the failure happens AFTER the queue entry is
+    // written, the session is still sitting in openSessions afterwards and
+    // the next run reassembles and re-queues it -- a duplicate delivery if
+    // the first entry has already completed by then (covered separately
+    // below).
+    //
+    // Faked here via the seam discardSession already has: an id that fails
+    // isValidSessionId is refused before it ever touches RTDB, returning
+    // false without throwing -- exactly the "discard failed, non-throwing"
+    // contract being tested. openSession() never mints an id shaped like
+    // this; writing one directly is what stands in for "the RTDB write
+    // failed" here.
+    const experimentID = await makeExperiment();
+    const badId = "not-a-real-session-id";
+    await rtdb.ref(`openSessions/${badId}`).set({
+      experimentId: experimentID,
+      owner: "staging-testuser",
+      startedAt: Date.now(),
+      expiresAt: Date.now() + 60000,
+      filename: "p01.csv",
+    });
+    await stageTrials(badId, 3);
+    await markAbandoned(badId);
+
+    try {
+      const stats = await sweepAbandonedSessions(new Set([badId]));
+
+      expect(stats.recovered).toBe(0);
+      expect(stats.discarded).toBe(0);
+      expect(stats.errors).toBeGreaterThanOrEqual(1);
+
+      // The data WAS queued -- this is about the REPORT, not about queueing
+      // having failed too.
+      const entries = await queueEntriesFor(experimentID);
+      expect(entries).toHaveLength(1);
+      expect(entries[0].status).toBe("pending");
+
+      // And the staging node genuinely still exists, exactly as a false
+      // discardOk promised -- next run will see it again.
+      expect((await rtdb.ref(`staging/${badId}`).get()).exists()).toBe(true);
+      expect((await rtdb.ref(`openSessions/${badId}`).get()).exists()).toBe(true);
+    } finally {
+      // discardSession refuses this id by design, so nothing else will clean
+      // it up.
+      await rtdb.ref(`staging/${badId}`).remove();
+      await rtdb.ref(`openSessions/${badId}`).remove();
+    }
+  });
+
+  it("does not re-queue a session whose recovery already completed before a discard failure", async () => {
+    // The other half of the fix above: partialFilenameFor is a pure function
+    // of the session, so a session that is STILL staged only because its
+    // discard failed computes the identical deduplication key on the next
+    // run. queueUpload's own dedup logic only special-cases "pending" and
+    // "processing" -- a "completed" doc falls through and gets freshly
+    // re-queued -- so without this check a second copy of an already-
+    // delivered partial would reach the provider.
+    const experimentID = await makeExperiment();
+    const badId = "already-delivered-fixture"; // fails isValidSessionId, as above
+    await rtdb.ref(`openSessions/${badId}`).set({
+      experimentId: experimentID,
+      owner: "staging-testuser",
+      startedAt: Date.now(),
+      expiresAt: Date.now() + 60000,
+      filename: "p02.csv",
+    });
+    await stageTrials(badId, 3);
+    await markAbandoned(badId);
+
+    const suffix = createHash("sha256").update(badId).digest("hex").slice(0, 8);
+    const filename = `p02-${suffix}.partial.json`;
+    const docId = `${experimentID}:${filename}`.replace(/[/\\]/g, "_");
+    await db.collection("uploadQueue").doc(docId).set({
+      experimentID,
+      owner: "staging-testuser",
+      filename,
+      storagePath: `upload-queue/${docId}`,
+      dataType: "data",
+      status: "completed",
+      errorCode: 0,
+      retryCount: 0,
+      maxRetries: 5,
+      createdAt: new Date(),
+      completedAt: new Date(),
+      deduplicationKey: `${experimentID}:${filename}`,
+      sessionIncremented: false,
+      partial: true,
+    });
+
+    try {
+      await sweepAbandonedSessions(new Set([badId]));
+
+      // The pre-existing completed doc must be untouched, not overwritten
+      // back to "pending" by a fresh re-queue.
+      const doc = await db.collection("uploadQueue").doc(docId).get();
+      expect(doc.data().status).toBe("completed");
+      const entries = await queueEntriesFor(experimentID);
+      expect(entries).toHaveLength(1);
+    } finally {
+      await rtdb.ref(`staging/${badId}`).remove();
+      await rtdb.ref(`openSessions/${badId}`).remove();
+      await db.collection("uploadQueue").doc(docId).delete();
+    }
+  });
+
+  it("records health and does not throw when the staging database is unreachable", async () => {
+    // The design doc's requirement: a broken sweep must show up as a recorded
+    // failure, never as an uncaught exception that takes the scheduled
+    // function down without a trace. Port 1 refuses the connection
+    // immediately, so this stays fast and needs no real network access.
+    const originalUrl = process.env.STAGING_DATABASE_URL;
+    process.env.STAGING_DATABASE_URL = "http://127.0.0.1:1/?ns=unreachable-staging-test";
+    resetStagingHandleForTests();
+
+    try {
+      const stats = await sweepAbandonedSessions(new Set());
+      expect(stats.errors).toBeGreaterThan(0);
+    } finally {
+      process.env.STAGING_DATABASE_URL = originalUrl;
+      resetStagingHandleForTests();
+    }
   });
 });
 

@@ -101,9 +101,24 @@ export function isProbeRetry(code?: string | null): boolean {
   return !!code && PROBE_RETRY_CODES.has(code);
 }
 
+/**
+ * The uploadQueue document id for a given experiment/filename pair -- the
+ * same value stored as `deduplicationKey` below, sanitised into a legal
+ * Firestore document id.
+ *
+ * Exported so a caller that needs to know whether an entry ALREADY EXISTS for
+ * a filename -- scheduled-staging-sweep.ts, before re-queueing a recovered
+ * partial whose earlier discard may have failed -- computes the identical id
+ * this module uses, rather than keeping a second copy that could drift out of
+ * sync with it.
+ */
+export function queueDocIdFor(experimentID: string, filename: string): string {
+  return `${experimentID}:${filename}`.replace(/[/\\]/g, "_");
+}
+
 export default async function queueUpload(params: QueueUploadParams): Promise<string> {
   const deduplicationKey = `${params.experimentID}:${params.filename}`;
-  const docId = deduplicationKey.replace(/[/\\]/g, "_");
+  const docId = queueDocIdFor(params.experimentID, params.filename);
 
   const docRef = db.collection("uploadQueue").doc(docId);
 

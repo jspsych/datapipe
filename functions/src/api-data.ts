@@ -35,10 +35,13 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
   //
   // WHERE THIS IS CALLED, AND WHY THERE
   //
-  // Exactly where cleanupPending() is called, plus the four gates above that
-  // reject before a pending copy exists. Both sets are the same predicate:
-  // DataPipe either HAS the data somewhere durable (uploaded, or in the
-  // encrypted upload queue) or has DEFINITIVELY REFUSED this session.
+  // Everywhere cleanupPending() is called, plus the finalized / inactive /
+  // session-cap / unknown-experiment gates above that reject before a pending
+  // copy even exists. Both sets are (almost) the same predicate: DataPipe
+  // either HAS the data somewhere durable (uploaded, or in the encrypted
+  // upload queue) or has DEFINITIVELY REFUSED THE EXPERIMENT, not merely this
+  // submission -- see the "NOT CALLED ON EVERY REFUSAL" note below for the
+  // two exceptions.
   //
   // Both halves matter, and for opposite reasons.
   //
@@ -53,6 +56,24 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
   //    sweep re-checks the gates itself, so this is the first of two doors,
   //    not the only one.)
   //
+  //  NOT CALLED ON EVERY REFUSAL, THOUGH. The four gates below this comment
+  //  (finalized / inactive / session-cap / unknown experiment -- the last one
+  //  is EXPERIMENT_NOT_FOUND, above this comment, which never staged anything
+  //  in the first place) are refusals about the EXPERIMENT: nothing this
+  //  submission does will ever be accepted, so the staged copy is genuinely
+  //  worthless and discarding it is correct. INVALID_DATA and the
+  //  duplicate-filename refusals (OSF_FILE_EXISTS, from either the collision
+  //  cache's "duplicate" verdict or the provider's own NAME_CONFLICT) are
+  //  refusals about THIS SUBMISSION -- this exact string failed validation, or
+  //  this exact filename collided -- and say nothing about whether the
+  //  experiment would accept the participant's trials under a different name
+  //  or format. Discarding on those would destroy the one recoverable copy in
+  //  exactly the case the staging tier exists for: a participant whose
+  //  browser is never coming back to retry. Leaving it staged costs nothing
+  //  extra -- the sweep's second door re-checks finalized/active before ever
+  //  promoting it, so a since-finalized or since-deactivated experiment is
+  //  still covered.
+  //
   // It is deliberately NOT called on DataPipe's own failures -- a persist
   // error, a token failure, a metadata error, an exception path that could not
   // even queue. Those are the cases the staging tier is FOR: the participant
@@ -60,15 +81,17 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
   // standing between that and lost data. Same reasoning as the "pending-data
   // copy is deliberately kept" note in the metadata branch below.
   //
-  // Never throws: discardSession swallows its own errors, because orphaned
+  // Never throws: discardSession reports its own errors through its boolean
+  // return value (ignored here) rather than throwing, because orphaned
   // staging data is a sweep's problem and must never turn a 201 into a 500.
   //
   // ORDERING: always awaited BEFORE res.json(), never after. On the branches
   // that reach cleanupPending() that is already true, because those clean up
-  // ahead of responding. On the four gates above it is a deliberate departure
-  // from the surrounding style -- writeLog() there runs AFTER the response --
-  // and the difference is that a log write losing a race costs a log line,
-  // while this one leaves a participant's trials sitting in RTDB. Work queued
+  // ahead of responding. On the three experiment-state gates above it is a
+  // deliberate departure from the surrounding style -- writeLog() there runs
+  // AFTER the response -- and the difference is that a log write losing a
+  // race costs a log line, while this one leaves a participant's trials
+  // sitting in RTDB. Work queued
   // after a response is not guaranteed to run: the instance can be frozen or
   // scaled down the moment the response is flushed. Same reasoning as the
   // "logs are written BEFORE the response here" note on the NAME_CONFLICT
@@ -81,8 +104,8 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
   // away the empty path segments, resolves to "/staging" and "/openSessions"
   // themselves -- wiping every in-progress session for every experiment. This
   // gate runs on every request that reaches discardStaging, including the
-  // four unauthenticated ones above (finalized / inactive / session-cap /
-  // validation), so a closed experiment id was, before this check, enough to
+  // three unauthenticated experiment-state gates below (finalized / inactive /
+  // session-cap), so a closed experiment id was, before this check, enough to
   // reach it. discardSession guards the same thing again on its own input;
   // this is the first of the two doors, not the only one.
   const discardStaging = async () => {
@@ -164,7 +187,10 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
       }
     }
     if (!valid) {
-      await discardStaging();
+      // Staging is deliberately LEFT ALONE here -- see the comment on
+      // discardStaging() above. This submission's string failed validation;
+      // the trials sitting in RTDB did not, and the sweep is what gives a
+      // participant who cannot retry a second chance at being recovered.
       res.status(400).json(MESSAGES.INVALID_DATA);
       await writeLog(experimentID, "logError", MESSAGES.INVALID_DATA, logContext);
       return;
@@ -323,8 +349,13 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
 
   if (!claimResult.claimed) {
     if (claimResult.reason === "duplicate") {
+      // cleanupPending() runs (the Cloud Storage pending copy really is
+      // superseded -- persist-pending.ts's own sweep would just rediscover an
+      // identical failure), but staging is deliberately LEFT ALONE -- see the
+      // comment on discardStaging() above. This filename collided; the
+      // participant's trials did not, and the sweep can still recover them
+      // under partialFilenameFor's own (hash-suffixed) name.
       await cleanupPending(pendingPath);
-      await discardStaging();
       res.status(400).json({...MESSAGES.OSF_FILE_EXISTS, metadataMessage});
       await writeLog(experimentID, "logError", MESSAGES.OSF_FILE_EXISTS, logContext);
       return;
@@ -461,7 +492,10 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
         direction: "cache-free-provider-conflict",
       }, logContext);
       await cleanupPending(pendingPath);
-      await discardStaging();
+      // Staging is deliberately LEFT ALONE here too -- see the comment on
+      // discardStaging() above. The provider refused this filename; the
+      // participant's trials did not, and the sweep can still recover them
+      // under partialFilenameFor's own (hash-suffixed) name.
       res.status(400).json({...MESSAGES.OSF_FILE_EXISTS, metadataMessage});
       return;
     }
