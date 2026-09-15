@@ -69,6 +69,24 @@
       ]
     },
     {
+      "collectionGroup": "uploadQueue",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "experimentID",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "mail",
       "queryScope": "COLLECTION",
       "fields": [
@@ -101,6 +119,25 @@
     {
       "collectionGroup": "mail",
       "fieldPath": "delivery.expireAt",
+      "ttl": true,
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "arrayConfig": "CONTAINS",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "filenameClaims",
+      "fieldPath": "expiresAt",
       "ttl": true,
       "indexes": [
         {
