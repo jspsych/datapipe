@@ -1,0 +1,86 @@
+# Publish datapipe-client to npm.
+#
+# The only thing in this repository that is published. The Next.js app and the
+# Cloud Functions are deployed by firebase-deploy.yml; nothing outside this
+# repository depends on their version numbers, so they have none.
+#
+# The flow is the standard changesets one, in two steps:
+#
+#   1. A push to main with changeset files pending opens (or updates) a
+#      "Release datapipe-client" pull request that applies the version bump
+#      and writes CHANGELOG.md.
+#   2. Merging that pull request runs this workflow again. There are no
+#      changesets left, so the action publishes to npm and tags the release.
+#
+# Both steps run the tests and the build first, because a broken publish
+# cannot be taken back -- npm forbids republishing a version, so a bad release
+# has to be superseded rather than fixed.
+
+name: Release datapipe-client
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "packages/client/**"
+      - ".github/workflows/release-client.yml"
+  workflow_dispatch:
+
+# Two releases of the same package must not overlap: the second would compute
+# its version from a package.json the first has already bumped but not yet
+# pushed.
+concurrency:
+  group: release-client
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/client
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # changesets needs the history to work out what has been released.
+          fetch-depth: 0
+
+      - name: Use Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.x
+          registry-url: "https://registry.npmjs.org"
+
+      # Not `npm ci` with a cache key on the root lockfile: packages/client is
+      # deliberately not part of a root workspace (see packages/client/.changeset/README.md),
+      # so it carries its own lockfile and installs on its own.
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Create a release pull request, or publish
+        uses: changesets/action@v1
+        with:
+          cwd: packages/client
+          version: npm run version-packages
+          publish: npm run release
+          title: "Release datapipe-client"
+          commit: "Version datapipe-client"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

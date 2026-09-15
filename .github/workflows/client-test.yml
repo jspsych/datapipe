@@ -1,0 +1,47 @@
+# Test datapipe-client on its own.
+#
+# Separate from node.js.yml because that workflow builds the Next.js app and
+# the Cloud Functions, and carries a page of NEXT_PUBLIC_* configuration that
+# this package has no use for. packages/client has no Firebase project, no
+# emulators, and no secrets -- it is a browser library with a mocked fetch.
+#
+# This exists so that a broken client cannot reach main and first fail at
+# release time, when npm's refusal to republish a version makes a bad publish
+# awkward to undo.
+
+name: Test datapipe-client
+
+on:
+  pull_request:
+    branches: ["main", "test"]
+    paths:
+      - "packages/client/**"
+      - ".github/workflows/client-test.yml"
+  push:
+    branches: ["test"]
+    paths:
+      - "packages/client/**"
+      - ".github/workflows/client-test.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/client
+
+    steps:
+      - uses: actions/checkout@v6
+      - name: Use Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.x
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      # The browser bundle carries the Firebase SDK, so its size is the whole
+      # reason streaming lives here rather than in the jsPsych plugin. Print it
+      # on every run, so a jump is visible in the log rather than discovered by
+      # a researcher on a slow connection.
+      - run: npm run size
