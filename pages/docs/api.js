@@ -118,11 +118,6 @@ export default function ApiReferencePage() {
             <Param name="data" type="string">
               The file contents as a string.
             </Param>
-            <Param name="metadataOptions" type="object (optional)">
-              Extra Psych-DS metadata to merge into this experiment&apos;s
-              dataset description. Ignored unless metadata is switched on for
-              the experiment.
-            </Param>
             <Param name="sessionId" type="string (optional)">
               The session returned by <Code>/api/session/</Code>, if this
               experiment staged its trials as it went. It carries no data — the{" "}

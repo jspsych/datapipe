@@ -20,7 +20,7 @@ import { discardSession, isValidSessionId } from "./staging.js";
 import { ExperimentData, UserData, RequestBody } from './interfaces';
 
 export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 }, async (req, res) => {
-  const { experimentID, data, filename, metadataOptions, sessionId }: RequestBody = req.body;
+  const { experimentID, data, filename, sessionId }: RequestBody = req.body;
 
   if (!experimentID || !data || !filename) {
     res.status(400).json(MESSAGES.MISSING_PARAMETER);
@@ -202,7 +202,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
   // during heavy processing (metadata, OSF upload).
   let pendingPath: string;
   try {
-    pendingPath = await persistPending(experimentID, filename, data, metadataOptions, "data");
+    pendingPath = await persistPending(experimentID, filename, data, "data");
   } catch (e) {
     const detail = e instanceof Error ? e.message : "Unknown error";
     res.status(500).json(MESSAGES.DATA_PERSIST_ERROR);
@@ -257,7 +257,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
     //Creates or references a document containing the metadata for the experiment in the metdata collection on Firestore.
     const metadata_doc_ref: DocumentReference<DocumentData> = db.collection("metadata").doc(experimentID);
 
-    const metadataResponse = await blockMetadata(exp_data, auth, metadata_doc_ref, data, filename, metadataOptions);
+    const metadataResponse = await blockMetadata(exp_data, auth, metadata_doc_ref, data, filename);
 
     if (metadataResponse.success === false) {
       // The pending-data copy is deliberately kept (not cleaned up) here: the

@@ -184,7 +184,6 @@ export interface ExperimentData {
     experimentID: string;
     data: string; // Consider specifying a more detailed type
     filename: string;
-    metadataOptions: object; // Consider specifying a more detailed type
     // RTDB staging session this submission completes
     // (docs/streaming-ingest-design.md). Absent for every submission that did
     // not stream -- the plugin's non-streaming path, and every request written
