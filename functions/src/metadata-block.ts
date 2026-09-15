@@ -55,7 +55,6 @@ export default async function blockMetadata(
     metadata_doc_ref: DocumentReference<DocumentData>,
     data: string,
     filename: string,
-    metadataOptions: object,
   ): Promise<MetadataBlockResult> {
 
 let metadataMessage: {metadataMessage: string} = {metadataMessage: ''};
@@ -82,7 +81,7 @@ try {
   await db.runTransaction(async (t) => {
 
       //Metadata is produced from the incoming data using the metadata module.
-      const produced = await produceMetadata(data, metadataOptions);
+      const produced = await produceMetadata(data);
       const incomingMetadata: Metadata = produced.metadata;
 
       //The full Psych-DS file set derived from this submission -- built here,

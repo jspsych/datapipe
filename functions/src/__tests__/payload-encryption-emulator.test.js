@@ -197,8 +197,7 @@ describe("pending payloads are encrypted at rest", () => {
     const storagePath = await persistPending(
       experimentID,
       "data.json",
-      SAMPLE,
-      { field: "value" }
+      SAMPLE
     );
     createdObjects.push(storagePath);
 
@@ -218,7 +217,10 @@ describe("pending payloads are encrypted at rest", () => {
     expect(envelope.experimentID).toBe(experimentID);
     expect(envelope.filename).toBe("data.json");
     expect(envelope.data).toBe(SAMPLE);
-    expect(envelope.metadataOptions).toEqual({ field: "value" });
+    // metadataOptions was the unauthenticated write channel removed
+    // 2026-09-15 (see docs/provider-migration-design.md) — persistPending no
+    // longer accepts or writes it.
+    expect(envelope.metadataOptions).toBeUndefined();
   });
 
   it("queueUpload writes ciphertext to upload-queue/", async () => {
