@@ -19,7 +19,7 @@ import { isCompactionInFlight, COMPACTION_HOLD_REASON } from "./compaction-gate.
 import { discardSession, isValidSessionId } from "./staging.js";
 import { ExperimentData, UserData, RequestBody } from './interfaces';
 
-// maxInstances: 300, overriding index.ts's global 20 (which still governs
+// maxInstances: 200, overriding index.ts's global 20 (which still governs
 // every OTHER function). Sized for the design doc's own worst case -- a
 // lecture-hall study where a few hundred participants submit within seconds
 // of each other (docs/streaming-ingest-design.md) -- served rather than shed.
@@ -27,17 +27,21 @@ import { ExperimentData, UserData, RequestBody } from './interfaces';
 // instance still handles one request at a time, so that memory-safety
 // argument (a 512MiB instance cannot be pushed over by concurrent large
 // payloads) is untouched; this only raises how many such single-request
-// instances Cloud Run is allowed to run side by side. Production on `main`
+// instances Cloud Run is allowed to run side by side. 200 is the ceiling
+// Cloud Run enforces in us-central1 for this CPU size: the first deploy at
+// 300 was refused with "Max instances must be set to 200 or fewer to set the
+// requested total CPU" (Cloud Run quota), so this is the largest value that
+// deploys without a quota increase. Production on `main`
 // has no concurrency cap at all and defaults to 80 (see
 // firebase-functions/lib/v2/options.d.ts: "A value of null restores the
 // default concurrency (80 when CPU >= 1, 1 otherwise)"), so 20 instances x 80
 // gives roughly 1,600 request slots today; this branch's 20 x 1 was a ~98%
-// capacity cut hiding behind an unrelated perf commit. 300 recovers a large
+// capacity cut hiding behind an unrelated perf commit. 200 recovers a large
 // share of that headroom while keeping the memory guarantee. maxInstances is
 // a CEILING, not a reservation -- idle instances still scale to zero, so this
 // does not raise idle/steady-state cost, only the number Cloud Run is willing
 // to spin up under burst. Cloud Run's default per-region instance quota is in
-// the low thousands, comfortably above 300.
+// the low thousands, comfortably above 200.
 //
 // timeoutSeconds: 300 (up from the 60s default) gives collision-cache.ts's
 // rehydrate() -- called below via claimFilename(), and which lists every file
@@ -66,11 +70,11 @@ import { ExperimentData, UserData, RequestBody } from './interfaces';
 // the jsPsych plugin's unconditional response.json() -- a separate, pre-
 // existing problem) instead of a clean 201. Every submission after that one
 // finds a warm cache and succeeds normally, instead of repeating the doomed
-// rehydration on every single request. 300 also covers this endpoint's other
+// rehydration on every single request. 200 also covers this endpoint's other
 // slow paths uniformly (the provider upload itself, metadata derivation) for
 // direct Cloud Run invocations that bypass Hosting.
 export const apiData = onRequest(
-  { cors: true, memory: "512MiB", concurrency: 1, maxInstances: 300, timeoutSeconds: 300 },
+  { cors: true, memory: "512MiB", concurrency: 1, maxInstances: 200, timeoutSeconds: 300 },
   async (req, res) => {
   const { experimentID, data, filename, sessionId }: RequestBody = req.body;
 
