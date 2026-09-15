@@ -47,7 +47,7 @@ export default function DocsOverviewPage() {
 
       <DocsSection id="how-it-works" title="How it works">
         <Text maxW="70ch">
-          Connect a storage provider — Google Drive, Dataverse, or Zenodo — to
+          Connect a storage provider (Google Drive, Dataverse, or Zenodo) to
           your DataPipe account, create an experiment, and add a few lines of
           code to the experiment your participants run. Google Drive and Zenodo
           connect in one click; Dataverse asks for an API token from your
@@ -68,15 +68,16 @@ export default function DocsOverviewPage() {
             <Text as="span" fontWeight="semibold">
               DataPipe
             </Text>{" "}
-            checks the submission against the settings on that experiment —
+            checks the submission against the settings on that experiment:
             whether it is still accepting data, whether the file validates,
-            whether the session limit is reached — and passes it on.
+            and whether the session limit is reached. Then it passes the
+            submission on.
           </List.Item>
           <List.Item>
             <Text as="span" fontWeight="semibold">
               Your storage provider
             </Text>{" "}
-            receives the file into your own account — the Drive folder,
+            receives the file into your own account: the Drive folder,
             Dataverse dataset, or Zenodo deposition DataPipe created for this
             experiment.
           </List.Item>
@@ -96,7 +97,7 @@ export default function DocsOverviewPage() {
         </Text>
         <Text maxW="70ch">
           You need a separate service to put the experiment your participants
-          run online — GitHub Pages, Netlify, or your university&apos;s web
+          run online: GitHub Pages, Netlify, or your university&apos;s web
           hosting. DataPipe only moves data to your storage provider, so you
           never have to set up a server of your own.
         </Text>
@@ -137,7 +138,7 @@ export default function DocsOverviewPage() {
         </Text>
         <Text maxW="70ch">
           DataPipe never interprets, summarizes or scores what a participant
-          submitted. The only thing it can add is Psych-DS metadata — a
+          submitted. The only thing it can add is Psych-DS metadata: a
           description of your dataset and its variables, written alongside the
           data when you turn metadata on.
         </Text>
@@ -152,7 +153,7 @@ export default function DocsOverviewPage() {
       <DocsSection id="where-to-start" title="Where to start">
         <Text maxW="70ch">
           These pages are in reading order, but each one answers its own
-          question — arrive at any of them directly.
+          question, so you can start at any of them.
         </Text>
         <Box maxW="70ch">
           <ProseLink href={GETTING_STARTED_LINK.href}>

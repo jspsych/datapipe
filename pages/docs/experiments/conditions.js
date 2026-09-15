@@ -47,7 +47,7 @@ export default function ConditionAssignmentPage() {
         </Text>
         <Text maxW="70ch">
           <strong>Set the number when you turn the switch on.</strong> A new
-          DataPipe experiment is created with one condition, and with one
+          DataPipe experiment starts with one condition, and with one
           condition every participant is handed 0 and nothing ever advances. The
           dashboard field will not go below 2, so a study with multiple
           conditions requires you to type the number in.
@@ -55,7 +55,7 @@ export default function ConditionAssignmentPage() {
         <Text maxW="70ch">
           Underneath, DataPipe keeps a single counter on the experiment. Each
           request returns the counter&apos;s current value and then advances it
-          — wrapping back to 0 after n−1 — and it does both inside one
+          (wrapping back to 0 after n−1), and it does both inside one
           transaction, so two participants who ask at the same moment always get
           different numbers rather than the same one twice.
         </Text>
@@ -126,9 +126,9 @@ export default function ConditionAssignmentPage() {
         </Text>
         <Text maxW="70ch">
           A 2 × 3 design is 6 conditions: request a number, then divide and take
-          the remainder to recover each factor — for example{" "}
-          <Code>Math.floor(condition / 3)</Code> for the two-level factor and{" "}
-          <Code>condition % 3</Code> for the three-level one.
+          the remainder to recover each factor. For example,{" "}
+          <Code>Math.floor(condition / 3)</Code> gives the two-level factor and{" "}
+          <Code>condition % 3</Code> the three-level one.
         </Text>
         <Text maxW="70ch">
           Because assignment is sequential, a factorial mapping stays balanced

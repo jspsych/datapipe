@@ -79,9 +79,9 @@ export default function PsychDsMetadataPage() {
             original bytes here; a JSON submission is written out as a table.
           </LayoutRow>
           <LayoutRow path="data/<name>_measure-<column>_data.csv">
-            One sidecar table per column that held nested objects or arrays —
-            survey responses, mouse-tracking samples and the like — so the main
-            table stays flat.
+            One sidecar table per column that held nested objects or arrays
+            (survey responses, mouse-tracking samples and the like), so the
+            main table stays flat.
           </LayoutRow>
           <LayoutRow path="dataset_description.json">
             At the top level: the description of the dataset and every variable
@@ -94,9 +94,9 @@ export default function PsychDsMetadataPage() {
           </LayoutRow>
         </List.Root>
         <Text maxW="70ch">
-          With metadata off, none of this happens: each submission is stored at
-          the top level under the filename you sent, and no other files are
-          created.
+          With metadata off, none of this happens: DataPipe stores each
+          submission at the top level under the filename you sent, and creates
+          no other files.
         </Text>
         <GuidanceLine href="/docs/data/files" linkText="Filenames, archives and your storage">
           Zenodo cannot store folders, so a Zenodo record shows these paths
@@ -114,14 +114,14 @@ export default function PsychDsMetadataPage() {
           the switch on your dashboard becomes read-only.
         </Text>
         <Text maxW="70ch">
-          The reason is that the setting decides <em>where</em> your files are
-          stored — at the top of your dataset with it off, under{" "}
+          The setting decides <em>where</em> your files are
+          stored: at the top of your dataset with it off, under{" "}
           <Code>data/raw/</Code> with it on. Changing it partway through would
           leave the sessions you already collected in one place and every
           session after it in another, and DataPipe&apos;s duplicate detection
-          would no longer recognise the earlier files — so a participant who
-          resubmitted a filename from before the change would get a second copy
-          rather than being caught as a repeat.
+          would no longer recognise the earlier files. A participant who
+          resubmitted a filename from before the change would then get a
+          second copy rather than being caught as a repeat.
         </Text>
         <Text maxW="70ch">
           If you need to change it after collecting data, create a new
@@ -132,8 +132,8 @@ export default function PsychDsMetadataPage() {
       <DocsSection id="folder-names-are-flattened" title="Folder names are flattened">
         <Text maxW="70ch">
           You will not get subfolders inside your dataset, whatever filenames
-          you send. If a filename contains a folder — say{" "}
-          <Code>condition-A/abc.json</Code> — DataPipe replaces the slash with a
+          you send. If a filename contains a folder (say{" "}
+          <Code>condition-A/abc.json</Code>), DataPipe replaces the slash with a
           hyphen and appends a short code before building any path, so the file
           is stored as <Code>data/raw/condition-A-abc~a145753b.json</Code> and
           its derived tables follow the same name.
@@ -146,7 +146,7 @@ export default function PsychDsMetadataPage() {
         </Text>
         <Text maxW="70ch">
           The code after <Code>~</Code> is derived from the name you sent, so
-          it is stable — resend the same filename and you get the same stored
+          it is stable: resend the same filename and you get the same stored
           name. It exists because the hyphen alone is ambiguous:{" "}
           <Code>condition-A/abc.json</Code> and <Code>condition-A-abc.json</Code>{" "}
           are different submissions, and without the code they would flatten to
@@ -171,8 +171,8 @@ export default function PsychDsMetadataPage() {
         </Text>
         <Text maxW="70ch">
           &ldquo;When available&rdquo; is doing real work in that sentence.
-          DataPipe does not ship a table of descriptions. At the moment a
-          session arrives, it fetches the source of the jsPsych plugin that
+          DataPipe does not ship a table of descriptions. When a session
+          arrives, it fetches the source of the jsPsych plugin that
           produced each variable from{" "}
           <ProseLink href="https://unpkg.com" external>
             unpkg.com
@@ -188,17 +188,17 @@ export default function PsychDsMetadataPage() {
               Custom, private, renamed and unpublished plugins have no source to
               fetch.
             </Text>{" "}
-            Their variables are described as{" "}
-            <Code>&quot;unknown&quot;</Code>. Your data is stored normally and
-            the variables still appear in the metadata — only the prose
+            DataPipe describes their variables as{" "}
+            <Code>&quot;unknown&quot;</Code>, but stores your data normally:
+            the variables still appear in the metadata, and only the prose
             descriptions are missing.
           </List.Item>
           <List.Item>
             <Text as="span" fontWeight="semibold">
               An unpkg outage does the same thing, for that session only.
             </Text>{" "}
-            The fetch is made while the submission is being handled; if it
-            fails, that session&apos;s new variables come out as{" "}
+            DataPipe makes the fetch while it handles the submission; if the
+            fetch fails, that session&apos;s new variables come out as{" "}
             <Code>&quot;unknown&quot;</Code>. DataPipe does not go back later to
             fill them in, and a variable already described keeps its
             description.
@@ -208,8 +208,8 @@ export default function PsychDsMetadataPage() {
           <Code>dataset_description.json</Code> is an ordinary file in your own
           storage, so you can write the missing descriptions in yourself. Do it{" "}
           <strong>after collection ends</strong>: DataPipe rewrites that file
-          from its own copy of the metadata after every session, so an edit made
-          mid-study is overwritten by the next participant.
+          from its own copy of the metadata after every session, so the next
+          submission overwrites any edit made mid-study.
         </Text>
       </DocsSection>
 
@@ -217,31 +217,31 @@ export default function PsychDsMetadataPage() {
         <Text maxW="70ch">
           DataPipe also combines information across sessions, such as observed
           numeric ranges and categorical values. The description file is never
-          rebuilt from just the newest session — each one is merged into what is
-          already there:
+          rebuilt from just the newest session; DataPipe merges each one into
+          what is already there:
         </Text>
         <List.Root maxW="70ch" gap={2} ps={6}>
           <List.Item>
-            new values seen for a categorical variable are added to its list of
-            levels;
+            DataPipe adds new values seen for a categorical variable to its
+            list of levels;
           </List.Item>
           <List.Item>
-            a numeric variable&apos;s minimum is lowered and its maximum raised
-            to cover the new session;
+            DataPipe lowers a numeric variable&apos;s minimum and raises its
+            maximum to cover the new session;
           </List.Item>
           <List.Item>
-            variables that appear for the first time are appended, so a
+            DataPipe appends variables that appear for the first time, so a
             condition that only some participants see is still described;
           </List.Item>
           <List.Item>
-            variables already described are kept — nothing is dropped because a
-            later session did not contain it.
+            DataPipe keeps variables already described, and drops nothing just
+            because a later session did not contain it.
           </List.Item>
         </List.Root>
         <Text maxW="70ch">
-          Four jsPsych bookkeeping variables — <Code>trial_type</Code>,{" "}
+          Four jsPsych bookkeeping variables (<Code>trial_type</Code>,{" "}
           <Code>trial_index</Code>, <Code>time_elapsed</Code> and{" "}
-          <Code>internal_node_id</Code> — are written once and then left alone,
+          <Code>internal_node_id</Code>) are written once and then left alone,
           since their meaning does not change from session to session.
         </Text>
       </DocsSection>
@@ -251,26 +251,26 @@ export default function PsychDsMetadataPage() {
           Metadata is a description of your data, and DataPipe treats it that
           way. The derived tables and{" "}
           <Code>.psychds-ignore</Code> are uploaded after your raw file has
-          landed, and if one of them fails it is queued and retried on its own
-          while the submission still succeeds. The{" "}
+          landed. If one of them fails, DataPipe queues and retries it on its
+          own while the submission still succeeds. The{" "}
           <Code>metadataMessage</Code> field on every data response reports what
           happened; it never decides whether a submission is accepted.
         </Text>
         <Text maxW="70ch">
-          There is one case where metadata does affect the response. If DataPipe
-          cannot produce metadata from a submission at all, that request comes
-          back as a <Code>400</Code> with <Code>METADATA_ERROR</Code>. The usual
-          cause is a submission that parses as JSON but is not an array of
-          trials — metadata needs the trial array jsPsych produces. Anything
-          that does not parse as JSON is treated as CSV instead.
+          Metadata affects the response in one case. If DataPipe cannot produce
+          metadata from a submission at all, that request comes back as a{" "}
+          <Code>400</Code> with <Code>METADATA_ERROR</Code>. The usual cause is
+          a submission that parses as JSON but is not an array of trials:
+          metadata needs the trial array jsPsych produces. Anything that does
+          not parse as JSON is treated as CSV instead.
         </Text>
         <Text maxW="70ch">
           Even then the data itself is not lost. DataPipe keeps the copy it took
           when the submission arrived, and a scheduled sweep picks that copy up
           once it is more than fifteen minutes old and sends it to your storage
-          provider. A session recovered this way arrives as the raw file only —
-          no derived tables are generated for it — so it is worth fixing the
-          shape of your data rather than relying on the sweep.
+          provider. A session recovered this way arrives as the raw file only
+          (DataPipe generates no derived tables for it), so fix the shape of
+          your data instead of relying on the sweep.
         </Text>
         <GuidanceLine href="/docs/data/failures" linkText="When an upload fails">
           What DataPipe does with a submission it has accepted but not yet

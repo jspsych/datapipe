@@ -124,7 +124,7 @@ function FeatureItem({ name, children }) {
     <Box>
       <Text>
         <Text as="span" fontWeight="semibold" color="brandOrange.fg">{name}</Text>
-        {" "}{children}
+        {": "}{children}
       </Text>
     </Box>
   );
@@ -141,7 +141,7 @@ function ProviderOption({ name, description, limits }) {
     <Box>
       <Text>
         <Text as="span" fontWeight="semibold" color="brandOrange.fg">{name}</Text>
-        {" — "}{description}
+        {": "}{description}
       </Text>
       {limits && (
         <Text fontSize="sm" color="fg.muted" mt={1}>
@@ -176,7 +176,7 @@ export default function GettingStarted() {
         </Heading>
         <Text color="fg.muted" fontSize="lg">
           DataPipe sends data from your experiment straight to storage you
-          control — Google Drive, Dataverse, or Zenodo. This guide sets up one
+          control: Google Drive, Dataverse, or Zenodo. This guide sets up one
           experiment end to end, from choosing a provider to your first test
           run.
         </Text>
@@ -186,7 +186,7 @@ export default function GettingStarted() {
         <Text>
           DataPipe writes each participant&apos;s data into your own account
           with one of the three storage providers below. The data is yours
-          throughout — DataPipe only ever asks for permission to add files.
+          throughout. DataPipe only ever asks for permission to add files.
           You can use a different provider for each experiment, so this choice
           is not permanent.
         </Text>
@@ -198,8 +198,8 @@ export default function GettingStarted() {
           />
           <ProviderOption
             name="Dataverse"
-            description="institutional repositories run by universities and consortia — Harvard Dataverse, Borealis, DataverseNL, and others. Data lands in a draft dataset, in a collection you name."
-            limits="your installation sets its own file size and storage limits. API tokens expire, often yearly, and DataPipe cannot renew them — data stops arriving until you reconnect."
+            description="institutional repositories run by universities and consortia (Harvard Dataverse, Borealis, DataverseNL, and others). Data lands in a draft dataset, in a collection you name."
+            limits="your installation sets its own file size and storage limits. API tokens expire, often yearly, and DataPipe cannot renew them, so data stops arriving until you reconnect."
           />
           <ProviderOption
             name="Zenodo"
@@ -253,8 +253,8 @@ export default function GettingStarted() {
         </Text>
         <Text>
           <strong>Dataverse</strong> opens a short form instead. It needs the
-          full address of your institution&apos;s installation — for
-          example, <em>https://dataverse.harvard.edu</em> — and an API token,
+          full address of your institution&apos;s installation (for
+          example, <em>https://dataverse.harvard.edu</em>) and an API token,
           which you create under the <strong>API Token</strong> tab of your
           Dataverse account.
         </Text>
@@ -274,21 +274,21 @@ export default function GettingStarted() {
         </Text>
         <Stack gap={2} pl={4}>
           <Text>
-            <Text as="span" fontWeight="semibold">Google Drive</Text> — nothing
+            <Text as="span" fontWeight="semibold">Google Drive</Text>: nothing
             else is required. To keep the data somewhere specific,
             click <strong>Choose Drive folder</strong> and pick a parent
             folder. Otherwise DataPipe creates the folder
             in <em>My Drive/DataPipe</em>.
           </Text>
           <Text>
-            <Text as="span" fontWeight="semibold">Dataverse</Text> — the{" "}
+            <Text as="span" fontWeight="semibold">Dataverse</Text>: the{" "}
             <strong>collection alias</strong>, which is the short name from
             your collection&apos;s URL, plus the author name, contact email,
             and description that Dataverse requires for every dataset. Subject
             is optional.
           </Text>
           <Text>
-            <Text as="span" fontWeight="semibold">Zenodo</Text> — the{" "}
+            <Text as="span" fontWeight="semibold">Zenodo</Text>: the{" "}
             <strong>creator name</strong> and a <strong>description</strong>{" "}
             for the deposition. Affiliation is optional.
           </Text>
@@ -310,19 +310,19 @@ export default function GettingStarted() {
         </Text>
         <Stack gap={3}>
           <FeatureItem name="Condition assignment">
-            — request the next sequential condition number. DataPipe cycles
+            request the next sequential condition number. DataPipe cycles
             through conditions (0, 1, 2, ... back to 0).
           </FeatureItem>
           <FeatureItem name="Data validation">
-            — check that incoming data is valid JSON or CSV. You can also
+            check that incoming data is valid JSON or CSV. You can also
             specify required fields. This helps prevent malicious submissions.
           </FeatureItem>
           <FeatureItem name="Session limit">
-            — cap how many data files DataPipe will accept. You can raise the
+            cap how many data files DataPipe will accept. You can raise the
             limit later.
           </FeatureItem>
           <FeatureItem name="Psych-DS metadata">
-            — automatically produce metadata adhering to{" "}
+            automatically produce metadata adhering to{" "}
             <Link href="https://psychds-docs.readthedocs.io/en/latest/" target="_blank" rel="noopener noreferrer" color="brandOrange.fg">
               Psych-DS
             </Link>
@@ -333,8 +333,8 @@ export default function GettingStarted() {
         </Stack>
         <Callout>
           Only activate the features you need, and only during active data
-          collection. DataPipe creates an open path into your storage provider
-          — validation and session limits reduce the risk of unwanted
+          collection. DataPipe creates an open path into your storage provider:
+          validation and session limits reduce the risk of unwanted
           submissions.
         </Callout>
         <GuidanceLine href="/docs/experiments#switches" linkText="The four switches">
@@ -353,7 +353,7 @@ export default function GettingStarted() {
           . Otherwise, you can use the DataPipe API directly with fetch requests.
         </Text>
         <Text>
-          The code is the same whichever storage provider you chose — your
+          The code is the same whichever storage provider you chose. Your
           experiment sends data to DataPipe, and DataPipe handles the rest.
           Your experiment dashboard has ready-to-use snippets for both jsPsych
           and plain JavaScript. Go to{" "}
@@ -365,7 +365,7 @@ export default function GettingStarted() {
           The jsPsych extension saves data as it is produced by default, not
           only when the experiment ends, so a participant who closes the tab
           partway through does not take all of their data with them. Plain
-          JavaScript can do the same with a small library — see{" "}
+          JavaScript can do the same with a small library; see{" "}
           <Link href="/docs/experiments/sending-data#saving-as-you-go" color="brandOrange.fg">
             Saving as you go
           </Link>
@@ -382,7 +382,7 @@ export default function GettingStarted() {
 
       <StepCard number={6} title="Publish your experiment online">
         <Text>
-          Host your experiment on any web server — university hosting, GitHub
+          Host your experiment on any web server: university hosting, GitHub
           Pages, Netlify, etc. Below is a quick guide for GitHub Pages.
         </Text>
         <CollapsibleSection title="GitHub Pages setup instructions">
@@ -424,22 +424,22 @@ export default function GettingStarted() {
         </Text>
         <Stack gap={2} pl={4}>
           <Text>
-            <Text as="span" fontWeight="semibold">Enable data collection</Text> — for
+            <Text as="span" fontWeight="semibold">Enable data collection</Text>: for
             sending text files (JSON, CSV).
           </Text>
           <Text>
-            <Text as="span" fontWeight="semibold">Enable base64 data collection</Text> — for
+            <Text as="span" fontWeight="semibold">Enable base64 data collection</Text>: for
             binary data like audio, video, or images.
           </Text>
           <Text>
-            <Text as="span" fontWeight="semibold">Enable condition assignment</Text> — for
+            <Text as="span" fontWeight="semibold">Enable condition assignment</Text>: for
             automated condition cycling.
           </Text>
         </Stack>
         <Text>
           Run through your experiment once to check that the data arrives. The
           experiment dashboard links straight to your Drive folder, Dataverse
-          dataset, or Zenodo deposition — your file should appear there
+          dataset, or Zenodo deposition. Your file should appear there
           shortly after you finish.
         </Text>
       </StepCard>
@@ -460,7 +460,7 @@ export default function GettingStarted() {
           cite. Finalizing cannot be undone, so do it only when you are
           certain no more data is coming. Google Drive and Dataverse
           don&apos;t have that file-count ceiling, so there is nothing to
-          finalize there — just stop sending data when you&apos;re done.
+          finalize there. Stop sending data when you&apos;re done.
         </Text>
         <Text color="fg.muted" fontSize="sm">
           On Zenodo, finalizing prepares the deposition but does not publish

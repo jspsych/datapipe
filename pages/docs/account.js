@@ -73,8 +73,8 @@ export default function AccountAndSecurityPage() {
         </Text>
         <List.Root maxW="70ch" gap={2} ps={6}>
           <List.Item>
-            Every stored credential — access tokens, refresh tokens and pasted
-            API tokens alike — is encrypted with AES-256-GCM before it is
+            Every stored credential (access tokens, refresh tokens and pasted
+            API tokens alike) is encrypted with AES-256-GCM before it is
             written, and decrypted only in the server code that is about to make
             a request to your provider.
           </List.Item>
@@ -122,7 +122,7 @@ export default function AccountAndSecurityPage() {
         <Text maxW="70ch">
           You must have signed in within the last five minutes to delete an
           account. If it has been longer, DataPipe asks you to sign in again
-          first — the same protection that stops a stolen session from
+          first: the same protection that stops a stolen session from
           destroying an account.
         </Text>
         <Text maxW="70ch">

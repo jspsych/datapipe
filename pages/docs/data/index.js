@@ -20,23 +20,23 @@ export default function WhatDataPipeStoresPage() {
           your Drive folder, Dataverse dataset, or Zenodo deposition.
         </Text>
         <Text maxW="70ch">
-          There is one moment in every submission when DataPipe does hold the
-          data: each participant&apos;s data is written to DataPipe&apos;s own
-          storage before the write to your provider is attempted, so a crash or
-          a timeout mid-request cannot lose it. That copy is deleted as soon as
+          DataPipe does hold the data at one point in every submission: each
+          participant&apos;s data is written to DataPipe&apos;s own storage
+          before the write to your provider is attempted, so a crash or a
+          timeout mid-request cannot lose it. That copy is deleted as soon as
           the provider write lands, which is normally the same second.
         </Text>
         <Text maxW="70ch">
-          The other exception is when an upload fails — because your provider is
-          briefly unavailable, or rate-limits DataPipe, or a name check cannot
-          be completed. In that case DataPipe keeps the submission so it can
+          The other exception is an upload that fails because your provider is
+          briefly unavailable or rate-limits DataPipe, or because a name check
+          cannot be completed. In that case DataPipe keeps the submission so it can
           retry the upload automatically, and so you can download it yourself
           from the dashboard in the meantime.
         </Text>
         <Text maxW="70ch">
           A queued upload is encrypted at rest with AES-256-GCM, lives in a
           private storage bucket no browser or client can read, and is deleted
-          seven days after it was queued — or up to fourteen if DataPipe could
+          seven days after it was queued, or up to fourteen if DataPipe could
           not deliver the failure notification about it.
         </Text>
         <GuidanceLine
@@ -80,7 +80,7 @@ export default function WhatDataPipeStoresPage() {
         <Text maxW="70ch">
           <strong>The counters count attempts, not stored sessions.</strong> A
           call is counted as soon as a request arrives carrying the required
-          fields — before DataPipe checks whether the experiment exists, whether
+          fields, before DataPipe checks whether the experiment exists, whether
           it is accepting data, whether the session limit is reached, or whether
           the data passes validation. So <Code>saveData</Code> will normally be
           higher than your completed-session count, and the gap is not a sign
@@ -91,7 +91,7 @@ export default function WhatDataPipeStoresPage() {
           <strong>
             An error entry can contain the filename your experiment chose
           </strong>{" "}
-          — for example when a derived metadata file cannot be queued — along
+          (for example, when a derived metadata file cannot be queued) along
           with the raw text your storage provider returned. Researchers commonly
           name files after a participant or subject ID, so if you treat that
           identifier as sensitive, keep it out of the filename and put it inside
@@ -99,7 +99,7 @@ export default function WhatDataPipeStoresPage() {
         </Text>
         <Text maxW="70ch">
           Only the account that owns an experiment can read its log, and log
-          documents can never be edited or deleted through the app — the
+          documents can never be edited or deleted through the app: the
           security rules allow reading and creating, and nothing else.
         </Text>
       </DocsSection>
@@ -107,14 +107,14 @@ export default function WhatDataPipeStoresPage() {
       <DocsSection id="retention" title="Retention">
         <Text maxW="70ch">
           The only copy of your data DataPipe keeps for any length of time is a
-          queued upload — a submission that could not reach your storage
+          queued upload: a submission that could not reach your storage
           provider yet.
         </Text>
         <Text maxW="70ch">
           <strong>
-            A queued upload is deleted seven days after it was queued — or up
+            A queued upload is deleted seven days after it was queued (or up
             to fourteen if DataPipe could not deliver the failure notification
-            about it
+            about it)
           </strong>
           , together with its queue entry. That clock starts when the upload was
           queued, not when the last retry ran, and it applies to permanently
@@ -132,7 +132,7 @@ export default function WhatDataPipeStoresPage() {
         <Text maxW="70ch">
           Your experiment&apos;s configuration, its session count and its log
           stay for as long as the experiment does. Deleting your account removes
-          all of it — and nothing at all from your storage provider.
+          all of it, and nothing at all from your storage provider.
         </Text>
         <GuidanceLine
           href="/docs/account#deleting-your-account"

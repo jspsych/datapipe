@@ -9,7 +9,7 @@ export default function WhenAnUploadFailsPage() {
     <>
       <PageHeader
         title="When an upload fails"
-        purpose="What a failed upload means, how DataPipe retries it, and where to find it while it's waiting."
+        purpose="What a failed upload means, how DataPipe retries it, and where to find it while it is waiting."
       />
 
       <Text maxW="70ch">
@@ -34,8 +34,7 @@ export default function WhenAnUploadFailsPage() {
           retries on non-201 responses, change it to treat any 2xx as success.
         </Text>
         <Text maxW="70ch">
-          There are four situations that produce a 202 on{" "}
-          <Code>/api/data</Code>:
+          Four situations produce a 202 on <Code>/api/data</Code>:
         </Text>
         <Box as="ul" pl={5} listStyleType="disc" maxW="70ch">
           <Box as="li" mb={2}>
@@ -45,7 +44,7 @@ export default function WhenAnUploadFailsPage() {
           </Box>
           <Box as="li" mb={2}>
             <strong>DataPipe could not check the filename.</strong> Its filename
-            record — the list of names this experiment has already used — could
+            record (the list of names this experiment has already used) could
             not be rebuilt, usually because your Drive folder, Dataverse dataset,
             or Zenodo deposition is missing or access was revoked. Rather than
             risk overwriting existing data, the submission is queued.
@@ -62,7 +61,7 @@ export default function WhenAnUploadFailsPage() {
           </Box>
         </Box>
         <Text maxW="70ch">
-          A queued upload still counts toward your session limit — it is a real
+          A queued upload still counts toward your session limit: it is a real
           session, just not stored yet.
         </Text>
       </DocsSection>
@@ -131,8 +130,8 @@ export default function WhenAnUploadFailsPage() {
             Running out of retries is not the same as losing the file.
           </strong>{" "}
           DataPipe keeps the file for seven days from the moment it was
-          queued — or up to fourteen if it could not deliver the failure
-          notification about it — so a permanently failed upload stays
+          queued, or up to fourteen if it could not deliver the failure
+          notification about it, so a permanently failed upload stays
           downloadable from your dashboard for roughly five and a half more
           days after the last attempt, longer still if that notification is
           undelivered.
@@ -147,7 +146,7 @@ export default function WhenAnUploadFailsPage() {
         </Text>
         <Box as="ul" pl={5} listStyleType="disc" maxW="70ch">
           <Box as="li" mb={2}>
-            <strong>Write contention</strong> (<Code>CONTENTION</Code>) —
+            <strong>Write contention</strong> (<Code>CONTENTION</Code>):
             another write to the same folder, dataset or deposition is already
             in flight, which clears in seconds. The first attempt is 60 seconds
             out and the waits are 2, 4, 8, 16 and 30 minutes, so all five
@@ -155,7 +154,7 @@ export default function WhenAnUploadFailsPage() {
           </Box>
           <Box as="li" mb={2}>
             <strong>Expired credentials and provider blips</strong> (
-            <Code>AUTH_EXPIRED</Code>, <Code>UNAVAILABLE</Code>) — these cannot
+            <Code>AUTH_EXPIRED</Code>, <Code>UNAVAILABLE</Code>): these cannot
             be told apart from something that has already healed itself, so
             DataPipe takes one look after 60 seconds instead of waiting an hour.
             If that look fails it goes back to the hourly chain above, giving
@@ -176,8 +175,8 @@ export default function WhenAnUploadFailsPage() {
           Uploads that never reported back
         </Heading>
         <Text maxW="70ch">
-          If a request is cut off before it can finish — a server restart, a
-          memory limit on a very large submission — the participant&apos;s data
+          If a request is cut off before it can finish (a server restart, a
+          memory limit on a very large submission), the participant&apos;s data
           has already been written to DataPipe&apos;s storage, so it is still
           there. A recovery sweep runs <strong>every fifteen minutes</strong>,
           picks up anything that has been sitting for more than fifteen minutes,
@@ -185,9 +184,9 @@ export default function WhenAnUploadFailsPage() {
           and retries like any other queued file.
         </Text>
         <Text maxW="70ch">
-          One limitation is worth knowing: a recovered session gets its raw data
-          file, but Psych-DS metadata and derived tables are not regenerated for
-          it. The raw file is the source of truth, and the next live submission
+          One limitation: a recovered session gets its raw data file, but
+          Psych-DS metadata and derived tables are not regenerated for it. The
+          raw file is the source of truth, and the next live submission
           re-merges the dataset description.
         </Text>
       </DocsSection>
@@ -196,7 +195,7 @@ export default function WhenAnUploadFailsPage() {
         <Text maxW="70ch">
           Whenever an experiment has uploads waiting, its dashboard shows a
           status line reading{" "}
-          <em>&ldquo;N uploads waiting to be stored&rdquo;</em> — as a warning
+          <em>&ldquo;N uploads waiting to be stored&rdquo;</em>, as a warning
           while every one of them is still retrying, and as an error as soon as
           any one of them has used up its attempts. The panel below it lists the
           files.
@@ -204,19 +203,19 @@ export default function WhenAnUploadFailsPage() {
         <Text maxW="70ch">Each row tells you:</Text>
         <Box as="ul" pl={5} listStyleType="disc" maxW="70ch">
           <Box as="li" mb={2}>
-            <strong>Filename</strong> — the name the submission would be stored
+            <strong>Filename</strong>: the name the submission would be stored
             under.
           </Box>
           <Box as="li" mb={2}>
-            <strong>Status</strong> — waiting, being uploaded right now, or
+            <strong>Status</strong>: waiting, being uploaded right now, or
             failed, plus when the next retry is due.
           </Box>
           <Box as="li" mb={2}>
-            <strong>Reason</strong> — a plain-language description of what went
+            <strong>Reason</strong>: a plain-language description of what went
             wrong.
           </Box>
           <Box as="li" mb={2}>
-            <strong>Stored for</strong> — how much of the seven days since
+            <strong>Stored for</strong>: how much of the seven days since
             queueing is left (up to fourteen if a failure notification about
             the file could not be delivered).
           </Box>
@@ -243,7 +242,7 @@ export default function WhenAnUploadFailsPage() {
           retries do.
         </Text>
         <Text maxW="70ch">
-          If a download fails, nothing has been lost — DataPipe still holds the
+          If a download fails, nothing has been lost: DataPipe still holds the
           file for the rest of its retention window (seven days, or up to
           fourteen if a failure notification about it could not be delivered).
           Try the single-file buttons if the ZIP will not build.
@@ -258,10 +257,10 @@ export default function WhenAnUploadFailsPage() {
         <Text maxW="70ch">
           After the fifth failed attempt the upload is marked failed and is not
           tried again. Download it from the dashboard and add it to your{" "}
-          Drive folder, Dataverse dataset, or Zenodo deposition by hand. It is
-          worth doing promptly: <strong>the file is deleted seven days after
-          it was queued</strong> — or up to fourteen if DataPipe could not
-          deliver the failure notification about it — failed or not.
+          Drive folder, Dataverse dataset, or Zenodo deposition by hand. Do
+          this promptly: <strong>the file is deleted seven days after
+          it was queued</strong>, or up to fourteen if DataPipe could not
+          deliver the failure notification about it, failed or not.
         </Text>
         <Text maxW="70ch">
           Some failures are permanent immediately, because retrying could never
@@ -272,7 +271,7 @@ export default function WhenAnUploadFailsPage() {
           <Box as="li" mb={2}>
             <strong>The experiment was finalized while the upload was queued.</strong>{" "}
             Finalizing seals your Zenodo record permanently, so the file cannot
-            be added to it. The data is not lost — download it from the queued
+            be added to it. The data is not lost: download it from the queued
             files panel.
           </Box>
           <Box as="li" mb={2}>

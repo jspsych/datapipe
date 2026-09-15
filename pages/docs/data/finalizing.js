@@ -9,7 +9,7 @@ export default function FinishingAStudyPage() {
     <>
       <PageHeader
         title="Finishing a study"
-        purpose="What finalizing an experiment does, which providers support it, and why it can't be undone."
+        purpose="What finalizing an experiment does, which providers support it, and why it cannot be undone."
       />
 
       <Text maxW="70ch">
@@ -29,8 +29,8 @@ export default function FinishingAStudyPage() {
 
       <DocsSection id="what-finalizing-does" title="What finalizing does">
         <Text maxW="70ch">
-          Finalizing merges <strong>everything</strong> — every archive created
-          during collection, plus every file still sitting loose — into exactly
+          Finalizing merges <strong>everything</strong>: every archive created
+          during collection, plus every file still sitting loose, into exactly
           one file called <Code>datapipe-final.zip</Code>. When it finishes,
           that archive is the only file in your Zenodo deposition.
         </Text>
@@ -67,21 +67,21 @@ export default function FinishingAStudyPage() {
         </Text>
         <Box as="ul" pl={5} listStyleType="disc" maxW="70ch">
           <Box as="li" mb={2}>
-            <strong>Zenodo</strong> — supported. Batch archives and loose files
+            <strong>Zenodo</strong>: supported. Batch archives and loose files
             are merged into one <Code>datapipe-final.zip</Code>.
           </Box>
           <Box as="li" mb={2}>
-            <strong>Google Drive</strong> — not applicable. Drive imposes no
+            <strong>Google Drive</strong>: not applicable. Drive imposes no
             file-count limit, so there is no ceiling to relieve; your folder can
             hold a session per file indefinitely, and it stores real folders, so
             the folder tree is already intact.
           </Box>
           <Box as="li" mb={2}>
-            <strong>Dataverse</strong> — not applicable, for the same reason: no
+            <strong>Dataverse</strong>: not applicable, for the same reason: no
             file-count cap that DataPipe enforces, and real folder support.
           </Box>
           <Box as="li" mb={2}>
-            <strong>OSF</strong> — not applicable. OSF is legacy only and no new
+            <strong>OSF</strong>: not applicable. OSF is legacy only and no new
             experiments can be created on it.
           </Box>
         </Box>
@@ -108,7 +108,7 @@ export default function FinishingAStudyPage() {
         <Text maxW="70ch">
           This is a protection, not an error. Finalizing merges what your storage
           provider currently holds, and a queued upload is by definition not
-          there yet — sealing the record now would leave that participant&apos;s
+          there yet: sealing the record now would leave that participant&apos;s
           data outside the final archive permanently. Wait for the queued files
           panel to empty, then try again.
         </Text>
@@ -119,7 +119,7 @@ export default function FinishingAStudyPage() {
           it was queued, and{" "}
           <strong>
             the file stays downloadable from the queued files panel until seven
-            days after it was queued — or up to fourteen if DataPipe could not
+            days after it was queued, or up to fourteen if DataPipe could not
             deliver the failure notification about it
           </strong>
           . Download it and add it to your Zenodo deposition by hand.

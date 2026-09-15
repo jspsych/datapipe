@@ -39,8 +39,8 @@ export default function AboutDataPipePage() {
       <DocsSection id="cost" title="Cost">
         <Text maxW="70ch">DataPipe is free to use.</Text>
         <Text maxW="70ch">
-          The expensive parts of running an online experiment — hosting files
-          and storing data — are handled by services you already have access to:
+          The expensive parts of running an online experiment (hosting files
+          and storing data) are handled by services you already have access to:
           GitHub Pages for hosting, and Google Drive, Dataverse, or Zenodo for
           storage. DataPipe is a lightweight bridge between them, which makes it
           inexpensive to operate.
@@ -72,7 +72,7 @@ export default function AboutDataPipePage() {
       </DocsSection>
 
       <DocsSection id="risks" title="Risks">
-        <Text maxW="70ch">There are a few risks to be aware of:</Text>
+        <Text maxW="70ch">Using DataPipe carries a few risks:</Text>
         <List.Root as="ol" maxW="70ch" gap={3} ps={6}>
           <List.Item>
             <Text as="span" fontWeight="semibold">
@@ -98,8 +98,8 @@ export default function AboutDataPipePage() {
             <Text as="span" fontWeight="semibold">
               Support availability.
             </Text>{" "}
-            DataPipe is not a commercial product, and has no dedicated support
-            team — the developers of jsPsych maintain it and answer what they
+            DataPipe is not a commercial product and has no dedicated support
+            team. The developers of jsPsych maintain it and answer what they
             can. The{" "}
             <ProseLink href="https://github.com/jspsych/datapipe" external>
               source code is open

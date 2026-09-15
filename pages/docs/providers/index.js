@@ -49,7 +49,7 @@ function ProviderOption({ name, description, limits }) {
         <Text as="span" fontWeight="semibold" color="fg">
           {name}
         </Text>
-        {" — "}
+        {": "}
         {description}
       </Text>
       {limits && (
@@ -90,7 +90,7 @@ export default function ChoosingAProviderPage() {
         <Text maxW="70ch">
           DataPipe writes each participant&apos;s data into your own account
           with one of the three storage providers below. The data is yours
-          throughout — DataPipe only ever asks for permission to add files.
+          throughout. DataPipe only ever asks for permission to add files.
         </Text>
         <Stack gap={3} maxW="70ch">
           <ProviderOption
@@ -100,8 +100,8 @@ export default function ChoosingAProviderPage() {
           />
           <ProviderOption
             name="Dataverse"
-            description="institutional repositories run by universities and consortia — Harvard Dataverse, Borealis, DataverseNL, and others. Data lands in a draft dataset, in a collection you name."
-            limits="your installation sets its own file size and storage limits. API tokens expire, often yearly, and DataPipe cannot renew them — data stops arriving until you reconnect."
+            description="institutional repositories run by universities and consortia (Harvard Dataverse, Borealis, DataverseNL, and others). Data lands in a draft dataset, in a collection you name."
+            limits="your installation sets its own file size and storage limits. API tokens expire, often yearly, and DataPipe cannot renew them. Data stops arriving until you reconnect."
           />
           <ProviderOption
             name="Zenodo"
@@ -149,8 +149,8 @@ export default function ChoosingAProviderPage() {
           experiment writes to the one Drive folder, Dataverse dataset, or
           Zenodo deposition DataPipe created for it. To collect the same study
           somewhere else, create a new experiment on the other provider and
-          point the experiment your participants run at the new experiment ID —
-          data already collected stays where it is.
+          point the experiment your participants run at the new experiment ID.
+          Data already collected stays where it is.
         </Text>
       </DocsSection>
 
@@ -180,14 +180,14 @@ export default function ChoosingAProviderPage() {
           </Text>
           <Text fontSize="sm" color="fg.muted">
             DataPipe sets no file count or file size limit on Drive. The real
-            constraint is your account&apos;s own quota — free Google accounts
-            share 15 GB across Drive, Gmail and Photos, and uploads stop when
+            constraint is your account&apos;s own quota: free Google accounts
+            share 15 GB across Drive, Gmail, and Photos, and uploads stop when
             that is full.
           </Text>
           <Text fontSize="sm" color="fg.muted">
             Drive allows two files with the same name in the same folder and
-            never reports a conflict, so DataPipe&apos;s filename record — its
-            own list of the names an experiment has used — is the only thing
+            never reports a conflict, so DataPipe&apos;s filename record (its
+            own list of the names an experiment has used) is the only thing
             preventing a duplicate. Drive stores the file under the last part
             of its name, so two submissions that differ only in their folder
             prefix count as the same name.
@@ -206,7 +206,7 @@ export default function ChoosingAProviderPage() {
             minute later rather than failing it.
           </Text>
           <Text fontSize="sm" color="fg.muted">
-            Dataverse never rejects a duplicate filename — it silently renames
+            Dataverse never rejects a duplicate filename: it silently renames
             the new file instead, so a second{" "}
             <Text as="span" fontWeight="semibold">
               README.md
@@ -234,8 +234,8 @@ export default function ChoosingAProviderPage() {
             record, and no DOI is minted until you publish.
           </Text>
           <Text fontSize="sm" color="fg.muted">
-            A Zenodo record holds at most 100 files and 50 GB — the only
-            file-count ceiling among the three providers. It is why DataPipe
+            A Zenodo record holds at most 100 files and 50 GB. No other
+            provider caps the file count. That cap is why DataPipe
             merges completed sessions into archives on Zenodo as collection
             goes on, and why finalizing a study into one archive is a Zenodo
             feature only.
@@ -254,7 +254,7 @@ export default function ChoosingAProviderPage() {
           </Text>
           <Text fontSize="sm" color="fg.muted">
             Writing a file that already exists on Zenodo replaces it, with no
-            error — DataPipe&apos;s filename record is the only thing standing
+            error. DataPipe&apos;s filename record is the only thing standing
             between a repeated filename and a lost session.
           </Text>
         </BehaviorRow>
