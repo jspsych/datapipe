@@ -39,3 +39,19 @@ than which function you edited.
 Pushing to `main` with changesets pending opens a "Release datapipe-client" pull
 request that applies the version bump and the changelog. Merging that pull
 request publishes to npm. See `.github/workflows/release-client.yml`.
+
+Publishing authenticates with npm **trusted publishing**, so there is no npm
+token in this repository's secrets. npm trusts a specific workflow file in a
+specific repository, and trades the OIDC token GitHub mints for that run for a
+short-lived credential good for one publish.
+
+Two consequences worth knowing before you change anything:
+
+- **The trust is bound to the workflow's filename.** Renaming or moving
+  `.github/workflows/release-client.yml` revokes its ability to publish until
+  the trusted publisher on npm is updated to match. The failure looks like an
+  authentication error, not a configuration one.
+- **A trusted publisher cannot be configured for a package that does not exist
+  yet.** Version 0.1.0 therefore has to be published once by hand, by someone
+  logged in locally, before the automation can take over. See
+  `docs/releasing-the-client.md`.

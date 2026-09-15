@@ -15,6 +15,9 @@
 # Both steps run the tests and the build first, because a broken publish
 # cannot be taken back -- npm forbids republishing a version, so a bad release
 # has to be superseded rather than fixed.
+#
+# Authentication is npm trusted publishing (OIDC), not a stored token. See the
+# publish step below for what that binds to.
 
 name: Release datapipe-client
 
@@ -55,7 +58,20 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 22.x
-          registry-url: "https://registry.npmjs.org"
+
+      # Trusted publishing needs npm 11.5.1 or later, and Node 22 still ships
+      # npm 10. Without this the publish falls back to looking for a token and
+      # fails with ENEEDAUTH, which reads like a missing secret rather than a
+      # too-old CLI.
+      #
+      # Deliberately not `npm@latest`: this step is the one thing standing
+      # between a green build and an unpublishable version number, so it should
+      # not change under us on an unrelated day.
+      - name: Use an npm that can do trusted publishing
+        run: |
+          npm install -g npm@11.6.2
+          npm --version
+        working-directory: .
 
       # Not `npm ci` with a cache key on the root lockfile: packages/client is
       # deliberately not part of a root workspace (see packages/client/.changeset/README.md),
@@ -72,6 +88,18 @@ jobs:
       - name: Build
         run: npm run build
 
+      # No NPM_TOKEN. npm authenticates through trusted publishing: it trades
+      # the GitHub OIDC token this job is allowed to mint (`id-token: write`
+      # above) for a short-lived, single-publish credential. Nothing long-lived
+      # is stored in this repository, and a leaked workflow log cannot be
+      # replayed into a publish.
+      #
+      # This binds to THIS FILE BY NAME. The trusted publisher configured on
+      # npm names `release-client.yml`, so renaming this file revokes its
+      # ability to publish until npm is updated to match.
+      #
+      # Provenance is attested automatically under trusted publishing; there is
+      # no NPM_CONFIG_PROVENANCE to set.
       - name: Create a release pull request, or publish
         uses: changesets/action@v1
         with:
@@ -82,5 +110,3 @@ jobs:
           commit: "Version datapipe-client"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
