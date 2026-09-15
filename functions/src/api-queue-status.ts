@@ -150,12 +150,19 @@ export const apiQueueStatus = onRequest({ cors: true }, async (req, res) => {
   }
 
   // List queue entries for this experiment
-  const queueItems = await db
-    .collection("uploadQueue")
-    .where("experimentID", "==", experimentID)
-    .where("status", "in", ["pending", "processing", "failed"])
-    .orderBy("createdAt", "desc")
-    .get();
+  let queueItems;
+  try {
+    queueItems = await db
+      .collection("uploadQueue")
+      .where("experimentID", "==", experimentID)
+      .where("status", "in", ["pending", "processing", "failed"])
+      .orderBy("createdAt", "desc")
+      .get();
+  } catch (e) {
+    console.error(`Failed to list queue entries for experiment ${experimentID}:`, e instanceof Error ? e.message : e);
+    res.status(500).json({ error: "Failed to list queue entries" });
+    return;
+  }
 
   const entries = queueItems.docs.map((doc) => {
     const data = doc.data();

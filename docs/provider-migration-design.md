@@ -788,9 +788,13 @@ Google Drive provider is announced:
    `GDRIVE_REDIRECT_URI` (must point at `https://pipe.jspsych.org/oauth2/connect`).
    `GDRIVE_API_BASE`/`GDRIVE_TOKEN_URL`/`GDRIVE_AUTHORIZE_URL` default to
    the real Google endpoints and need no production values.
-3. **Firestore TTL policy** on `filenameClaims` `expiresAt` field
-   (console/gcloud). Cost-boundedness only — correctness never depends on
-   it.
+3. **Firestore TTL policy** on `filenameClaims` `expiresAt` field: declared
+   as a `fieldOverrides` entry in `firestore.indexes.json` (same shape as the
+   `mail` collection's `delivery.expireAt` TTL) and deployed with
+   `firebase deploy --only firestore`, alongside the rules. No manual
+   console/gcloud step — a hand-created policy is deleted by the next
+   `--force` deploy that doesn't declare it (see commit f0aafe0). Cost-
+   boundedness only — correctness never depends on it.
 4. **Firestore index**: the scheduled gdrive refresh queries
    `connectedAccounts.gdrive.tokenExpiresAt` — confirm the single-field
    index exists in production (auto-indexing normally covers it; the
