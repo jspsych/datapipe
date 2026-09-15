@@ -9,7 +9,7 @@ import MESSAGES from "./api-messages.js";
 import blockMetadata from "./metadata-block.js";
 import { DerivedFile, uploadPathFor } from "./metadata-derived-files.js";
 import { uploadDerivedFiles, queueDerivedFiles } from "./metadata-derived-upload.js";
-import resolveToken from "./resolve-token.js";
+import resolveToken, { classifyTokenFailure } from "./resolve-token.js";
 import queueUpload from "./queue-upload.js";
 import { persistPending, cleanupPending } from "./persist-pending.js";
 import { getProviderForExperiment, claimNameFor } from "./providers/index.js";
@@ -282,6 +282,20 @@ export const apiData = onRequest(
     return;
   }
 
+  //With metadata on, the raw submission is the critical upload and lives at
+  //data/raw/<original name> in the Psych-DS layout (the CSVs above are derived
+  //from it). Session counting and queue-on-failure key off this file. With
+  //metadata off, the layout is unchanged: the raw file goes to the root.
+  //
+  // Computed here -- ahead of token resolution -- rather than down in the
+  // metadata block where it used to live, purely so the RECOVERABLE
+  // token-failure branch below can queue under the same path the retry
+  // worker will eventually write. uploadPathFor is pure and depends only on
+  // exp_data.metadataActive and filename, neither of which changes between
+  // here and its old call site, so moving it earlier changes no behavior for
+  // any other branch.
+  const uploadFilename = uploadPathFor(exp_data.metadataActive, filename);
+
   let tokenResult: Awaited<ReturnType<typeof resolveToken>>;
   try {
     tokenResult = await resolveToken(user_data, exp_data);
@@ -294,9 +308,73 @@ export const apiData = onRequest(
 
   if (!tokenResult.success) {
     const errorMessage = MESSAGES[tokenResult.error as keyof typeof MESSAGES] || MESSAGES.TOKEN_RESOLUTION_ERROR;
-    res.status(400).json(errorMessage);
-    await writeLog(experimentID, "logError", {...errorMessage, detail: tokenResult.detail}, logContext);
-    return;
+
+    // NOT_RECOVERABLE (no connection for this owner/provider at all --
+    // resolve-token.ts's classifyTokenFailure) keeps the original behavior:
+    // reject outright, nothing to queue a retry against.
+    if (classifyTokenFailure(tokenResult.error) === "NOT_RECOVERABLE") {
+      res.status(400).json(errorMessage);
+      await writeLog(experimentID, "logError", {...errorMessage, detail: tokenResult.detail}, logContext);
+      return;
+    }
+
+    // RECOVERABLE: a connection exists but its credential is currently
+    // unusable (expired/revoked refresh token, a failed refresh exchange, an
+    // expired static token). The researcher reconnecting -- or the token
+    // simply outliving a transient refresh-endpoint hiccup -- fixes this with
+    // no code change, so this is queued for retry exactly like the "upload
+    // exception" branch below, instead of rejecting a submission that a later
+    // attempt could have saved.
+    //
+    // This happens BEFORE the collision-cache claim (claimFilename, below)
+    // and before the metadata block, so unlike every later queue branch in
+    // this handler there is no claimToken to pass and no derivedFiles to
+    // queue alongside it yet -- metadataMessage itself is not even declared
+    // until the METADATA BLOCK further down. An entry queued with no
+    // claimToken is not a gap: queue-upload.ts's QueueUploadParams marks
+    // claimToken optional (`claimToken: params.claimToken || null`), and
+    // scheduled-upload-retry.ts's collision-cache section only runs
+    // `if (data.claimToken)` (see its comment: "only entries queued after
+    // the cache existed carry a claimToken... legacy behavior, the
+    // provider's own conflict backstop still applies to them") -- so this
+    // entry takes exactly the pre-collision-cache retry path every
+    // legacy-queued entry already takes, and the provider's own NAME_CONFLICT
+    // response is the backstop against a same-named file having appeared in
+    // the meantime. Likewise, the retry worker's normal successful-write path
+    // (result.success in scheduled-upload-retry.ts) never generates Psych-DS
+    // derived files for ANY queued entry -- see its file header and the
+    // "Uploads that never reported back" limitation documented in
+    // pages/docs/data/failures.js -- so a recovered token failure produces
+    // exactly what every other retried entry produces: the raw session file,
+    // with no derived tables. That is a pre-existing property of the retry
+    // worker, not a regression introduced here.
+    try {
+      await queueUpload({
+        experimentID, owner: exp_data.owner, filename: uploadFilename, data,
+        dataType: "data", osfFilesLink: exp_data.osfFilesLink,
+        storageProvider: exp_data.storageProvider, providerContainer: exp_data.providerContainer,
+        errorCode: 0, sessionIncremented: true,
+        failureReason: `Token resolution failed: ${tokenResult.error}`,
+      });
+      await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
+      await cleanupPending(pendingPath); // queue-upload has its own copy
+      await discardStaging();
+      res.status(202).json(MESSAGES.OSF_UPLOAD_QUEUED);
+      // Counted apart from both success and failure, same convention as
+      // every other queue branch -- see write-log.ts.
+      await writeLog(experimentID, "saveDataQueued", undefined, logContext);
+      // The original credential-specific message (INVALID_REFRESH_TOKEN,
+      // PROVIDER_TOKEN_EXPIRED, INVALID_OSF_TOKEN, ...), not a generic queued
+      // notice -- this is what makes the dashboard's error panel show the
+      // credential problem immediately, before the failure-notification email
+      // (which waits for the retry worker's first attempt) ever fires.
+      await writeLog(experimentID, "logError", {...errorMessage, detail: tokenResult.detail}, logContext);
+      return;
+    } catch {
+      res.status(500).json(MESSAGES.OSF_UPLOAD_EXCEPTION);
+      await writeLog(experimentID, "logError", {...errorMessage, detail: tokenResult.detail}, logContext);
+      return;
+    }
   }
 
   const auth: ResolvedAuth = { token: tokenResult.token, serverUrl: tokenResult.serverUrl };
@@ -339,12 +417,6 @@ export const apiData = onRequest(
   //METADATA BLOCK END
 
   const { provider, container } = getProviderForExperiment(exp_data);
-
-  //With metadata on, the raw submission is the critical upload and lives at
-  //data/raw/<original name> in the Psych-DS layout (the CSVs above are derived
-  //from it). Session counting and queue-on-failure key off this file. With
-  //metadata off, the layout is unchanged: the raw file goes to the root.
-  const uploadFilename = uploadPathFor(exp_data.metadataActive, filename);
 
   // Collision detection: claim the filename in the Firestore cache
   // immediately before the provider write. The provider's own conflict

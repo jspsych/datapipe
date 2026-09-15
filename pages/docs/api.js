@@ -349,9 +349,20 @@ export default function ApiReferencePage() {
           Codes beginning <Code>OSF_</Code> are historical names kept for
           backward compatibility. <Code>OSF_FILE_EXISTS</Code>,{" "}
           <Code>OSF_UPLOAD_ERROR</Code> and <Code>OSF_UPLOAD_EXCEPTION</Code>{" "}
-          are returned for every storage provider, not only OSF.{" "}
-          <Code>INVALID_OSF_TOKEN</Code> and <Code>INVALID_REFRESH_TOKEN</Code>{" "}
-          occur only on experiments still collecting to OSF.
+          are returned for every storage provider, not only OSF.
+        </Text>
+        <Text fontSize="sm" color="fg.muted" maxW="70ch">
+          <Code>INVALID_OSF_TOKEN</Code>, <Code>INVALID_REFRESH_TOKEN</Code>{" "}
+          and <Code>PROVIDER_TOKEN_EXPIRED</Code> never appear as a rejection
+          any more: a connected account whose credential has expired, been
+          revoked, or gone invalid is queued for retry instead (
+          <Code>202</Code>, <Code>OSF_UPLOAD_QUEUED</Code>), the same as a
+          provider outage, since reconnecting the account fixes it with no
+          code change. They are documented below because a queued entry's
+          <Code>failureReason</Code> still names them, and so does the
+          failure-notification email. <Code>PROVIDER_NOT_CONNECTED</Code> is
+          the one credential code still rejected outright: there is no
+          connection at all for a retry to succeed against.
         </Text>
         <Text fontSize="sm" color="fg.muted" maxW="70ch">
           The same applies to the <Code>message</Code> text: several messages
@@ -429,15 +440,22 @@ export default function ApiReferencePage() {
                 The owner has not connected an account for this
                 experiment&apos;s storage provider.
               </ErrorRow>
-              <ErrorRow code="PROVIDER_TOKEN_EXPIRED" status={400}>
-                The API token for the storage provider has expired. The owner
-                must create a new one and reconnect it.
+              <ErrorRow code="PROVIDER_TOKEN_EXPIRED" status="202 (queued)">
+                The API token for the storage provider has expired. The
+                submission is queued and retried automatically rather than
+                rejected -- the owner must still create a new token and
+                reconnect it, since retrying alone cannot fix an expired
+                static token, but no participant sees an error for it.
               </ErrorRow>
-              <ErrorRow code="INVALID_OSF_TOKEN" status={400}>
-                The OSF token for this account is invalid or expired.
+              <ErrorRow code="INVALID_OSF_TOKEN" status="202 (queued)">
+                The OSF token for this account is invalid or expired. Queued
+                and retried automatically; reconnecting the account is what
+                lets a later retry succeed.
               </ErrorRow>
-              <ErrorRow code="INVALID_REFRESH_TOKEN" status={400}>
-                The owner&apos;s OSF refresh token is no longer valid.
+              <ErrorRow code="INVALID_REFRESH_TOKEN" status="202 (queued)">
+                The owner&apos;s refresh token is no longer valid (OSF,
+                Google Drive, or Zenodo). Queued and retried automatically;
+                reconnecting the account is what lets a later retry succeed.
               </ErrorRow>
               <ErrorRow code="UNKNOWN_ERROR_GETTING_CONDITION" status={400}>
                 An unexpected error occurred while assigning a condition.

@@ -34,13 +34,27 @@ export default function WhenAnUploadFailsPage() {
           retries on non-201 responses, change it to treat any 2xx as success.
         </Text>
         <Text maxW="70ch">
-          Four situations produce a 202 on <Code>/api/data</Code>:
+          Five situations produce a 202, on both <Code>/api/data</Code> and{" "}
+          <Code>/api/base64</Code>:
         </Text>
         <Box as="ul" pl={5} listStyleType="disc" maxW="70ch">
           <Box as="li" mb={2}>
+            <strong>Your stored credential failed to resolve.</strong> An
+            expired or revoked refresh token, a failed token-refresh request,
+            or an expired static token (Dataverse). DataPipe treats this as
+            recoverable -- reconnecting the account, or the token simply
+            outliving a transient refresh hiccup, is enough for the next
+            automatic retry to succeed -- so the submission is queued instead
+            of rejected. The one credential problem that is <em>not</em>{" "}
+            queued this way is having no connection at all: with nothing to
+            retry against, that still comes back as a rejection (
+            <Code>PROVIDER_NOT_CONNECTED</Code> in the API docs&apos;{" "}
+            error codes table).
+          </Box>
+          <Box as="li" mb={2}>
             <strong>The provider write failed.</strong> The most common case: an
-            outage, a rate limit, an expired credential, or a Zenodo record that
-            is already full.
+            outage, a rate limit, a credential that expired mid-write, or a
+            Zenodo record that is already full.
           </Box>
           <Box as="li" mb={2}>
             <strong>DataPipe could not check the filename.</strong> Its filename

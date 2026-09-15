@@ -486,8 +486,25 @@ describe("tiered backoff, exercised through the real retry worker", () => {
       // PROVIDER_NOT_CONNECTED and routes straight to handleRetryFailure with
       // no provider code at all. decrypt() passes a non-"v1:" value through
       // unchanged, so a plaintext token needs no encryption key here.
+      //
+      // "token-failure-recoverable" is the OTHER half of resolve-token.ts's
+      // classifyTokenFailure: a connection DOES exist, but its credential is
+      // unusable -- here, a Dataverse static token whose tokenExpiresAt has
+      // already passed (dataverse.ts's resolveToken: "PROVIDER_TOKEN_EXPIRED",
+      // no network call needed to observe it).
       ...(attemptOutcome === "token-failure"
         ? {}
+        : attemptOutcome === "token-failure-recoverable"
+        ? {
+            connectedAccounts: {
+              dataverse: {
+                authMethod: "static-token",
+                encryptedToken: "plaintext-token",
+                serverUrl: "https://example.test",
+                tokenExpiresAt: Date.now() - 1000,
+              },
+            },
+          }
         : {
             connectedAccounts: {
               dataverse: {
@@ -507,7 +524,8 @@ describe("tiered backoff, exercised through the real retry worker", () => {
 
     // The worker downloads the cached payload before it attempts the write —
     // without it the item short-circuits to "Failed to read cached data".
-    if (attemptOutcome !== "token-failure") {
+    // Neither token-failure variant ever reaches that step.
+    if (attemptOutcome !== "token-failure" && attemptOutcome !== "token-failure-recoverable") {
       await bucket.file(storagePath).save("[]", { contentType: "text/plain" });
     }
 
@@ -590,6 +608,38 @@ describe("tiered backoff, exercised through the real retry worker", () => {
     const after = (await db.collection("uploadQueue").doc(docId).get()).data();
     expect(after.providerErrorCode).toBeNull();
     const delayMs = after.nextRetryAt.toMillis() - Date.now();
+    expect(delayMs).toBeGreaterThan(60 * 60 * 1000);
+  });
+
+  // The RECOVERABLE half of resolve-token.ts's classifyTokenFailure, exercised
+  // through the real retry worker: a connection exists (the owner has a
+  // Dataverse static token) but the credential itself has expired
+  // (PROVIDER_TOKEN_EXPIRED). scheduled-upload-retry.ts's token-failure branch
+  // maps this to providerErrorCode AUTH_EXPIRED so QueuePanel.js and the
+  // failure-notification email describe it as a credential problem instead of
+  // the raw "Token resolution failed: PROVIDER_TOKEN_EXPIRED" string -- but
+  // AUTH_EXPIRED is a PROBE_RETRY_CODE, not a FAST_RETRY_CODE
+  // (queue-upload.ts), so this must still land on the hours-scale slow tier,
+  // not the fast tier CONTENTION uses.
+  it("a RECOVERABLE token failure is tagged AUTH_EXPIRED and stays on the slow tier", async () => {
+    const { owner, docId } = await seedDueItem({
+      storedCode: undefined,
+      attemptOutcome: "token-failure-recoverable",
+    });
+
+    await retryPendingUploads(owner);
+
+    const after = (await db.collection("uploadQueue").doc(docId).get()).data();
+    expect(after.status).toBe("pending");
+    expect(after.retryCount).toBe(1);
+    expect(after.providerErrorCode).toBe("AUTH_EXPIRED");
+
+    const delayMs = after.nextRetryAt.toMillis() - Date.now();
+    // retryCount 1 on the slow tier => 2^1 * 1h = 2 hours -- not the fast
+    // tier's ~2 minutes, and not the CONTENTION/UNAVAILABLE probe's 60s
+    // first look either (that only applies to the FIRST time an item is
+    // queued, in queue-upload.ts -- this item's initial nextRetryAt was
+    // seeded directly by this test, not through queueUpload).
     expect(delayMs).toBeGreaterThan(60 * 60 * 1000);
   });
 

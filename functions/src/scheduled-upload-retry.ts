@@ -3,7 +3,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { db, storage } from "./app.js";
 import { getProvider, claimNameFor } from "./providers/index.js";
 import { ContainerRef, StorageProviderId, ResolvedAuth, ProviderErrorCode } from "./providers/types.js";
-import resolveToken from "./resolve-token.js";
+import resolveToken, { classifyTokenFailure } from "./resolve-token.js";
 import { claimFilename, confirmClaim, CollisionCacheUnavailableError } from "./collision-cache.js";
 import { ExperimentData, UserData } from "./interfaces.js";
 import { isCompactionInFlight, COMPACTION_HOLD_REASON } from "./compaction-gate.js";
@@ -172,13 +172,35 @@ async function processQueueItem(queueDoc: FirebaseFirestore.QueryDocumentSnapsho
   try {
     const tokenResult = await resolveToken(userData, expData);
     if (!tokenResult.success) {
-      await handleRetryFailure(docRef, data, `Token resolution failed: ${tokenResult.error}`);
+      // RECOVERABLE (see resolve-token.ts's classifyTokenFailure -- a
+      // connection exists but its credential is currently unusable) gets
+      // AUTH_EXPIRED so QueuePanel and the failure-notification email
+      // describe this as a credential problem instead of the raw
+      // "Token resolution failed: ..." string (REASON_COPY's fallback in
+      // QueuePanel.js). AUTH_EXPIRED is a PROBE_RETRY_CODE, not a
+      // FAST_RETRY_CODE (queue-upload.ts) -- computeBackoffMs
+      // (upload-backoff.ts) only fast-tiers CONTENTION, so this still lands
+      // on the hours-scale slow tier, just as an uncoded token failure
+      // always has.
+      //
+      // NOT_RECOVERABLE (no connection at all) passes no code, same as
+      // before this change -- nothing in the ProviderErrorCode union
+      // describes "no connection exists", and clearing the field is what
+      // already routes an uncoded failure to the slow tier.
+      const providerErrorCode =
+        classifyTokenFailure(tokenResult.error) === "RECOVERABLE" ? "AUTH_EXPIRED" : undefined;
+      await handleRetryFailure(docRef, data, `Token resolution failed: ${tokenResult.error}`, undefined, providerErrorCode);
       return;
     }
     auth = { token: tokenResult.token, serverUrl: tokenResult.serverUrl };
   } catch (e) {
     const detail = e instanceof Error ? e.message : "Unknown error";
-    await handleRetryFailure(docRef, data, `Token resolution exception: ${detail}`);
+    // An exception during resolution (a decrypt failure, a Firestore error
+    // mid-refresh, ...) is RECOVERABLE by the same rule as a returned
+    // failure -- see resolve-token.ts's classifyTokenFailure -- so it gets
+    // the same AUTH_EXPIRED treatment rather than silently falling back to
+    // an uncoded slow-tier retry.
+    await handleRetryFailure(docRef, data, `Token resolution exception: ${detail}`, undefined, "AUTH_EXPIRED");
     return;
   }
 
