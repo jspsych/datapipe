@@ -122,8 +122,7 @@ async function seedAndRun({ storedRef }) {
     { token: "t" },
     metadataDocRef,
     sampleData,
-    "session-1.json",
-    {}
+    "session-1.json"
   );
 
   const after = (await db.collection("metadata").doc(experimentID).get()).data();

@@ -58,17 +58,21 @@ describe('produceMetadata', () => {
     expect(result.metadata).toEqual(sampleMetadata);
   });
 
-  it('should generate metadata with provided options', async () => {
+  // produceMetadata used to take a caller-supplied seed descriptor as a 2nd
+  // argument and merge it verbatim into the generated metadata. That was the
+  // unauthenticated write channel closed 2026-09-15 (see
+  // docs/provider-migration-design.md): the seed came straight from an
+  // anonymous participant's request body (metadataOptions on POST
+  // /api/data), which let any participant set or overwrite dataset-level
+  // fields. The parameter is gone; a 2nd argument is now just an extra,
+  // ignored value, and generate() always sees an empty seed.
+  it('ignores a second argument and never merges caller-supplied fields', async () => {
     const options = { randomField: "this is a field" };
 
     const result = await produceMetadata(sampleData, options);
 
-    // Build the expectation from a deep copy so we don't mutate the shared sampleMetadata
-    // fixture used by the test above (the previous version aliased it).
-    const optionMetadata = structuredClone(sampleMetadata);
-    optionMetadata.randomField = "this is a field";
-
-    expect(result.metadata).toEqual(optionMetadata);
+    expect(result.metadata).toEqual(sampleMetadata);
+    expect(result.metadata.randomField).toBeUndefined();
   });
 
   it('should report no extracted columns for flat data', async () => {

@@ -99,10 +99,17 @@ const downloadedMetadata = {
 // stops doing so.
 function createMockOSFServer() {
   const app = express();
+  // The dataset_description.json body arrives as a raw JSON string with
+  // Content-Type: application/json (put-file-osf.ts / update-file-osf.ts) --
+  // express.json() parses it onto req.body so tests can inspect exactly what
+  // metadata-block.ts sent, not just that it sent something.
+  app.use(express.json({ limit: "10mb" }));
   let nextId = 1;
   let nextFolderId = 1;
   const createCallsByFilename = new Map();
+  const createBodiesByFilename = new Map();
   const updateCallsById = new Map();
+  const updateBodiesById = new Map();
 
   // Handles both a file create (kind=file, the pre-existing behavior) and a
   // folder create (kind=folder). The latter is new: now that a
@@ -122,6 +129,7 @@ function createMockOSFServer() {
     }
 
     createCallsByFilename.set(filename, (createCallsByFilename.get(filename) || 0) + 1);
+    createBodiesByFilename.set(filename, req.body);
     const id = `mock-file-${nextId++}`;
     res.status(201).json({ data: { id, attributes: { name: filename, kind: "file" } } });
   }
@@ -139,6 +147,7 @@ function createMockOSFServer() {
   app.put("/files/:id", (req, res) => {
     const id = req.params.id;
     updateCallsById.set(id, (updateCallsById.get(id) || 0) + 1);
+    updateBodiesById.set(id, req.body);
     res.status(200).json({});
   });
 
@@ -159,13 +168,17 @@ function createMockOSFServer() {
         port: server.address().port,
         getCreateCount: (filename) => createCallsByFilename.get(filename) || 0,
         getUpdateCount: (id) => updateCallsById.get(id) || 0,
+        getCreateBody: (filename) => createBodiesByFilename.get(filename),
+        getUpdateBody: (id) => updateBodiesById.get(id),
         // Every scenario below creates/updates a file literally named
         // "dataset_description.json", so counts must be reset between
         // tests -- otherwise a later test's assertion would include
         // creates/updates left over from an earlier one.
         resetCounts: () => {
           createCallsByFilename.clear();
+          createBodiesByFilename.clear();
           updateCallsById.clear();
+          updateBodiesById.clear();
         },
       });
     });
@@ -306,5 +319,44 @@ describe("runTransaction", () => {
     expect(response.status).toBe(201);
     expect(response.body.metadataMessage).toEqual(MESSAGES.METADATA_IN_FIRESTORE_NOT_IN_OSF.metadataMessage);
     expect(mockOSF.getCreateCount("dataset_description.json")).toBe(1);
+  });
+
+  // Regression for the removed unauthenticated write channel: POST /api/data
+  // is anonymous (participants' browsers call it), and it used to accept a
+  // `metadataOptions` body parameter that was passed straight through
+  // blockMetadata -> produceMetadata into generate() as the seed descriptor,
+  // landing verbatim in dataset_description.json -- letting any participant
+  // set or overwrite the dataset's `name`, `author`, `license` or `@context`,
+  // which then persisted into every later merge. Removed 2026-09-15 (see
+  // docs/provider-migration-design.md). This asserts the body parameter is
+  // now silently ignored end to end: neither the created provider file nor
+  // the persisted Firestore metadata doc carries any of the injected values.
+  it("ignores a metadataOptions body parameter and never lets a participant set dataset fields", async () => {
+    const experimentID = `metadata-hijack-${randomUUID()}`;
+    await createExperiment(experimentID);
+    await db.collection("metadata").doc(experimentID).set({ metadataFileRef: null });
+
+    const response = await saveData({
+      experimentID,
+      data: sampleData,
+      filename: `hijack-${randomUUID()}.json`,
+      metadataOptions: { name: "hijacked", author: "attacker", license: "CC0" },
+    });
+
+    expect(response.status).toBe(201);
+    expect(mockOSF.getCreateCount("dataset_description.json")).toBe(1);
+
+    const createdBody = mockOSF.getCreateBody("dataset_description.json");
+    expect(createdBody).toBeDefined();
+    expect(createdBody.name).not.toBe("hijacked");
+    expect(createdBody.author).not.toBe("attacker");
+    expect(createdBody.license).not.toBe("CC0");
+    expect(createdBody["@context"]).not.toBe("attacker");
+
+    const metadataDoc = await db.collection("metadata").doc(experimentID).get();
+    const storedMetadata = metadataDoc.data().metadata;
+    expect(storedMetadata.name).not.toBe("hijacked");
+    expect(storedMetadata.author).not.toBe("attacker");
+    expect(storedMetadata.license).not.toBe("CC0");
   });
 });

@@ -132,7 +132,6 @@ describe("scheduled-pending-recovery propagates the envelope's dataType", () => 
       experimentID,
       filename,
       base64Payload,
-      undefined,
       "base64"
     );
     const file = bucket.file(storagePath);

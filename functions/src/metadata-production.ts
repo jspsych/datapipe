@@ -23,7 +23,7 @@ export interface ProducedMetadata extends ExtractionResult {
 // private so it can only be thrown/caught here, never matched by message text.
 class NotATrialArrayError extends Error {}
 
-export default async function produceMetadata(data: string, options: object | null = null): Promise<ProducedMetadata> {
+export default async function produceMetadata(data: string): Promise<ProducedMetadata> {
 
     // Initializes the metadata object.
     var metadata = new jsPsychMetadata(); // eslint-disable-line no-var
@@ -58,16 +58,24 @@ export default async function produceMetadata(data: string, options: object | nu
       ? (await parseCSV(data)) as Array<Record<string, unknown>>
       : undefined;
 
-    // Generates the metadata, using the options if they are provided.
-    // The vendored @jspsych/metadata (see functions/metadata/) changed generate()'s
-    // signature to generate(data, metadata={}, ext='json'|'csv', options={}) — the 3rd
-    // arg is now a string extension, not the boolean csv flag the old fork used.
+    // Generates the metadata. The vendored @jspsych/metadata (see
+    // functions/metadata/) changed generate()'s signature to
+    // generate(data, metadata={}, ext='json'|'csv', options={}) — the 3rd arg
+    // is now a string extension, not the boolean csv flag the old fork used.
     // Passing a pre-parsed array (rather than the raw string) skips generate()'s
     // own internal parse for both formats; ext is still passed for its other
     // format-dependent behavior (e.g. id-column detection).
+    //
+    // The seed descriptor (generate()'s 2nd argument) is always an empty
+    // object: it used to be an unauthenticated caller's metadataOptions body
+    // parameter, which let any participant set or overwrite dataset-level
+    // fields (name, author, license, @context) that then persisted into every
+    // later merge. Removed 2026-09-15 — see docs/provider-migration-design.md.
+    // A researcher-controlled equivalent belongs on the experiment document
+    // instead, as separate follow-up work.
     const ext: 'json' | 'csv' = csvFlag ? 'csv' : 'json';
     const rows = (csvFlag ? csvRows : jsonRows) as Array<Record<string, unknown>>;
-    options ? await metadata.generate(rows, options, ext) : await metadata.generate(rows, {}, ext);
+    await metadata.generate(rows, {}, ext);
 
     const incomingMetadata: Metadata = metadata.getMetadata() as Metadata;
 

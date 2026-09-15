@@ -245,6 +245,13 @@ that ref back directly — no more per-adapter "list the folder and look for a
 matching name" logic, which today only exists because OSF is queried as the
 live source of truth for this check.
 
+Removed 2026-09-15: the `metadataOptions` body parameter on the unauthenticated
+`POST /api/data` — it let any participant seed or overwrite dataset-level
+fields (`name`, `author`, `license`, `@context`) that then persisted into every
+later merge of this doc. A researcher-controlled equivalent, set on the
+experiment document instead of the anonymous request body, is separate
+follow-up work, not part of this migration.
+
 ### Data model
 
 ```

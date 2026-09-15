@@ -110,7 +110,7 @@ export const apiBase64 = onRequest(
   // during heavy processing (OSF upload).
   let pendingPath: string;
   try {
-    pendingPath = await persistPending(experimentID, filename, data, undefined, "base64");
+    pendingPath = await persistPending(experimentID, filename, data, "base64");
   } catch (e) {
     const detail = e instanceof Error ? e.message : "Unknown error";
     res.status(500).json(MESSAGES.DATA_PERSIST_ERROR);
