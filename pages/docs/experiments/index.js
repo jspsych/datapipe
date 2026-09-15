@@ -49,10 +49,10 @@ export default function CreatingAnExperimentPage() {
         <Text maxW="70ch">
           Click <strong>New Experiment</strong> in the navigation bar. Pick your
           storage provider at the top of the form and give the experiment a{" "}
-          <strong>Title</strong>. The title is what names the thing DataPipe
-          creates in your storage account — the Drive folder, the Dataverse
-          dataset, or the Zenodo deposition — so pick something you will
-          recognise there. It is set once, at creation: renaming the experiment
+          <strong>Title</strong>. The title names the thing DataPipe
+          creates in your storage account (the Drive folder, the Dataverse
+          dataset, or the Zenodo deposition), so pick something you will
+          recognise there. You set it once, at creation: renaming the experiment
           on its dashboard later changes what DataPipe calls it, not what your
           storage account calls it.
         </Text>
@@ -64,30 +64,30 @@ export default function CreatingAnExperimentPage() {
         <List.Root maxW="70ch" gap={2} ps={6}>
           <List.Item>
             <Text as="span" fontWeight="semibold">
-              Google Drive
+              Google Drive:
             </Text>{" "}
-            — nothing else is required. To keep the data somewhere specific,
+            nothing else is required. To keep the data somewhere specific,
             click <strong>Choose Drive folder</strong> and pick a parent folder.
             Otherwise DataPipe creates the folder in <em>My Drive/DataPipe</em>.
           </List.Item>
           <List.Item>
             <Text as="span" fontWeight="semibold">
-              Dataverse
+              Dataverse:
             </Text>{" "}
-            — the <strong>collection alias</strong>, which is the short name
+            the <strong>collection alias</strong>, which is the short name
             from your collection&apos;s URL, plus the <strong>author name</strong>,{" "}
             <strong>contact email</strong>, and <strong>description</strong>{" "}
-            that Dataverse requires in the citation metadata of every dataset —
-            it refuses to create one without them. The contact email starts
+            that Dataverse requires in the citation metadata of every dataset.
+            It refuses to create one without them. The contact email starts
             filled in from your DataPipe account; change it if the address you
             want published on the dataset is a different one. Subject is
             optional, and defaults to Social Sciences.
           </List.Item>
           <List.Item>
             <Text as="span" fontWeight="semibold">
-              Zenodo
+              Zenodo:
             </Text>{" "}
-            — the <strong>author name</strong> and a{" "}
+            the <strong>author name</strong> and a{" "}
             <strong>description</strong> for the deposition. Zenodo would accept
             a draft without these, but it will not let you publish one, so
             DataPipe asks now rather than leaving you to find out at the end of
@@ -128,8 +128,8 @@ export default function CreatingAnExperimentPage() {
             <Text as="span" fontWeight="semibold">
               The details block
             </Text>{" "}
-            below it holds the <strong>experiment ID</strong> — the value your
-            code sends with every request — and a link that opens the Drive
+            below it holds the <strong>experiment ID</strong> (the value your
+            code sends with every request) and a link that opens the Drive
             folder, Dataverse dataset, or Zenodo deposition in your own storage
             account.
           </List.Item>
@@ -155,7 +155,7 @@ export default function CreatingAnExperimentPage() {
               The queued files panel
             </Text>{" "}
             appears only when a submission DataPipe accepted has not reached
-            your storage provider yet. Not seeing it is the normal state.
+            your storage provider yet. Normally, it does not appear.
           </List.Item>
         </List.Root>
         <Text maxW="70ch">
@@ -174,11 +174,11 @@ export default function CreatingAnExperimentPage() {
         <Text maxW="70ch">
           You can rename an experiment at any time from the pencil icon beside
           its title, and nothing about data collection changes: the experiment
-          ID stays the same, so your code keeps working. The new name is used
-          inside DataPipe only. Your Drive folder, Dataverse dataset, or Zenodo
-          deposition took its name from the title when the experiment was
-          created, and keeps that name — rename it there yourself if you want
-          the two to match.
+          ID stays the same, so your code keeps working. DataPipe uses the new
+          name internally only. Your Drive folder, Dataverse dataset, or Zenodo
+          deposition took its name from the title when you created the
+          experiment, and keeps that name. Rename it there yourself if you
+          want the two to match.
         </Text>
       </DocsSection>
 
@@ -191,18 +191,18 @@ export default function CreatingAnExperimentPage() {
         <List.Root maxW="70ch" gap={3} ps={6}>
           <List.Item>
             <Text as="span" fontWeight="semibold">
-              Accept new data
+              Accept new data:
             </Text>{" "}
-            — while this is on, your experiment ID accepts submissions from
+            while this is on, your experiment ID accepts submissions from
             participants. Turn it off and every submission is rejected with{" "}
             <Code>DATA_COLLECTION_NOT_ACTIVE</Code>, so leave it off until you
             are ready to recruit.
           </List.Item>
           <List.Item>
             <Text as="span" fontWeight="semibold">
-              Accept base64 file uploads
+              Accept base64 file uploads:
             </Text>{" "}
-            — a separate switch, needed only if your experiment sends binary
+            a separate switch, needed only if your experiment sends binary
             files such as audio, video or images.{" "}
             <ProseLink href="/docs/experiments/sending-data#media-and-binary-files">
               Media and binary files
@@ -210,9 +210,9 @@ export default function CreatingAnExperimentPage() {
           </List.Item>
           <List.Item>
             <Text as="span" fontWeight="semibold">
-              Assign conditions in sequence
+              Assign conditions in sequence:
             </Text>{" "}
-            — hands each participant the next condition number in order. Set
+            hands each participant the next condition number in order. Set
             how many conditions you have when you turn it on.{" "}
             <ProseLink href="/docs/experiments/conditions">
               Condition assignment
@@ -220,9 +220,9 @@ export default function CreatingAnExperimentPage() {
           </List.Item>
           <List.Item>
             <Text as="span" fontWeight="semibold">
-              Stop after a set number of sessions
+              Stop after a set number of sessions:
             </Text>{" "}
-            — refuses submissions once the count reaches the limit you set, so
+            refuses submissions once the count reaches the limit you set, so
             a study cannot overrun its recruitment target.{" "}
             <ProseLink href="/docs/experiments/validation#session-limits">
               Session limits

@@ -48,7 +48,7 @@ export default function MovingOffOsfPage() {
     <>
       <PageHeader
         title="Moving off OSF"
-        purpose="OSF is winding down its projects feature — what changes, what happens to data you already collected, and how to move."
+        purpose="OSF is winding down its projects feature: what changes, what happens to data you already collected, and how to move."
       />
 
       <DocsSection id="what-changes" title="What changes">
@@ -60,13 +60,13 @@ export default function MovingOffOsfPage() {
           New experiments on OSF are refused by DataPipe itself, not merely
           hidden from the new-experiment form: OSF is not offered as a choice,
           the server rejects a request that names it, and the database rules
-          refuse the record. There is no way around it, so plan on collecting
+          refuse the record. No workaround exists, so plan on collecting
           new data elsewhere.
         </Text>
         <Text maxW="70ch">
           Everything else about an OSF experiment works as it always has while
-          it is still collecting — the endpoints, validation, condition
-          assignment, session limits and metadata all behave the same.
+          it is still collecting: the endpoints, validation, condition
+          assignment, session limits, and metadata all behave the same.
         </Text>
       </DocsSection>
 
@@ -74,7 +74,7 @@ export default function MovingOffOsfPage() {
         <Text maxW="70ch">
           Data already on OSF is unaffected. It stays in your OSF account, and
           DataPipe never removes it. That stays true after the cutoff, and it
-          stays true if you disconnect OSF or delete your DataPipe account —
+          stays true if you disconnect OSF or delete your DataPipe account.
           DataPipe does not delete anything from your storage.
         </Text>
       </DocsSection>
@@ -85,8 +85,7 @@ export default function MovingOffOsfPage() {
           <ProseLink href="/admin/account">account settings</ProseLink>, create
           a new experiment on that provider, and point the experiment your
           participants run at the new experiment ID. Your existing data does not
-          move, so it is worth
-          finishing a study on OSF if you are close to done rather than
+          move, so finish a study on OSF if you are close to done, rather than
           switching mid-collection.
         </Text>
         <Text maxW="70ch">

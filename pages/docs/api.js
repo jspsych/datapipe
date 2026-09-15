@@ -40,15 +40,15 @@ export default function ApiReferencePage() {
       <Text maxW="70ch">
         All endpoints accept JSON request bodies with{" "}
         <Code>Content-Type: application/json</Code>. You will need an experiment
-        ID, which you get when you create an experiment on DataPipe. Code
+        ID, which DataPipe assigns when you create your experiment. Code
         examples for jsPsych and JavaScript are available on each
         experiment&apos;s dashboard.
       </Text>
       <Text maxW="70ch" mt={4}>
         The API is the same whichever storage provider an experiment uses.
         DataPipe routes each submission to that experiment&apos;s own
-        destination — a Google Drive folder, a Dataverse dataset, or a Zenodo
-        deposition — so your experiment code never names a provider.
+        destination (a Google Drive folder, a Dataverse dataset, or a Zenodo
+        deposition), so your experiment code never names a provider.
       </Text>
 
       <DocsSection id="limits" title="Limits">
@@ -66,9 +66,10 @@ export default function ApiReferencePage() {
           </Box>
           <Box as="li" mb={2}>
             <strong>60 seconds per request.</strong> Every <Code>/api/*</Code>{" "}
-            path runs behind a hosting layer with a hard 60-second ceiling. It
-            is why <Code>/api/finalize</Code> returns immediately and does its
-            work in the background rather than answering when the job is done.
+            path runs behind a hosting layer with a hard 60-second ceiling,
+            which is why <Code>/api/finalize</Code> returns immediately and
+            finishes its work in the background instead of waiting for the job
+            to end.
           </Box>
           <Box as="li" mb={2}>
             <strong>JSON bodies only.</strong> Send{" "}
@@ -112,18 +113,17 @@ export default function ApiReferencePage() {
             </Param>
             <Param name="filename" type="string">
               Name for the stored file (e.g., <Code>subject01.csv</Code>). Must
-              be unique — the request will fail if a file with this name already
-              exists.
+              be unique, or the request fails.
             </Param>
             <Param name="data" type="string">
               The file contents as a string.
             </Param>
             <Param name="sessionId" type="string (optional)">
               The session returned by <Code>/api/session/</Code>, if this
-              experiment staged its trials as it went. It carries no data — the{" "}
-              <Code>data</Code> field above is still the submission — and only
-              tells DataPipe which staged copy this request supersedes, so it
-              can be discarded.
+              experiment staged its trials as it went. It carries no data
+              itself: the <Code>data</Code> field above is still the
+              submission. It only tells DataPipe which staged copy this
+              request supersedes, so DataPipe can discard it.
             </Param>
           </ParamTable>
         </Box>
@@ -152,14 +152,14 @@ export default function ApiReferencePage() {
           nothing at all.
         </Text>
         <Text maxW="70ch">
-          You will not usually call this directly — the{" "}
+          The{" "}
           <ProseLink
             href="https://github.com/jspsych/jsPsych/tree/main/packages/extension-pipe"
             external
           >
             @jspsych/extension-pipe extension
           </ProseLink>{" "}
-          does it for you by default, along with the staging writes that
+          calls this for you by default, along with the staging writes that
           follow, and{" "}
           <ProseLink
             href="https://github.com/jspsych/datapipe/tree/main/packages/client"
@@ -167,9 +167,10 @@ export default function ApiReferencePage() {
           >
             datapipe-client
           </ProseLink>{" "}
-          does the same for plain JavaScript. It is documented because those writes go to a Firebase
-          Realtime Database rather than to this API, and this response is what
-          tells a client where.
+          does the same for plain JavaScript, so you will not usually call it
+          directly. This page documents it because those writes go to a
+          Firebase Realtime Database rather than to this API, and this
+          response tells a client where to send them.
         </Text>
         <Box overflowX="auto" w="100%">
           <ParamTable>
@@ -188,13 +189,13 @@ export default function ApiReferencePage() {
           The same checks as <Code>/api/data/</Code> run here, with the same
           error codes: the experiment must exist, not be finalized, be accepting
           data, and be under its session limit. Starting a session does{" "}
-          <strong>not</strong> consume one from that limit — the count is still
+          <strong>not</strong> consume one from that limit. The count is still
           taken when a submission completes. A <Code>503</Code> with{" "}
           <Code>SESSION_START_ERROR</Code> means incremental upload is
-          unavailable — because the service is unreachable, because an
+          unavailable, because the service is unreachable, because an
           experiment already has an unusually large number of sessions open at
-          once, or because it has been switched off entirely — and the
-          experiment should simply submit at the end, as it would otherwise.
+          once, or because it has been switched off entirely. The experiment
+          should submit at the end, as it would without streaming.
         </Text>
         <Box>
           <Text fontSize="sm" color="fg.muted" mb={2}>
@@ -216,8 +217,9 @@ export default function ApiReferencePage() {
           Trials are then written to{" "}
           <Code>staging/&lt;sessionId&gt;/trials/&lt;n&gt;</Code> in that
           database, each one a JSON string, numbered from zero and never
-          rewritten. The session is write-only: nothing can read it back, and a
-          missing number is tolerated rather than treated as an error. Send{" "}
+          rewritten. The session is write-only: nothing can read it back, and
+          DataPipe tolerates a missing number rather than treating it as an
+          error. Send{" "}
           <Code>sessionId</Code> with the final <Code>/api/data/</Code> request
           to close it.
         </Text>
@@ -313,7 +315,7 @@ export default function ApiReferencePage() {
                   Accepted and queued. DataPipe has your data safely but could
                   not reach your storage provider yet, so it will retry
                   automatically. <Code>error</Code> is <Code>null</Code>.{" "}
-                  <strong>Treat this as success and do not resubmit</strong> —
+                  <strong>Treat this as success and do not resubmit</strong>:
                   retrying would store the participant&apos;s data twice.
                 </Table.Cell>
               </Table.Row>
@@ -322,7 +324,7 @@ export default function ApiReferencePage() {
                   <Code>400</Code>
                 </Table.Cell>
                 <Table.Cell>
-                  The request was rejected and the data was not stored.
+                  Rejected. The data was not stored.
                 </Table.Cell>
               </Table.Row>
               <Table.Row>
@@ -353,12 +355,13 @@ export default function ApiReferencePage() {
         </Text>
         <Text fontSize="sm" color="fg.muted" maxW="70ch">
           The same applies to the <Code>message</Code> text: several messages
-          still name OSF whatever provider an experiment actually uses — a
-          queued upload reports &ldquo;Data received. OSF upload will be retried
-          automatically&rdquo; on Google Drive, Dataverse, and Zenodo alike. Read
+          still name OSF whatever provider an experiment actually uses. For
+          example, a queued upload reports &ldquo;Data received. OSF upload
+          will be retried automatically&rdquo; on Google Drive, Dataverse, and
+          Zenodo alike. Read
           &ldquo;OSF&rdquo; in a message as &ldquo;your storage
-          provider&rdquo;, and match on the <Code>error</Code> code rather than
-          the message when you are writing code.
+          provider&rdquo;, and match on the <Code>error</Code> code, not the
+          message, when writing code.
         </Text>
         <Box overflowX="auto" w="100%">
           <Table.Root variant="outline">
@@ -377,10 +380,11 @@ export default function ApiReferencePage() {
                 No experiment matches the provided ID.
               </ErrorRow>
               <ErrorRow code="EXPERIMENT_DATA_NOT_FOUND" status={400}>
-                The experiment exists but its configuration could not be read.
+                The experiment exists, but DataPipe could not read its
+                configuration.
               </ErrorRow>
               <ErrorRow code="USER_DATA_NOT_FOUND" status={400}>
-                The account that owns the experiment could not be read.
+                DataPipe could not read the account that owns the experiment.
               </ErrorRow>
               <ErrorRow code="INVALID_OWNER" status={400}>
                 The experiment owner does not match a valid user account.
@@ -410,9 +414,9 @@ export default function ApiReferencePage() {
                 The data is not valid base64.
               </ErrorRow>
               <ErrorRow code="METADATA_ERROR" status={400}>
-                Psych-DS metadata could not be produced from this submission, so
-                the data was not stored. The submission is kept and recovered
-                automatically in the background.
+                DataPipe could not produce Psych-DS metadata from this
+                submission, so it did not store the data. It keeps the
+                submission and recovers it automatically in the background.
               </ErrorRow>
               <ErrorRow code="OSF_FILE_EXISTS" status={400}>
                 A file with this name already exists in the experiment&apos;s
@@ -446,8 +450,8 @@ export default function ApiReferencePage() {
                 provider.
               </ErrorRow>
               <ErrorRow code="DATA_PERSIST_ERROR" status={500}>
-                DataPipe could not save the data. It was not stored, and a live
-                participant may need to resubmit.
+                DataPipe could not save the data, and a live participant may
+                need to resubmit.
               </ErrorRow>
             </Table.Body>
           </Table.Root>
@@ -468,7 +472,7 @@ export default function ApiReferencePage() {
           Unlike the three participant endpoints, this one is authenticated:
           send a Firebase ID token for the account that owns the experiment as{" "}
           <Code>Authorization: Bearer &lt;token&gt;</Code>. Anything other than{" "}
-          <Code>GET</Code> is answered <Code>405</Code>.
+          <Code>GET</Code> gets <Code>405</Code>.
         </Text>
         <Box overflowX="auto" w="100%">
           <ParamTable>
@@ -496,7 +500,7 @@ export default function ApiReferencePage() {
           <Code>lastAttemptAt</Code>, <Code>nextRetryAt</Code> and{" "}
           <Code>failureReason</Code>. Only entries that are{" "}
           <Code>pending</Code>, <Code>processing</Code> or <Code>failed</Code>{" "}
-          are listed — a completed upload leaves the queue.
+          are listed. A completed upload leaves the queue.
         </Text>
         <Box>
           <Text fontSize="sm" color="fg.muted" mb={2}>
@@ -579,8 +583,8 @@ export default function ApiReferencePage() {
                   <Code>500</Code>
                 </Table.Cell>
                 <Table.Cell>
-                  A queued upload could not be read. Nothing has been deleted —
-                  try again, or fetch the files individually.
+                  DataPipe could not read a queued upload. Nothing has been
+                  deleted. Try again, or fetch the files individually.
                 </Table.Cell>
               </Table.Row>
             </Table.Body>
@@ -598,9 +602,9 @@ export default function ApiReferencePage() {
           endpoint behind the Finalize control on the dashboard.
         </Text>
         <Text maxW="70ch">
-          Authenticated the same way as queue status —{" "}
+          Authenticated the same way as queue status:{" "}
           <Code>Authorization: Bearer &lt;token&gt;</Code> for the owning
-          account. Anything other than <Code>POST</Code> is answered{" "}
+          account. Anything other than <Code>POST</Code> gets{" "}
           <Code>405</Code>.
         </Text>
         <Box overflowX="auto" w="100%">
@@ -684,8 +688,8 @@ export default function ApiReferencePage() {
                   <Code>500</Code>
                 </Table.Cell>
                 <Table.Cell>
-                  The background job could not be scheduled. Nothing has been
-                  merged or deleted.
+                  DataPipe could not schedule the background job. Nothing has
+                  been merged or deleted.
                 </Table.Cell>
               </Table.Row>
             </Table.Body>
@@ -721,8 +725,8 @@ export default function ApiReferencePage() {
                 It had already been finalized.
               </ErrorRow>
               <ErrorRow code="not-eligible" status="refused">
-                This storage provider has no file-count ceiling to relieve —
-                today that means anything other than Zenodo.
+                This storage provider has no file-count ceiling to relieve.
+                Today that means anything other than Zenodo.
               </ErrorRow>
               <ErrorRow code="queued-uploads-pending" status="refused">
                 Uploads are still waiting to be stored, and they belong inside
@@ -740,8 +744,8 @@ export default function ApiReferencePage() {
                 limit. Nothing was uploaded or deleted.
               </ErrorRow>
               <ErrorRow code="failed" status="error">
-                Something went wrong during the pass. Files are only ever
-                deleted after the archive that replaces them is verified.
+                Something went wrong during the pass. DataPipe deletes files
+                only after verifying the archive that replaces them.
               </ErrorRow>
             </Table.Body>
           </Table.Root>

@@ -97,7 +97,7 @@ export default function ConnectingAndReconnectingPage() {
         </Text>
         <Text maxW="70ch">
           Which Zenodo installation you are connected to is fixed by this
-          DataPipe deployment, not chosen per connection — the live site
+          DataPipe deployment, not chosen per connection: the live site
           connects to zenodo.org, and the test site connects to the Zenodo
           sandbox.
         </Text>
@@ -107,8 +107,8 @@ export default function ConnectingAndReconnectingPage() {
         <Text maxW="70ch">
           For Dataverse, clicking Connect opens a short form instead of handing
           you to another site. It needs the full
-          address of your institution&apos;s installation — for example,{" "}
-          <Code>https://dataverse.harvard.edu</Code> — and an API token, which
+          address of your institution&apos;s installation (for example,{" "}
+          <Code>https://dataverse.harvard.edu</Code>) and an API token, which
           you create under the{" "}
           <Text as="span" fontWeight="semibold">
             API Token
@@ -117,7 +117,7 @@ export default function ConnectingAndReconnectingPage() {
         </Text>
         <Text maxW="70ch">
           The address has to be the plain <Code>https</Code> address of a named
-          installation. DataPipe rejects anything else — no{" "}
+          installation. DataPipe rejects anything else: no{" "}
           <Code>http</Code>, no address with a username or password in it, no
           non-standard port, no IP address, and no internal or single-word
           hostname. That is because the DataPipe server itself makes
@@ -134,9 +134,9 @@ export default function ConnectingAndReconnectingPage() {
         <Text maxW="70ch">
           When the credential for an experiment&apos;s provider is no longer
           usable, that experiment stops saving data. Submissions come back with{" "}
-          <Code>PROVIDER_TOKEN_EXPIRED</Code> — &quot;The API token for this
+          <Code>PROVIDER_TOKEN_EXPIRED</Code> (&quot;The API token for this
           experiment&apos;s storage provider has expired. A new token must be
-          created on that provider and reconnected to DataPipe&quot; — or with{" "}
+          created on that provider and reconnected to DataPipe&quot;) or with{" "}
           <Code>PROVIDER_NOT_CONNECTED</Code> if the connection was removed
           entirely. Data that arrives during a temporary provider failure is
           queued and retried; a lapsed credential is not something a retry can
@@ -157,7 +157,7 @@ export default function ConnectingAndReconnectingPage() {
         </Text>
         <Text maxW="70ch">
           A Dataverse API token has no renewal mechanism, so it eventually
-          expires — commonly a year after you create it — and only you can
+          expires (commonly a year after you create it), and only you can
           replace it. DataPipe reads the expiry date from your installation each
           time you create an experiment on Dataverse, and names the date on that
           form when the token expires in the next 60 days. Dataverse does not
@@ -170,8 +170,8 @@ export default function ConnectingAndReconnectingPage() {
 
       <DocsSection id="reconnecting" title="Reconnecting">
         <Text maxW="70ch">
-          A provider whose credential has lapsed still shows as connected —
-          the connection exists, it just no longer works — so replacing it is a
+          A provider whose credential has lapsed still shows as connected (the
+          connection exists; it just no longer works), so replacing it is a
           two-step action in the{" "}
           <Text as="span" fontWeight="semibold">
             Storage Providers
@@ -190,12 +190,12 @@ export default function ConnectingAndReconnectingPage() {
           Your experiments are unaffected. Each one keeps writing to the Drive
           folder, Dataverse dataset, or Zenodo deposition it already has, and
           submissions that failed while the credential was lapsed are retried
-          automatically — as long as they have not already used up their five
+          automatically, as long as they have not already used up their five
           attempts, which takes about 31 hours from when they were queued.
         </Text>
         <Text maxW="70ch">
-          If a one-click authorization does not come back — you left the tab
-          sitting, or opened the link twice — start it again from the account
+          If a one-click authorization does not come back (you left the tab
+          sitting, or opened the link twice), start it again from the account
           page. The link DataPipe hands to the provider works once, and expires
           ten minutes after it is created.
         </Text>

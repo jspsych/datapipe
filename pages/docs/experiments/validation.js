@@ -50,7 +50,7 @@ export default function ValidationAndSessionLimitsPage() {
           <strong>Validation is on for every new experiment</strong>, with JSON
           and CSV both allowed and one required field:{" "}
           <Code>trial_type</Code>. That is the usual reason a first test
-          submission comes back rejected — data that is not jsPsych output has
+          submission comes back rejected: data that is not jsPsych output has
           no <Code>trial_type</Code> column, so it fails the check until you
           edit or clear the required fields on the dashboard.
         </Text>
@@ -74,8 +74,8 @@ export default function ValidationAndSessionLimitsPage() {
           <List.Item>
             <Text as="span" fontWeight="semibold">
               JSON, as an array
-            </Text>{" "}
-            — the usual shape for jsPsych output. DataPipe collects the keys
+            </Text>:{" "}
+            the usual shape for jsPsych output. DataPipe collects the keys
             from every object in the array and requires each of your fields to
             appear in at least one of them. A field that only one trial carries
             still counts as present.
@@ -83,18 +83,18 @@ export default function ValidationAndSessionLimitsPage() {
           <List.Item>
             <Text as="span" fontWeight="semibold">
               JSON, as a single object
-            </Text>{" "}
-            — the required fields must be keys of that object.
+            </Text>:{" "}
+            the required fields must be keys of that object.
           </List.Item>
           <List.Item>
             <Text as="span" fontWeight="semibold">
               CSV
-            </Text>{" "}
-            — required fields are checked against the header row only, so a
+            </Text>:{" "}
+            required fields are checked against the header row only, so a
             column that exists but is empty in every row still passes. CSV has
             one extra rule of its own: <strong>every row must have the same
             number of cells as the first row</strong>. A ragged file is rejected
-            even when you have listed no required fields at all — an unquoted
+            even when you have listed no required fields at all; an unquoted
             comma inside a response is the usual culprit.
           </List.Item>
         </List.Root>
@@ -112,7 +112,7 @@ export default function ValidationAndSessionLimitsPage() {
           <Text fontSize="sm">
             <strong>Rejected data cannot be recovered.</strong> An invalid file
             never reaches your storage provider, never enters the upload queue,
-            and never appears on your dashboard. There is nothing anywhere to
+            and never appears on your dashboard. No copy exists to
             restore it from, and the participant has already moved on.
           </Text>
         </Box>
@@ -123,7 +123,7 @@ export default function ValidationAndSessionLimitsPage() {
         </Text>
         <Text maxW="70ch">
           So set your validation rules deliberately, and test them once, end to
-          end, with your real experiment — before the first participant, not
+          end, with your real experiment, before the first participant, not
           after.
         </Text>
       </DocsSection>
@@ -141,7 +141,7 @@ export default function ValidationAndSessionLimitsPage() {
         </Text>
         <Text maxW="70ch">
           Nothing in the dashboard prevents this combination, and nothing about
-          it looks broken from the outside — the experiment still reports that
+          it looks broken from the outside: the experiment still reports that
           it is accepting data. If submissions are being rejected and you cannot
           see why, check these two boxes first.
         </Text>
@@ -205,8 +205,8 @@ export default function ValidationAndSessionLimitsPage() {
         <Box borderWidth="1px" borderColor="border" bg="bg.muted" rounded="md" p={4} maxW="70ch">
           <Text fontSize="sm">
             Only activate the features you need, and only during active data
-            collection. DataPipe creates an open path into your storage provider
-            — validation and session limits reduce the risk of unwanted
+            collection. DataPipe creates an open path into your storage provider:
+            validation and session limits reduce the risk of unwanted
             submissions.
           </Text>
         </Box>

@@ -89,10 +89,10 @@ export default function PrivacyPage() {
       <Stack gap={4} maxW="70ch">
         <Text>
           This page exists so that you can answer an IRB protocol question or an
-          institutional security questionnaire without having to read our source
-          code. It describes how the service works, what DataPipe does not do
-          with your data, and which certifications it does not have. If you need
-          a paragraph you can adapt for a protocol, there is one under{" "}
+          institutional security questionnaire without reading our source code.
+          It describes how the service works, what DataPipe does not do with
+          your data, and which certifications it does not have. For a paragraph
+          you can adapt for a protocol, see{" "}
           <ProseLink href="#for-your-irb">For your IRB protocol</ProseLink>.
         </Text>
 
@@ -113,7 +113,7 @@ export default function PrivacyPage() {
         <Text maxW="70ch">
           DataPipe is a free, open-source service run by the developers of
           jsPsych. It moves data out of a participant&apos;s browser and into a
-          storage account that you already control. It is a pipe, not an
+          storage account you already control. It is a pipe, not an
           archive: your data lives in the storage account you connect, not in
           DataPipe.
         </Text>
@@ -125,8 +125,8 @@ export default function PrivacyPage() {
           </List.Item>
           <List.Item>
             DataPipe&apos;s server checks that the experiment exists and is
-            accepting data, applies any validation rules you set, and — if you
-            turned on Psych-DS metadata — reads the submission to build column
+            accepting data, applies any validation rules you set, and, if you
+            turned on Psych-DS metadata, reads the submission to build column
             descriptions.
           </List.Item>
           <List.Item>
@@ -137,9 +137,9 @@ export default function PrivacyPage() {
         </List.Root>
         <Text maxW="70ch">
           Under normal operation all of this happens in seconds, and DataPipe
-          keeps no copy afterwards. The exceptions — a temporary copy held
-          during the transfer, and a longer-lived copy when your provider is
-          unreachable — are described below.
+          keeps no copy afterwards. Two exceptions are described below: a
+          temporary copy held during the transfer, and a longer-lived copy when
+          your provider is unreachable.
         </Text>
       </DocsSection>
 
@@ -186,7 +186,7 @@ export default function PrivacyPage() {
             submission to a private Google Cloud Storage bucket, so that an
             interruption during the transfer cannot lose a participant&apos;s
             session. That copy is encrypted (see below) and is deleted as soon
-            as the file is safely in your storage — normally within the same
+            as the file is safely in your storage, normally within the same
             second.
           </List.Item>
           <List.Item>
@@ -195,11 +195,11 @@ export default function PrivacyPage() {
               incremental upload.
             </Text>{" "}
             The jsPsych extension and the plain JavaScript streaming library
-            send each trial to DataPipe as it is produced — on by default for
-            experiments built on either of them — so that a participant who
+            send each trial to DataPipe as it is produced (on by default for
+            experiments built on either of them), so that a participant who
             closes the tab partway through does not lose everything they did.
             Those trials are held in a private database, unreadable by any
-            browser — including the one that wrote them — and are deleted the
+            browser (including the one that wrote them), and are deleted the
             moment the participant&apos;s submission completes, normally
             within minutes.{" "}
             <strong>
@@ -207,7 +207,7 @@ export default function PrivacyPage() {
               received as a separate partial file in your storage
             </strong>{" "}
             and then deletes the staged copy. Unlike the two copies above,
-            these trials are not encrypted by DataPipe itself — see{" "}
+            these trials are not encrypted by DataPipe itself. See{" "}
             <ProseLink href="#encryption">Encryption</ProseLink>. An experiment
             built on the older jsPsychPipe plugin, or one that calls the API
             directly with a plain <Code>fetch</Code>, does not stage trials
@@ -233,7 +233,7 @@ export default function PrivacyPage() {
             encrypted, and retried on a schedule. You can download it from your
             dashboard in the meantime.{" "}
             <strong>
-              A queued submission is deleted seven days after it was queued —
+              A queued submission is deleted seven days after it was queued,
               or up to fourteen if DataPipe could not deliver the failure
               notification to you
             </strong>
@@ -244,7 +244,7 @@ export default function PrivacyPage() {
               Dataset metadata, if you enable Psych-DS metadata.
             </Text>{" "}
             The metadata document DataPipe keeps for an experiment describes
-            each column in your data — and for columns that are not numeric it
+            each column in your data, and for columns that are not numeric it
             keeps a list (called <Code>levels</Code>) of every distinct value it
             has seen in that column. For numeric columns it keeps the minimum
             and maximum. There is no cap on how many distinct values are
@@ -326,11 +326,11 @@ export default function PrivacyPage() {
           </List.Item>
         </List.Root>
         <Text maxW="70ch">
-          Deleting your account removes all of the above in one pass —
+          Deleting your account removes all of the above in one pass:
           experiments, metadata documents, logs, queued submissions and their
           stored files, filename records, records of sessions in progress,
-          notification records, and the account itself. It removes nothing from your storage provider; your data stays
-          where you sent it.
+          notification records, and the account itself. It removes nothing
+          from your storage provider; your data stays where you sent it.
         </Text>
         <Text maxW="70ch">
           Deleting a single experiment removes its configuration, log, and
@@ -347,18 +347,18 @@ export default function PrivacyPage() {
         </Text>
         <Text maxW="70ch">
           <strong>At rest, by DataPipe.</strong> The copies of a completed
-          submission that DataPipe holds — the temporary copy and a queued
-          submission — are encrypted with AES-256-GCM before being written,
+          submission that DataPipe holds (the temporary copy and a queued
+          submission) are encrypted with AES-256-GCM before being written,
           using a key held only by DataPipe&apos;s server. Your storage provider
-          credentials — the tokens that let DataPipe write to your storage — are
+          credentials (the tokens that let DataPipe write to your storage) are
           also encrypted with AES-256-GCM before being written to the database.
         </Text>
         <Text maxW="70ch">
-          <strong>Trials staged during a session are the exception</strong>, and
-          it is worth being plain about why. They are written by the
-          participant&apos;s own browser, which has no key and cannot be given
-          one — a key shipped inside an experiment&apos;s JavaScript is a key
-          every participant holds, which is not encryption. So those trials rely
+          <strong>Trials staged during a session are the exception.</strong>{" "}
+          They are written by the participant&apos;s own browser, which has no
+          key and cannot be given one. A key shipped inside an
+          experiment&apos;s JavaScript is a key every participant holds, which
+          is not encryption. So those trials rely
           on the platform encryption below plus access rules: no browser can
           read that database at any depth, not even the one that wrote the
           session, and each session is reachable only through an unguessable
@@ -398,14 +398,14 @@ export default function PrivacyPage() {
           DataPipe is operated by the developers of jsPsych and hosted on Google
           Cloud through Firebase. Google Cloud is DataPipe&apos;s infrastructure
           provider; DataPipe uses Resend to send notification email to
-          researchers — never to participants.
+          researchers, never to participants.
         </Text>
         <Text maxW="70ch">
           <strong>
             A small number of project administrators have administrative access
             that can reach anything DataPipe stores
-          </strong>{" "}
-          — the temporary and queued copies of submissions, metadata documents,
+          </strong>
+          : the temporary and queued copies of submissions, metadata documents,
           experiment logs, and encrypted provider credentials. That access
           exists to operate and debug the service, and it is not used for
           research, analysis, or any other purpose. We would rather state this
@@ -414,7 +414,7 @@ export default function PrivacyPage() {
         <Text maxW="70ch">
           Once a file reaches your storage provider, DataPipe&apos;s access is
           only what you granted it. For Google Drive, DataPipe can only reach
-          the files and folders it created or that you picked — not the rest of
+          the files and folders it created or that you picked, not the rest of
           your Drive. For Dataverse, it uses an API token you issued and can
           revoke. For Zenodo, it uses the authorization you granted. You can
           disconnect any provider from your account settings at any time.
@@ -422,7 +422,7 @@ export default function PrivacyPage() {
         <Text maxW="70ch">
           For a Google Drive connection specifically, what DataPipe keeps is an
           OAuth refresh token, encrypted at rest, and the identifier of the
-          folder you picked — nothing else about your Drive. Disconnecting
+          folder you picked. Nothing else about your Drive. Disconnecting
           Drive from account settings deletes that token and asks Google to
           revoke DataPipe&apos;s authorization; deleting your account does the
           same. You can also remove DataPipe from your Google Account at any
@@ -493,14 +493,14 @@ export default function PrivacyPage() {
           used for protected health information.
         </Text>
         <Text maxW="70ch">
-          The underlying infrastructure carries its own certifications — see{" "}
+          The underlying infrastructure carries its own certifications (see{" "}
           <ProseLink
             href="https://cloud.google.com/security/compliance/offerings"
             external
           >
             Google Cloud&apos;s compliance offerings
-          </ProseLink>{" "}
-          — but those belong to Google, not to DataPipe.
+          </ProseLink>
+          ), but those belong to Google, not to DataPipe.
         </Text>
         <Text maxW="70ch">
           If your protocol involves participants in the EU or UK: you and your
@@ -514,8 +514,8 @@ export default function PrivacyPage() {
 
       <DocsSection id="your-responsibilities" title="What is yours to decide">
         <Text maxW="70ch">
-          DataPipe has no view into your study design, so several protections
-          can only be applied by you.
+          DataPipe has no view into your study design, so you alone can apply
+          several protections.
         </Text>
         <List.Root maxW="70ch" gap={3} ps={6}>
           <List.Item>
@@ -561,7 +561,7 @@ export default function PrivacyPage() {
           <ProseLink href="https://about.zenodo.org/privacy-policy/" external>
             Zenodo
           </ProseLink>{" "}
-          (hosted by CERN, in Switzerland), and — for Dataverse — the policy of
+          (hosted by CERN, in Switzerland), and, for Dataverse, the policy of
           the specific installation you use, since each is run by a different
           institution. Experiments still writing to the Open Science Framework
           are governed by the{" "}
@@ -586,7 +586,7 @@ export default function PrivacyPage() {
         <Text maxW="70ch">
           Your data does not come to rest there. It is written straight through
           to the storage provider you chose, which may be in a different
-          jurisdiction entirely — Zenodo is hosted by CERN in Switzerland, a
+          jurisdiction entirely: Zenodo is hosted by CERN in Switzerland, a
           Dataverse installation is wherever its host institution runs it, and a
           Google Drive folder follows your own Google account. If data residency
           matters to your protocol, the provider you pick is the decision that
