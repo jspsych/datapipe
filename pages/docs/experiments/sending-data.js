@@ -85,39 +85,29 @@ export default function SendingDataPage() {
 
       <DocsSection id="plain-javascript" title="Plain JavaScript">
         <Text maxW="70ch">
-          You do not need jsPsych, or any framework at all. The menu at the top
-          right of the panel above switches every sample to plain JavaScript.
-          Saving data, saving a file, and requesting a condition are each a
-          single <Code>fetch</Code> to a DataPipe endpoint with a JSON body
-          carrying your experiment ID, a filename, and the data as a string.
-        </Text>
-        <Text maxW="70ch">
-          Send whatever your experiment produces. The data string is stored
-          byte for byte, under the filename you give it.
-        </Text>
-        <Text maxW="70ch">
-          A small library,{" "}
+          You do not need jsPsych, or any framework at all. Use{" "}
           <ProseLink href="https://www.npmjs.com/package/datapipe-client" external>
             datapipe-client
           </ProseLink>
-          , wraps those same endpoints and adds the one thing you cannot
-          reasonably write yourself: incremental upload, which stages each trial
-          in a Firebase Realtime Database rather than posting it here. It has no
-          jsPsych in it.
+          , a small library with no jsPsych in it. The menu at the top right of
+          the panel above switches every sample to it.
         </Text>
         <CodeBlock language="html">
           {`<script src="https://unpkg.com/datapipe-client"></script>`}
         </CodeBlock>
         <Text maxW="70ch">
           That exposes a <Code>DataPipe</Code> global. With a bundler,{" "}
-          <Code>npm install datapipe-client</Code> instead. Either way you get{" "}
-          <Code>saveData</Code>, <Code>saveBase64Data</Code>,{" "}
-          <Code>getCondition</Code> and <Code>createSession</Code>; the{" "}
-          <strong>Save as you go</strong> tab under JavaScript in the panel
-          above shows the streaming one.
+          <Code>npm install datapipe-client</Code> instead. Either way you get
+          one function for each JavaScript tab in the panel:{" "}
+          <Code>saveData</Code>, <Code>createSession</Code>,{" "}
+          <Code>saveBase64Data</Code> and <Code>getCondition</Code>.
         </Text>
         <Text maxW="70ch">
-          Two things about it are worth knowing before you read the reference,
+          Send whatever your experiment produces. The data string is stored
+          byte for byte, under the filename you give it.
+        </Text>
+        <Text maxW="70ch">
+          Two things about the library are worth knowing before you read the reference,
           because both are easy to get wrong and neither fails loudly:
         </Text>
         <List.Root maxW="70ch" gap={2} ps={6}>
@@ -142,6 +132,15 @@ export default function SendingDataPage() {
             complete file.
           </List.Item>
         </List.Root>
+        <Text maxW="70ch">
+          The library is a thin layer over DataPipe&apos;s HTTP API, and you can
+          call that API yourself instead: saving data, saving a file, and
+          requesting a condition are each one <Code>POST</Code> with a JSON
+          body. You give up two things. Compression becomes your job (see{" "}
+          <ProseLink href="#request-size-limits">Request size limits</ProseLink>
+          ), and saving as you go is impractical, because it stages each trial
+          in a Firebase Realtime Database rather than posting it to DataPipe.
+        </Text>
         <GuidanceLine
           href="https://github.com/jspsych/datapipe/tree/main/packages/client"
           linkText="datapipe-client reference"
@@ -171,15 +170,12 @@ export default function SendingDataPage() {
           streaming off and submit once at the end instead.
         </Text>
         <Text maxW="70ch">
-          Plain JavaScript can stream too, through a small framework-neutral
-          library,{" "}
-          <ProseLink href="/docs/experiments/sending-data#plain-javascript">
-            datapipe-client
-          </ProseLink>
-          . That was not possible before: staging trials means
-          writing to a database directly, not something you can hand-roll from a{" "}
-          <Code>fetch</Code> call. The <strong>Save as you go</strong> tab under
-          JavaScript in the panel above has the code.
+          Plain JavaScript can stream too, with{" "}
+          <ProseLink href="#plain-javascript">datapipe-client</ProseLink>
+          &apos;s <Code>createSession</Code>. Unlike the extension, it does not
+          stream by default: your experiment opts in by starting a session. The{" "}
+          <strong>Save as you go</strong> tab under JavaScript in the panel
+          above has the code.
         </Text>
         <Text maxW="70ch">
           Three things to know before you rely on it:
@@ -387,8 +383,8 @@ export default function SendingDataPage() {
           exceed the limit even after compression.
         </Text>
         <Text maxW="70ch">
-          If you are sending data without the plugin (calling{" "}
-          <Code>fetch</Code> yourself), you can compress the request body with
+          If you call the API yourself rather than through the extension or{" "}
+          <Code>datapipe-client</Code>, you can compress the request body with
           the browser&apos;s{" "}
           <ProseLink
             href="https://developer.mozilla.org/en-US/docs/Web/API/CompressionStream"
@@ -403,7 +399,7 @@ export default function SendingDataPage() {
           A request that is still over 32 MB never reaches DataPipe&apos;s own
           code: the hosting infrastructure rejects it before any endpoint runs.
           DataPipe gives no error response, and nothing in your experiment
-          dashboard explains it; your <Code>fetch</Code> call gets back a
+          dashboard explains it; your request gets back a
           bare <Code>500 Internal Error</Code> (or a plain network failure,
           depending on the client), and unlike a queued{" "}
           <Code>202</Code>, the data is not held anywhere for retry. If

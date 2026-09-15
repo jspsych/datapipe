@@ -170,29 +170,31 @@ export default function CodeHints({ expId }) {
           <Tabs.Content value="send-data-js">
             <VStack alignItems={"start"} gap={3}>
               <Text fontSize="sm" color="fg.muted">
-                POST your data as a string with a unique filename.
+                Send your data as a string with a unique filename.
               </Text>
+              <CodeBlock language="html">
+                {`<script src="https://unpkg.com/datapipe-client"></script>`}
+              </CodeBlock>
               <CodeBlock>
                 {`
-            fetch("https://pipe.jspsych.org/api/data/", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Accept: "*/*",
-              },
-              body: JSON.stringify({
-                experimentID: "${expId}",
-                filename: "UNIQUE_FILENAME.csv",
-                data: dataAsString,
-              }),
-            });`}
+            const result = await DataPipe.saveData({
+              experimentID: "${expId}",
+              filename: "UNIQUE_FILENAME.csv",
+              data: dataAsString,
+            });
+
+            if (!result.ok) {
+              console.error(\`DataPipe refused the data (HTTP \${result.status})\`, result.body);
+            }`}
               </CodeBlock>
+              <Text fontSize="sm" color="fg.muted">
+                saveData never throws. Check result.ok to find out whether the data arrived.
+              </Text>
             </VStack>
           </Tabs.Content>
-          {/* Plain JavaScript could not stream at all until the client was
-              split out of the jsPsych plugin. Staging a trial means writing to
-              a database directly, which is not something to hand-roll from an
-              endpoint reference, so this tab is the library or nothing. */}
+          {/* Every JavaScript tab uses datapipe-client, but this is the one
+              that could not be rewritten as a raw fetch: staging a trial means
+              writing to a database directly, not calling a DataPipe endpoint. */}
           <Tabs.Content value="stream-data-js">
             <VStack alignItems={"start"} gap={3}>
               <Text fontSize="sm" color="fg.muted">
@@ -233,21 +235,17 @@ export default function CodeHints({ expId }) {
           <Tabs.Content value="send-base64-js">
             <VStack alignItems={"start"} gap={3}>
               <Text fontSize="sm" color="fg.muted">
-                POST base64-encoded binary data. The server decodes and uploads the file to your storage provider.
+                Send binary data (audio, video, images) as a base64 string. DataPipe decodes it and uploads the file to your storage provider.
               </Text>
+              <CodeBlock language="html">
+                {`<script src="https://unpkg.com/datapipe-client"></script>`}
+              </CodeBlock>
               <CodeBlock>
                 {`
-            fetch("https://pipe.jspsych.org/api/base64/", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Accept: "*/*",
-              },
-              body: JSON.stringify({
-                experimentID: "${expId}",
-                filename: "UNIQUE_FILENAME.webm",
-                data: base64DataString,
-              }),
+            const result = await DataPipe.saveBase64Data({
+              experimentID: "${expId}",
+              filename: "UNIQUE_FILENAME.webm",
+              data: base64DataString,
             });`}
               </CodeBlock>
             </VStack>
@@ -255,23 +253,24 @@ export default function CodeHints({ expId }) {
           <Tabs.Content value="get-condition-js">
             <VStack alignItems={"start"} gap={3}>
               <Text fontSize="sm" color="fg.muted">
-                Request the next condition number. Returns a JSON object with a condition property.
+                Request the next condition assignment, a number starting at 0.
               </Text>
+              <CodeBlock language="html">
+                {`<script src="https://unpkg.com/datapipe-client"></script>`}
+              </CodeBlock>
               <CodeBlock>
                 {`
-            const response = await fetch("https://pipe.jspsych.org/api/condition/", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Accept: "*/*",
-              },
-              body: JSON.stringify({
-                experimentID: "${expId}",
-              }),
-            });
-            const data = await response.json();
-            const condition = data.condition;`}
+            let condition;
+            try {
+              condition = await DataPipe.getCondition({ experimentID: "${expId}" });
+            } catch (error) {
+              document.body.innerHTML = "<p>The experiment could not be started.</p>";
+              throw error;
+            }`}
               </CodeBlock>
+              <Text fontSize="sm" color="fg.muted">
+                getCondition throws if the assignment cannot be made — the experiment is closed, or condition assignment is switched off. There is no safe value to fall back to, so decide what the participant sees rather than letting them run the wrong condition.
+              </Text>
             </VStack>
           </Tabs.Content>
         </Tabs.Root>

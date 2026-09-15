@@ -194,10 +194,11 @@ export default function PrivacyPage() {
               Trials staged during a session, if your experiment uses
               incremental upload.
             </Text>{" "}
-            The jsPsych extension and the plain JavaScript streaming library
-            send each trial to DataPipe as it is produced (on by default for
-            experiments built on either of them), so that a participant who
-            closes the tab partway through does not lose everything they did.
+            The jsPsych extension sends each trial to DataPipe as it is
+            produced, and does so by default; <Code>datapipe-client</Code>{" "}
+            does the same once an experiment starts a session with it. Either
+            way, a participant who closes the tab partway through does not lose
+            everything they did.
             Those trials are held in a private database, unreadable by any
             browser (including the one that wrote them), and are deleted the
             moment the participant&apos;s submission completes, normally
