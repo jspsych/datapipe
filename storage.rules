@@ -1,4 +1,23 @@
 rules_version = '2';
+
+// The default bucket is written and read exclusively by the Admin SDK from
+// Cloud Functions, which bypasses these rules entirely. Nothing here is
+// meant to be reachable from a client Storage SDK -- there is no client
+// code that uses one (no `getStorage`/`firebase/storage` import anywhere
+// under pages/components/lib). Known Admin-SDK-only prefixes as of this
+// writing:
+//   pending-data/<experimentID>/<safeName>_<timestamp>  - persist-pending.ts,
+//     read/deleted by scheduled-pending-recovery.ts and purge-user-data.ts
+//   upload-queue/<docId>                                 - queue-upload.ts,
+//     written by scheduled-pending-recovery.ts, read by api-queue-status.ts
+//     and scheduled-upload-retry.ts, deleted by purge-user-data.ts
+//   finalization/<experimentID>/<archiveName>            - finalization.ts's
+//     scratch object for the merged archive before it is handed to the
+//     storage provider (OSF/Drive/etc.) and then deleted
+//
+// If a new prefix is added, it stays Admin-SDK-only by default under the
+// deny-all rule below -- add an explicit `allow` only if a client actually
+// needs direct Storage access, and update this list.
 service firebase.storage {
   match /b/{bucket}/o {
     match /{allPaths=**} {

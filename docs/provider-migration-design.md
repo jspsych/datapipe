@@ -794,7 +794,15 @@ Google Drive provider is announced:
    facing wording is an editorial decision.
 6. **Deploy order**: functions + rules + hosting can ship together; the
    collision cache dual-runs against OSF's 409 for legacy experiments, so
-   no data migration or flag-flip is needed.
+   no data migration or flag-flip is needed. "Rules" includes `storage`, not
+   just `firestore`/`database` — both deploy workflows'
+   `firebase deploy --only ...` lists now carry `storage` ahead of
+   `functions` so `storage.rules` (deny-all; the bucket is Admin-SDK-only —
+   see its header comment for the `pending-data/`, `upload-queue/` and
+   `finalization/` prefixes in use) actually reaches the default bucket.
+   That bucket must already exist in the project (`firebase deploy --only
+   storage` fails otherwise) — true today for both `osf-relay.appspot.com`
+   and `datapipe-test.appspot.com`.
 
 ## Open questions
 
