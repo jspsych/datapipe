@@ -350,7 +350,11 @@ export default function GettingStarted() {
           <Link href="https://github.com/jspsych/jsPsych/tree/main/packages/extension-pipe" target="_blank" rel="noopener noreferrer" color="brandOrange.fg">
             @jspsych/extension-pipe extension
           </Link>
-          . Otherwise, you can use the DataPipe API directly with fetch requests.
+          . Otherwise, use the{" "}
+          <Link href="https://www.npmjs.com/package/datapipe-client" target="_blank" rel="noopener noreferrer" color="brandOrange.fg">
+            datapipe-client
+          </Link>{" "}
+          JavaScript library.
         </Text>
         <Text>
           The code is the same whichever storage provider you chose. Your
@@ -364,8 +368,9 @@ export default function GettingStarted() {
         <Text>
           The jsPsych extension saves data as it is produced by default, not
           only when the experiment ends, so a participant who closes the tab
-          partway through does not take all of their data with them. Plain
-          JavaScript can do the same with a small library; see{" "}
+          partway through does not take all of their data with them. The
+          datapipe-client library does the same once your experiment starts a
+          session with it; see{" "}
           <Link href="/docs/experiments/sending-data#saving-as-you-go" color="brandOrange.fg">
             Saving as you go
           </Link>
