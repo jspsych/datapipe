@@ -26,6 +26,11 @@ jest.mock("react-firebase-hooks/firestore", () => ({
   useDocumentData: jest.fn(),
 }));
 
+const mockEnsureUserDocument = jest.fn(() => Promise.resolve(false));
+jest.mock("../lib/user-bootstrap", () => ({
+  ensureUserDocument: (...args) => mockEnsureUserDocument(...args),
+}));
+
 // AuthCheck reads useRouter for the pathname passed to SignInForm and an
 // effect that pushes fallbackRoute when signed out -- neither path is
 // exercised by these tests (every case here is signed in), but the module
@@ -56,6 +61,8 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockSetDoc.mockClear();
   mockSetDoc.mockResolvedValue();
+  mockEnsureUserDocument.mockClear();
+  mockEnsureUserDocument.mockResolvedValue(false);
 });
 
 describe("AuthCheck's contact-email gate", () => {
@@ -165,6 +172,47 @@ describe("AuthCheck's contact-email gate", () => {
     expect(payload.contactEmail).toBe("researcher@example.edu");
     expect(payload.contactEmailVerified).toBe(false);
     expect(options).toEqual({ merge: true });
+  });
+
+  it("missing users/{uid} doc: saving calls ensureUserDocument, then writes the contact email", async () => {
+    // userDoc undefined (not loading, no error) is AuthCheck's own signal
+    // that the document does not exist at all -- see AuthCheck.js. A plain
+    // setDoc of just the four contactEmail keys here would be a CREATE that
+    // firestore.rules' isAccountCreation() denies (no uid/email/experiments),
+    // which is exactly the lockout this recovery path exists to break.
+    useDocumentData.mockReturnValue([undefined, false, undefined]);
+
+    renderGated();
+
+    fireEvent.change(screen.getByLabelText(/Email address/i), {
+      target: { value: "researcher@example.edu" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Save and continue/i }));
+
+    await waitFor(() => expect(mockSetDoc).toHaveBeenCalled());
+
+    expect(mockEnsureUserDocument).toHaveBeenCalledWith(mockUser);
+    expect(
+      mockEnsureUserDocument.mock.invocationCallOrder[0]
+    ).toBeLessThan(mockSetDoc.mock.invocationCallOrder[0]);
+
+    const [, payload] = mockSetDoc.mock.calls[0];
+    expect(payload.contactEmail).toBe("researcher@example.edu");
+  });
+
+  it("present users/{uid} doc: saving does not call ensureUserDocument", async () => {
+    useDocumentData.mockReturnValue([{ email: "" }, false, undefined]);
+
+    renderGated();
+
+    fireEvent.change(screen.getByLabelText(/Email address/i), {
+      target: { value: "researcher@example.edu" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Save and continue/i }));
+
+    await waitFor(() => expect(mockSetDoc).toHaveBeenCalled());
+
+    expect(mockEnsureUserDocument).not.toHaveBeenCalled();
   });
 
   it("has no control labelled Skip or Later -- there is no skip", () => {

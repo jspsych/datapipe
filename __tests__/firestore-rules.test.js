@@ -661,6 +661,53 @@ describe('contact email (P0)', () => {
         connectedAccounts: { gdrive: { authMethod: 'oauth2' } },
       })));
     });
+
+    // Pins the fix for the password sign-in lockout: a Firebase Auth user
+    // whose users/{uid} doc never landed (a half-failed account deletion, or
+    // a legacy signup write that never landed) must be able to have
+    // ensureUserDocument (lib/user-bootstrap.js) recreate it on sign-in,
+    // BEFORE ContactEmailGate ever tries its own four-key write. The two
+    // tests below pin why that ordering is required: the bootstrap shape is
+    // allowed, and the gate's bare shape against a missing doc is not.
+    it('ALLOWS exactly the shape ensureUserDocument writes for a password account', async () => {
+      // No authMethod: password accounts have none (see lib/osf-sunset.js
+      // and functions/src/check-email-conflict.ts, which query
+      // authMethod == 'osf' and treat its absence as "not an OSF account").
+      // No contactEmailUpdatedAt either -- that key is unique to
+      // buildContactEmailUpdate()'s later, researcher-typed write;
+      // contactEmailSeedFromAuthUser() (what ensureUserDocument calls to
+      // build this shape) never sets it.
+      const uid = 'ce-create-password-bootstrap';
+      const ctx = testEnv.authenticatedContext(uid);
+
+      await assertSucceeds(setDoc(doc(ctx.firestore(), `users/${uid}`), {
+        uid,
+        email: 'researcher@example.edu',
+        experiments: [],
+        contactEmail: 'researcher@example.edu',
+        contactEmailVerified: false,
+        contactEmailSource: 'auth',
+      }));
+    });
+
+    it('DENIES a create of only the four contactEmail fields -- the bug this bootstrap fixes', async () => {
+      // Exactly what ContactEmailGate's setDoc(..., {merge: true}) sends: on
+      // a MISSING document this is a CREATE, not an update, so it is judged
+      // by isAccountCreation() -- which requires uid/email/experiments and
+      // has neither here. Without calling ensureUserDocument first (as
+      // SignInForm.js and ContactEmailGate.js's own defense-in-depth path
+      // now both do), this write loops forever with "Could not save your
+      // email address."
+      const uid = 'ce-create-bare-contact-fields';
+      const ctx = testEnv.authenticatedContext(uid);
+
+      await assertFails(setDoc(doc(ctx.firestore(), `users/${uid}`), {
+        contactEmail: 'researcher@example.edu',
+        contactEmailVerified: false,
+        contactEmailUpdatedAt: 1700000000000,
+        contactEmailSource: 'user',
+      }));
+    });
   });
 
   describe('contactEmail updates', () => {
