@@ -55,6 +55,29 @@ describe("base URL", () => {
     expect(fetchMock.mock.calls[0][0]).toBe("https://datapipe-test.web.app/api/condition/");
   });
 
+  it("collapses a run of trailing slashes", async () => {
+    // Pins the behaviour of the hand-rolled loop that replaced
+    // `url.replace(/\/+$/, "")`, which CodeQL flags as js/polynomial-redos.
+    setBaseURL("https://datapipe-test.web.app///");
+    const fetchMock = mockFetch(() => ({ condition: 1 }));
+
+    await getCondition({ experimentID: "EXP12345" });
+
+    expect(fetchMock.mock.calls[0][0]).toBe("https://datapipe-test.web.app/api/condition/");
+  });
+
+  it("leaves interior slashes alone and survives an all-slash string", async () => {
+    setBaseURL("https://datapipe-test.web.app/a/b/");
+    const fetchMock = mockFetch(() => ({ condition: 1 }));
+    await getCondition({ experimentID: "EXP12345" });
+    expect(fetchMock.mock.calls[0][0]).toBe("https://datapipe-test.web.app/a/b/api/condition/");
+
+    // Degenerate, but it must not hang or throw: stripping everything leaves
+    // an empty base, and the default takes over.
+    setBaseURL("///");
+    expect(getBaseURL()).toBe("https://pipe.jspsych.org");
+  });
+
   it("lets a single call override the global setting", async () => {
     const fetchMock = mockFetch(() => ({ message: "Success" }));
 

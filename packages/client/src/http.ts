@@ -11,9 +11,18 @@
 const DEFAULT_BASE_URL = "https://pipe.jspsych.org";
 let baseURL = DEFAULT_BASE_URL;
 
-/** Point every request at a different DataPipe deployment. */
+/**
+ * Point every request at a different DataPipe deployment. An empty string
+ * restores the default.
+ *
+ * The fallback tests what normalizing PRODUCED, not what the caller passed.
+ * `"/"` and `"///"` are truthy but normalize to `""`, and an empty base makes
+ * `endpoint()` return `/api/data/` -- a relative URL, so every submission
+ * would quietly go to the experiment's own host instead of DataPipe, and the
+ * researcher would be left reading 404s from their own server.
+ */
 export function setBaseURL(url: string): void {
-  baseURL = url ? normalizeBaseURL(url) : DEFAULT_BASE_URL;
+  baseURL = (url ? normalizeBaseURL(url) : "") || DEFAULT_BASE_URL;
 }
 
 /** The deployment requests currently go to. */
@@ -21,9 +30,23 @@ export function getBaseURL(): string {
   return baseURL;
 }
 
-/** Strip any trailing slash so `${base}/api/data/` never doubles it. */
+/**
+ * Strip any trailing slash so `${base}/api/data/` never doubles it.
+ *
+ * Deliberately a loop and not `url.replace(/\/+$/, "")`. CodeQL flags that
+ * regex as js/polynomial-redos: in the general backtracking model, every
+ * starting position in a run of slashes matches `/+` to the end and then
+ * fails the anchor. V8 appears to optimise the anchored case -- a 60k-slash
+ * string showed no measurable slowdown -- and nothing hostile reaches this
+ * anyway, since the value is the researcher's own baseURL and not participant
+ * input. So this is not a fix for an observed problem. It is here because the
+ * loop is provably linear, reads no worse, and costs less than re-arguing the
+ * alert every time someone scans this package.
+ */
 export function normalizeBaseURL(url: string): string {
-  return url.replace(/\/+$/, "");
+  let end = url.length;
+  while (end > 0 && url.charCodeAt(end - 1) === 47 /* "/" */) end--;
+  return url.slice(0, end);
 }
 
 export function endpoint(path: string, override?: string): string {
