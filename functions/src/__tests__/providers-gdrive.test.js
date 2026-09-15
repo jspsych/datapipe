@@ -192,6 +192,95 @@ describe("1. writeSessionFile success", () => {
   });
 });
 
+describe("1b. multipart boundary is per-request and unguessable", () => {
+  it("uses a different random boundary on each upload, and the Content-Type boundary matches the one written into the body", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 200, statusText: "OK", jsonBody: { id: "gdrive-file-a", name: "a.json" } })
+    );
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 200, statusText: "OK", jsonBody: { id: "gdrive-file-b", name: "b.json" } })
+    );
+
+    await gdriveProvider.writeSessionFile(
+      auth,
+      { provider: "gdrive", folderId: "folder-abc" },
+      "a.json",
+      "data-a",
+      { size: 6, contentType: "application/json" }
+    );
+    await gdriveProvider.writeSessionFile(
+      auth,
+      { provider: "gdrive", folderId: "folder-abc" },
+      "b.json",
+      "data-b",
+      { size: 6, contentType: "application/json" }
+    );
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+
+    const boundaries = [0, 1].map((index) => {
+      const { options } = callArgs(index);
+      const contentType = header(options.headers, "Content-Type");
+      const boundary = extractBoundary(contentType);
+      // Random per request, `datapipe-gdrive-` prefixed, 16 bytes of hex --
+      // matches newMultipartBoundary()'s format exactly (not just "looks
+      // random"), so a regression back to a fixed or shorter token fails
+      // this assertion even if it happens to still be unique across calls.
+      expect(boundary).toMatch(/^datapipe-gdrive-[0-9a-f]{32}$/);
+
+      // The header's boundary must be the SAME value the body was built
+      // with -- both parties of the request have to agree, or Drive can't
+      // parse the body at all.
+      const body = options.body.toString();
+      expect(body).toContain(`--${boundary}`);
+      return boundary;
+    });
+
+    expect(boundaries[0]).not.toBe(boundaries[1]);
+  });
+
+  it("is not fooled by a payload containing the OLD fixed boundary string -- the closing delimiter it forges is inert against the fresh random boundary", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 200, statusText: "OK", jsonBody: { id: "gdrive-file-inj", name: "inj.json" } })
+    );
+
+    const trailing = "TRAILING-DATA-THAT-MUST-SURVIVE";
+    const payload = `legit-prefix\r\n--datapipe-gdrive-multipart-boundary--\r\n${trailing}`;
+
+    await gdriveProvider.writeSessionFile(
+      auth,
+      { provider: "gdrive", folderId: "folder-abc" },
+      "inj.json",
+      payload,
+      { size: payload.length, contentType: "text/plain" }
+    );
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const { options } = callArgs(0);
+    const contentType = header(options.headers, "Content-Type");
+    const boundary = extractBoundary(contentType);
+    expect(boundary).toMatch(/^datapipe-gdrive-[0-9a-f]{32}$/);
+
+    const body = options.body.toString();
+
+    // Parse the multipart body using the REAL (random) boundary from the
+    // header, the way a well-behaved multipart consumer (and Drive) would.
+    const delimiter = `--${boundary}`;
+    const parts = body.split(delimiter).filter((part) => part !== "" && part !== "--");
+    // part 0: leading CRLF/empty remnant before the first delimiter is
+    // filtered out above; parts should be [metadata-part, data-part].
+    expect(parts.length).toBe(2);
+    const dataPart = parts[1];
+
+    // The forged "old fixed boundary" delimiter embedded in the payload must
+    // NOT have closed the data part -- the entire payload, including the
+    // trailing data after the forged delimiter, must appear intact in the
+    // one true data part.
+    expect(dataPart).toContain(payload);
+    expect(dataPart).toContain(trailing);
+  });
+});
+
 describe("2. writeSessionFile subfolder", () => {
   it("finds-or-creates the subfolder by name under the container, then uploads parented to it", async () => {
     // 1) folder query -- absent

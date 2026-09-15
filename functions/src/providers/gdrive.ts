@@ -1,4 +1,5 @@
 import fetch from "node-fetch";
+import { randomBytes } from "crypto";
 import { decrypt } from "../crypto-utils.js";
 import { db } from "../app.js";
 import { refreshGdriveToken } from "./gdrive-oauth.js";
@@ -27,10 +28,16 @@ const FOLDER_MIME = "application/vnd.google-apps.folder";
 
 const GDRIVE_DEFAULT_WINDOW_MS = 10 * 60 * 1000;
 
-// A fixed boundary is fine here — the request body is built and sent in one
-// shot, never streamed/concatenated across requests, so there's no need for
-// per-call uniqueness.
-const MULTIPART_BOUNDARY = "datapipe-gdrive-multipart-boundary";
+// The boundary is generated per request rather than being a fixed constant.
+// Uniqueness per call is not the point — the body is built and sent in one
+// shot — but UNGUESSABILITY is: one of the two parts below is the
+// participant's raw submission, copied in verbatim, and a fixed boundary is a
+// string an attacker can simply include in their data to close the part early
+// and append parts of their own. A random boundary cannot be written into a
+// payload that was composed before it existed.
+function newMultipartBoundary(): string {
+  return `datapipe-gdrive-${randomBytes(16).toString("hex")}`;
+}
 
 // GDRIVE_API_BASE is read at CALL time (not module load) so tests — and, in
 // production, config changes — can vary it without a process restart.
@@ -214,18 +221,25 @@ async function findOrCreateFolder(auth: ResolvedAuth, name: string, parentId: st
 
 // Hand-built multipart/related body: part 1 is the JSON metadata (name +
 // parents), part 2 is the raw file payload — no extra dependencies needed
-// for this.
-function buildMultipartBody(metadata: object, data: string | Buffer, contentType: string): Buffer {
+// for this. Returns the boundary alongside the bytes because the caller has
+// to put the same one in the request's Content-Type header.
+function buildMultipartBody(
+  metadata: object,
+  data: string | Buffer,
+  contentType: string
+): { body: Buffer; boundary: string } {
+  const boundary = newMultipartBoundary();
   const dataBuffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
   const preamble =
-    `--${MULTIPART_BOUNDARY}\r\n` +
+    `--${boundary}\r\n` +
     `Content-Type: application/json; charset=UTF-8\r\n\r\n` +
     `${JSON.stringify(metadata)}\r\n` +
-    `--${MULTIPART_BOUNDARY}\r\n` +
+    `--${boundary}\r\n` +
     `Content-Type: ${contentType}\r\n\r\n`;
-  const epilogue = `\r\n--${MULTIPART_BOUNDARY}--`;
+  const epilogue = `\r\n--${boundary}--`;
 
-  return Buffer.concat([Buffer.from(preamble), dataBuffer, Buffer.from(epilogue)]);
+  const body = Buffer.concat([Buffer.from(preamble), dataBuffer, Buffer.from(epilogue)]);
+  return { body, boundary };
 }
 
 export const gdriveProvider: StorageProvider = {
@@ -434,7 +448,7 @@ export const gdriveProvider: StorageProvider = {
       };
     }
 
-    const body = buildMultipartBody(
+    const { body, boundary } = buildMultipartBody(
       { name: uploadFilename, parents: [parentId] },
       data,
       meta.contentType
@@ -444,7 +458,7 @@ export const gdriveProvider: StorageProvider = {
       method: "POST",
       headers: {
         ...authHeaders(auth),
-        "Content-Type": `multipart/related; boundary=${MULTIPART_BOUNDARY}`,
+        "Content-Type": `multipart/related; boundary=${boundary}`,
       },
       body,
     });
