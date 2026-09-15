@@ -12,14 +12,38 @@ workflow log cannot be replayed into a publish.
 
 ## One-time setup
 
-### 1. Publish 0.1.0 by hand
+### 1. Configure the trusted publisher
 
-A trusted publisher is configured on a package's settings page, which means the
-package has to exist first. There is no way around this for the first release of
-a brand-new name. (If npm has since added a way to pre-register a publisher for
-an unclaimed name, prefer that and skip this step.)
+Run this from `packages/client`, logged in to npm as the account that will own
+the package (`npm whoami` to check). It needs npm 11.5.1 or later.
 
-From `packages/client`, logged in as the account that should own the name:
+```
+npm trust github datapipe-client \
+  --repo jspsych/datapipe \
+  --file release-client.yml \
+  --allow-publish
+```
+
+Add `--dry-run` first if you want to see what it will do, and `npm trust list
+datapipe-client` afterwards to confirm it took. To undo one, `npm trust revoke
+datapipe-client --id=<trust-id>`, with the id from `list`.
+
+`--file` is the workflow's filename, and it is part of the trust: renaming or
+moving `.github/workflows/release-client.yml` revokes publishing until this is
+re-run to match, and the failure surfaces as an authentication error rather
+than a configuration one. There is also `--environment`, which we do not set —
+if you add one, the job in that workflow has to declare the same
+`environment:`, or every publish is rejected.
+
+`--allow-publish` is what grants ordinary `npm publish`. The separate
+`--allow-stage-publish` covers staged publishes, which this release flow does
+not use.
+
+### 2. Publish 0.1.0 by hand, if npm asks you to
+
+A trusted publisher may need the package to exist before it can be attached to
+it. If step 1 succeeded, skip this. If npm refused because `datapipe-client` is
+not published yet, claim the name first and then re-run step 1:
 
 ```
 npm run build
@@ -37,24 +61,6 @@ npm owner add <username> datapipe-client
 Then set `version` in `packages/client/package.json` to `0.1.0` to match what
 you just published, and delete the initial changeset, so the automation's first
 run computes `0.1.1` (or `0.2.0`) rather than trying to republish `0.1.0`.
-
-### 2. Configure the trusted publisher
-
-On npmjs.com, go to the `datapipe-client` package → Settings → Trusted
-Publishing → Add GitHub Actions, and enter:
-
-| Field | Value |
-| --- | --- |
-| Organization or user | `jspsych` |
-| Repository | `datapipe` |
-| Workflow filename | `release-client.yml` |
-| Environment | leave blank |
-
-The workflow filename is part of the trust. Renaming or moving
-`.github/workflows/release-client.yml` revokes publishing until this is updated
-to match, and the failure surfaces as an authentication error rather than a
-configuration one. If you fill in Environment here, the job in that workflow
-must declare the same `environment:`, or every publish is rejected.
 
 ### 3. Let Actions open pull requests
 

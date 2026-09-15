@@ -69,7 +69,7 @@ jobs:
       # not change under us on an unrelated day.
       - name: Use an npm that can do trusted publishing
         run: |
-          npm install -g npm@11.6.2
+          npm install -g npm@11.17.0
           npm --version
         working-directory: .
 
@@ -94,9 +94,11 @@ jobs:
       # is stored in this repository, and a leaked workflow log cannot be
       # replayed into a publish.
       #
-      # This binds to THIS FILE BY NAME. The trusted publisher configured on
-      # npm names `release-client.yml`, so renaming this file revokes its
-      # ability to publish until npm is updated to match.
+      # This binds to THIS FILE BY NAME. The trust was registered with
+      # `npm trust github datapipe-client --repo jspsych/datapipe
+      # --file release-client.yml --allow-publish`, so renaming this file
+      # revokes its ability to publish until that is re-run to match.
+      # `npm trust list datapipe-client` shows what is currently trusted.
       #
       # Provenance is attested automatically under trusted publishing; there is
       # no NPM_CONFIG_PROVENANCE to set.

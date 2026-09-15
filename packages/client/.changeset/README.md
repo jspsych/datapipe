@@ -49,9 +49,9 @@ Two consequences worth knowing before you change anything:
 
 - **The trust is bound to the workflow's filename.** Renaming or moving
   `.github/workflows/release-client.yml` revokes its ability to publish until
-  the trusted publisher on npm is updated to match. The failure looks like an
+  `npm trust github` is re-run to match. The failure looks like an
   authentication error, not a configuration one.
-- **A trusted publisher cannot be configured for a package that does not exist
-  yet.** Version 0.1.0 therefore has to be published once by hand, by someone
-  logged in locally, before the automation can take over. See
-  `docs/releasing-the-client.md`.
+- **The trust is set up with the npm CLI**, not by hand on the website:
+  `npm trust github datapipe-client --repo jspsych/datapipe --file
+  release-client.yml --allow-publish`, and `npm trust list datapipe-client` to
+  see what is configured. See `docs/releasing-the-client.md`.
