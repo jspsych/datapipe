@@ -17,6 +17,7 @@ import { useState } from "react";
 import { useRouter } from "next/router";
 import NextLink from "next/link";
 import { messageForAuthError } from "../lib/auth-errors";
+import { ensureUserDocument } from "../lib/user-bootstrap";
 import AuthProviderButtons from "./auth/AuthProviderButtons";
 import SignInWithOSF from "./SignInWithOSF";
 import FormErrorAlert from "./ui/FormErrorAlert";
@@ -48,7 +49,15 @@ export default function SignInForm({ routeAfterSignIn }) {
 
     setIsSubmitting(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const credential = await signInWithEmailAndPassword(auth, email, password);
+      // A password account whose users/{uid} doc never landed (a half-failed
+      // account deletion, or a legacy signup write that failed) would
+      // otherwise hit ContactEmailGate's denied create on every admin route
+      // and loop there forever. Same call and same error handling as
+      // AuthProviderButtons.js's federated path: a bootstrap failure surfaces
+      // as a generic sign-in error rather than silently navigating into
+      // a still-missing document.
+      await ensureUserDocument(credential.user);
       router.push(routeAfterSignIn);
     } catch (error) {
       setIsSubmitting(false);

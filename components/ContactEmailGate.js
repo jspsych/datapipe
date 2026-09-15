@@ -4,6 +4,7 @@ import { doc, setDoc } from "firebase/firestore";
 import { UserContext } from "../lib/context";
 import { db } from "../lib/firebase";
 import FormErrorAlert from "./ui/FormErrorAlert";
+import { ensureUserDocument } from "../lib/user-bootstrap";
 import {
   isValidEmailFormat,
   isSyntheticOsfEmail,
@@ -62,6 +63,19 @@ export default function ContactEmailGate({ userDoc }) {
 
     setIsSubmitting(true);
     try {
+      // Defense in depth: userDoc missing means AuthCheck's snapshot found no
+      // users/{uid} document at all (a half-failed account deletion, or a
+      // legacy signup whose write never landed -- see lib/user-bootstrap.js).
+      // The plain setDoc below would then be a CREATE of only the four
+      // contactEmail keys, which firestore.rules' isAccountCreation() denies
+      // (it requires uid/email/experiments). Normally SignInForm.js and
+      // AuthProviderButtons.js already called ensureUserDocument before this
+      // gate could ever render, but a tab left open from before that fix
+      // would otherwise loop on this denied write forever.
+      if (!userDoc) {
+        await ensureUserDocument(user);
+      }
+
       // buildContactEmailUpdate() is the ONLY place this object is
       // assembled -- it emits exactly the four keys
       // firestore.rules' isContactEmailUpdate() allows
