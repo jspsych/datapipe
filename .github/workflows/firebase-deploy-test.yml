@@ -119,5 +119,11 @@ jobs:
           npm run build
       - name: Use test firebase project
         run: firebase use test
+      # storage deploys storage.rules to the project's default bucket
+      # (datapipe-test.appspot.com, which already exists). It is listed
+      # before functions because firebase-tools deploys --only targets in
+      # the order given, and the deny-all rules should be in place before
+      # functions keep writing participant data under pending-data/,
+      # upload-queue/ and finalization/ in that bucket.
       - name: Deploy firebase project
-        run: firebase deploy --only firestore,database,functions,hosting --force
+        run: firebase deploy --only firestore,database,storage,functions,hosting --force
