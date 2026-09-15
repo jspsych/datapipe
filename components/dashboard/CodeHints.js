@@ -11,7 +11,7 @@ import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 
 import CodeBlock from "../CodeBlock";
-import { streamingSnippet } from "./streaming-snippet";
+import { extensionSnippet } from "./extension-snippet";
 
 export default function CodeHints({ expId }) {
   const [language, setLanguage] = useState("jsPsych v8");
@@ -76,53 +76,27 @@ export default function CodeHints({ expId }) {
         <Tabs.Root variant="enclosed" colorPalette="brandGreen" defaultValue="send-data" size="sm">
           <Tabs.List>
             <Tabs.Trigger value="send-data">Save data</Tabs.Trigger>
-            <Tabs.Trigger value="stream-data">Save as you go</Tabs.Trigger>
             <Tabs.Trigger value="send-base64">Save file</Tabs.Trigger>
             <Tabs.Trigger value="get-condition">Conditions</Tabs.Trigger>
           </Tabs.List>
 
+          {/* The extension is the whole integration: registering it saves the
+              data, so there is no save trial and no separate "save as you go"
+              path to choose between. Streaming is simply on. */}
           <Tabs.Content value="send-data">
             <VStack alignItems={"start"} gap={3}>
               <Text fontSize="sm" color="fg.muted">
-                Load the plugin, generate a unique filename, and add a save trial to your timeline.
+                Load the extension and register it. That is the whole integration — there is no save trial to add.
               </Text>
               <CodeBlock language="html">
-                {`<script src="https://unpkg.com/@jspsych-contrib/plugin-pipe"></script>`}
+                {`<script src="https://unpkg.com/@jspsych/extension-pipe"></script>`}
               </CodeBlock>
-              <CodeBlock>
-                {`
-              const subject_id = jsPsych.randomization.randomID(10);
-              const filename = \`\${subject_id}.csv\`;
-
-              const save_data = {
-                type: jsPsychPipe,
-                action: "save",
-                experiment_id: "${expId}",
-                filename: filename,
-                data_string: ()=>jsPsych.data.get().csv()
-              };`}
-              </CodeBlock>
+              <CodeBlock>{extensionSnippet(expId)}</CodeBlock>
               <Text fontSize="sm" color="fg.muted">
-                Use .json() and a .json filename to save as JSON instead of CSV.
+                Each trial is sent as it happens, so a participant who closes the tab partway through does not take all of their data with them: their completed trials arrive as a separate file ending in .partial.json, and do not count toward your session limit. A participant who finishes produces one ordinary file.
               </Text>
-            </VStack>
-          </Tabs.Content>
-
-          {/* Incremental upload. Deliberately a separate tab rather than a
-              replacement for "Save data": it needs a newer plugin version, it
-              adds a second file type to the researcher's dataset, and the
-              plain path stays correct and recommended for most studies. */}
-          <Tabs.Content value="stream-data">
-            <VStack alignItems={"start"} gap={3}>
               <Text fontSize="sm" color="fg.muted">
-                Send each trial as it happens, so a participant who closes the tab partway through does not take all of their data with them. Requires plugin version 0.7 or later.
-              </Text>
-              <CodeBlock language="html">
-                {`<script src="https://unpkg.com/@jspsych-contrib/plugin-pipe"></script>`}
-              </CodeBlock>
-              <CodeBlock>{streamingSnippet(expId)}</CodeBlock>
-              <Text fontSize="sm" color="fg.muted">
-                A participant who finishes produces the same file as before. One who quits partway produces a separate JSON file ending in .partial.json, holding the trials they completed. Partial sessions do not count toward your session limit.
+                Add format: &quot;json&quot; to save JSON instead of CSV. Add stream: false to send only at the end.
               </Text>
             </VStack>
           </Tabs.Content>
@@ -132,25 +106,23 @@ export default function CodeHints({ expId }) {
                 Use saveBase64Data to upload binary files (audio, video, images). This example saves audio from the html-audio-response plugin.
               </Text>
               <CodeBlock language="html">
-                {`<script src="https://unpkg.com/@jspsych-contrib/plugin-pipe"></script>`}
+                {`<script src="https://unpkg.com/@jspsych/extension-pipe"></script>`}
               </CodeBlock>
               <CodeBlock>
                 {`
-              const subject_id = jsPsych.randomization.randomID(10);
-
               var trial = {
                 type: jsPsychHtmlAudioResponse,
                 stimulus: "<p>Record a few seconds of audio.</p>",
                 recording_duration: 15000,
-                on_finish: function(data){
+                on_finish: async function(data){
                   const filename = \`\${subject_id}_\${jsPsych.getProgress().current_trial_global}_audio.webm\`;
-                  jsPsychPipe.saveBase64Data("${expId}", filename, data.response);
+                  await jsPsychExtensionPipe.saveBase64Data("${expId}", filename, data.response);
                   data.response = filename;
                 }
               };`}
               </CodeBlock>
               <Text fontSize="sm" color="fg.muted">
-                saveBase64Data is async. Use the plugin with action: "saveBase64" if you need to wait for confirmation before continuing.
+                jsPsych waits for an async on_finish, so awaiting the upload keeps the timeline paused until the file has been sent. Drop the await to let it finish in the background.
               </Text>
             </VStack>
           </Tabs.Content>
@@ -160,18 +132,28 @@ export default function CodeHints({ expId }) {
                 Request the next condition assignment. This is async, so wrap your experiment in an async function.
               </Text>
               <CodeBlock language="html">
-                {`<script src="https://unpkg.com/@jspsych-contrib/plugin-pipe"></script>`}
+                {`<script src="https://unpkg.com/@jspsych/extension-pipe"></script>`}
               </CodeBlock>
               <CodeBlock>
                 {`
               async function createExperiment(){
-                const condition = await jsPsychPipe.getCondition("${expId}");
+                let condition;
+                try {
+                  condition = await jsPsychExtensionPipe.getCondition("${expId}");
+                } catch (error) {
+                  document.body.innerHTML = "<p>The experiment could not be started.</p>";
+                  throw error;
+                }
+
                 if(condition == 0) { timeline = condition_1_timeline; }
                 if(condition == 1) { timeline = condition_2_timeline; }
                 jsPsych.run(timeline);
               }
               createExperiment();`}
               </CodeBlock>
+              <Text fontSize="sm" color="fg.muted">
+                getCondition throws if the assignment cannot be made — the experiment is closed, or condition assignment is switched off. There is no safe value to fall back to, so decide what the participant sees rather than letting them run the wrong condition.
+              </Text>
             </VStack>
           </Tabs.Content>
         </Tabs.Root>
@@ -180,6 +162,7 @@ export default function CodeHints({ expId }) {
         <Tabs.Root variant="enclosed" colorPalette="brandGreen" defaultValue="send-data-js" size="sm">
           <Tabs.List>
             <Tabs.Trigger value="send-data-js">Save data</Tabs.Trigger>
+            <Tabs.Trigger value="stream-data-js">Save as you go</Tabs.Trigger>
             <Tabs.Trigger value="send-base64-js">Save file</Tabs.Trigger>
             <Tabs.Trigger value="get-condition-js">Conditions</Tabs.Trigger>
           </Tabs.List>
@@ -204,6 +187,47 @@ export default function CodeHints({ expId }) {
               }),
             });`}
               </CodeBlock>
+            </VStack>
+          </Tabs.Content>
+          {/* Plain JavaScript could not stream at all until the client was
+              split out of the jsPsych plugin. Staging a trial means writing to
+              a database directly, which is not something to hand-roll from an
+              endpoint reference, so this tab is the library or nothing. */}
+          <Tabs.Content value="stream-data-js">
+            <VStack alignItems={"start"} gap={3}>
+              <Text fontSize="sm" color="fg.muted">
+                Send each trial as it happens, so a participant who closes the tab partway through does not take all of their data with them.
+              </Text>
+              <CodeBlock language="html">
+                {`<script src="https://unpkg.com/datapipe-client"></script>`}
+              </CodeBlock>
+              <CodeBlock>
+                {`
+            const filename = "UNIQUE_FILENAME.csv";
+            const session = DataPipe.createSession({
+              experimentID: "${expId}",
+              filename: filename,
+            });
+
+            // ...after each trial:
+            session.record(trialData);
+
+            // ...when the experiment ends:
+            await session.flush();
+            const result = await DataPipe.saveData({
+              experimentID: "${expId}",
+              filename: filename,
+              data: dataAsString,
+              sessionId: session.sessionId,
+            });
+            await session.close({ submitted: result.ok });`}
+              </CodeBlock>
+              <Text fontSize="sm" color="fg.muted">
+                Flush before reading sessionId: the session starts in the background, and until it has, the id is empty. Submitting without it leaves the staged copy unmatched, and it comes back as a duplicate .partial.json.
+              </Text>
+              <Text fontSize="sm" color="fg.muted">
+                A participant who finishes produces one ordinary file. One who quits partway produces a separate file ending in .partial.json, holding the trials they completed. Partial sessions do not count toward your session limit.
+              </Text>
             </VStack>
           </Tabs.Content>
           <Tabs.Content value="send-base64-js">
