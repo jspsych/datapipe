@@ -180,9 +180,25 @@ async function rehydrate(
   // rehydration -- the listFiles() call below included, not just the batch
   // loop -- because a slow provider listing is exactly the kind of legitimate
   // work a shorter interval must not mistake for a dead holder.
-  // .unref() so a lingering timer (e.g. one last in-flight tick racing
-  // clearInterval below) can never keep the process alive on its own.
+  //
+  // .unref() so this timer can NEVER be the reason a process (or, critically,
+  // an in-process test runner) fails to exit -- it must not keep the event
+  // loop alive on its own even if something above forgets to clear it.
+  //
+  // `stopped` is a belt-and-suspenders guard against a narrower race than
+  // "the interval never gets cleared": clearInterval() only prevents FUTURE
+  // ticks, so a tick already in flight when the function reaches its final
+  // write (mark warm, or clear the lease on failure) can still land AFTER
+  // that write and silently resurrect a rehydratingUntil this call just
+  // deleted -- blocking the next request's retry for up to another
+  // REHYDRATION_HEARTBEAT_MS for no reason. Checked inside the callback
+  // rather than by calling clearInterval() at each exit point, so there is
+  // exactly ONE place (the `finally` below) that ever calls clearInterval --
+  // simple enough to audit for "does every exit path actually stop this
+  // timer", which is the property that matters for never hanging a caller.
+  let stopped = false;
   const heartbeat = setInterval(() => {
+    if (stopped) return;
     expRef
       .update({
         "collisionCache.rehydratingUntil": Timestamp.fromMillis(
@@ -205,12 +221,11 @@ async function rehydrate(
     try {
       files = await listFilesFn();
     } catch (e) {
-      // Stop the heartbeat BEFORE clearing the lease, and await that clear --
-      // otherwise a tick already in flight (or one that fires while this
-      // delete is still pending) can land after it and silently re-write a
-      // live-looking lease over the one we just released, blocking retries
-      // for up to another REHYDRATION_HEARTBEAT_MS for no reason.
-      clearInterval(heartbeat);
+      // See the `stopped` comment above: flips the guard before the write
+      // that releases the lease, so an in-flight or already-queued tick
+      // cannot silently re-write it afterward. clearInterval() itself still
+      // happens exactly once, in the `finally` below.
+      stopped = true;
       // Clear the lease so a subsequent claim attempts rehydration again
       // rather than being locked out until the lease naturally expires.
       await expRef.update({ "collisionCache.rehydratingUntil": FieldValue.delete() });
@@ -239,10 +254,8 @@ async function rehydrate(
       await batch.commit();
     }
 
-    // Stopped before this final write for the same reason as the error path
-    // above: a heartbeat tick landing after this update would re-write a
-    // rehydratingUntil that this call already deleted.
-    clearInterval(heartbeat);
+    // See the `stopped` comment above.
+    stopped = true;
 
     const warmUntil = Timestamp.fromMillis(Date.now() + CLAIM_TTL_MS);
     await expRef.update({
@@ -255,6 +268,11 @@ async function rehydrate(
 
     return true;
   } finally {
+    // The ONE place this timer is ever cleared, on every exit -- success,
+    // the listFilesFn failure above, or any other error thrown out of the
+    // batch-write loop (a Firestore outage mid-commit, say). A `finally`
+    // around the whole body is what guarantees that: no exit path can reach
+    // `return`/`throw` without passing through here first.
     clearInterval(heartbeat);
   }
 }
