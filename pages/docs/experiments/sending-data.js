@@ -5,6 +5,7 @@ import GuidanceLine from "../../../components/ui/GuidanceLine";
 import DocsLayout from "../../../components/docs/DocsLayout";
 import DocsSection from "../../../components/docs/DocsSection";
 import CodeHints from "../../../components/dashboard/CodeHints";
+import CodeBlock from "../../../components/CodeBlock";
 
 // Prose link, per DESIGN.md §5: brandGreen.fg with a persistent underline, so
 // a link is never signalled by color alone. Local to this page for the same
@@ -94,6 +95,60 @@ export default function SendingDataPage() {
           Send whatever your experiment produces — the data string is stored
           byte for byte, under the filename you give it.
         </Text>
+        <Text maxW="70ch">
+          There is also a small library,{" "}
+          <ProseLink href="https://www.npmjs.com/package/datapipe-client" external>
+            datapipe-client
+          </ProseLink>
+          , which wraps those same endpoints and adds the one thing you cannot
+          reasonably write yourself: incremental upload, which stages each trial
+          in a Firebase Realtime Database rather than posting it here. It has no
+          jsPsych in it.
+        </Text>
+        <CodeBlock language="html">
+          {`<script src="https://unpkg.com/datapipe-client"></script>`}
+        </CodeBlock>
+        <Text maxW="70ch">
+          That exposes a <Code>DataPipe</Code> global. With a bundler,{" "}
+          <Code>npm install datapipe-client</Code> instead. Either way you get{" "}
+          <Code>saveData</Code>, <Code>saveBase64Data</Code>,{" "}
+          <Code>getCondition</Code> and <Code>createSession</Code>; the{" "}
+          <strong>Save as you go</strong> tab under JavaScript in the panel
+          above shows the streaming one.
+        </Text>
+        <Text maxW="70ch">
+          Two things about it are worth knowing before you read the reference,
+          because both are easy to get wrong and neither fails loudly:
+        </Text>
+        <List.Root maxW="70ch" gap={2} ps={6}>
+          <List.Item>
+            <strong>
+              <Code>getCondition</Code> throws, and nothing else does.
+            </strong>{" "}
+            Saving is written to fail quietly, because a failed upload is
+            retried and the data is still in the browser. A condition is not
+            like that — it usually decides which timeline a participant runs, so
+            there is no value to fall back to. Catch it and decide what the
+            participant sees, rather than letting them run the wrong condition.
+          </List.Item>
+          <List.Item>
+            <strong>
+              Call <Code>flush()</Code> before you read <Code>sessionId</Code>.
+            </strong>{" "}
+            A session starts in the background, and until it has, the id is an
+            empty string. Submitting without it leaves DataPipe unable to match
+            your file to the staged copy, so it recovers that copy separately
+            and you get a spurious <Code>.partial.json</Code> alongside a
+            complete file.
+          </List.Item>
+        </List.Root>
+        <GuidanceLine
+          href="https://github.com/jspsych/datapipe/tree/main/packages/client"
+          linkText="datapipe-client reference"
+          external
+        >
+          Every function, its options, and what it returns.
+        </GuidanceLine>
         <GuidanceLine href="/docs/api" linkText="API reference">
           Every field, response code, and error code, for all three participant
           endpoints.
@@ -117,11 +172,14 @@ export default function SendingDataPage() {
         </Text>
         <Text maxW="70ch">
           Plain JavaScript can stream too, through a small framework-neutral
-          library, <Code>datapipe-client</Code> — something that was not
-          possible before, because staging trials means writing to a database
-          directly, not something to hand-roll from a <Code>fetch</Code> call.
-          The <strong>Save as you go</strong> tab under JavaScript in the panel
-          above has the code.
+          library,{" "}
+          <ProseLink href="/docs/experiments/sending-data#plain-javascript">
+            datapipe-client
+          </ProseLink>{" "}
+          — something that was not possible before, because staging trials means
+          writing to a database directly, not something to hand-roll from a{" "}
+          <Code>fetch</Code> call. The <strong>Save as you go</strong> tab under
+          JavaScript in the panel above has the code.
         </Text>
         <Text maxW="70ch">
           Three things to know before you rely on it:

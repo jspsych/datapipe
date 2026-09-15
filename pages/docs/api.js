@@ -165,8 +165,14 @@ export default function ApiReferencePage() {
             @jspsych/extension-pipe extension
           </ProseLink>{" "}
           does it for you by default, along with the staging writes that
-          follow, and <Code>datapipe-client</Code> does the same for plain
-          JavaScript. It is documented because those writes go to a Firebase
+          follow, and{" "}
+          <ProseLink
+            href="https://github.com/jspsych/datapipe/tree/main/packages/client"
+            external
+          >
+            datapipe-client
+          </ProseLink>{" "}
+          does the same for plain JavaScript. It is documented because those writes go to a Firebase
           Realtime Database rather than to this API, and this response is what
           tells a client where.
         </Text>
