@@ -46,6 +46,16 @@ beforeAll(async () => {
     active: true,
     owner: "testuser",
   });
+  // `testlog` used to be deliberately absent: the request counter was
+  // incremented before api-data.ts checked that the experiment existed, so a
+  // log document appeared for any ID at all. It is counted after the check
+  // now (see write-log.ts), so the experiment this test counts against has to
+  // actually exist.
+  await db.collection("experiments").doc("testlog").set({
+    active: false,
+    owner: "testuser",
+    storageProvider: "osf",
+  });
 });
 
 describe("apiData", () => {
@@ -79,6 +89,11 @@ describe("apiData", () => {
     let doc = await db.collection("logs").doc("testlog").get();
     expect(doc.exists).toBe(true);
     expect(doc.data().saveData).toBe(1);
+    // The two fields that make this document readable by its owner
+    // (firestore.rules) and groupable by provider.
+    expect(doc.data().owner).toBe("testuser");
+    expect(doc.data().storageProvider).toBe("osf");
+    expect(doc.data().lastRequestAt).toBeTruthy();
 
     await saveData({
       experimentID: "testlog",
@@ -125,6 +140,99 @@ describe("apiData", () => {
     doc = await db.collection("logs").doc("data-testexp").get();
     expect(doc.data().logError).toBe(2);
 
+  });
+
+  it("should not count a request against an experiment that does not exist", async () => {
+    const db = getFirestore();
+    const bogusID = `does-not-exist-${Date.now()}`;
+
+    await saveData({ experimentID: bogusID, data: "test", filename: "test" });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    // The error is still recorded -- but `saveData`, the attempt counter, is
+    // not touched, because there is no experiment for the attempt to be an
+    // attempt AT. Counting it inflated the request totals and let any POST
+    // create an unreadable, ownerless document.
+    const doc = await db.collection("logs").doc(bogusID).get();
+    expect(doc.data()?.saveData).toBeUndefined();
+    expect(doc.data()?.owner).toBeUndefined();
+
+    await db.collection("logs").doc(bogusID).delete();
+  });
+
+  it("should tally errors by code and stamp each entry with a real Timestamp", async () => {
+    const db = getFirestore();
+    await db.collection("logs").doc("data-testexp-bycode").delete();
+    await db.collection("experiments").doc("data-testexp-bycode").set({
+      active: false,
+      owner: "testuser",
+      storageProvider: "osf",
+    });
+
+    // Two of the same code, so the tally has to count rather than merely
+    // record that the code was seen.
+    await saveData({ experimentID: "data-testexp-bycode", data: "test", filename: "test" });
+    await saveData({ experimentID: "data-testexp-bycode", data: "test", filename: "test" });
+    await new Promise((resolve) => setTimeout(resolve, 700));
+
+    const doc = await db.collection("logs").doc("data-testexp-bycode").get();
+    const data = doc.data();
+
+    expect(data.logError).toBe(2);
+    expect(data.errorsByCode.DATA_COLLECTION_NOT_ACTIVE).toBe(2);
+
+    // A real Timestamp, not the preformatted en-GB string it used to be --
+    // the whole point is that this is sortable and filterable.
+    expect(data.errors).toHaveLength(2);
+    expect(typeof data.errors[0].time.toDate).toBe("function");
+    expect(data.errors[0].time.toDate()).toBeInstanceOf(Date);
+
+    // Both halves of what used to be two non-atomic writes land together.
+    expect(data.owner).toBe("testuser");
+    expect(data.storageProvider).toBe("osf");
+  });
+
+  it("should cap the stored errors array while the counter keeps climbing", async () => {
+    const db = getFirestore();
+    const experimentID = "data-testexp-cap";
+    await db.collection("logs").doc(experimentID).delete();
+    await db.collection("experiments").doc(experimentID).set({
+      active: false,
+      owner: "testuser",
+      storageProvider: "osf",
+    });
+
+    // Seed the array one short of the cap with entries that are individually
+    // identifiable, so the trim can be shown to drop the OLDEST rather than
+    // some arbitrary slice. Driving 50 real requests through the emulator
+    // would make this test minutes long for no extra coverage.
+    const seeded = Array.from({ length: 49 }, (_, i) => ({
+      error: "SEEDED",
+      message: `seeded ${i}`,
+      time: new Date(2020, 0, 1, 0, 0, i),
+    }));
+    await db.collection("logs").doc(experimentID).set({ errors: seeded }, { merge: true });
+
+    // Two more real errors: the first fills the cap, the second must evict.
+    await saveData({ experimentID, data: "test", filename: "test" });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    let data = (await db.collection("logs").doc(experimentID).get()).data();
+    expect(data.errors).toHaveLength(50);
+    expect(data.errors[0].message).toBe("seeded 0");
+
+    await saveData({ experimentID, data: "test", filename: "test" });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    data = (await db.collection("logs").doc(experimentID).get()).data();
+
+    // Still 50 -- the array does not grow past the cap ...
+    expect(data.errors).toHaveLength(50);
+    // ... the oldest entry is the one that went ...
+    expect(data.errors[0].message).toBe("seeded 1");
+    // ... the newest is at the tail, where the dashboard looks for it ...
+    expect(data.errors[49].error).toBe("DATA_COLLECTION_NOT_ACTIVE");
+    // ... and the true total is the counter, which is NOT capped. This is why
+    // ErrorPanel is passed logError instead of errors.length.
+    expect(data.logError).toBe(2);
   });
 
   it("should return error message when the experimentID does not match an experiment", async () => {

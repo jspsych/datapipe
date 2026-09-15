@@ -135,6 +135,8 @@ yarn-error.log*
 
 # local env files
 .env*.local
+# ...except the committed emulator/CI overrides (never deployed by Firebase)
+!functions/.env.local
 
 # vercel
 .vercel
@@ -157,7 +159,11 @@ functions/lib/
 #vscode local testing
 .vscode/settings.json
 
-#metadata build artifacts
-functions/metadata/dist
+# metadata build artifacts — the vendored @jspsych/metadata dist is intentionally
+# COMMITTED (populated by functions/scripts/sync-metadata.mjs) so deploys need no
+# metadata build step. See functions/metadata/README.md. These negations override the
+# broad `dist` rule above; both the dir and its contents must be re-included.
+!functions/metadata/dist/
+!functions/metadata/dist/**
 
 CLAUDE.md

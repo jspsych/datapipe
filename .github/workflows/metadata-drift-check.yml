@@ -1,0 +1,74 @@
+# Nudge (never an auto-merge): flags when upstream @jspsych/metadata main has moved past
+# the commit DataPipe currently vendors. The vendored copy is pinned + built by
+# functions/scripts/sync-metadata.mjs; this job just tells a human it's time to re-sync.
+name: Metadata vendor drift check
+
+on:
+  schedule:
+    - cron: "0 12 * * 1" # Mondays 12:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  drift-check:
+    runs-on: ubuntu-latest
+    env:
+      UPSTREAM: jspsych/metadata
+      ISSUE_TITLE: "[metadata-sync] Vendored @jspsych/metadata is behind upstream main"
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Compare pinned commit against upstream main
+        id: compare
+        run: |
+          PINNED=$(jq -r .commit functions/metadata/VENDORED_FROM.json)
+          echo "Pinned commit: $PINNED"
+          if [ -z "$PINNED" ] || [ "$PINNED" = "null" ]; then
+            echo "::error::Could not read pinned commit from functions/metadata/VENDORED_FROM.json"
+            exit 1
+          fi
+          UPSTREAM_MAIN=$(gh api "repos/$UPSTREAM/commits/main" --jq .sha)
+          echo "Upstream main:  $UPSTREAM_MAIN"
+          if [ "$PINNED" = "$UPSTREAM_MAIN" ]; then
+            echo "in_sync=true" >> "$GITHUB_OUTPUT"
+            echo "Vendored copy is up to date with upstream main."
+            exit 0
+          fi
+          # ahead_by = how many commits upstream main is ahead of our pinned commit.
+          AHEAD=$(gh api "repos/$UPSTREAM/compare/$PINNED...main" --jq .ahead_by)
+          echo "in_sync=false" >> "$GITHUB_OUTPUT"
+          echo "ahead=$AHEAD" >> "$GITHUB_OUTPUT"
+          echo "pinned=$PINNED" >> "$GITHUB_OUTPUT"
+          echo "upstream=$UPSTREAM_MAIN" >> "$GITHUB_OUTPUT"
+
+      - name: Open or update tracking issue
+        if: steps.compare.outputs.in_sync == 'false'
+        run: |
+          BODY=$(cat <<EOF
+          Upstream \`$UPSTREAM\` \`main\` is **${{ steps.compare.outputs.ahead }} commit(s) ahead** of the version DataPipe vendors.
+
+          - Pinned:   \`${{ steps.compare.outputs.pinned }}\`
+          - Upstream: \`${{ steps.compare.outputs.upstream }}\`
+          - Diff: https://github.com/$UPSTREAM/compare/${{ steps.compare.outputs.pinned }}...main
+
+          To re-sync (nothing is automatic):
+          \`\`\`
+          cd functions && npm run sync:metadata
+          \`\`\`
+          Then review the diff, run the tests, and open a PR. See \`functions/metadata/README.md\`.
+
+          _This issue is updated automatically by \`.github/workflows/metadata-drift-check.yml\`._
+          EOF
+          )
+          EXISTING=$(gh issue list --state open --search "$ISSUE_TITLE in:title" --json number --jq '.[0].number')
+          if [ -n "$EXISTING" ]; then
+            echo "Updating existing issue #$EXISTING"
+            gh issue edit "$EXISTING" --body "$BODY"
+          else
+            echo "Creating new tracking issue"
+            gh issue create --title "$ISSUE_TITLE" --body "$BODY"
+          fi

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Box, HStack, IconButton, Link, Text } from "@chakra-ui/react";
 import { TriangleAlert, X } from "lucide-react";
 import { osfSunsetLabel } from "../lib/osf-sunset";
@@ -12,7 +12,7 @@ const DISMISS_KEY = "datapipe:announcement:osf-sunset:v1";
 // (Safari private browsing, "block all cookies", some embedded webviews). A
 // visitor who cannot persist a dismissal should still see the announcement and
 // still be able to close it for the session, so both helpers fail soft.
-function wasDismissed() {
+function readDismissed() {
   try {
     return window.localStorage.getItem(DISMISS_KEY) === "1";
   } catch {
@@ -24,26 +24,41 @@ function rememberDismissal() {
   try {
     window.localStorage.setItem(DISMISS_KEY, "1");
   } catch {
-    // Ignored: the banner still closes, it just comes back on the next visit.
+    // Ignored: the banner still closes for this session (see `dismissedNow`
+    // below), it just comes back on the next visit.
   }
 }
 
+// The site is statically exported, so the server-rendered HTML cannot know
+// whether this visitor has dismissed the banner. Rendering it on the server
+// would make it flash for everyone who already closed it.
+//
+// getServerSnapshot therefore answers "dismissed" -- the banner is absent from
+// the static HTML and appears on the hydration pass only for visitors who have
+// not closed it. This is the same useSyncExternalStore shape Navbar.js uses for
+// the same reason, and it replaces a setState-in-effect "reveal" flag that the
+// react-hooks rules (enforced in CI since #109) reject.
+//
+// subscribe is a no-op: nothing mutates localStorage behind this component's
+// back within a session -- the dismiss button drives `dismissedNow` directly --
+// so there is no external change to listen for.
+const subscribeToNothing = () => () => {};
+
 // Homepage announcement that OSF-backed storage is going away and DataPipe is
-// becoming multi-backend. Links out to COS's own announcement rather than to
-// anything on this site: the FAQ and getting-started pages still describe OSF
-// as the only destination, so there is nothing here worth sending people to.
+// becoming multi-backend. Links out to COS's own announcement; the closing
+// band's "Already collecting on OSF?" paragraph is the surface that points at
+// DataPipe's own migration docs, and it addresses a different reader.
 export default function OsfSunsetBanner() {
-  // Starts hidden and is revealed in an effect. The site is statically
-  // exported, so the server-rendered HTML cannot know whether this visitor has
-  // dismissed the banner; rendering it on the server would make it flash for
-  // everyone who already closed it.
-  const [visible, setVisible] = useState(false);
+  const dismissedBefore = useSyncExternalStore(
+    subscribeToNothing,
+    readDismissed,
+    () => true
+  );
+  // Dismissal within this session, kept separately so the banner still closes
+  // when the localStorage write is refused.
+  const [dismissedNow, setDismissedNow] = useState(false);
 
-  useEffect(() => {
-    if (!wasDismissed()) setVisible(true);
-  }, []);
-
-  if (!visible) return null;
+  if (dismissedBefore || dismissedNow) return null;
 
   const deadline = osfSunsetLabel();
 
@@ -92,7 +107,7 @@ export default function OsfSunsetBanner() {
           flexShrink={0}
           _hover={{ bg: "brandOrange.800", color: "white" }}
           onClick={() => {
-            setVisible(false);
+            setDismissedNow(true);
             rememberDismissal();
           }}
         >

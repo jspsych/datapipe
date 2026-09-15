@@ -19,6 +19,7 @@ on:
         options:
         - 2025-09-29-osf-integration.cjs
         - encrypt-tokens.cjs
+        - 2026-08-contact-email-backfill.cjs
       dry_run:
         description: 'Dry run (no changes applied)'
         required: true

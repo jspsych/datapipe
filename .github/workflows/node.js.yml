@@ -45,15 +45,14 @@ jobs:
         with:
           credentials_json: '${{ secrets.GOOGLE_TEST_CREDENTIALS }}' # Replace with the name of your GitHub Actions secret
       - name: Install firebase tools
-        run: npm install -g firebase-tools@15.8.0
+        run: npm install -g firebase-tools@15.28.1
       - name: Enable firebase webframeworks
         run: firebase experiments:enable webframeworks
       - run: npm ci
-      - name: Install dependencies and build metadata
-        working-directory: functions/metadata
-        run: |
-          npm ci
-          npm run build
+      - name: Lint
+        run: npm run lint
+      # functions/metadata is a pre-built vendored dist (see functions/metadata/README.md);
+      # it is installed as a file: dependency by the functions npm ci below.
       - name: Install dependencies and build functions
         working-directory: functions
         run: |
@@ -62,4 +61,7 @@ jobs:
       - name: Select project
         run: firebase use test
       - name: Launch firestore emulator and test
-        run: firebase emulators:exec 'npm run test-ci'
+        # maxWorkers=2: the emulator-backed suites contend under full
+        # parallel load (pre-existing data-emulator timing flake); capping
+        # workers reproduces consistently-green runs.
+        run: firebase emulators:exec 'npm run test-ci -- --maxWorkers=2'

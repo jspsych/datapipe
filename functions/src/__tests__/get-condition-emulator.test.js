@@ -48,7 +48,7 @@ beforeAll(async () => {
   await db
     .collection("experiments")
     .doc("testexp")
-    .set({ activeConditionAssignment: false });
+    .set({ activeConditionAssignment: false, owner: "testuser", storageProvider: "osf" });
   await db
     .collection("experiments")
     .doc("testexp-active")
@@ -81,6 +81,8 @@ describe("getCondition", () => {
     await getCondition({ experimentID: "testexp" });
     let doc = await waitForLog(db, "testexp", "logError", 1);
     expect(doc.data().logError).toBe(1);
+    expect(doc.data().errorsByCode.CONDITION_ASSIGNMENT_NOT_ACTIVE).toBe(1);
+    expect(doc.data().owner).toBe("testuser");
 
     await getCondition({ experimentID: "testexp" });
     doc = await waitForLog(db, "testexp", "logError", 2);

@@ -57,6 +57,12 @@ function createMockOSFServer() {
   app.put("/endpoint", (req, res) => {
     res.status(201).json({ data: { attributes: { name: req.query.name || "uploaded.json" } } });
   });
+  // Collision-cache rehydration lists the container on an experiment's first
+  // write (see collision-cache.ts); an empty listing keeps this suite's
+  // experiments cold-start-clean without changing what it tests.
+  app.get("/endpoint", (req, res) => {
+    res.json({ data: [] });
+  });
   return new Promise((resolve) => {
     const server = app.listen(0, () => {
       resolve(server);

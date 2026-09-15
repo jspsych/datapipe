@@ -6,6 +6,9 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
+  "database": {
+    "rules": "database.rules.json"
+  },
   "hosting": {
     "source": ".",
     "ignore": [
@@ -17,6 +20,10 @@
       {
         "source": "/api/data",
         "function": "apidata"
+      },
+      {
+        "source": "/api/session",
+        "function": "apisessionstart"
       },
       {
         "source": "/api/condition",
@@ -53,6 +60,46 @@
       {
         "source": "/api/queuestatus",
         "function": "apiqueuestatus"
+      },
+      {
+        "source": "/api/createexperiment",
+        "function": "createexperiment"
+      },
+      {
+        "source": "/api/connectprovider",
+        "function": "connectprovider"
+      },
+      {
+        "source": "/api/connectstatictokenprovider",
+        "function": "connectstatictokenprovider"
+      },
+      {
+        "source": "/api/disconnectprovider",
+        "function": "disconnectprovider"
+      },
+      {
+        "source": "/api/getprovideraccesstoken",
+        "function": "getprovideraccesstoken"
+      },
+      {
+        "source": "/api/providersetupwarnings",
+        "function": "providersetupwarnings"
+      },
+      {
+        "source": "/api/deleteaccount",
+        "function": "deleteaccount"
+      },
+      {
+        "source": "/api/finalize",
+        "function": "apifinalize"
+      },
+      {
+        "source": "/api/sendcontactemailverification",
+        "function": "sendcontactemailverification"
+      },
+      {
+        "source": "/api/verifycontactemail",
+        "function": "verifycontactemail"
       }
     ]
   },
@@ -67,6 +114,10 @@
     },
     "firestore": {
       "port": 8080,
+      "host": "localhost"
+    },
+    "database": {
+      "port": 9000,
       "host": "localhost"
     },
     "hosting": {
