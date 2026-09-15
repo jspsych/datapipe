@@ -23,6 +23,7 @@ import {
   CLAIM_TTL_MS,
   STALE_PENDING_TAKEOVER_MS,
   REHYDRATION_LEASE_MS,
+  REHYDRATION_HEARTBEAT_MS,
   CLAIM_NAMESPACE_VERSION,
   CollisionCacheUnavailableError,
 } from "../../lib/collision-cache.js";
@@ -497,4 +498,58 @@ describe("13. namespace versioning", () => {
 
     expect(listFilesFn).not.toHaveBeenCalled();
   });
+});
+
+// REHYDRATION_LEASE_MS was raised from 60s to 330s so a live rehydration
+// (bulk-writing a legacy experiment's file listing) is never preempted before
+// apiData/apiBase64's 300s timeoutSeconds would kill it anyway -- see the
+// comment on the constant. On its own that change would make a DEAD holder
+// (one whose instance is hard-killed mid-rehydration, so it never clears its
+// own lease) block every other submission to the experiment for up to 5.5
+// minutes instead of the previous 60 seconds. rehydrate()'s heartbeat is what
+// keeps that from regressing: it re-writes rehydratingUntil to a much shorter
+// horizon throughout the whole call, so the value another request actually
+// observes stays close to REHYDRATION_HEARTBEAT_MS, not REHYDRATION_LEASE_MS,
+// for as long as -- and only as long as -- the holder is still alive.
+describe("14. rehydration heartbeat", () => {
+  it(
+    "renews rehydratingUntil to roughly now + REHYDRATION_HEARTBEAT_MS while a slow listFilesFn is in flight, far short of REHYDRATION_LEASE_MS",
+    async () => {
+      const experimentID = freshExperimentId("heartbeat");
+      await createExperiment(experimentID); // no collisionCache field — cold by construction
+
+      // rehydrate() ticks the heartbeat every REHYDRATION_HEARTBEAT_MS / 3 (see
+      // the constant's comment in collision-cache.ts). Held open long enough
+      // to observe at least one tick land before it resolves.
+      const heartbeatTickMs = REHYDRATION_HEARTBEAT_MS / 3;
+      const listDelayMs = heartbeatTickMs + 2000;
+      const listFilesFn = jest.fn(
+        () => new Promise((resolve) => setTimeout(() => resolve([]), listDelayMs))
+      );
+
+      const claimPromise = claimFilename(experimentID, "slow.csv", randomUUID(), listFilesFn);
+
+      // Past the first tick, but well before listFilesFn resolves.
+      await new Promise((resolve) => setTimeout(resolve, heartbeatTickMs + 1000));
+
+      const midFlight = await getExperimentData(experimentID);
+      const rehydratingUntilMs = midFlight.collisionCache.rehydratingUntil.toMillis();
+      const remainingMs = rehydratingUntilMs - Date.now();
+
+      // Still held (not yet expired)...
+      expect(remainingMs).toBeGreaterThan(0);
+      // ...but nowhere near the full lease -- if the heartbeat weren't
+      // renewing it, this would still read close to REHYDRATION_LEASE_MS
+      // (5.5 minutes) from the initial acquisition instead.
+      expect(remainingMs).toBeLessThan(REHYDRATION_HEARTBEAT_MS + TOLERANCE_MS);
+      expect(remainingMs).toBeLessThan(REHYDRATION_LEASE_MS / 2);
+
+      const result = await claimPromise; // let it finish so nothing lingers
+      expect(result).toEqual({ claimed: true });
+
+      const after = await getExperimentData(experimentID);
+      expect(after.collisionCache.rehydratingUntil).toBeFalsy();
+    },
+    35000
+  );
 });

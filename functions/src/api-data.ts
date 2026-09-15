@@ -19,7 +19,59 @@ import { isCompactionInFlight, COMPACTION_HOLD_REASON } from "./compaction-gate.
 import { discardSession, isValidSessionId } from "./staging.js";
 import { ExperimentData, UserData, RequestBody } from './interfaces';
 
-export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 }, async (req, res) => {
+// maxInstances: 300, overriding index.ts's global 20 (which still governs
+// every OTHER function). Sized for the design doc's own worst case -- a
+// lecture-hall study where a few hundred participants submit within seconds
+// of each other (docs/streaming-ingest-design.md) -- served rather than shed.
+// concurrency: 1 stays exactly as 058a1db set it (git show 058a1db): each
+// instance still handles one request at a time, so that memory-safety
+// argument (a 512MiB instance cannot be pushed over by concurrent large
+// payloads) is untouched; this only raises how many such single-request
+// instances Cloud Run is allowed to run side by side. Production on `main`
+// has no concurrency cap at all and defaults to 80 (see
+// firebase-functions/lib/v2/options.d.ts: "A value of null restores the
+// default concurrency (80 when CPU >= 1, 1 otherwise)"), so 20 instances x 80
+// gives roughly 1,600 request slots today; this branch's 20 x 1 was a ~98%
+// capacity cut hiding behind an unrelated perf commit. 300 recovers a large
+// share of that headroom while keeping the memory guarantee. maxInstances is
+// a CEILING, not a reservation -- idle instances still scale to zero, so this
+// does not raise idle/steady-state cost, only the number Cloud Run is willing
+// to spin up under burst. Cloud Run's default per-region instance quota is in
+// the low thousands, comfortably above 300.
+//
+// timeoutSeconds: 300 (up from the 60s default) gives collision-cache.ts's
+// rehydrate() -- called below via claimFilename(), and which lists every file
+// a legacy experiment's provider container holds and bulk-writes one Firestore
+// claim per file in batches of 500 -- room to finish for experiments with
+// thousands of existing files. Under the old 60s default the instance was
+// killed mid-rehydration, and because REHYDRATION_LEASE_MS (collision-cache.ts)
+// was also 60s, the lease expired at essentially the same moment: the next
+// submission just repeated the same too-slow rehydration forever, a permanent
+// per-experiment stall. See collision-cache.ts for the matching lease change.
+//
+// CAVEAT: requests that arrive through Firebase Hosting's "/api/data" rewrite
+// (pipe.jspsych.org, firebase.json) are still cut off at Hosting's own fixed
+// 60-second ceiling regardless of this value -- see pages/docs/api.js's
+// "Limits" section, which documents this explicitly ("Every /api/* path runs
+// behind a hosting layer with a hard 60-second ceiling"), and
+// firebase-tools/lib/deploy/functions/validate.js's MAX_V2_HTTP_TIMEOUT_SECONDS
+// (3600s), which caps only the FUNCTION's own timeout and says nothing about
+// what the Hosting proxy in front of it will wait for. So a participant whose
+// submission triggers a cold rehydration will likely still see a 504 at 60s.
+// timeoutSeconds: 300 is still worth setting: Cloud Run keeps the instance
+// running past that client-side disconnect (CPU stays allocated to the
+// in-flight request, not the client's dropped connection) up to this new
+// limit, so rehydrate() gets to finish writing the cache even though that
+// one participant's data landed in the queue (or was lost client-side, per
+// the jsPsych plugin's unconditional response.json() -- a separate, pre-
+// existing problem) instead of a clean 201. Every submission after that one
+// finds a warm cache and succeeds normally, instead of repeating the doomed
+// rehydration on every single request. 300 also covers this endpoint's other
+// slow paths uniformly (the provider upload itself, metadata derivation) for
+// direct Cloud Run invocations that bypass Hosting.
+export const apiData = onRequest(
+  { cors: true, memory: "512MiB", concurrency: 1, maxInstances: 300, timeoutSeconds: 300 },
+  async (req, res) => {
   const { experimentID, data, filename, metadataOptions, sessionId }: RequestBody = req.body;
 
   if (!experimentID || !data || !filename) {
