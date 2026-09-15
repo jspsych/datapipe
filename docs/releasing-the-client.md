@@ -54,11 +54,20 @@ the same step, so the repository ends up agreeing with the registry:
 
 ```
 cd packages/client
+npm ci                     # changesets is a devDependency HERE, not at the root
 npx changeset version      # 0.0.0 -> 0.1.0, writes CHANGELOG.md
 npm test
 npm run build
 npm publish --access public
 ```
+
+`npm ci` is not optional and is easy to skip, because `packages/client` is not
+part of a root workspace — a root `npm install` does not reach it. Without it
+`npx changeset` fails with "could not determine executable to run", which reads
+like a broken install rather than a missing one: `npx` cannot find the local
+binary, so it tries to fetch a package named `changeset` from the registry, and
+no such package exists. The one you want is `@changesets/cli`, of which
+`changeset` is only the binary name.
 
 Commit the version bump and changelog it produced. The automation then picks up
 from 0.1.1 on the next changeset.
