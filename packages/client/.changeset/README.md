@@ -26,9 +26,16 @@ From the repository root:
 npm run changeset
 ```
 
-Or from this directory, `npx changeset`. Either way you get a prompt for the
+Or from `packages/client`, `npx changeset`. Either way you get a prompt for the
 bump type and a summary, and a markdown file lands here. Commit it with your
 change.
+
+Both need `packages/client` to have been installed — `npm ci` in that directory,
+once. A root `npm install` does not reach it, because this package deliberately
+is not a workspace member. Skip it and you get "could not determine executable
+to run", which sounds like a broken install rather than a missing one: `npx`
+cannot find the local binary, so it tries to fetch a package named `changeset`
+from the registry, and the package is actually called `@changesets/cli`.
 
 Write the summary for a researcher reading a changelog, not for a reviewer
 reading a diff: say what is different about using the library, and why, rather

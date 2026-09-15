@@ -12,10 +12,63 @@ workflow log cannot be replayed into a publish.
 
 ## One-time setup
 
-### 1. Configure the trusted publisher
+These steps are in order, and the order matters: **the package has to exist on
+npm before a trusted publisher can be attached to it.** That is the registry's
+behaviour, not a preference — `npm trust` operates on a package endpoint, so
+until the name is claimed it answers:
 
-Run this from `packages/client`, logged in to npm as the account that will own
-the package (`npm whoami` to check). It needs npm 11.5.1 or later.
+```
+npm error 404 Not Found - POST https://registry.npmjs.org/-/package/datapipe-client/trust
+```
+
+So the first release is published by hand. Only the first.
+
+### 1. Publish the first version by hand
+
+**Bump the version before publishing, not after.** The package sits at `0.0.0`
+with a changeset pending — that is the changesets idiom for something that has
+never shipped — so `npm publish` on a fresh checkout would put **0.0.0** on the
+registry, and npm never lets a version be reused. `changeset version` is what
+turns it into 0.1.0, and it writes `CHANGELOG.md` and consumes the changeset in
+the same step, so the repository ends up agreeing with the registry:
+
+```
+cd packages/client
+npm ci                     # changesets is a devDependency HERE, not at the root
+npx changeset version      # 0.0.0 -> 0.1.0, writes CHANGELOG.md
+npm test
+npm run build              # NOT optional -- see below
+npm publish --access public
+```
+
+Three things in that sequence are easy to skip, and each fails in a way that
+does not point at itself:
+
+- **`npm ci`.** `packages/client` is deliberately not a workspace member, so a
+  root `npm install` does not reach it. Without it `npx changeset` fails with
+  "could not determine executable to run", which reads like a broken install
+  rather than a missing one: `npx` cannot find the local binary, so it tries to
+  fetch a package named `changeset` from the registry, and no such package
+  exists. The one that provides the binary is `@changesets/cli`.
+- **`npm run build`.** `npm publish` does not build, and `files` is `["dist"]`.
+  On an unbuilt checkout it publishes `package.json`, `README.md` and `LICENSE`
+  and nothing else — no error, no warning, and the version can never be reused.
+  `npm pack --dry-run` lists what would go, and is worth a look first.
+- **Committing what `changeset version` produced.** The bump, the changelog and
+  the consumed changeset all belong in the repository, or the next release
+  recomputes the version you just published.
+
+`datapipe-client` is unscoped, so whoever publishes first owns the name — this
+is the step that claims it. Afterwards, add anyone else who needs it:
+
+```
+npm owner add <username> datapipe-client
+```
+
+### 2. Register the trusted publisher
+
+Now that the package exists. From `packages/client`, logged in as its owner
+(`npm whoami` to check). Needs npm 11.5.1 or later.
 
 ```
 npm trust github datapipe-client \
@@ -38,29 +91,6 @@ if you add one, the job in that workflow has to declare the same
 `--allow-publish` is what grants ordinary `npm publish`. The separate
 `--allow-stage-publish` covers staged publishes, which this release flow does
 not use.
-
-### 2. Publish 0.1.0 by hand, if npm asks you to
-
-A trusted publisher may need the package to exist before it can be attached to
-it. If step 1 succeeded, skip this. If npm refused because `datapipe-client` is
-not published yet, claim the name first and then re-run step 1:
-
-```
-npm run build
-npm test
-npm publish --access public
-```
-
-`datapipe-client` is unscoped, so whoever publishes first owns the name — this
-is the step that claims it. Afterwards, add anyone else who needs it:
-
-```
-npm owner add <username> datapipe-client
-```
-
-Then set `version` in `packages/client/package.json` to `0.1.0` to match what
-you just published, and delete the initial changeset, so the automation's first
-run computes `0.1.1` (or `0.2.0`) rather than trying to republish `0.1.0`.
 
 ### 3. Let Actions open pull requests
 
