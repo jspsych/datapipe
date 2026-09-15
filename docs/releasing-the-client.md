@@ -43,13 +43,25 @@ not use.
 
 A trusted publisher may need the package to exist before it can be attached to
 it. If step 1 succeeded, skip this. If npm refused because `datapipe-client` is
-not published yet, claim the name first and then re-run step 1:
+not published yet, claim the name first and then re-run step 1.
+
+**Bump the version before publishing, not after.** The package sits at `0.0.0`
+with a changeset pending — that is the changesets idiom for something that has
+never shipped — so `npm publish` on a fresh checkout would put **0.0.0** on the
+registry, and npm never lets a version be reused. `changeset version` is what
+turns it into 0.1.0, and it writes `CHANGELOG.md` and consumes the changeset in
+the same step, so the repository ends up agreeing with the registry:
 
 ```
-npm run build
+cd packages/client
+npx changeset version      # 0.0.0 -> 0.1.0, writes CHANGELOG.md
 npm test
+npm run build
 npm publish --access public
 ```
+
+Commit the version bump and changelog it produced. The automation then picks up
+from 0.1.1 on the next changeset.
 
 `datapipe-client` is unscoped, so whoever publishes first owns the name — this
 is the step that claims it. Afterwards, add anyone else who needs it:
@@ -57,10 +69,6 @@ is the step that claims it. Afterwards, add anyone else who needs it:
 ```
 npm owner add <username> datapipe-client
 ```
-
-Then set `version` in `packages/client/package.json` to `0.1.0` to match what
-you just published, and delete the initial changeset, so the automation's first
-run computes `0.1.1` (or `0.2.0`) rather than trying to republish `0.1.0`.
 
 ### 3. Let Actions open pull requests
 
