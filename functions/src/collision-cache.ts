@@ -31,7 +31,40 @@ import { FileRef } from "./providers/types.js";
 
 export const CLAIM_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
 export const STALE_PENDING_TAKEOVER_MS = 15 * 60 * 1000; // 15 minutes
-export const REHYDRATION_LEASE_MS = 60 * 1000; // 60 seconds
+
+// 5.5 minutes. Written ONCE, at initial lease acquisition (see rehydrate()
+// below), and must outlive the longest request that could legitimately still
+// be holding it: apiData/apiBase64 now run with timeoutSeconds: 300 (see the
+// comments on both onRequest calls) specifically so rehydrate() -- which
+// lists every file a provider container holds and bulk-writes one Firestore
+// claim per file in batches of 500 -- has room to finish for a legacy
+// experiment with thousands of files. A lease that could expire before Cloud
+// Run would actually kill the instance recreates the exact stall this module
+// exists to prevent: a second request would see a "warm enough" lease, start
+// its OWN rehydration pass concurrently, and both race a clock too short for
+// either to reliably win. 300s + a 30s margin (for the transaction round trip
+// and clock skew between this process and Cloud Run's own timeout enforcement)
+// is 330s. Raised from the previous 60s alongside timeoutSeconds; before this
+// change the two were both 60s, which is why a rehydration that didn't fit in
+// 60 seconds stalled forever instead of eventually succeeding.
+export const REHYDRATION_LEASE_MS = 330 * 1000;
+
+// 45 seconds. Raising REHYDRATION_LEASE_MS on its own would trade one bug for
+// a worse one: a DEAD holder (an instance that is OOM-killed or hard-killed
+// by Cloud Run's own timeout mid-rehydration, and therefore never runs a
+// `finally` block) would block every OTHER request against this experiment --
+// they all see "rehydrating" and get queued, see claimFilename() -- for up to
+// 5.5 minutes instead of the previous 60 seconds. rehydrate() below runs a
+// heartbeat that re-writes rehydratingUntil to (now + REHYDRATION_HEARTBEAT_MS)
+// every REHYDRATION_HEARTBEAT_MS / 3, for as long as it is actually alive and
+// making progress -- spanning both the listFiles() call and the batch-write
+// loop, not just the loop. A LIVE holder's stored lease is therefore never
+// more than about one heartbeat tick stale, and a DEAD holder's stale lease is
+// picked up by the next request within roughly one heartbeat interval, not
+// the full REHYDRATION_LEASE_MS. REHYDRATION_LEASE_MS itself is only ever
+// written once, at acquisition, as a safety net for the brief window before
+// the first heartbeat tick lands (see the acquisition transaction below).
+export const REHYDRATION_HEARTBEAT_MS = 45 * 1000;
 
 // Identifies the NAMESPACE a cache's claim hashes were written in -- i.e. the
 // rule mapping a file to the name that gets hashed. Bump this whenever any
@@ -137,48 +170,111 @@ async function rehydrate(
     return false;
   }
 
-  let files: FileRef[];
-  try {
-    files = await listFilesFn();
-  } catch (e) {
-    // Clear the lease so a subsequent claim attempts rehydration again
-    // rather than being locked out until the lease naturally expires.
-    await expRef.update({ "collisionCache.rehydratingUntil": FieldValue.delete() });
-    const detail = e instanceof Error ? e.message : String(e);
-    throw new CollisionCacheUnavailableError(
-      `Rehydration failed for experiment ${experimentID}: ${detail}`
-    );
-  }
-
-  const now = Timestamp.now();
-  const expiresAt = Timestamp.fromMillis(now.toMillis() + CLAIM_TTL_MS);
-  const claims = claimsCollection(experimentID);
-
-  for (let i = 0; i < files.length; i += 500) {
-    const chunk = files.slice(i, i + 500);
-    const batch = db.batch();
-    for (const file of chunk) {
-      const hash = hashFilename(salt, file.name);
-      batch.set(claims.doc(hash), {
-        status: "confirmed",
-        ownerToken: "rehydration",
-        createdAt: now,
-        expiresAt,
+  // Heartbeat: keeps rehydratingUntil fresh at a much shorter interval than
+  // REHYDRATION_LEASE_MS for as long as this process is alive, so a holder
+  // that dies mid-rehydration only blocks other requests for about one
+  // heartbeat interval -- see the REHYDRATION_HEARTBEAT_MS comment above.
+  // Ticks at a THIRD of the value it writes so a single slow or dropped tick
+  // (Firestore write latency, an event-loop stall) doesn't let the lease it
+  // just renewed lapse before the next one lands. Runs across the ENTIRE
+  // rehydration -- the listFiles() call below included, not just the batch
+  // loop -- because a slow provider listing is exactly the kind of legitimate
+  // work a shorter interval must not mistake for a dead holder.
+  //
+  // .unref() so this timer can NEVER be the reason a process (or, critically,
+  // an in-process test runner) fails to exit -- it must not keep the event
+  // loop alive on its own even if something above forgets to clear it.
+  //
+  // `stopped` is a belt-and-suspenders guard against a narrower race than
+  // "the interval never gets cleared": clearInterval() only prevents FUTURE
+  // ticks, so a tick already in flight when the function reaches its final
+  // write (mark warm, or clear the lease on failure) can still land AFTER
+  // that write and silently resurrect a rehydratingUntil this call just
+  // deleted -- blocking the next request's retry for up to another
+  // REHYDRATION_HEARTBEAT_MS for no reason. Checked inside the callback
+  // rather than by calling clearInterval() at each exit point, so there is
+  // exactly ONE place (the `finally` below) that ever calls clearInterval --
+  // simple enough to audit for "does every exit path actually stop this
+  // timer", which is the property that matters for never hanging a caller.
+  let stopped = false;
+  const heartbeat = setInterval(() => {
+    if (stopped) return;
+    expRef
+      .update({
+        "collisionCache.rehydratingUntil": Timestamp.fromMillis(
+          Date.now() + REHYDRATION_HEARTBEAT_MS
+        ),
+      })
+      .catch((e) => {
+        // Best-effort: a missed heartbeat just means the next tick (or, in
+        // the worst case, REHYDRATION_LEASE_MS itself) is what recovers this.
+        // Must never throw out of a timer callback and crash the instance
+        // mid-rehydration -- that would be strictly worse than the stall
+        // this exists to shorten.
+        console.error(`rehydrate: heartbeat write failed for experiment ${experimentID}:`, e);
       });
+  }, Math.floor(REHYDRATION_HEARTBEAT_MS / 3));
+  heartbeat.unref?.();
+
+  try {
+    let files: FileRef[];
+    try {
+      files = await listFilesFn();
+    } catch (e) {
+      // See the `stopped` comment above: flips the guard before the write
+      // that releases the lease, so an in-flight or already-queued tick
+      // cannot silently re-write it afterward. clearInterval() itself still
+      // happens exactly once, in the `finally` below.
+      stopped = true;
+      // Clear the lease so a subsequent claim attempts rehydration again
+      // rather than being locked out until the lease naturally expires.
+      await expRef.update({ "collisionCache.rehydratingUntil": FieldValue.delete() });
+      const detail = e instanceof Error ? e.message : String(e);
+      throw new CollisionCacheUnavailableError(
+        `Rehydration failed for experiment ${experimentID}: ${detail}`
+      );
     }
-    await batch.commit();
+
+    const now = Timestamp.now();
+    const expiresAt = Timestamp.fromMillis(now.toMillis() + CLAIM_TTL_MS);
+    const claims = claimsCollection(experimentID);
+
+    for (let i = 0; i < files.length; i += 500) {
+      const chunk = files.slice(i, i + 500);
+      const batch = db.batch();
+      for (const file of chunk) {
+        const hash = hashFilename(salt, file.name);
+        batch.set(claims.doc(hash), {
+          status: "confirmed",
+          ownerToken: "rehydration",
+          createdAt: now,
+          expiresAt,
+        });
+      }
+      await batch.commit();
+    }
+
+    // See the `stopped` comment above.
+    stopped = true;
+
+    const warmUntil = Timestamp.fromMillis(Date.now() + CLAIM_TTL_MS);
+    await expRef.update({
+      "collisionCache.warmUntil": warmUntil,
+      // Stamped in the same write that marks the cache warm, so a cache can
+      // never be warm without recording which namespace it was warmed in.
+      "collisionCache.namespaceVersion": CLAIM_NAMESPACE_VERSION,
+      "collisionCache.rehydratingUntil": FieldValue.delete(),
+    });
+
+    return true;
+  } finally {
+    // The ONE place this timer is ever cleared, on every exit -- success,
+    // the listFilesFn failure above, or any other error thrown out of the
+    // batch-write loop (a Firestore outage mid-commit, say). A `finally`
+    // around the whole body is what guarantees that: no exit path can reach
+    // `return`/`throw` without passing through here first.
+    clearInterval(heartbeat);
   }
-
-  const warmUntil = Timestamp.fromMillis(Date.now() + CLAIM_TTL_MS);
-  await expRef.update({
-    "collisionCache.warmUntil": warmUntil,
-    // Stamped in the same write that marks the cache warm, so a cache can
-    // never be warm without recording which namespace it was warmed in.
-    "collisionCache.namespaceVersion": CLAIM_NAMESPACE_VERSION,
-    "collisionCache.rehydratingUntil": FieldValue.delete(),
-  });
-
-  return true;
 }
 
 async function attemptClaim(

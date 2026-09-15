@@ -14,7 +14,29 @@ import { claimFilename, confirmClaim, CollisionCacheUnavailableError } from "./c
 import { isCompactionInFlight, COMPACTION_HOLD_REASON } from "./compaction-gate.js";
 import { ExperimentData, UserData } from './interfaces';
 
-export const apiBase64 = onRequest({ cors: true, memory: "512MiB", concurrency: 1 }, async (req, res) => {
+// maxInstances: 100, overriding index.ts's global 20 (unchanged for every
+// other function) -- lower than apiData's 300 because this endpoint carries
+// media (base64-encoded images/audio/video), so each request's body and the
+// in-memory buffer it decodes into are typically much larger; fewer
+// concurrent 512MiB instances are wanted at a given burst size. concurrency: 1
+// is unchanged from 058a1db (git show 058a1db) for the same reason as
+// api-data.ts: the memory-safety argument for one request per instance is
+// independent of how many instances exist. maxInstances is a CEILING, not a
+// reservation -- idle instances still scale to zero, so idle/steady-state
+// cost is unaffected. Cloud Run's default per-region instance quota is in the
+// low thousands, comfortably above 100.
+//
+// timeoutSeconds: 300, matching apiData -- see the long comment there for why
+// (collision-cache.ts's rehydrate(), the same function this endpoint calls
+// via claimFilename(), needs room to finish listing and bulk-writing a
+// legacy container's files) and for the CAVEAT that Firebase Hosting's
+// "/api/base64" rewrite still caps a participant-facing response at 60
+// seconds regardless (pages/docs/api.js "Limits"); this value still matters
+// because it lets the instance keep running server-side past that point to
+// finish rehydrating the cache for every request after this one.
+export const apiBase64 = onRequest(
+  { cors: true, memory: "512MiB", concurrency: 1, maxInstances: 100, timeoutSeconds: 300 },
+  async (req, res) => {
   const { experimentID, data, filename } = req.body;
 
   if (!experimentID || !data || !filename) {
