@@ -346,9 +346,9 @@ export default function GettingStarted() {
       <StepCard number={5} title="Add code to your experiment">
         <Text>
           Add code to send data from your experiment to DataPipe. If you use
-          jsPsych, the easiest option is the{" "}
-          <Link href="https://github.com/jspsych/jspsych-contrib/tree/main/packages/plugin-pipe" target="_blank" rel="noopener noreferrer" color="brandOrange.fg">
-            jsPsychPipe plugin
+          jsPsych, the recommended option is the{" "}
+          <Link href="https://github.com/jspsych/jsPsych/tree/main/packages/extension-pipe" target="_blank" rel="noopener noreferrer" color="brandOrange.fg">
+            @jspsych/extension-pipe extension
           </Link>
           . Otherwise, you can use the DataPipe API directly with fetch requests.
         </Text>
@@ -360,6 +360,16 @@ export default function GettingStarted() {
           <Link href="/admin" color="brandOrange.fg">My Experiments</Link>,
           select your experiment, and copy the code from the{" "}
           <strong>Code Samples</strong> panel.
+        </Text>
+        <Text>
+          The jsPsych extension saves data as it is produced by default, not
+          only when the experiment ends, so a participant who closes the tab
+          partway through does not take all of their data with them. Plain
+          JavaScript can do the same with a small library — see{" "}
+          <Link href="/docs/experiments/sending-data#saving-as-you-go" color="brandOrange.fg">
+            Saving as you go
+          </Link>
+          .
         </Text>
         <GuidanceLine
           href="/docs/experiments/sending-data"

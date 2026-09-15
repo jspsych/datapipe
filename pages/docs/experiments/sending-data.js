@@ -50,16 +50,17 @@ export default function SendingDataPage() {
           ones on the dashboard cannot drift apart. */}
       <DocsSection id="jspsych" title="jsPsych">
         <Text maxW="70ch">
-          The quickest route is the{" "}
+          The recommended route is the{" "}
           <ProseLink
-            href="https://github.com/jspsych/jspsych-contrib/tree/main/packages/plugin-pipe"
+            href="https://github.com/jspsych/jsPsych/tree/main/packages/extension-pipe"
             external
           >
-            jsPsychPipe plugin
+            @jspsych/extension-pipe extension
           </ProseLink>
-          : load it, generate a unique filename, and add a save trial to your
-          timeline. The panel below is the same one on your experiment
-          dashboard, where{" "}
+          . Register it when you set up jsPsych and it saves your data on its
+          own — there is no save trial to add, and by default it sends each
+          trial as it happens rather than waiting until the experiment ends.
+          The panel below is the same one on your experiment dashboard, where{" "}
           <Code>YOUR_EXPERIMENT_ID</Code> is already replaced with the real
           value — copy from there when you are ready to run.
         </Text>
@@ -68,15 +69,26 @@ export default function SendingDataPage() {
           The code is the same whichever storage provider you chose — your
           experiment never names a provider.
         </Text>
+        <Text maxW="70ch" color="fg.muted" fontSize="sm">
+          An experiment already built on the older{" "}
+          <ProseLink
+            href="https://github.com/jspsych/jspsych-contrib/tree/main/packages/plugin-pipe"
+            external
+          >
+            jsPsychPipe plugin
+          </ProseLink>{" "}
+          and its save trial keeps working — it is not the recommendation for
+          a new experiment, but nothing about it is broken.
+        </Text>
       </DocsSection>
 
       <DocsSection id="plain-javascript" title="Plain JavaScript">
         <Text maxW="70ch">
-          You do not need jsPsych, or any library at all. The menu at the top
-          right of the panel above switches every sample to plain JavaScript:
-          each one is a single <Code>fetch</Code> to a DataPipe endpoint with a
-          JSON body carrying your experiment ID, a filename, and the data as a
-          string.
+          You do not need jsPsych, or any framework at all. The menu at the top
+          right of the panel above switches every sample to plain JavaScript.
+          Saving data, saving a file, and requesting a condition are each a
+          single <Code>fetch</Code> to a DataPipe endpoint with a JSON body
+          carrying your experiment ID, a filename, and the data as a string.
         </Text>
         <Text maxW="70ch">
           Send whatever your experiment produces — the data string is stored
@@ -90,27 +102,37 @@ export default function SendingDataPage() {
 
       <DocsSection id="saving-as-you-go" title="Saving as you go">
         <Text maxW="70ch">
-          By default DataPipe sees a session&apos;s data exactly once, when the
-          experiment finishes. If a participant closes the tab, loses their
-          connection, or their browser crashes at trial 199 of 200,{" "}
+          Without it, DataPipe sees a session&apos;s data exactly once, when
+          the experiment finishes. If a participant closes the tab, loses
+          their connection, or their browser crashes at trial 199 of 200,{" "}
           <strong>all 199 trials are lost</strong> — DataPipe never saw any of
           them. On an online panel that is not a rare event.
         </Text>
         <Text maxW="70ch">
-          Version 0.7 of the plugin can send each trial as it is produced. The{" "}
-          <strong>Save as you go</strong> tab in the panel above has the code:
-          start a session before the timeline runs, hand each trial to it from{" "}
-          <Code>on_data_update</Code>, and pass the session to your save trial.
+          The <Code>@jspsych/extension-pipe</Code> extension sends each trial
+          as it is produced, and it does this by default — registering it, as
+          shown above, is the whole setup. Add{" "}
+          <Code>stream: false</Code> to its <Code>params</Code> to turn
+          streaming off and submit once at the end instead.
         </Text>
         <Text maxW="70ch">
-          Three things to know before switching a live study over:
+          Plain JavaScript can stream too, through a small framework-neutral
+          library, <Code>datapipe-client</Code> — something that was not
+          possible before, because staging trials means writing to a database
+          directly, not something to hand-roll from a <Code>fetch</Code> call.
+          The <strong>Save as you go</strong> tab under JavaScript in the panel
+          above has the code.
+        </Text>
+        <Text maxW="70ch">
+          Three things to know before you rely on it:
         </Text>
         <List.Root maxW="70ch" gap={2} ps={6}>
           <List.Item>
-            <strong>A completed session is unchanged.</strong> The save trial
-            still sends your whole dataset, in your chosen format, stored under
-            the filename you gave it. What DataPipe held during the session is
-            deleted as soon as your submission lands.
+            <strong>A completed session is unchanged.</strong> Whatever your
+            experiment submits at the end — your whole dataset, in your chosen
+            format, stored under the filename you gave it — is the file that
+            lands in your storage. What DataPipe held during the session is
+            deleted as soon as that submission lands.
           </List.Item>
           <List.Item>
             <strong>An abandoned session becomes a second kind of file.</strong>{" "}
@@ -140,13 +162,6 @@ export default function SendingDataPage() {
           <strong>Stopped — being recovered</strong> once DataPipe begins turning
           what they did into a partial file.
         </Text>
-        <Text maxW="70ch">
-          The trade is size: the browser build of the plugin grows from about
-          1 KB to about 53 KB compressed, because it carries the database client
-          that makes this work. If your participants are on slow connections and
-          you do not need this, the plain <strong>Save data</strong> path is
-          still the right one.
-        </Text>
         <GuidanceLine href="/docs/privacy#what-we-store" linkText="What DataPipe stores">
           Where staged trials live while a session is running, and how they
           differ from the copies DataPipe encrypts.
@@ -157,7 +172,7 @@ export default function SendingDataPage() {
         <Text maxW="70ch">
           Save as you go enforces the limits below on every request. None of
           them is configurable, and hitting one never breaks your
-          experiment — the plugin carries on and a completed submission is
+          experiment — streaming carries on and a completed submission is
           unaffected. What each one actually costs a participant is the
           partial-file safety net for someone who never finishes, not the
           data your experiment collects.
@@ -168,7 +183,7 @@ export default function SendingDataPage() {
           <List.Item>
             <strong>16 KiB per trial.</strong> A trial larger than that is
             refused by the database — the write for that one trial fails, and
-            the plugin moves on to the next. A completed session still sends
+            streaming continues with the next one. A completed session still sends
             your whole dataset in its final submission, so that trial is only
             missing from the partial file DataPipe would recover if the
             participant never finished.
@@ -293,18 +308,18 @@ export default function SendingDataPage() {
           — a typical jsPsych dataset is 50 KB to 5 MB.
         </Text>
         <Text maxW="70ch">
-          If you are using version 0.6.0 or later of the{" "}
+          The extension and <Code>datapipe-client</Code> both compress request
+          bodies with gzip before sending, as does version 0.6.0 or later of the
+          older{" "}
           <ProseLink
             href="https://github.com/jspsych/jspsych-contrib/tree/main/packages/plugin-pipe"
             external
           >
             @jspsych-contrib/plugin-pipe
           </ProseLink>{" "}
-          plugin, request bodies are automatically compressed with gzip before
-          sending. Text data (JSON, CSV) typically compresses by 2–10x, which
+          plugin. Text data (JSON, CSV) typically compresses by 2–10x, which
           effectively raises the upload limit to roughly 60–300 MB for most
-          experiment data. Compression is enabled by default and requires no
-          configuration.
+          experiment data. Compression requires no configuration.
         </Text>
         <Text maxW="70ch">
           Compression is less effective for binary data sent to the base64

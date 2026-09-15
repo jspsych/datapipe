@@ -194,20 +194,24 @@ export default function PrivacyPage() {
               Trials staged during a session, if your experiment uses
               incremental upload.
             </Text>{" "}
-            Experiments that switch this on send each trial to DataPipe as it
-            is produced, so that a participant who closes the tab partway
-            through does not lose everything they did. Those trials are held in
-            a private database, unreadable by any browser — including the one
-            that wrote them — and are deleted the moment the participant&apos;s
-            submission completes, normally within minutes.{" "}
+            The jsPsych extension and the plain JavaScript streaming library
+            send each trial to DataPipe as it is produced — on by default for
+            experiments built on either of them — so that a participant who
+            closes the tab partway through does not lose everything they did.
+            Those trials are held in a private database, unreadable by any
+            browser — including the one that wrote them — and are deleted the
+            moment the participant&apos;s submission completes, normally
+            within minutes.{" "}
             <strong>
               If the participant never finishes, DataPipe stores what it
               received as a separate partial file in your storage
             </strong>{" "}
             and then deletes the staged copy. Unlike the two copies above,
             these trials are not encrypted by DataPipe itself — see{" "}
-            <ProseLink href="#encryption">Encryption</ProseLink>. Incremental
-            upload is off unless your experiment&apos;s code asks for it.
+            <ProseLink href="#encryption">Encryption</ProseLink>. An experiment
+            built on the older jsPsychPipe plugin, or one that calls the API
+            directly with a plain <Code>fetch</Code>, does not stage trials
+            unless its code is updated to.
           </List.Item>
           <List.Item>
             <Text as="span" fontWeight="semibold">

@@ -71,7 +71,9 @@ export default function ConditionAssignmentPage() {
           linkText="Sending data from your experiment"
         >
           The code samples include a ready-made condition request for jsPsych
-          and for plain JavaScript.
+          and for plain JavaScript. It throws on failure rather than returning
+          a value, so a participant is never silently started on the wrong
+          timeline.
         </GuidanceLine>
       </DocsSection>
 
