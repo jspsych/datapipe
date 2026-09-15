@@ -24,6 +24,18 @@ const customJestConfig = {
   // so this only shows up locally -- which is exactly why it is worth pinning
   // here rather than rediscovering it each time.
   modulePathIgnorePatterns: ['<rootDir>/.claude/', '<rootDir>/.firebase/'],
+  // `packages/` is published libraries, not part of this app. They carry their
+  // own runners -- packages/client is vitest -- and Jest's default testMatch
+  // is purely path-based, so it globs `packages/client/test/*.test.ts` and
+  // dies on `Cannot find module 'vitest'` before running a line of it.
+  //
+  // Note this has nothing to do with npm workspaces. packages/client is
+  // deliberately NOT a workspace member (see packages/client/.changeset/README.md),
+  // and that makes no difference: testMatch does not know what a workspace is.
+  // Adding a package under `packages/` is enough to break the app's suite.
+  //
+  // Those packages are tested by their own CI job -- .github/workflows/client-test.yml.
+  testPathIgnorePatterns: ['<rootDir>/node_modules/', '<rootDir>/packages/'],
 }
 
 // createJestConfig is exported this way to ensure that next/jest can load the Next.js config which is async

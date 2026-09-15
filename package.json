@@ -12,7 +12,10 @@
     "test": "jest --watch",
     "test-ci": "jest --ci",
     "emulators": "firebase emulators:start --import=./.emulator-data --export-on-exit",
-    "postinstall": "cd functions && npm install"
+    "postinstall": "cd functions && npm install",
+    "changeset": "npm --prefix packages/client run changeset",
+    "client:test": "npm --prefix packages/client test",
+    "client:build": "npm --prefix packages/client run build"
   },
   "dependencies": {
     "@chakra-ui/react": "^3.33.0",

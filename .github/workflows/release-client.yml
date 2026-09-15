@@ -1,0 +1,114 @@
+# Publish datapipe-client to npm.
+#
+# The only thing in this repository that is published. The Next.js app and the
+# Cloud Functions are deployed by firebase-deploy.yml; nothing outside this
+# repository depends on their version numbers, so they have none.
+#
+# The flow is the standard changesets one, in two steps:
+#
+#   1. A push to main with changeset files pending opens (or updates) a
+#      "Release datapipe-client" pull request that applies the version bump
+#      and writes CHANGELOG.md.
+#   2. Merging that pull request runs this workflow again. There are no
+#      changesets left, so the action publishes to npm and tags the release.
+#
+# Both steps run the tests and the build first, because a broken publish
+# cannot be taken back -- npm forbids republishing a version, so a bad release
+# has to be superseded rather than fixed.
+#
+# Authentication is npm trusted publishing (OIDC), not a stored token. See the
+# publish step below for what that binds to.
+
+name: Release datapipe-client
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "packages/client/**"
+      - ".github/workflows/release-client.yml"
+  workflow_dispatch:
+
+# Two releases of the same package must not overlap: the second would compute
+# its version from a package.json the first has already bumped but not yet
+# pushed.
+concurrency:
+  group: release-client
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/client
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # changesets needs the history to work out what has been released.
+          fetch-depth: 0
+
+      - name: Use Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.x
+
+      # Trusted publishing needs npm 11.5.1 or later, and Node 22 still ships
+      # npm 10. Without this the publish falls back to looking for a token and
+      # fails with ENEEDAUTH, which reads like a missing secret rather than a
+      # too-old CLI.
+      #
+      # Deliberately not `npm@latest`: this step is the one thing standing
+      # between a green build and an unpublishable version number, so it should
+      # not change under us on an unrelated day.
+      - name: Use an npm that can do trusted publishing
+        run: |
+          npm install -g npm@11.17.0
+          npm --version
+        working-directory: .
+
+      # Not `npm ci` with a cache key on the root lockfile: packages/client is
+      # deliberately not part of a root workspace (see packages/client/.changeset/README.md),
+      # so it carries its own lockfile and installs on its own.
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      # No NPM_TOKEN. npm authenticates through trusted publishing: it trades
+      # the GitHub OIDC token this job is allowed to mint (`id-token: write`
+      # above) for a short-lived, single-publish credential. Nothing long-lived
+      # is stored in this repository, and a leaked workflow log cannot be
+      # replayed into a publish.
+      #
+      # This binds to THIS FILE BY NAME. The trust was registered with
+      # `npm trust github datapipe-client --repo jspsych/datapipe
+      # --file release-client.yml --allow-publish`, so renaming this file
+      # revokes its ability to publish until that is re-run to match.
+      # `npm trust list datapipe-client` shows what is currently trusted.
+      #
+      # Provenance is attested automatically under trusted publishing; there is
+      # no NPM_CONFIG_PROVENANCE to set.
+      - name: Create a release pull request, or publish
+        uses: changesets/action@v1
+        with:
+          cwd: packages/client
+          version: npm run version-packages
+          publish: npm run release
+          title: "Release datapipe-client"
+          commit: "Version datapipe-client"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
