@@ -48,7 +48,7 @@ export default function MovingOffOsfPage() {
     <>
       <PageHeader
         title="Moving off OSF"
-        purpose="OSF is winding down its projects feature: what changes, what happens to data you already collected, and how to move."
+        purpose="OSF is winding down its projects feature. Here is what changes, what happens to data you already collected, and how to move."
       />
 
       <DocsSection id="what-changes" title="What changes">
@@ -57,42 +57,42 @@ export default function MovingOffOsfPage() {
           no longer create new experiments there. {osfUntil}
         </Text>
         <Text maxW="70ch">
-          New experiments on OSF are refused by DataPipe itself, not merely
-          hidden from the new-experiment form: OSF is not offered as a choice,
-          the server rejects a request that names it, and the database rules
-          refuse the record. No workaround exists, so plan on collecting
-          new data elsewhere.
+          There&apos;s no way around this. OSF isn&apos;t offered on the
+          new-experiment form, the server rejects a request that asks for it,
+          and the database rules refuse the record. Plan on collecting new
+          data somewhere else.
         </Text>
         <Text maxW="70ch">
-          Everything else about an OSF experiment works as it always has while
-          it is still collecting: the endpoints, validation, condition
-          assignment, session limits, and metadata all behave the same.
+          Everything else about an OSF experiment keeps working while
+          it&apos;s still collecting. The endpoints, validation, condition
+          assignment, session limits, and metadata all behave as they always
+          have.
         </Text>
       </DocsSection>
 
       <DocsSection id="your-existing-data" title="Your existing data">
         <Text maxW="70ch">
-          Data already on OSF is unaffected. It stays in your OSF account, and
-          DataPipe never removes it. That stays true after the cutoff, and it
-          stays true if you disconnect OSF or delete your DataPipe account.
-          DataPipe does not delete anything from your storage.
+          Data already on OSF isn&apos;t affected. It stays in your OSF
+          account, and DataPipe never removes it. That remains true after the
+          cutoff, if you disconnect OSF, or if you delete your DataPipe
+          account. DataPipe never deletes anything from your storage.
         </Text>
       </DocsSection>
 
       <DocsSection id="how-to-move" title="How to move">
         <Text maxW="70ch">
-          To keep collecting, connect Google Drive, Dataverse, or Zenodo in your{" "}
-          <ProseLink href="/admin/account">account settings</ProseLink>, create
-          a new experiment on that provider, and point the experiment your
-          participants run at the new experiment ID. Your existing data does not
-          move, so finish a study on OSF if you are close to done, rather than
-          switching mid-collection.
+          To keep collecting, connect Google Drive, Dataverse, or Zenodo in
+          your <ProseLink href="/admin/account">account settings</ProseLink>,
+          create a new experiment on that provider, and point your experiment
+          code at the new experiment ID. Your existing data doesn&apos;t move.
+          If you&apos;re close to finishing a study on OSF, finish it there
+          rather than switching partway through.
         </Text>
         <Text maxW="70ch">
-          If you do switch mid-study, you will end up with two sets of files in
-          two places: what OSF already holds, and what the new experiment
-          collects from that point on. Nothing merges them for you, so plan how
-          you will combine them before you start.
+          If you do switch mid-study, you&apos;ll end up with two sets of
+          files in two places: what OSF already holds, and what the new
+          experiment collects from then on. Nothing merges them for you, so
+          decide how you&apos;ll combine them before you start.
         </Text>
         <GuidanceLine href="/docs/providers" linkText="Choosing a provider">
           A comparison of the three providers, and what each one does with your

@@ -34,24 +34,24 @@ export default function AccountAndSecurityPage() {
     <>
       <PageHeader
         title="Account and security"
-        purpose="How you sign in, how your credentials are stored, and what happens to your data if you delete your account."
+        purpose="How you sign in, how your credentials are kept, and what deleting your account does to your data."
       />
 
       <DocsSection id="sign-in-methods" title="Sign-in methods">
         <Text maxW="70ch">
           You can sign in to DataPipe with Google, ORCID, GitHub, or an email
-          address and password. How you sign in has nothing to do with where
-          your data goes: a Google sign-in does not give DataPipe access to your
-          Google Drive, and connecting Google Drive does not change how you sign
-          in.
+          address and password. How you sign in is separate from where your
+          data goes. Signing in with Google doesn&apos;t give DataPipe access
+          to your Google Drive, and connecting Google Drive doesn&apos;t
+          change how you sign in.
         </Text>
         <Text maxW="70ch">
-          One account can have several sign-in methods linked to it, and you add
-          or remove them in your{" "}
-          <ProseLink href="/admin/account">account settings</ProseLink>. Adding
-          a second method is worth doing: it is what keeps you in the account
-          that owns your experiments if you ever lose access to the first.
-          DataPipe will not let you remove your only remaining method.
+          One account can have several sign-in methods, which you add or
+          remove in your{" "}
+          <ProseLink href="/admin/account">account settings</ProseLink>. We
+          recommend adding a second one. If you ever lose access to the first,
+          it&apos;s what keeps you in the account that owns your experiments.
+          DataPipe won&apos;t let you remove your only remaining method.
         </Text>
       </DocsSection>
 
@@ -60,53 +60,44 @@ export default function AccountAndSecurityPage() {
         title="How credentials are stored"
       >
         <Text maxW="70ch">
-          DataPipe needs permission to write to your storage account, and all
-          tokens are stored encrypted. For Google Drive and Zenodo you authorize
-          DataPipe directly, and it manages and refreshes those tokens for you.
-          For Dataverse you supply an API token, so create one specifically for
-          DataPipe and revoke it when you are done collecting data. You can
-          disconnect any provider from your account settings at any time.
+          DataPipe needs permission to write to your storage account, and it
+          stores every token encrypted. For Google Drive and Zenodo, you
+          authorize DataPipe directly and it manages and refreshes those tokens
+          for you. For Dataverse, you supply an API token yourself, so create
+          one just for DataPipe and revoke it when you finish collecting data.
+          You can disconnect any provider from your account settings at any
+          time.
         </Text>
         <Text maxW="70ch">
-          Three details behind that, for anyone who needs them for an ethics
-          application or a data management plan:
+          If you need more detail for an ethics application or a data
+          management plan, here are the specifics:
         </Text>
         <List.Root maxW="70ch" gap={2} ps={6}>
           <List.Item>
-            Every stored credential (access tokens, refresh tokens and pasted
-            API tokens alike) is encrypted with AES-256-GCM before it is
-            written, and decrypted only in the server code that is about to make
-            a request to your provider.
+            Every stored credential, whether an access token, a refresh token,
+            or a pasted API token, is encrypted with AES-256-GCM before it is
+            written. It is decrypted only in the server code that is about to
+            make a request to your provider.
           </List.Item>
           <List.Item>
             Credentials live on your user record, and nothing running in a
-            browser can write them: the database rules permit only the server to
+            browser can write to them. The database rules let only the server
             add or change a stored connection.
           </List.Item>
           <List.Item>
             The only credential that ever reaches your browser is a short-lived
-            Google access token, handed over when you use the Drive folder
-            picker to choose where an experiment&apos;s data should go. The
-            refresh token behind it never leaves the server, and no other
-            provider&apos;s credentials are sent to the browser at all.
+            Google access token, used by the Drive folder picker when you
+            choose where an experiment&apos;s data should go. The refresh token
+            behind it never leaves the server, and no other provider&apos;s
+            credentials are sent to the browser at all.
           </List.Item>
         </List.Root>
-      </DocsSection>
-
-      <DocsSection
-        id="disconnecting-a-provider"
-        title="Disconnecting a provider"
-      >
-        <Text maxW="70ch">
-          Disconnecting a provider deletes DataPipe&apos;s stored credential for
-          it and stops new data from reaching it. It never removes data already
-          stored there, and you can reconnect at any time.
-        </Text>
         <GuidanceLine
           href="/docs/providers/connecting#disconnecting"
           linkText="Disconnecting"
         >
-          What disconnecting affects, and what it leaves alone.
+          Disconnecting a provider deletes its stored credential and nothing
+          else. Data already in your storage stays where it is.
         </GuidanceLine>
       </DocsSection>
 
@@ -114,22 +105,22 @@ export default function AccountAndSecurityPage() {
         <Box borderWidth="1px" borderColor="border" bg="bg.muted" rounded="md" p={4} maxW="70ch">
           <Text fontSize="sm">
             <strong>Deleting your DataPipe account is permanent.</strong> It
-            removes every experiment you own and everything DataPipe holds about
-            them, with no way to recover them afterwards. It does not touch a
-            single file in your storage provider.
+            removes every experiment you own and everything DataPipe holds
+            about them, and there is no way to get them back. It does not
+            touch a single file in your storage provider.
           </Text>
         </Box>
         <Text maxW="70ch">
-          You must have signed in within the last five minutes to delete an
-          account. If it has been longer, DataPipe asks you to sign in again
-          first: the same protection that stops a stolen session from
-          destroying an account.
+          You need to have signed in within the last five minutes to delete
+          your account. If it has been longer, DataPipe asks you to sign in
+          again first. This is the same protection that stops a stolen session
+          from destroying an account.
         </Text>
         <Text maxW="70ch">
-          DataPipe deletes its own data first and your sign-in record last. If
-          something fails partway, your account still exists and still owns
-          everything that survived, so you can simply try again. Nothing is left
-          stranded without an owner.
+          DataPipe deletes its own records first and your sign-in record last.
+          If something fails partway through, your account still exists and
+          still owns whatever is left, so you can simply try again. Nothing is
+          ever left behind without an owner.
         </Text>
         <Text maxW="70ch" fontWeight="semibold">
           What is removed
@@ -139,10 +130,10 @@ export default function AccountAndSecurityPage() {
             Every experiment you own, along with its filename record.
           </List.Item>
           <List.Item>
-            Every queued upload, including files you have not downloaded.
+            Every queued upload, including files you haven&apos;t downloaded.
           </List.Item>
           <List.Item>
-            The metadata and log documents belonging to those experiments.
+            The metadata and log documents for those experiments.
           </List.Item>
           <List.Item>
             Your user record, which is where your encrypted provider
@@ -153,11 +144,11 @@ export default function AccountAndSecurityPage() {
           What is not removed
         </Text>
         <Text maxW="70ch">
-          Nothing in your storage provider. Your Google Drive folders, Dataverse
-          datasets, Zenodo depositions, and OSF components all stay exactly as
-          they are, in your own account, with everything DataPipe wrote to them.
-          Deleting a DataPipe account removes DataPipe&apos;s ability to write
-          to them, not the data itself.
+          Anything in your storage provider. Your Google Drive folders,
+          Dataverse datasets, Zenodo depositions, and OSF components stay
+          exactly as they are, in your own account, with everything DataPipe
+          wrote to them. Deleting your account removes DataPipe&apos;s ability
+          to write to them, not the data itself.
         </Text>
         <GuidanceLine href="/docs/data" linkText="What DataPipe stores">
           What DataPipe holds while an experiment is running, and for how long.
