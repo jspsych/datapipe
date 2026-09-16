@@ -176,9 +176,9 @@ export default function GettingStarted() {
         </Heading>
         <Text color="fg.muted" fontSize="lg">
           DataPipe sends data from your experiment straight to storage you
-          control: Google Drive, Dataverse, or Zenodo. This guide sets up one
-          experiment end to end, from choosing a provider to your first test
-          run.
+          control: Google Drive, Dataverse, or Zenodo. This guide walks you
+          through setting up one experiment end to end, from choosing a
+          provider to your first test run.
         </Text>
       </VStack>
 
@@ -186,9 +186,9 @@ export default function GettingStarted() {
         <Text>
           DataPipe writes each participant&apos;s data into your own account
           with one of the three storage providers below. The data is yours
-          throughout. DataPipe only ever asks for permission to add files.
-          You can use a different provider for each experiment, so this choice
-          is not permanent.
+          the whole way through. DataPipe only ever asks for permission to
+          add files. You can use a different provider for each experiment, so
+          this choice isn&apos;t permanent.
         </Text>
         <Stack gap={3}>
           <ProviderOption
@@ -208,7 +208,7 @@ export default function GettingStarted() {
           />
         </Stack>
         <Text>
-          You need an account with whichever provider you choose:{" "}
+          You&apos;ll need an account with whichever provider you choose:{" "}
           <Link href="https://drive.google.com" target="_blank" rel="noopener noreferrer" color="brandOrange.fg">
             Google Drive
           </Link>
@@ -228,10 +228,10 @@ export default function GettingStarted() {
             can no longer create new experiments there. {osfUntil}
           </Text>
           <Text>
-            Data already on OSF is unaffected and stays in your OSF account. To
-            keep collecting past that point, connect one of the providers
-            above, create a new experiment on it, and point your experiment
-            code at the new experiment ID.
+            Data already on OSF isn&apos;t affected and stays in your OSF
+            account. To keep collecting past that point, connect one of the
+            providers above, create a new experiment on it, and point your
+            experiment code at the new experiment ID.
           </Text>
         </CollapsibleSection>
       </StepCard>
@@ -244,16 +244,16 @@ export default function GettingStarted() {
           </Link>
           {" "}and find the <strong>Storage Providers</strong> section. Click{" "}
           <strong>Connect</strong> next to the provider you chose. A green{" "}
-          <strong>Connected</strong> label confirms it worked.
+          <strong>Connected</strong> label tells you it worked.
         </Text>
         <Text>
-          <strong>Google Drive</strong> and <strong>Zenodo</strong> hand you
-          to their own sign-in page to authorize DataPipe, then bring you
-          straight back.
+          <strong>Google Drive</strong> and <strong>Zenodo</strong> open
+          their own sign-in page so you can authorize DataPipe, then bring
+          you straight back.
         </Text>
         <Text>
-          <strong>Dataverse</strong> opens a short form instead. It needs the
-          full address of your institution&apos;s installation (for
+          <strong>Dataverse</strong> opens a short form instead. It asks for
+          the full address of your institution&apos;s installation (for
           example, <em>https://dataverse.harvard.edu</em>) and an API token,
           which you create under the <strong>API Token</strong> tab of your
           Dataverse account.
@@ -294,9 +294,9 @@ export default function GettingStarted() {
           </Text>
         </Stack>
         <Text>
-          Click <strong>Create</strong>. DataPipe makes the folder, dataset,
-          or deposition for you and opens the experiment dashboard, which
-          links straight to it.
+          Click <strong>Create</strong>. DataPipe creates the folder,
+          dataset, or deposition for you and opens the experiment dashboard,
+          which links straight to it.
         </Text>
         <GuidanceLine href="/docs/experiments" linkText="Creating an experiment">
           The dashboard this opens is where you get the experiment ID, watch
@@ -306,47 +306,49 @@ export default function GettingStarted() {
 
       <StepCard number={4} title="Configure the experiment">
         <Text>
-          The experiment dashboard has several optional features you can enable:
+          The experiment dashboard has a few optional features you can turn
+          on:
         </Text>
         <Stack gap={3}>
           <FeatureItem name="Condition assignment">
-            request the next sequential condition number. DataPipe cycles
-            through conditions (0, 1, 2, ... back to 0).
+            give each participant the next condition number in order.
+            DataPipe cycles through conditions (0, 1, 2, ... back to 0).
           </FeatureItem>
           <FeatureItem name="Data validation">
-            check that incoming data is valid JSON or CSV. You can also
-            specify required fields. This helps prevent malicious submissions.
+            check that incoming data is valid JSON or CSV, and optionally that
+            it contains the fields you name. This helps keep junk submissions
+            out of your storage.
           </FeatureItem>
           <FeatureItem name="Session limit">
-            cap how many data files DataPipe will accept. You can raise the
-            limit later.
+            cap how many data files DataPipe will accept. You can always
+            raise the limit later.
           </FeatureItem>
           <FeatureItem name="Psych-DS metadata">
-            automatically produce metadata adhering to{" "}
+            automatically write metadata in the{" "}
             <Link href="https://psychds-docs.readthedocs.io/en/latest/" target="_blank" rel="noopener noreferrer" color="brandOrange.fg">
               Psych-DS
             </Link>
-            , updated after each session. See{" "}
+            {" "}format, updated after each session. See{" "}
             <Link href="/docs/experiments/metadata" color="brandOrange.fg">how it works</Link>
             {" "}in the docs.
           </FeatureItem>
         </Stack>
         <Callout>
-          Only activate the features you need, and only during active data
-          collection. DataPipe creates an open path into your storage provider:
-          validation and session limits reduce the risk of unwanted
-          submissions.
+          Turn on only the features you need, and only while you&apos;re
+          actively collecting data. DataPipe opens a path into your storage
+          provider, and validation and session limits help keep unwanted
+          submissions out.
         </Callout>
         <GuidanceLine href="/docs/experiments#switches" linkText="The four switches">
           Each of these settings has its own page, with the fine print on
-          conditions, validation and session limits.
+          conditions, validation, and session limits.
         </GuidanceLine>
       </StepCard>
 
       <StepCard number={5} title="Add code to your experiment">
         <Text>
-          Add code to send data from your experiment to DataPipe. If you use
-          jsPsych, the recommended option is the{" "}
+          Now add the code that sends data from your experiment to DataPipe.
+          If you use jsPsych, we recommend the{" "}
           <Link href="https://github.com/jspsych/jsPsych/tree/main/packages/extension-pipe" target="_blank" rel="noopener noreferrer" color="brandOrange.fg">
             @jspsych/extension-pipe extension
           </Link>
@@ -359,19 +361,19 @@ export default function GettingStarted() {
         <Text>
           The code is the same whichever storage provider you chose. Your
           experiment sends data to DataPipe, and DataPipe handles the rest.
-          Your experiment dashboard has ready-to-use snippets for both jsPsych
-          and plain JavaScript. Go to{" "}
+          Your experiment dashboard has ready-to-paste snippets for both
+          jsPsych and plain JavaScript. Go to{" "}
           <Link href="/admin" color="brandOrange.fg">My Experiments</Link>,
           select your experiment, and copy the code from the{" "}
           <strong>Code Samples</strong> panel.
         </Text>
         <Text>
-          The jsPsych extension saves data as it is produced by default, not
-          only when the experiment ends, so a participant who closes the tab
-          partway through does not take all of their data with them. The
-          datapipe-client library does the same once your experiment starts a
-          session with it; see{" "}
-          <Link href="/docs/experiments/sending-data#saving-as-you-go" color="brandOrange.fg">
+          By default, the jsPsych extension saves data as it&apos;s produced,
+          not only when the experiment ends, so a participant who closes the
+          tab partway through doesn&apos;t take all of their data with them.
+          The datapipe-client library does the same once your experiment
+          starts a session with it. See{" "}
+          <Link href="/docs/experiments/streaming" color="brandOrange.fg">
             Saving as you go
           </Link>
           .
@@ -388,7 +390,8 @@ export default function GettingStarted() {
       <StepCard number={6} title="Publish your experiment online">
         <Text>
           Host your experiment on any web server: university hosting, GitHub
-          Pages, Netlify, etc. Below is a quick guide for GitHub Pages.
+          Pages, Netlify, or whatever you prefer. Here&apos;s a quick guide
+          for GitHub Pages.
         </Text>
         <CollapsibleSection title="GitHub Pages setup instructions">
           <Text>
@@ -400,9 +403,9 @@ export default function GettingStarted() {
             <Link href="https://www.github.com/new" target="_blank" rel="noopener noreferrer" color="brandOrange.fg">
               create a new repository
             </Link>
-            . The repo name becomes part of your experiment URL, so avoid
-            names that reveal information to participants. Check the box
-            to add a README file.
+            . The repository name becomes part of your experiment URL, so
+            avoid names that give anything away to participants. Check the
+            box to add a README file.
           </Text>
           <Text>
             2. Go to <strong>Settings &rarr; Pages</strong> in your
@@ -416,36 +419,25 @@ export default function GettingStarted() {
           <Text>
             Your experiment will be available
             at <em>https://[username].github.io/[repo-name]</em>. If your
-            HTML file is not named <em>index.html</em>, append the filename to
-            the URL. It may take a few minutes for the site to become
-            available after uploading.
+            HTML file isn&apos;t named <em>index.html</em>, add the filename
+            to the end of the URL. The site can take a few minutes to appear
+            after you upload.
           </Text>
         </CollapsibleSection>
       </StepCard>
 
       <StepCard number={7} title="Activate and test">
         <Text>
-          Back on the experiment dashboard, turn on the features you need:
+          Back on the experiment dashboard, turn on{" "}
+          <strong>Accept new data</strong>. If your experiment sends audio,
+          video, or images, turn on{" "}
+          <strong>Accept base64 file uploads</strong> as well.
         </Text>
-        <Stack gap={2} pl={4}>
-          <Text>
-            <Text as="span" fontWeight="semibold">Enable data collection</Text>: for
-            sending text files (JSON, CSV).
-          </Text>
-          <Text>
-            <Text as="span" fontWeight="semibold">Enable base64 data collection</Text>: for
-            binary data like audio, video, or images.
-          </Text>
-          <Text>
-            <Text as="span" fontWeight="semibold">Enable condition assignment</Text>: for
-            automated condition cycling.
-          </Text>
-        </Stack>
         <Text>
-          Run through your experiment once to check that the data arrives. The
-          experiment dashboard links straight to your Drive folder, Dataverse
-          dataset, or Zenodo deposition. Your file should appear there
-          shortly after you finish.
+          Then run through your experiment once to check that the data arrives.
+          The experiment dashboard links straight to your Drive folder,
+          Dataverse dataset, or Zenodo deposition, and your file should show
+          up there shortly after you finish.
         </Text>
       </StepCard>
 
@@ -457,20 +449,21 @@ export default function GettingStarted() {
       <Box mt={8}>
         <StepCard number={8} title="When data collection ends">
         <Text>
-          When your study is finished on <strong>Zenodo</strong>,{" "}
-          <strong>finalize</strong> the experiment from its dashboard. DataPipe
-          merges every remaining data file into a single archive and stops
-          accepting new submissions, which keeps the deposition under
+          When your study on <strong>Zenodo</strong> is finished,{" "}
+          <strong>finalize</strong> the experiment from its dashboard.
+          DataPipe merges every remaining data file into a single archive and
+          stops accepting new submissions, which keeps the deposition under
           Zenodo&apos;s file limit and makes the dataset easier to share and
-          cite. Finalizing cannot be undone, so do it only when you are
-          certain no more data is coming. Google Drive and Dataverse
-          don&apos;t have that file-count ceiling, so there is nothing to
-          finalize there. Stop sending data when you&apos;re done.
+          cite. Finalizing can&apos;t be undone, so only do it when
+          you&apos;re certain no more data is coming. Google Drive and
+          Dataverse don&apos;t have that file-count ceiling, so there&apos;s
+          nothing to finalize there. Just turn off data collection when
+          you&apos;re done.
         </Text>
         <Text color="fg.muted" fontSize="sm">
-          On Zenodo, finalizing prepares the deposition but does not publish
-          it. Publishing the record, and with it issuing the DOI, stays your
-          decision and happens on Zenodo itself.
+          On Zenodo, finalizing prepares the deposition but doesn&apos;t
+          publish it. Publishing the record, and issuing the DOI that comes
+          with it, is your decision and happens on Zenodo itself.
         </Text>
         <GuidanceLine href="/docs/data/finalizing" linkText="Finishing a study">
           What finalizing does, which providers support it, and what happens
