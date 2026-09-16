@@ -3,12 +3,21 @@
  */
 
 import { initializeApp } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
 import { randomUUID } from "crypto";
 import express from "express";
 import MESSAGES from "../api-messages";
 
+// Not imported from collision-cache.ts/lib -- see the matching comment in
+// data-emulator.test.js. Must match collision-cache.ts's own export.
+const CLAIM_NAMESPACE_VERSION = 2;
+
 process.env.FIRESTORE_EMULATOR_HOST = "localhost:8080";
+// Needed only by the RECOVERABLE / NOT_RECOVERABLE token-failure tests below,
+// which check the pending-data cleanup and uploadQueue side effects of a
+// queued submission -- mirrors early-persist-emulator.test.js.
+process.env.FIREBASE_STORAGE_EMULATOR_HOST = "localhost:9199";
 
 async function saveData(body) {
   const response = await fetch(
@@ -89,6 +98,7 @@ function createMockOSFServer() {
 
 const config = {
   projectId: "datapipe-test",
+  storageBucket: "datapipe-test.appspot.com",
 };
 
 jest.setTimeout(30000);
@@ -106,13 +116,25 @@ async function waitForLog(db, docId, field, expectedValue, timeoutMs = 10000) {
   return db.collection("logs").doc(docId).get();
 }
 
+let bucket;
+
+async function listPendingFiles(experimentID) {
+  const [files] = await bucket.getFiles({ prefix: `pending-data/${experimentID}/` });
+  return files;
+}
+
+function uploadQueueDocId(experimentID, filename) {
+  return `${experimentID}:${filename}`.replace(/[/\\]/g, "_");
+}
+
 let mockOSF;
 
 beforeAll(async () => {
   mockOSF = await createMockOSFServer();
 
-  initializeApp(config);
+  const app = initializeApp(config);
   const db = getFirestore();
+  bucket = getStorage(app).bucket();
   await db.collection("experiments").doc("base64-testexp").set({ activeBase64: false });
   await db.collection("users").doc("testuser").set({
     osfTokenValid: false,
@@ -260,13 +282,112 @@ describe("apiData", () => {
     expect(response).toEqual(MESSAGES.INVALID_OWNER);
   });
 
-  it("should reject a request when there is no valid OSF token", async () => {
-    const response = await saveData({
+  // RECOVERABLE token failure (resolve-token.ts's classifyTokenFailure): a
+  // connection exists (a personal OSF token, here) but the credential itself
+  // is invalid. This used to reject the submission outright; it is now
+  // queued for retry exactly like a provider outage would be -- see the
+  // matching test in data-emulator.test.js.
+  it("should queue (not reject) a submission when the owner's OSF token is invalid", async () => {
+    const db = getFirestore();
+    const filename = `token-failure-recoverable-${randomUUID()}`;
+
+    // Isolate this test's errorsByCode tally from whatever earlier tests in
+    // this file logged against the same shared "base64-testexp-active" fixture.
+    await db.collection("logs").doc("base64-testexp-active").delete();
+
+    const response = await saveDataWithStatus({
       experimentID: "base64-testexp-active",
       data: "test",
-      filename: "test",
+      filename,
     });
-    expect(response).toEqual(MESSAGES.INVALID_OSF_TOKEN);
+
+    // 202, UPLOAD_QUEUED — error: null, so the jsPsych plugin treats
+    // this as success.
+    expect(response.status).toBe(202);
+    expect(response.body).toEqual(MESSAGES.UPLOAD_QUEUED);
+
+    const docId = uploadQueueDocId("base64-testexp-active", filename);
+    const queueDoc = await db.collection("uploadQueue").doc(docId).get();
+    expect(queueDoc.exists).toBe(true);
+    expect(queueDoc.data().failureReason).toBe("Token resolution failed: INVALID_OSF_TOKEN");
+    // Base64 uploads are supplementary media, not a session -- same
+    // convention as every other queue branch in api-base64.ts.
+    expect(queueDoc.data().sessionIncremented).toBe(false);
+    expect(queueDoc.data().providerErrorCode).toBe("AUTH_EXPIRED");
+    expect(queueDoc.data().nextRetryAt.toMillis() - Date.now()).toBeLessThan(2 * 60 * 1000);
+    expect(typeof queueDoc.data().claimToken).toBe("string");
+
+    const pendingFiles = await listPendingFiles("base64-testexp-active");
+    expect(pendingFiles.some((f) => f.name.includes(filename))).toBe(false);
+
+    const logDoc = await waitForLog(db, "base64-testexp-active", "saveBase64DataQueued", 1);
+    expect(logDoc.data().saveBase64DataQueued).toBe(1);
+    expect(logDoc.data().errorsByCode.INVALID_OSF_TOKEN).toBe(1);
+  });
+
+  // Same RECOVERABLE token failure, but with a WARM collision cache -- see
+  // the matching test in data-emulator.test.js. Uses its own experiment so
+  // pre-warming its collisionCache can't affect any other test in this file.
+  it("should reject a same-named repeat while queued, when the collision cache is warm", async () => {
+    const db = getFirestore();
+    const experimentID = `base64-testexp-collision-warm-${randomUUID()}`;
+    await db.collection("experiments").doc(experimentID).set({
+      activeBase64: true,
+      owner: "testuser",
+      collisionCache: {
+        salt: randomUUID().replace(/-/g, ""),
+        warmUntil: Timestamp.fromMillis(Date.now() + 24 * 60 * 60 * 1000),
+        namespaceVersion: CLAIM_NAMESPACE_VERSION,
+      },
+    });
+
+    const filename = `token-failure-collision-${randomUUID()}`;
+    const docId = uploadQueueDocId(experimentID, filename);
+
+    const first = await saveDataWithStatus({ experimentID, data: "test", filename });
+    expect(first.status).toBe(202);
+    expect(first.body).toEqual(MESSAGES.UPLOAD_QUEUED);
+
+    const firstClaimToken = (await db.collection("uploadQueue").doc(docId).get()).data()
+      .claimToken;
+    expect(typeof firstClaimToken).toBe("string");
+
+    const second = await saveDataWithStatus({ experimentID, data: "test", filename });
+    expect(second.status).toBe(400);
+    expect(second.body).toEqual(MESSAGES.FILE_EXISTS);
+
+    // The first submission's queued payload was not replaced by the rejected
+    // repeat.
+    const queueDocAfter = await db.collection("uploadQueue").doc(docId).get();
+    expect(queueDocAfter.data().claimToken).toBe(firstClaimToken);
+  });
+
+  // NOT_RECOVERABLE token failure: no connection exists at all for this
+  // owner/provider, so nothing a retry could ever succeed against -- this
+  // must keep rejecting the submission outright, with no queue document.
+  it("should reject (not queue) a submission when the owner has no connection for the experiment's provider", async () => {
+    const db = getFirestore();
+    const owner = `base64-notconnected-owner-${randomUUID()}`;
+    const experimentID = `base64-testexp-notconnected-${randomUUID()}`;
+    const filename = `token-failure-not-recoverable-${randomUUID()}`;
+
+    // No connectedAccounts field at all -- gdrive.ts's resolveToken returns
+    // PROVIDER_NOT_CONNECTED without ever making a network call.
+    await db.collection("users").doc(owner).set({});
+    await db.collection("experiments").doc(experimentID).set({
+      activeBase64: true,
+      owner,
+      storageProvider: "gdrive",
+    });
+
+    const response = await saveDataWithStatus({ experimentID, data: "test", filename });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual(MESSAGES.PROVIDER_NOT_CONNECTED);
+
+    const docId = uploadQueueDocId(experimentID, filename);
+    const queueDoc = await db.collection("uploadQueue").doc(docId).get();
+    expect(queueDoc.exists).toBe(false);
   });
 });
 

@@ -523,3 +523,28 @@ export async function releaseClaim(
     }
   });
 }
+
+// Claims a filename when there's no usable provider credential, for queueing a
+// submission whose token failed to resolve. A warm cache needs no provider
+// call, so the claim is the same as on the normal path: a repeat of a name
+// that is already taken or pending is caught now instead of silently
+// replacing the first submission's queued payload. A cold cache can't be
+// rehydrated without listing the provider's files, so that case returns
+// "unchecked" and the retry worker does the full check once the credential
+// works again -- the same as an upload queued because rehydration failed.
+export async function claimFilenameWithoutCredentials(
+  experimentID: string,
+  filename: string,
+  ownerToken: string
+): Promise<"claimed" | "duplicate" | "unchecked"> {
+  try {
+    const result = await claimFilename(experimentID, filename, ownerToken, () =>
+      Promise.reject(new Error("no usable provider credential"))
+    );
+    if (result.claimed) return "claimed";
+    return result.reason === "duplicate" ? "duplicate" : "unchecked";
+  } catch (e) {
+    if (e instanceof CollisionCacheUnavailableError) return "unchecked";
+    throw e;
+  }
+}

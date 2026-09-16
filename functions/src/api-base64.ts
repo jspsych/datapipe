@@ -5,12 +5,12 @@ import { db } from "./app.js";
 import writeLog from "./write-log.js";
 import isBase64 from "is-base64";
 import MESSAGES from "./api-messages.js";
-import resolveToken from "./resolve-token.js";
+import resolveToken, { classifyTokenFailure } from "./resolve-token.js";
 import queueUpload from "./queue-upload.js";
 import { persistPending, cleanupPending } from "./persist-pending.js";
 import { getProviderForExperiment, claimNameFor } from "./providers/index.js";
 import { WriteResult, ResolvedAuth } from "./providers/types.js";
-import { claimFilename, confirmClaim, CollisionCacheUnavailableError } from "./collision-cache.js";
+import { claimFilename, claimFilenameWithoutCredentials, confirmClaim, CollisionCacheUnavailableError } from "./collision-cache.js";
 import { isCompactionInFlight, COMPACTION_HOLD_REASON } from "./compaction-gate.js";
 import { ExperimentData, UserData } from './interfaces';
 
@@ -145,9 +145,56 @@ export const apiBase64 = onRequest(
 
   if (!tokenResult.success) {
     const errorMessage = MESSAGES[tokenResult.error as keyof typeof MESSAGES] || MESSAGES.TOKEN_RESOLUTION_ERROR;
-    res.status(400).json(errorMessage);
-    await writeLog(experimentID, "logError", {...errorMessage, detail: tokenResult.detail}, logContext);
-    return;
+
+    // NOT_RECOVERABLE (no connection for this owner/provider at all -- see
+    // resolve-token.ts's classifyTokenFailure) keeps the original behavior:
+    // reject outright, nothing to queue a retry against.
+    if (classifyTokenFailure(tokenResult.error) === "NOT_RECOVERABLE") {
+      res.status(400).json(errorMessage);
+      await writeLog(experimentID, "logError", {...errorMessage, detail: tokenResult.detail}, logContext);
+      return;
+    }
+
+    // RECOVERABLE: a connection exists but its credential is currently
+    // unusable. Queued for retry exactly like the "upload exception" branch
+    // below, after claiming the filename -- see the matching comment in
+    // api-data.ts.
+    // sessionIncremented: false and no `sessions` increment, matching every
+    // other queue branch in this file -- a base64 upload is a supplementary
+    // media file, not a session.
+    const tokenFailureClaimToken = randomUUID();
+    const { provider: tokenFailureProvider } = getProviderForExperiment(exp_data);
+    const claimOutcome = await claimFilenameWithoutCredentials(
+      experimentID, claimNameFor(tokenFailureProvider, filename), tokenFailureClaimToken
+    );
+    if (claimOutcome === "duplicate") {
+      await cleanupPending(pendingPath);
+      res.status(400).json(MESSAGES.FILE_EXISTS);
+      await writeLog(experimentID, "logError", MESSAGES.FILE_EXISTS, logContext);
+      return;
+    }
+    try {
+      await queueUpload({
+        experimentID, owner: exp_data.owner, filename, data,
+        dataType: "base64", osfFilesLink: exp_data.osfFilesLink,
+        storageProvider: exp_data.storageProvider, providerContainer: exp_data.providerContainer,
+        errorCode: 0, sessionIncremented: false,
+        failureReason: `Token resolution failed: ${tokenResult.error}`,
+        providerErrorCode: "AUTH_EXPIRED",
+        claimToken: tokenFailureClaimToken,
+      });
+      await cleanupPending(pendingPath); // queue-upload has its own copy
+      res.status(202).json(MESSAGES.UPLOAD_QUEUED);
+      await writeLog(experimentID, "saveBase64DataQueued", undefined, logContext);
+      // The original credential-specific message, not a generic queued
+      // notice -- see the matching comment in api-data.ts.
+      await writeLog(experimentID, "logError", {...errorMessage, detail: tokenResult.detail}, logContext);
+      return;
+    } catch {
+      res.status(500).json(MESSAGES.UPLOAD_EXCEPTION);
+      await writeLog(experimentID, "logError", {...errorMessage, detail: tokenResult.detail}, logContext);
+      return;
+    }
   }
 
   const auth: ResolvedAuth = { token: tokenResult.token, serverUrl: tokenResult.serverUrl };
