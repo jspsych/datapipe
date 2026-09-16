@@ -83,14 +83,15 @@ export default function ChoosingAProviderPage() {
     <>
       <PageHeader
         title="Choosing a provider"
-        purpose="Compare Google Drive, Dataverse, and Zenodo, and see what each one does with your files once data starts arriving."
+        purpose="Compare Google Drive, Dataverse, and Zenodo, and see how each one handles your files once data starts arriving."
       />
 
       <DocsSection id="comparison" title="Comparing the providers">
         <Text maxW="70ch">
           DataPipe writes each participant&apos;s data into your own account
-          with one of the three storage providers below. The data is yours
-          throughout. DataPipe only ever asks for permission to add files.
+          with one of the three storage providers below. The data is yours the
+          whole way through. DataPipe only ever asks for permission to add
+          files.
         </Text>
         <Stack gap={3} maxW="70ch">
           <ProviderOption
@@ -113,7 +114,7 @@ export default function ChoosingAProviderPage() {
 
       <DocsSection id="accounts-you-need" title="Accounts you need">
         <Text maxW="70ch">
-          You need an account with whichever provider you choose:{" "}
+          You&apos;ll need an account with whichever provider you choose:{" "}
           <ProseLink href="https://drive.google.com" external>
             Google Drive
           </ProseLink>
@@ -131,7 +132,8 @@ export default function ChoosingAProviderPage() {
           href="/docs/providers/connecting"
           linkText="Connecting and reconnecting"
         >
-          Once you have an account, DataPipe needs permission to write to it.
+          Once you have an account, the next step is giving DataPipe permission
+          to write to it.
         </GuidanceLine>
       </DocsSection>
 
@@ -140,17 +142,18 @@ export default function ChoosingAProviderPage() {
         title="One provider per experiment"
       >
         <Text maxW="70ch">
-          You can use a different provider for each experiment, so this choice
-          is not permanent. You can also connect more than one provider to your
-          account and pick between them each time you create an experiment.
+          This choice isn&apos;t permanent. You can use a different provider
+          for each experiment, and you can connect more than one provider to
+          your account and pick between them whenever you create a new
+          experiment.
         </Text>
         <Text maxW="70ch">
-          What an experiment cannot do is change provider once it exists. Each
-          experiment writes to the one Drive folder, Dataverse dataset, or
-          Zenodo deposition DataPipe created for it. To collect the same study
-          somewhere else, create a new experiment on the other provider and
-          point the experiment your participants run at the new experiment ID.
-          Data already collected stays where it is.
+          What you can&apos;t do is change the provider of an experiment that
+          already exists. Each experiment writes to the one Drive folder,
+          Dataverse dataset, or Zenodo deposition that DataPipe created for it.
+          To collect the same study somewhere else, create a new experiment on
+          the other provider and point your experiment code at the new
+          experiment ID. Data you already collected stays where it is.
         </Text>
       </DocsSection>
 
@@ -159,15 +162,15 @@ export default function ChoosingAProviderPage() {
         title="Provider-specific behavior"
       >
         <Text maxW="70ch">
-          The three providers are not interchangeable once data is arriving.
-          These are the differences that show up mid-study.
+          The three providers behave differently once data is arriving. These
+          are the differences you&apos;re likely to notice mid-study.
         </Text>
 
         <BehaviorRow name="Google Drive">
           <Text fontSize="sm" color="fg.muted">
             DataPipe creates one folder per experiment, named after the
             experiment, either under a parent folder you pick or under a folder
-            called DataPipe in your Drive. It creates{" "}
+            called DataPipe in your Drive. It also creates{" "}
             <Text as="span" fontWeight="semibold">
               data
             </Text>{" "}
@@ -175,38 +178,38 @@ export default function ChoosingAProviderPage() {
             <Text as="span" fontWeight="semibold">
               data/raw
             </Text>{" "}
-            inside it at the same time, so they are ready before the first
+            inside it right away, so they&apos;re ready before the first
             participant submits.
           </Text>
           <Text fontSize="sm" color="fg.muted">
             DataPipe sets no file count or file size limit on Drive. The real
-            constraint is your account&apos;s own quota: free Google accounts
+            constraint is your account&apos;s own quota. Free Google accounts
             share 15 GB across Drive, Gmail, and Photos, and uploads stop when
             that is full.
           </Text>
           <Text fontSize="sm" color="fg.muted">
             Drive allows two files with the same name in the same folder and
-            never reports a conflict, so DataPipe&apos;s filename record (its
-            own list of the names an experiment has used) is the only thing
-            preventing a duplicate. Drive stores the file under the last part
-            of its name, so two submissions that differ only in their folder
-            prefix count as the same name.
+            never reports a conflict. That means DataPipe&apos;s own filename
+            record, its list of the names an experiment has already used, is
+            the only thing preventing a duplicate. Drive stores a file under
+            the last part of its name, so two submissions that differ only in
+            their folder prefix count as the same name.
           </Text>
         </BehaviorRow>
 
         <BehaviorRow name="Dataverse">
           <Text fontSize="sm" color="fg.muted">
             DataPipe creates a draft dataset in the collection you name and
-            never publishes it. Publishing stays your decision.
+            never publishes it. Publishing is your decision.
           </Text>
           <Text fontSize="sm" color="fg.muted">
-            Dataverse accepts one write to a dataset at a time. When two
-            participants submit at the same moment, the second write is
-            refused, so DataPipe queues that submission and retries it about a
-            minute later rather than failing it.
+            Dataverse accepts only one write to a dataset at a time. If two
+            participants submit at the same moment, Dataverse refuses the
+            second write, so DataPipe queues that submission and retries it
+            about a minute later instead of failing it.
           </Text>
           <Text fontSize="sm" color="fg.muted">
-            Dataverse never rejects a duplicate filename: it silently renames
+            Dataverse never rejects a duplicate filename. It quietly renames
             the new file instead, so a second{" "}
             <Text as="span" fontWeight="semibold">
               README.md
@@ -219,11 +222,12 @@ export default function ChoosingAProviderPage() {
           </Text>
           <Text fontSize="sm" color="fg.muted">
             Dataverse converts uploaded CSVs into its own archival .tab format
-            unless it is told not to. DataPipe tells it not to on every write,
-            but installations older than Dataverse 5.11 ignore that instruction
-            with no error. DataPipe checks your installation&apos;s version when
-            you create an experiment and warns you on the form if it is too old.
-            JSON data is unaffected either way.
+            unless it&apos;s told not to. DataPipe tells it not to on every
+            write, but installations older than Dataverse 5.11 ignore that
+            instruction without any error. DataPipe checks your
+            installation&apos;s version when you create an experiment and
+            warns you on the form if it&apos;s too old. JSON data is unaffected
+            either way.
           </Text>
         </BehaviorRow>
 
@@ -235,22 +239,14 @@ export default function ChoosingAProviderPage() {
           </Text>
           <Text fontSize="sm" color="fg.muted">
             A Zenodo record holds at most 100 files and 50 GB. No other
-            provider caps the file count. That cap is why DataPipe
-            merges completed sessions into archives on Zenodo as collection
-            goes on, and why finalizing a study into one archive is a Zenodo
-            feature only.
+            provider caps the file count. That cap is why DataPipe merges
+            completed sessions into archives on Zenodo as collection goes on,
+            and why finalizing a study into one archive is a Zenodo-only
+            feature.
           </Text>
           <Text fontSize="sm" color="fg.muted">
-            Zenodo has no folders. A file named{" "}
-            <Text as="span" fontWeight="semibold">
-              data/raw/subject-1.json
-            </Text>{" "}
-            is stored as{" "}
-            <Text as="span" fontWeight="semibold">
-              data_raw_subject-1.json
-            </Text>
-            , so a record with metadata turned on shows flattened names rather
-            than a folder tree.
+            Zenodo has no folders, so a record with metadata turned on shows
+            flattened names rather than a folder tree.
           </Text>
           <Text fontSize="sm" color="fg.muted">
             Writing a file that already exists on Zenodo replaces it, with no
@@ -263,21 +259,11 @@ export default function ChoosingAProviderPage() {
           href="/docs/data/files"
           linkText="Filenames, archives and your storage"
         >
-          How DataPipe keeps filenames unique, and what the archives in your
-          storage are.
+          How DataPipe keeps filenames unique, what your files end up named,
+          and what the archives in your storage are.
         </GuidanceLine>
       </DocsSection>
 
-      <DocsSection id="osf" title="OSF">
-        <Text maxW="70ch">
-          OSF is shutting down its projects feature, so DataPipe can no longer
-          create new experiments there. Experiments already collecting on OSF
-          keep running for now, and the data already there is untouched.
-        </Text>
-        <GuidanceLine href="/docs/providers/osf" linkText="Moving off OSF">
-          What changes, when, and how to move a study to another provider.
-        </GuidanceLine>
-      </DocsSection>
     </>
   );
 }

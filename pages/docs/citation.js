@@ -102,13 +102,13 @@ export default function CitationPage() {
     <>
       <PageHeader
         title="Citing DataPipe"
-        purpose="The paper to cite if you collected data with DataPipe, in APA and BibTeX."
+        purpose="The paper to cite if you collected data with DataPipe, ready to copy in APA or BibTeX."
       />
 
       <DocsSection id="apa" title="APA">
         <Text maxW="70ch">
-          If you use DataPipe to collect data, please cite the paper describing
-          it. The article is open access.
+          If DataPipe helped you collect data, please cite the paper that
+          describes it. The article is open access.
         </Text>
         <CitationPanel label="APA citation" text={CITATION_APA}>
           {/* Rendered from the same fields the clipboard string is built
@@ -127,7 +127,7 @@ export default function CitationPage() {
 
       <DocsSection id="bibtex" title="BibTeX">
         <Text maxW="70ch">
-          The same reference as a BibTeX entry, for a{" "}
+          The same reference as a BibTeX entry, ready to paste into a{" "}
           <Text as="span" fontFamily="mono">
             .bib
           </Text>{" "}
