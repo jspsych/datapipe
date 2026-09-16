@@ -354,14 +354,11 @@ export default function ApiReferencePage() {
           occur only on experiments still collecting to OSF.
         </Text>
         <Text fontSize="sm" color="fg.muted" maxW="70ch">
-          The same applies to the <Code>message</Code> text: several messages
-          still name OSF whatever provider an experiment actually uses. For
-          example, a queued upload reports &ldquo;Data received. OSF upload
-          will be retried automatically&rdquo; on Google Drive, Dataverse, and
-          Zenodo alike. Read
-          &ldquo;OSF&rdquo; in a message as &ldquo;your storage
-          provider&rdquo;, and match on the <Code>error</Code> code, not the
-          message, when writing code.
+          The <Code>message</Code> text does not follow the code: it says
+          &ldquo;the storage provider&rdquo; rather than naming OSF, on every
+          provider. Treat it as human-readable only — it is reworded without
+          notice, so match on the <Code>error</Code> code, not the message,
+          when writing code.
         </Text>
         <Box overflowX="auto" w="100%">
           <Table.Root variant="outline">

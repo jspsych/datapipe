@@ -69,10 +69,14 @@ const MESSAGES = {
     message:
       "The data are not valid according to the validation parameters set for this experiment.",
   },
+  // oauth2-regenerate.ts gates on user_data.usingPersonalToken, which every
+  // provider sets -- the handler names no provider at all. The old wording
+  // ("OSF API verification") told a Zenodo or Dataverse owner with a personal
+  // token to go look at OSF.
   NOT_USING_OAUTH: {
     error: "NOT_USING_OAUTH",
     message:
-      "The user is not using OAuth for OSF API verification"
+      "The user is not using OAuth for this provider's API verification"
   },
   OAUTH_NOT_SETUP: {
     error: "OAUTH_NOT_SETUP",
@@ -87,29 +91,36 @@ const MESSAGES = {
     message:
       "An unknown error occurred while getting the condition for this experiment",
   },
+  // The `error` CODES below keep their historical OSF_ names: they are the
+  // public API contract, the jsPsych pipe plugin and researchers' own scripts
+  // match on them, and renaming one breaks that silently. The `message` TEXT
+  // is not a contract, and naming OSF in it was simply wrong -- api-data.ts
+  // and api-base64.ts serve every provider, so a Zenodo upload collision
+  // answered with "The OSF file already exists". Same reasoning as
+  // PROVIDER_TOKEN_EXPIRED above: stay provider-neutral rather than swap in
+  // another provider's name, since these strings are built once and reused
+  // across all of them.
   OSF_FILE_EXISTS: {
     error: "OSF_FILE_EXISTS",
-    message: "The OSF file already exists. File names must be unique.",
+    message:
+      "A file with this name already exists in the storage provider. File names must be unique.",
   },
   OSF_UPLOAD_ERROR: {
     error: "OSF_UPLOAD_ERROR",
-    message: "An error occurred while uploading the data to OSF",
+    message: "An error occurred while uploading the data to the storage provider",
   },
   OSF_UPLOAD_EXCEPTION: {
     error: "OSF_UPLOAD_EXCEPTION",
-    message: "An unexpected error occurred while uploading the data to OSF",
+    message:
+      "An unexpected error occurred while uploading the data to the storage provider",
   },
   TOKEN_RESOLUTION_ERROR: {
     error: "TOKEN_RESOLUTION_ERROR",
-    message: "Failed to resolve the OSF token",
+    message: "Failed to resolve the storage provider's token",
   },
   INVALID_METADATA_ERROR: {
     error: "INVALID_METADATA_ERROR",
     message: "Metadata produced from incoming data is invalid"
-  },
-  OSF_METADATA_UPLOAD_ERROR: {
-    error: "OSF_METADATA_UPLOAD_ERROR",
-    message: "An error occured while uploading metadata to OSF"
   },
   METADATA_ERROR: {
     error: "METADATA_ERROR",
@@ -119,16 +130,16 @@ const MESSAGES = {
     metadataMessage : "Metadata production is not active for this experiment",
   },
   METADATA_IN_OSF_NOT_IN_FIRESTORE: {
-    metadataMessage : "Metadata is in OSF but not in Firestore",
+    metadataMessage : "Metadata is in the storage provider but not in Firestore",
   },
   METADATA_IN_FIRESTORE_NOT_IN_OSF: {
-    metadataMessage : "Metadata is in Firestore but not in OSF",
+    metadataMessage : "Metadata is in Firestore but not in the storage provider",
   },
   METADATA_NOT_IN_FIRESTORE_OR_OSF: {
-    metadataMessage : "Metadata is not in Firestore or OSF",
+    metadataMessage : "Metadata is not in Firestore or the storage provider",
   },
   METADATA_IN_OSF_AND_FIRESTORE: {
-    metadataMessage : "Metadata is in OSF and in Firestore",
+    metadataMessage : "Metadata is in the storage provider and in Firestore",
   },
   DATA_PERSIST_ERROR: {
     error: "DATA_PERSIST_ERROR",
@@ -136,7 +147,7 @@ const MESSAGES = {
   },
   OSF_UPLOAD_QUEUED: {
     error: null,
-    message: "Data received. OSF upload will be retried automatically.",
+    message: "Data received. The upload will be retried automatically.",
   },
   // The experiment was open and the session was admissible, but the staging
   // tier itself could not be written -- no RTDB instance provisioned, or the

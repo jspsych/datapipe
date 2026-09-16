@@ -571,7 +571,7 @@ export const apiData = onRequest(
       await discardStaging();
       // OSF is failing, so queue the derived files alongside the raw data —
       // same provider error code, since it's the same provider write path.
-      await queueDerivedFiles(derivedFiles, derivedTarget, `Queued alongside data file: OSF error ${result.providerStatus}`, result.error);
+      await queueDerivedFiles(derivedFiles, derivedTarget, `Queued alongside data file: Provider error ${result.providerStatus}`, result.error);
       res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
       await writeLog(experimentID, "saveDataQueued", undefined, logContext);
       await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.providerStatus, osfStatusText: result.providerMessage}, logContext);

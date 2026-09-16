@@ -143,7 +143,7 @@ describe("saveData", () => {
         ok: true,
         status: 202,
         error: null,
-        message: "Data received. OSF upload will be retried automatically.",
+        message: "Data received. The upload will be retried automatically.",
       }));
 
       const result = await saveData({ experimentID: "EXP12345", filename: "p01.csv", data: "x" });
