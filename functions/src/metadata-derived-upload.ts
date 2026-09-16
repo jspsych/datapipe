@@ -109,10 +109,10 @@ export async function queueDerivedFiles(
         sessionIncremented: true,
         failureReason,
       });
-      await writeLog(target.experimentID, "logError", {...MESSAGES.OSF_UPLOAD_QUEUED, detail: `derived file ${file.filename}: ${failureReason}`}, logContext);
+      await writeLog(target.experimentID, "logError", {...MESSAGES.UPLOAD_QUEUED, detail: `derived file ${file.filename}: ${failureReason}`}, logContext);
     } catch (e) {
       const detail = e instanceof Error ? e.message : "Unknown error";
-      await writeLog(target.experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, detail: `derived file ${file.filename} could not be queued: ${detail}`}, logContext);
+      await writeLog(target.experimentID, "logError", {...MESSAGES.UPLOAD_ERROR, detail: `derived file ${file.filename} could not be queued: ${detail}`}, logContext);
     }
   }
 }

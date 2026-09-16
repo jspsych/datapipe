@@ -312,7 +312,7 @@ describe("Z1. zenodo experiment: apidata POST succeeds and warms the collision c
 });
 
 describe("Z2. duplicate filename is rejected without a second provider write", () => {
-  it("second POST for the same filename gets OSF_FILE_EXISTS and the mock sees exactly one PUT", async () => {
+  it("second POST for the same filename gets FILE_EXISTS and the mock sees exactly one PUT", async () => {
     const experimentID = `zenodo-e2e-2-${randomUUID()}`;
     const filename = `z2-dup-${randomUUID()}.json`;
     await createZenodoExperiment(experimentID);
@@ -322,7 +322,7 @@ describe("Z2. duplicate filename is rejected without a second provider write", (
 
     const second = await saveData({ experimentID, data: sampleData, filename });
     expect(second.status).toBe(400);
-    expect(second.body).toEqual({ ...MESSAGES.OSF_FILE_EXISTS, metadataMessage: "" });
+    expect(second.body).toEqual({ ...MESSAGES.FILE_EXISTS, metadataMessage: "" });
 
     // This assertion is the whole point on Zenodo specifically. Its write is
     // an OVERWRITING PUT with no NAME_CONFLICT to fall back on, so a second
@@ -398,7 +398,7 @@ describe("Z4. flat keyspace: Psych-DS paths are flattened consistently across wr
     // objectContaining, not toEqual: a metadataActive experiment also reports
     // its metadata state alongside the duplicate error, which the
     // metadata-off cases above (Z2) do not.
-    expect(second.body).toEqual(expect.objectContaining(MESSAGES.OSF_FILE_EXISTS));
+    expect(second.body).toEqual(expect.objectContaining(MESSAGES.FILE_EXISTS));
     expect(mockZenodo.getPutCount(`data_raw_${filename}`)).toBe(1);
   });
 });
@@ -414,7 +414,7 @@ describe("Z5. provider failure queues the upload and tags it with the zenodo con
     const response = await saveData({ experimentID, data: sampleData, filename });
     expect(response.status).toBe(202);
     expect(response.body).toEqual(
-      expect.objectContaining({ ...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage: "" })
+      expect.objectContaining({ ...MESSAGES.UPLOAD_QUEUED, metadataMessage: "" })
     );
 
     const docId = `${experimentID}:${filename}`.replace(/[/\\]/g, "_");
@@ -495,7 +495,7 @@ describe("Z8. cold collision cache rehydrates from the deposition listing", () =
     const response = await saveData({ experimentID, data: sampleData, filename });
 
     expect(response.status).toBe(400);
-    expect(response.body).toEqual({ ...MESSAGES.OSF_FILE_EXISTS, metadataMessage: "" });
+    expect(response.body).toEqual({ ...MESSAGES.FILE_EXISTS, metadataMessage: "" });
     // Never overwritten: the earlier session's bytes are still there.
     expect(mockZenodo.getPutCount(filename)).toBe(0);
     expect(mockZenodo.getContent(filename).toString("utf8")).toBe("an earlier session");

@@ -35,6 +35,11 @@ const MESSAGES = {
     error: "INVALID_OWNER",
     message: "The owner ID of this experiment does not match a valid user",
   },
+  // Keeps its OSF name deliberately, unlike the upload codes below. Only
+  // providers/osf.ts mints this one -- every other provider returns
+  // INVALID_REFRESH_TOKEN, PROVIDER_NOT_CONNECTED or PROVIDER_TOKEN_EXPIRED
+  // -- so it cannot fire on a non-OSF upload, and naming OSF is accurate
+  // rather than a leftover.
   INVALID_OSF_TOKEN: {
     error: "INVALID_OSF_TOKEN",
     message: "The OSF token for this experiment is not valid",
@@ -91,26 +96,26 @@ const MESSAGES = {
     message:
       "An unknown error occurred while getting the condition for this experiment",
   },
-  // The `error` CODES below keep their historical OSF_ names: they are the
-  // public API contract, the jsPsych pipe plugin and researchers' own scripts
-  // match on them, and renaming one breaks that silently. The `message` TEXT
-  // is not a contract, and naming OSF in it was simply wrong -- api-data.ts
-  // and api-base64.ts serve every provider, so a Zenodo upload collision
-  // answered with "The OSF file already exists". Same reasoning as
-  // PROVIDER_TOKEN_EXPIRED above: stay provider-neutral rather than swap in
-  // another provider's name, since these strings are built once and reused
-  // across all of them.
-  OSF_FILE_EXISTS: {
-    error: "OSF_FILE_EXISTS",
+  // api-data.ts and api-base64.ts serve every provider, so none of the three
+  // codes below may name one: a Zenodo upload collision was answering with
+  // OSF_FILE_EXISTS / "The OSF file already exists". They were renamed from
+  // OSF_* on 2026-09-16, which is a BREAKING change to the wire contract --
+  // an experiment matching on the old string silently stops matching. See the
+  // migration note in pages/docs/api.js. Messages stay provider-neutral
+  // rather than naming the actual provider, same reasoning as
+  // PROVIDER_TOKEN_EXPIRED above: each string is built once and reused across
+  // all of them.
+  FILE_EXISTS: {
+    error: "FILE_EXISTS",
     message:
       "A file with this name already exists in the storage provider. File names must be unique.",
   },
-  OSF_UPLOAD_ERROR: {
-    error: "OSF_UPLOAD_ERROR",
+  UPLOAD_ERROR: {
+    error: "UPLOAD_ERROR",
     message: "An error occurred while uploading the data to the storage provider",
   },
-  OSF_UPLOAD_EXCEPTION: {
-    error: "OSF_UPLOAD_EXCEPTION",
+  UPLOAD_EXCEPTION: {
+    error: "UPLOAD_EXCEPTION",
     message:
       "An unexpected error occurred while uploading the data to the storage provider",
   },
@@ -129,23 +134,23 @@ const MESSAGES = {
   METADATA_NOT_ACTIVE: {
     metadataMessage : "Metadata production is not active for this experiment",
   },
-  METADATA_IN_OSF_NOT_IN_FIRESTORE: {
+  METADATA_IN_PROVIDER_NOT_IN_FIRESTORE: {
     metadataMessage : "Metadata is in the storage provider but not in Firestore",
   },
-  METADATA_IN_FIRESTORE_NOT_IN_OSF: {
+  METADATA_IN_FIRESTORE_NOT_IN_PROVIDER: {
     metadataMessage : "Metadata is in Firestore but not in the storage provider",
   },
-  METADATA_NOT_IN_FIRESTORE_OR_OSF: {
+  METADATA_NOT_IN_FIRESTORE_OR_PROVIDER: {
     metadataMessage : "Metadata is not in Firestore or the storage provider",
   },
-  METADATA_IN_OSF_AND_FIRESTORE: {
+  METADATA_IN_PROVIDER_AND_FIRESTORE: {
     metadataMessage : "Metadata is in the storage provider and in Firestore",
   },
   DATA_PERSIST_ERROR: {
     error: "DATA_PERSIST_ERROR",
     message: "Failed to save data. The data was not stored. If this is from a live experiment, participants may need to resubmit.",
   },
-  OSF_UPLOAD_QUEUED: {
+  UPLOAD_QUEUED: {
     error: null,
     message: "Data received. The upload will be retried automatically.",
   },

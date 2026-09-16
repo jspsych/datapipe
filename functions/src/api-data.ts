@@ -118,7 +118,7 @@ export const apiData = onRequest(
   //  in the first place) are refusals about the EXPERIMENT: nothing this
   //  submission does will ever be accepted, so the staged copy is genuinely
   //  worthless and discarding it is correct. INVALID_DATA and the
-  //  duplicate-filename refusals (OSF_FILE_EXISTS, from either the collision
+  //  duplicate-filename refusals (FILE_EXISTS, from either the collision
   //  cache's "duplicate" verdict or the provider's own NAME_CONFLICT) are
   //  refusals about THIS SUBMISSION -- this exact string failed validation, or
   //  this exact filename collided -- and say nothing about whether the
@@ -385,18 +385,18 @@ export const apiData = onRequest(
         await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
         await cleanupPending(pendingPath); // queue-upload has its own copy
         await discardStaging();
-        res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
+        res.status(202).json({...MESSAGES.UPLOAD_QUEUED, metadataMessage});
         // The submission is safe (queue-upload.ts holds an encrypted copy) but
         // is not in the researcher's storage yet. Counted apart from both
         // success and failure so that
         //   failed = saveData - saveDataSucceeded - saveDataQueued
         // holds exactly. See write-log.ts.
         await writeLog(experimentID, "saveDataQueued", undefined, logContext);
-        await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail: `Collision cache rehydration failed: ${detail}`}, logContext);
+        await writeLog(experimentID, "logError", {...MESSAGES.UPLOAD_EXCEPTION, detail: `Collision cache rehydration failed: ${detail}`}, logContext);
         return;
       } catch {
-        res.status(500).json({...MESSAGES.OSF_UPLOAD_EXCEPTION, metadataMessage});
-        await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail}, logContext);
+        res.status(500).json({...MESSAGES.UPLOAD_EXCEPTION, metadataMessage});
+        await writeLog(experimentID, "logError", {...MESSAGES.UPLOAD_EXCEPTION, detail}, logContext);
         return;
       }
     }
@@ -412,8 +412,8 @@ export const apiData = onRequest(
       // participant's trials did not, and the sweep can still recover them
       // under partialFilenameFor's own (hash-suffixed) name.
       await cleanupPending(pendingPath);
-      res.status(400).json({...MESSAGES.OSF_FILE_EXISTS, metadataMessage});
-      await writeLog(experimentID, "logError", MESSAGES.OSF_FILE_EXISTS, logContext);
+      res.status(400).json({...MESSAGES.FILE_EXISTS, metadataMessage});
+      await writeLog(experimentID, "logError", MESSAGES.FILE_EXISTS, logContext);
       return;
     }
 
@@ -438,13 +438,13 @@ export const apiData = onRequest(
       // gate and is far rarer (a rehydration lease lasts 60 seconds), but it
       // is the identical hole.
       await queueDerivedFiles(derivedFiles, derivedTarget, "Collision cache rehydrating");
-      res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
+      res.status(202).json({...MESSAGES.UPLOAD_QUEUED, metadataMessage});
       await writeLog(experimentID, "saveDataQueued", undefined, logContext);
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail: "Collision cache rehydrating"}, logContext);
+      await writeLog(experimentID, "logError", {...MESSAGES.UPLOAD_EXCEPTION, detail: "Collision cache rehydrating"}, logContext);
       return;
     } catch {
-      res.status(500).json({...MESSAGES.OSF_UPLOAD_EXCEPTION, metadataMessage});
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail: "Collision cache rehydrating"}, logContext);
+      res.status(500).json({...MESSAGES.UPLOAD_EXCEPTION, metadataMessage});
+      await writeLog(experimentID, "logError", {...MESSAGES.UPLOAD_EXCEPTION, detail: "Collision cache rehydrating"}, logContext);
       return;
     }
   }
@@ -481,11 +481,11 @@ export const apiData = onRequest(
       // diverted, which is a Psych-DS dataset with holes in it. Observed live:
       // 44 loose raw sessions against 10 derived CSVs.
       await queueDerivedFiles(derivedFiles, derivedTarget, COMPACTION_HOLD_REASON, "CONTENTION");
-      res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
+      res.status(202).json({...MESSAGES.UPLOAD_QUEUED, metadataMessage});
       await writeLog(experimentID, "saveDataQueued", undefined, logContext);
       return;
     } catch {
-      res.status(500).json({...MESSAGES.OSF_UPLOAD_EXCEPTION, metadataMessage});
+      res.status(500).json({...MESSAGES.UPLOAD_EXCEPTION, metadataMessage});
       return;
     }
   }
@@ -517,13 +517,13 @@ export const apiData = onRequest(
       await discardStaging();
       // OSF is unreachable, so queue the derived files alongside the raw data.
       await queueDerivedFiles(derivedFiles, derivedTarget, `Queued alongside data file: ${detail}`);
-      res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
+      res.status(202).json({...MESSAGES.UPLOAD_QUEUED, metadataMessage});
       await writeLog(experimentID, "saveDataQueued", undefined, logContext);
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail}, logContext);
+      await writeLog(experimentID, "logError", {...MESSAGES.UPLOAD_EXCEPTION, detail}, logContext);
       return;
     } catch {
-      res.status(500).json({...MESSAGES.OSF_UPLOAD_EXCEPTION, metadataMessage});
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail}, logContext);
+      res.status(500).json({...MESSAGES.UPLOAD_EXCEPTION, metadataMessage});
+      await writeLog(experimentID, "logError", {...MESSAGES.UPLOAD_EXCEPTION, detail}, logContext);
       return;
     }
   }
@@ -537,7 +537,7 @@ export const apiData = onRequest(
       // Logs are written BEFORE the response here (unlike other branches):
       // the disagreement entry is the dual-run's whole audit trail, and
       // responding first races observers of the log against the write.
-      await writeLog(experimentID, "logError", MESSAGES.OSF_FILE_EXISTS, logContext);
+      await writeLog(experimentID, "logError", MESSAGES.FILE_EXISTS, logContext);
       await writeLog(experimentID, "logError", {
         // Carries an `error` code like every other entry so it lands in its
         // own errorsByCode bucket instead of the UNCODED catch-all -- a
@@ -552,7 +552,7 @@ export const apiData = onRequest(
       // discardStaging() above. The provider refused this filename; the
       // participant's trials did not, and the sweep can still recover them
       // under partialFilenameFor's own (hash-suffixed) name.
-      res.status(400).json({...MESSAGES.OSF_FILE_EXISTS, metadataMessage});
+      res.status(400).json({...MESSAGES.FILE_EXISTS, metadataMessage});
       return;
     }
     // Queue all other failures for retry. The claim stays pending so the
@@ -572,13 +572,13 @@ export const apiData = onRequest(
       // OSF is failing, so queue the derived files alongside the raw data —
       // same provider error code, since it's the same provider write path.
       await queueDerivedFiles(derivedFiles, derivedTarget, `Queued alongside data file: Provider error ${result.providerStatus}`, result.error);
-      res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
+      res.status(202).json({...MESSAGES.UPLOAD_QUEUED, metadataMessage});
       await writeLog(experimentID, "saveDataQueued", undefined, logContext);
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.providerStatus, osfStatusText: result.providerMessage}, logContext);
+      await writeLog(experimentID, "logError", {...MESSAGES.UPLOAD_ERROR, osfStatus: result.providerStatus, osfStatusText: result.providerMessage}, logContext);
       return;
     } catch {
-      res.status(400).json({...MESSAGES.OSF_UPLOAD_ERROR, metadataMessage});
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.providerStatus, osfStatusText: result.providerMessage}, logContext);
+      res.status(400).json({...MESSAGES.UPLOAD_ERROR, metadataMessage});
+      await writeLog(experimentID, "logError", {...MESSAGES.UPLOAD_ERROR, osfStatus: result.providerStatus, osfStatusText: result.providerMessage}, logContext);
       return;
     }
   }

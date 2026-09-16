@@ -303,8 +303,9 @@ export default function SendingDataPage() {
         <Text maxW="70ch">
           Two submissions to the same experiment can never share a filename:
           the second one is rejected with{" "}
-          <Code>OSF_FILE_EXISTS</Code> and is not stored. That code name is
-          historical: the rule applies on every storage provider. Generate a
+          <Code>FILE_EXISTS</Code> and is not stored. The rule applies on every
+          storage provider. (This code was called{" "}
+          <Code>OSF_FILE_EXISTS</Code> before 16 September 2026.) Generate a
           fresh random ID per participant and build the filename from it, as the
           samples above do. Do not use a counter your experiment maintains, and
           do not reuse a name after a failed attempt.

@@ -173,7 +173,7 @@ async function createBase64Experiment(experimentID, overrides = {}) {
 }
 
 describe("13. apidata: duplicate filename is rejected without a second provider upload", () => {
-  it("first POST succeeds, second POST for the same filename gets OSF_FILE_EXISTS, and OSF received exactly one upload", async () => {
+  it("first POST succeeds, second POST for the same filename gets FILE_EXISTS, and OSF received exactly one upload", async () => {
     const experimentID = `collision-int13-${randomUUID()}`;
     const filename = `dup-${randomUUID()}.json`;
     await createDataExperiment(experimentID);
@@ -183,14 +183,14 @@ describe("13. apidata: duplicate filename is rejected without a second provider 
 
     const second = await saveData({ experimentID, data: sampleData, filename });
     expect(second.status).toBe(400);
-    expect(second.body).toEqual({ ...MESSAGES.OSF_FILE_EXISTS, metadataMessage: "" });
+    expect(second.body).toEqual({ ...MESSAGES.FILE_EXISTS, metadataMessage: "" });
 
     expect(mockOSF.getUploadCount(filename)).toBe(1);
   });
 });
 
 describe("14. dual-run disagreement between an empty cache and a 409 from OSF", () => {
-  it("responds OSF_FILE_EXISTS, confirms the claim, and logs a collisionCacheDisagreement entry", async () => {
+  it("responds FILE_EXISTS, confirms the claim, and logs a collisionCacheDisagreement entry", async () => {
     const experimentID = `collision-int14-${randomUUID()}`;
     const filename = `disagree-${randomUUID()}.json`;
     await createDataExperiment(experimentID);
@@ -202,7 +202,7 @@ describe("14. dual-run disagreement between an empty cache and a 409 from OSF", 
     const response = await saveData({ experimentID, data: sampleData, filename });
 
     expect(response.status).toBe(400);
-    expect(response.body).toEqual({ ...MESSAGES.OSF_FILE_EXISTS, metadataMessage: "" });
+    expect(response.body).toEqual({ ...MESSAGES.FILE_EXISTS, metadataMessage: "" });
 
     const expDataAfter = (await db.collection("experiments").doc(experimentID).get()).data();
     expect(expDataAfter.collisionCache).toBeDefined();
@@ -234,7 +234,7 @@ describe("15. provider failure queues the upload and preserves the claim", () =>
     const response = await saveData({ experimentID, data: sampleData, filename });
 
     expect(response.status).toBe(202);
-    expect(response.body).toEqual(expect.objectContaining({ ...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage: "" }));
+    expect(response.body).toEqual(expect.objectContaining({ ...MESSAGES.UPLOAD_QUEUED, metadataMessage: "" }));
 
     const docId = `${experimentID}:${filename}`.replace(/[/\\]/g, "_");
     const queueDoc = await db.collection("uploadQueue").doc(docId).get();
@@ -259,7 +259,7 @@ describe("15. provider failure queues the upload and preserves the claim", () =>
 });
 
 describe("16. apibase64: duplicate filename is rejected without a second provider upload", () => {
-  it("first POST succeeds, second POST for the same filename gets OSF_FILE_EXISTS, and OSF received exactly one upload", async () => {
+  it("first POST succeeds, second POST for the same filename gets FILE_EXISTS, and OSF received exactly one upload", async () => {
     const experimentID = `collision-int16-${randomUUID()}`;
     const filename = `dup-b64-${randomUUID()}.dat`;
     await createBase64Experiment(experimentID);
@@ -269,7 +269,7 @@ describe("16. apibase64: duplicate filename is rejected without a second provide
 
     const second = await saveBase64Data({ experimentID, data: sampleBase64, filename });
     expect(second.status).toBe(400);
-    expect(second.body).toEqual(MESSAGES.OSF_FILE_EXISTS);
+    expect(second.body).toEqual(MESSAGES.FILE_EXISTS);
 
     expect(mockOSF.getUploadCount(filename)).toBe(1);
   });

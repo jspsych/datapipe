@@ -384,7 +384,7 @@ describe("D1. dataverse experiment: apidata POST succeeds, suppresses tabular in
 });
 
 describe("D2. duplicate filename is rejected without a second provider write", () => {
-  it("second POST gets OSF_FILE_EXISTS and the mock sees exactly one add", async () => {
+  it("second POST gets FILE_EXISTS and the mock sees exactly one add", async () => {
     const experimentID = `dataverse-e2e-2-${randomUUID()}`;
     const filename = `d2-dup-${randomUUID()}.json`;
     await createDataverseExperiment(experimentID);
@@ -394,7 +394,7 @@ describe("D2. duplicate filename is rejected without a second provider write", (
 
     const second = await saveData({ experimentID, data: sampleData, filename });
     expect(second.status).toBe(400);
-    expect(second.body).toEqual({ ...MESSAGES.OSF_FILE_EXISTS, metadataMessage: "" });
+    expect(second.body).toEqual({ ...MESSAGES.FILE_EXISTS, metadataMessage: "" });
 
     // Dataverse cannot return a name conflict -- it would have silently
     // stored a SECOND file as "<name>-1.json" -- so the Firestore cache is
@@ -469,7 +469,7 @@ describe("D4. directoryLabel round-trip for Psych-DS paths", () => {
     // rehydration would miss and Dataverse would silently duplicate.
     const second = await saveData({ experimentID, data: sampleData, filename });
     expect(second.status).toBe(400);
-    expect(second.body).toEqual(expect.objectContaining(MESSAGES.OSF_FILE_EXISTS));
+    expect(second.body).toEqual(expect.objectContaining(MESSAGES.FILE_EXISTS));
     expect(mockDataverse.getAddCount(filename)).toBe(1);
   });
 });
@@ -595,7 +595,7 @@ describe("D9. cold collision cache rehydrates from the draft file listing", () =
     const response = await saveData({ experimentID, data: sampleData, filename });
 
     expect(response.status).toBe(400);
-    expect(response.body).toEqual(expect.objectContaining(MESSAGES.OSF_FILE_EXISTS));
+    expect(response.body).toEqual(expect.objectContaining(MESSAGES.FILE_EXISTS));
     expect(mockDataverse.getAddCount(filename)).toBe(0);
     expect(mockDataverse.getFile(`data/raw/${filename}`).content.toString("utf8")).toBe(
       "an earlier session"
