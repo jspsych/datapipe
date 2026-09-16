@@ -180,6 +180,7 @@ export const apiBase64 = onRequest(
         storageProvider: exp_data.storageProvider, providerContainer: exp_data.providerContainer,
         errorCode: 0, sessionIncremented: false,
         failureReason: `Token resolution failed: ${tokenResult.error}`,
+        providerErrorCode: "AUTH_EXPIRED",
         claimToken: tokenFailureClaimToken,
       });
       await cleanupPending(pendingPath); // queue-upload has its own copy

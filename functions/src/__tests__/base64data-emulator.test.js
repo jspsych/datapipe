@@ -313,6 +313,8 @@ describe("apiData", () => {
     // Base64 uploads are supplementary media, not a session -- same
     // convention as every other queue branch in api-base64.ts.
     expect(queueDoc.data().sessionIncremented).toBe(false);
+    expect(queueDoc.data().providerErrorCode).toBe("AUTH_EXPIRED");
+    expect(queueDoc.data().nextRetryAt.toMillis() - Date.now()).toBeLessThan(2 * 60 * 1000);
     expect(typeof queueDoc.data().claimToken).toBe("string");
 
     const pendingFiles = await listPendingFiles("base64-testexp-active");

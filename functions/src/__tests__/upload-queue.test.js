@@ -636,7 +636,7 @@ describe("tiered backoff, exercised through the real retry worker", () => {
 
     const delayMs = after.nextRetryAt.toMillis() - Date.now();
     // retryCount 1 on the slow tier => 2^1 * 1h = 2 hours -- not the fast
-    // tier's ~2 minutes, and not the CONTENTION/UNAVAILABLE probe's 60s
+    // tier's ~2 minutes, and not the AUTH_EXPIRED probe's 60s
     // first look either (that only applies to the FIRST time an item is
     // queued, in queue-upload.ts -- this item's initial nextRetryAt was
     // seeded directly by this test, not through queueUpload).

@@ -196,11 +196,11 @@ async function processQueueItem(queueDoc: FirebaseFirestore.QueryDocumentSnapsho
   } catch (e) {
     const detail = e instanceof Error ? e.message : "Unknown error";
     // An exception during resolution (a decrypt failure, a Firestore error
-    // mid-refresh, ...) is RECOVERABLE by the same rule as a returned
-    // failure -- see resolve-token.ts's classifyTokenFailure -- so it gets
-    // the same AUTH_EXPIRED treatment rather than silently falling back to
-    // an uncoded slow-tier retry.
-    await handleRetryFailure(docRef, data, `Token resolution exception: ${detail}`, undefined, "AUTH_EXPIRED");
+    // mid-refresh, ...) says nothing about the credential, so it gets no
+    // AUTH_EXPIRED code -- that would tell the researcher to reconnect an
+    // account that may be fine. The API endpoints answer the same exception
+    // with a 500 rather than queueing it.
+    await handleRetryFailure(docRef, data, `Token resolution exception: ${detail}`);
     return;
   }
 

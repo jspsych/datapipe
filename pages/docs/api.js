@@ -358,7 +358,7 @@ export default function ApiReferencePage() {
           revoked, or gone invalid is queued for retry instead (
           <Code>202</Code>, <Code>OSF_UPLOAD_QUEUED</Code>), the same as a
           provider outage, since reconnecting the account fixes it with no
-          code change. They are documented below because a queued entry's
+          code change. They are documented below because a queued entry&apos;s{" "}
           <Code>failureReason</Code> still names them, and so does the
           failure-notification email. <Code>PROVIDER_NOT_CONNECTED</Code> is
           the one credential code still rejected outright: there is no

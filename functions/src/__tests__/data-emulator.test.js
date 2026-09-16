@@ -418,6 +418,10 @@ describe("apiData", () => {
     expect(queueDoc.exists).toBe(true);
     expect(queueDoc.data().failureReason).toBe("Token resolution failed: INVALID_OSF_TOKEN");
     expect(queueDoc.data().sessionIncremented).toBe(true);
+    // Tagged as a credential problem from the start, so the first retry is
+    // the 60-second probe rather than an hour out.
+    expect(queueDoc.data().providerErrorCode).toBe("AUTH_EXPIRED");
+    expect(queueDoc.data().nextRetryAt.toMillis() - Date.now()).toBeLessThan(2 * 60 * 1000);
     // The filename was claimed before queueing, so the retry worker re-enters
     // that claim by this token.
     expect(typeof queueDoc.data().claimToken).toBe("string");

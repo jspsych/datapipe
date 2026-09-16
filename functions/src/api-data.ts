@@ -350,6 +350,9 @@ export const apiData = onRequest(
         storageProvider: exp_data.storageProvider, providerContainer: exp_data.providerContainer,
         errorCode: 0, sessionIncremented: true,
         failureReason: `Token resolution failed: ${tokenResult.error}`,
+        // Same code the retry worker assigns, so the first retry is the
+        // 60-second probe and QueuePanel shows the credential copy right away.
+        providerErrorCode: "AUTH_EXPIRED",
         claimToken: tokenFailureClaimToken,
       });
       await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
