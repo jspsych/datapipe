@@ -24,7 +24,7 @@
 // because Auth's top-level `user.email` reflects whatever the account has
 // today, not how it was created. That is exactly what lib/contact-email.js's
 // `contactEmailSeedFromAuthUser(authUser)` encodes, and exactly why this
-// script walks `admin.auth().listUsers()` -- paginated, 1000 at a time --
+// script walks `getAuth().listUsers()` -- paginated, 1000 at a time --
 // instead of querying the `users` collection.
 //
 // This file is CommonJS (migrations/ has no package.json with
@@ -44,7 +44,12 @@
 // already has a non-empty contactEmail is left alone -- this script only
 // fills a gap, it never overwrites an address a researcher (or an earlier run
 // of this same script) already set.
-const admin = require('firebase-admin');
+// Modular imports: firebase-admin v14 removed the namespaced API
+// (admin.apps, admin.credential, admin.firestore()), so require('firebase-admin')
+// no longer exposes them.
+const { initializeApp, getApps, cert, applicationDefault } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
+const { getAuth } = require('firebase-admin/auth');
 const path = require('path');
 const os = require('os');
 
@@ -99,37 +104,37 @@ function seedFromAuthUser(authUser) {
 // Firebase Admin init -- same three-way branch as the other scripts in this
 // directory (2025-09-29-osf-integration.cjs, encrypt-tokens.cjs).
 // ---------------------------------------------------------------------------
-if (!admin.apps.length) {
+if (!getApps().length) {
   if (process.env.NODE_ENV === 'production' || process.env.CI) {
     const credentials = process.env.GOOGLE_CREDENTIALS
       ? JSON.parse(process.env.GOOGLE_CREDENTIALS)
       : undefined;
 
-    admin.initializeApp({
-      credential: credentials ? admin.credential.cert(credentials) : admin.credential.applicationDefault(),
+    initializeApp({
+      credential: credentials ? cert(credentials) : applicationDefault(),
       projectId: process.env.FIREBASE_PROJECT_ID || 'osf-relay'
     });
   } else if (process.env.USE_LOCAL_SERVICE_ACCOUNT) {
     const serviceAccountPath = path.join(os.homedir(), '.config', 'datapipe', 'datapipe-service-account.json');
     const serviceAccount = require(serviceAccountPath);
 
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
+    initializeApp({
+      credential: cert(serviceAccount),
       projectId: process.env.FIREBASE_PROJECT_ID || 'datapipe-test'
     });
   } else {
     process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080';
     process.env.FIREBASE_AUTH_EMULATOR_HOST = 'localhost:9099';
-    admin.initializeApp({
+    initializeApp({
       projectId: 'datapipe-test'
     });
   }
 }
 
-const db = admin.firestore();
-const auth = admin.auth();
+const db = getFirestore();
+const auth = getAuth();
 
-const AUTH_PAGE_SIZE = 1000; // admin.auth().listUsers() max per page.
+const AUTH_PAGE_SIZE = 1000; // getAuth().listUsers() max per page.
 const BATCH_LIMIT = 500; // Firestore batch write limit.
 
 async function backfillContactEmails() {
@@ -192,7 +197,9 @@ async function backfillContactEmails() {
       }
 
       if (DRY_RUN) {
-        console.log(`  [DRY RUN] Would set contactEmail for ${authUser.uid}: ${seed.contactEmail}`);
+        // uid only, never the address: run-migration.yml runs this in a public
+        // repo's Actions log, which anyone can read.
+        console.log(`  [DRY RUN] Would set contactEmail for ${authUser.uid}`);
       } else {
         batch.update(userRef, seed);
         batchCount += 1;
