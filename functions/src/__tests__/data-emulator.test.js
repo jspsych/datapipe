@@ -3,9 +3,17 @@
  */
 
 import { initializeApp } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
+import { randomUUID } from "crypto";
 import MESSAGES from "../api-messages";
+
+// Not imported from collision-cache.ts/lib: that module's app.js does a bare
+// initializeApp() at import time, which collides with this file's own
+// unnamed initializeApp(config) below ("[DEFAULT]" app, different config) --
+// see upload-queue.test.js's header comment for the same hazard, avoided
+// there with a named app. Must match collision-cache.ts's own export.
+const CLAIM_NAMESPACE_VERSION = 2;
 
 process.env.FIRESTORE_EMULATOR_HOST = "localhost:8080";
 // Needed only by the RECOVERABLE / NOT_RECOVERABLE token-failure tests below,
@@ -410,13 +418,20 @@ describe("apiData", () => {
     expect(queueDoc.exists).toBe(true);
     expect(queueDoc.data().failureReason).toBe("Token resolution failed: INVALID_OSF_TOKEN");
     expect(queueDoc.data().sessionIncremented).toBe(true);
-    // Queued before the collision-cache claim exists — see the comment in
-    // api-data.ts's RECOVERABLE branch.
-    expect(queueDoc.data().claimToken).toBeNull();
+    // The filename was claimed before queueing, so the retry worker re-enters
+    // that claim by this token.
+    expect(typeof queueDoc.data().claimToken).toBe("string");
 
     // `sessions` incremented exactly once, same as a normal queued failure.
     const after = (await db.collection("experiments").doc("data-testexp-active").get()).data();
     expect(after.sessions).toBe((before.sessions || 0) + 1);
+
+    // Cache was cold (this experiment has never been through a real provider
+    // write), so claimFilenameWithoutCredentials's rehydrate attempt fails
+    // immediately -- the rehydration lease it briefly acquires must be
+    // released, not left dangling to block every other request against this
+    // experiment for REHYDRATION_LEASE_MS.
+    expect(after.collisionCache?.rehydratingUntil).toBeUndefined();
 
     // The pending Cloud Storage copy was cleaned up — queue-upload.ts has its
     // own encrypted copy now.
@@ -431,6 +446,46 @@ describe("apiData", () => {
     expect(logDoc.data().saveDataQueued).toBe(1);
     expect(logDoc.data().logError).toBe(1);
     expect(logDoc.data().errorsByCode.INVALID_OSF_TOKEN).toBe(1);
+  });
+
+  // Same RECOVERABLE token failure, but with a WARM collision cache: the
+  // claim in claimFilenameWithoutCredentials needs no provider call, so a
+  // same-named repeat is caught immediately instead of silently replacing
+  // the first submission's queued payload. Uses its own experiment (rather
+  // than the shared "data-testexp-active") so pre-warming its collisionCache
+  // can't affect any other test in this file.
+  it("should reject a same-named repeat while queued, when the collision cache is warm", async () => {
+    const db = getFirestore();
+    const experimentID = `data-testexp-collision-warm-${randomUUID()}`;
+    await db.collection("experiments").doc(experimentID).set({
+      active: true,
+      owner: "testuser",
+      collisionCache: {
+        salt: randomUUID().replace(/-/g, ""),
+        warmUntil: Timestamp.fromMillis(Date.now() + 24 * 60 * 60 * 1000),
+        namespaceVersion: CLAIM_NAMESPACE_VERSION,
+      },
+    });
+
+    const filename = `token-failure-collision-${randomUUID()}.json`;
+    const docId = uploadQueueDocId(experimentID, filename);
+
+    const first = await saveDataWithStatus({ experimentID, data: "test", filename });
+    expect(first.status).toBe(202);
+    expect(first.body).toEqual(MESSAGES.OSF_UPLOAD_QUEUED);
+
+    const firstClaimToken = (await db.collection("uploadQueue").doc(docId).get()).data()
+      .claimToken;
+    expect(typeof firstClaimToken).toBe("string");
+
+    const second = await saveDataWithStatus({ experimentID, data: "test", filename });
+    expect(second.status).toBe(400);
+    expect(second.body).toEqual(MESSAGES.OSF_FILE_EXISTS);
+
+    // The first submission's queued payload was not replaced by the rejected
+    // repeat.
+    const queueDocAfter = await db.collection("uploadQueue").doc(docId).get();
+    expect(queueDocAfter.data().claimToken).toBe(firstClaimToken);
   });
 
   // NOT_RECOVERABLE token failure: no connection exists at all for this

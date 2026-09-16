@@ -14,7 +14,7 @@ import queueUpload from "./queue-upload.js";
 import { persistPending, cleanupPending } from "./persist-pending.js";
 import { getProviderForExperiment, claimNameFor } from "./providers/index.js";
 import { WriteResult, ResolvedAuth } from "./providers/types.js";
-import { claimFilename, confirmClaim, CollisionCacheUnavailableError } from "./collision-cache.js";
+import { claimFilename, claimFilenameWithoutCredentials, confirmClaim, CollisionCacheUnavailableError } from "./collision-cache.js";
 import { isCompactionInFlight, COMPACTION_HOLD_REASON } from "./compaction-gate.js";
 import { discardSession, isValidSessionId } from "./staging.js";
 import { ExperimentData, UserData, RequestBody } from './interfaces';
@@ -326,28 +326,23 @@ export const apiData = onRequest(
     // exception" branch below, instead of rejecting a submission that a later
     // attempt could have saved.
     //
-    // This happens BEFORE the collision-cache claim (claimFilename, below)
-    // and before the metadata block, so unlike every later queue branch in
-    // this handler there is no claimToken to pass and no derivedFiles to
-    // queue alongside it yet -- metadataMessage itself is not even declared
-    // until the METADATA BLOCK further down. An entry queued with no
-    // claimToken is not a gap: queue-upload.ts's QueueUploadParams marks
-    // claimToken optional (`claimToken: params.claimToken || null`), and
-    // scheduled-upload-retry.ts's collision-cache section only runs
-    // `if (data.claimToken)` (see its comment: "only entries queued after
-    // the cache existed carry a claimToken... legacy behavior, the
-    // provider's own conflict backstop still applies to them") -- so this
-    // entry takes exactly the pre-collision-cache retry path every
-    // legacy-queued entry already takes, and the provider's own NAME_CONFLICT
-    // response is the backstop against a same-named file having appeared in
-    // the meantime. Likewise, the retry worker's normal successful-write path
-    // (result.success in scheduled-upload-retry.ts) never generates Psych-DS
-    // derived files for ANY queued entry -- see its file header and the
-    // "Uploads that never reported back" limitation documented in
-    // pages/docs/data/failures.js -- so a recovered token failure produces
-    // exactly what every other retried entry produces: the raw session file,
-    // with no derived tables. That is a pre-existing property of the retry
-    // worker, not a regression introduced here.
+    // The filename is claimed first, the same as on the normal path, so a
+    // repeated name is rejected here instead of replacing the first
+    // submission's queued payload, and the retry worker re-enters this claim
+    // by its token. See claimFilenameWithoutCredentials for the cold-cache
+    // case. No derivedFiles are queued: the metadata block hasn't run yet,
+    // and the retry worker never generates them for any queued entry.
+    const tokenFailureClaimToken = randomUUID();
+    const { provider: tokenFailureProvider } = getProviderForExperiment(exp_data);
+    const claimOutcome = await claimFilenameWithoutCredentials(
+      experimentID, claimNameFor(tokenFailureProvider, uploadFilename), tokenFailureClaimToken
+    );
+    if (claimOutcome === "duplicate") {
+      await cleanupPending(pendingPath);
+      res.status(400).json(MESSAGES.OSF_FILE_EXISTS);
+      await writeLog(experimentID, "logError", MESSAGES.OSF_FILE_EXISTS, logContext);
+      return;
+    }
     try {
       await queueUpload({
         experimentID, owner: exp_data.owner, filename: uploadFilename, data,
@@ -355,6 +350,7 @@ export const apiData = onRequest(
         storageProvider: exp_data.storageProvider, providerContainer: exp_data.providerContainer,
         errorCode: 0, sessionIncremented: true,
         failureReason: `Token resolution failed: ${tokenResult.error}`,
+        claimToken: tokenFailureClaimToken,
       });
       await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
       await cleanupPending(pendingPath); // queue-upload has its own copy

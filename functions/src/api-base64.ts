@@ -10,7 +10,7 @@ import queueUpload from "./queue-upload.js";
 import { persistPending, cleanupPending } from "./persist-pending.js";
 import { getProviderForExperiment, claimNameFor } from "./providers/index.js";
 import { WriteResult, ResolvedAuth } from "./providers/types.js";
-import { claimFilename, confirmClaim, CollisionCacheUnavailableError } from "./collision-cache.js";
+import { claimFilename, claimFilenameWithoutCredentials, confirmClaim, CollisionCacheUnavailableError } from "./collision-cache.js";
 import { isCompactionInFlight, COMPACTION_HOLD_REASON } from "./compaction-gate.js";
 import { ExperimentData, UserData } from './interfaces';
 
@@ -157,12 +157,22 @@ export const apiBase64 = onRequest(
 
     // RECOVERABLE: a connection exists but its credential is currently
     // unusable. Queued for retry exactly like the "upload exception" branch
-    // below -- see the matching (longer) comment in api-data.ts for why no
-    // claimToken is passed here (this runs before the collision-cache claim)
-    // and why the retry worker's normal path covers this case with no gap.
+    // below, after claiming the filename -- see the matching comment in
+    // api-data.ts.
     // sessionIncremented: false and no `sessions` increment, matching every
     // other queue branch in this file -- a base64 upload is a supplementary
     // media file, not a session.
+    const tokenFailureClaimToken = randomUUID();
+    const { provider: tokenFailureProvider } = getProviderForExperiment(exp_data);
+    const claimOutcome = await claimFilenameWithoutCredentials(
+      experimentID, claimNameFor(tokenFailureProvider, filename), tokenFailureClaimToken
+    );
+    if (claimOutcome === "duplicate") {
+      await cleanupPending(pendingPath);
+      res.status(400).json(MESSAGES.OSF_FILE_EXISTS);
+      await writeLog(experimentID, "logError", MESSAGES.OSF_FILE_EXISTS, logContext);
+      return;
+    }
     try {
       await queueUpload({
         experimentID, owner: exp_data.owner, filename, data,
@@ -170,6 +180,7 @@ export const apiBase64 = onRequest(
         storageProvider: exp_data.storageProvider, providerContainer: exp_data.providerContainer,
         errorCode: 0, sessionIncremented: false,
         failureReason: `Token resolution failed: ${tokenResult.error}`,
+        claimToken: tokenFailureClaimToken,
       });
       await cleanupPending(pendingPath); // queue-upload has its own copy
       res.status(202).json(MESSAGES.OSF_UPLOAD_QUEUED);
