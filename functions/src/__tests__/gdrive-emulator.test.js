@@ -503,7 +503,7 @@ describe("12. gdrive experiment: apidata POST succeeds and warms the collision c
 });
 
 describe("13. gdrive experiment: duplicate filename is rejected without a second provider upload", () => {
-  it("first POST succeeds, second POST for the same filename gets OSF_FILE_EXISTS, and the mock received exactly one upload", async () => {
+  it("first POST succeeds, second POST for the same filename gets FILE_EXISTS, and the mock received exactly one upload", async () => {
     const experimentID = `gdrive-int13-${randomUUID()}`;
     const folderId = `folder-${randomUUID()}`;
     const filename = `dup-${randomUUID()}.json`;
@@ -514,10 +514,10 @@ describe("13. gdrive experiment: duplicate filename is rejected without a second
 
     const second = await saveData({ experimentID, data: sampleData, filename });
     expect(second.status).toBe(400);
-    // Message key is a historical "OSF_FILE_EXISTS" name (unchanged: the
+    // Message key is a historical "FILE_EXISTS" name (unchanged: the
     // collision-cache duplicate check is entirely provider-agnostic in
     // api-data.ts), not a claim that gdrive itself returned an OSF error.
-    expect(second.body).toEqual({ ...MESSAGES.OSF_FILE_EXISTS, metadataMessage: "" });
+    expect(second.body).toEqual({ ...MESSAGES.FILE_EXISTS, metadataMessage: "" });
 
     expect(mockDrive.getUploadCount(filename)).toBe(1);
   });
@@ -571,7 +571,7 @@ describe("13b. gdrive experiment: two submissions differing only by folder prefi
 
     const second = await saveData({ experimentID, data: sampleData, filename });
     expect(second.status).toBe(400);
-    expect(second.body).toEqual({ ...MESSAGES.OSF_FILE_EXISTS, metadataMessage: "" });
+    expect(second.body).toEqual({ ...MESSAGES.FILE_EXISTS, metadataMessage: "" });
   });
 });
 
@@ -620,7 +620,7 @@ describe("15. provider failure queues the upload and tags it with the gdrive con
     const response = await saveData({ experimentID, data: sampleData, filename });
 
     expect(response.status).toBe(202);
-    expect(response.body).toEqual(expect.objectContaining({ ...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage: "" }));
+    expect(response.body).toEqual(expect.objectContaining({ ...MESSAGES.UPLOAD_QUEUED, metadataMessage: "" }));
 
     const docId = `${experimentID}:${filename}`.replace(/[/\\]/g, "_");
     const queueDoc = await db.collection("uploadQueue").doc(docId).get();
@@ -720,7 +720,7 @@ describe("17. cold collision cache rehydrates from a nested (data/raw/) folder l
     // rejects the raw file, so metadataMessage carries whatever that block
     // produced rather than the "" a metadataActive:false experiment would
     // have -- mirrors dataverse-emulator.test.js's D9, the equivalent test.
-    expect(response.body).toEqual(expect.objectContaining(MESSAGES.OSF_FILE_EXISTS));
+    expect(response.body).toEqual(expect.objectContaining(MESSAGES.FILE_EXISTS));
     // Never overwritten, and no second upload of the RAW file was ever
     // attempted (the metadata file upload above is a separate, expected
     // upload and is not what this gate is checking).

@@ -39,10 +39,10 @@ export default function ApiReferencePage() {
 
       <Text maxW="70ch">
         All endpoints accept JSON request bodies with{" "}
-        <Code>Content-Type: application/json</Code>. You will need an experiment
-        ID, which DataPipe assigns when you create your experiment. Code
-        examples for jsPsych and JavaScript are available on each
-        experiment&apos;s dashboard.
+        <Code>Content-Type: application/json</Code>. You&apos;ll need an
+        experiment ID, which DataPipe assigns when you create your experiment.
+        Code examples for jsPsych and JavaScript are on each experiment&apos;s
+        dashboard.
       </Text>
       <Text maxW="70ch" mt={4}>
         The API is the same whichever storage provider an experiment uses.
@@ -53,32 +53,32 @@ export default function ApiReferencePage() {
 
       <DocsSection id="limits" title="Limits">
         <Text maxW="70ch">
-          Three limits apply to every request, and none of them is configurable
-          per experiment.
+          Three limits apply to every request, and none of them can be
+          changed per experiment.
         </Text>
         <Box as="ul" pl={5} listStyleType="disc" maxW="70ch">
           <Box as="li" mb={2}>
             <strong>32 MB per request.</strong> Enforced by the server
-            infrastructure and not raisable. A typical jsPsych dataset is 50 KB
-            to 5 MB, so this bites mainly on base64 media. Gzipped request
-            bodies are decompressed transparently, which effectively raises the
-            ceiling for text data.
+            infrastructure and not adjustable. A typical jsPsych dataset is 50
+            KB to 5 MB, so this mainly matters for base64 media. Gzipped
+            request bodies are decompressed transparently, which in practice
+            raises the ceiling for text data.
           </Box>
           <Box as="li" mb={2}>
             <strong>60 seconds per request.</strong> Every <Code>/api/*</Code>{" "}
-            path runs behind a hosting layer with a hard 60-second ceiling,
-            which is why <Code>/api/finalize</Code> returns immediately and
-            finishes its work in the background instead of waiting for the job
-            to end.
+            path runs behind a hosting layer with a hard 60-second ceiling.
+            That&apos;s why <Code>/api/finalize</Code> returns immediately and
+            finishes its work in the background instead of waiting for the
+            job to end.
           </Box>
           <Box as="li" mb={2}>
             <strong>JSON bodies only.</strong> Send{" "}
             <Code>Content-Type: application/json</Code>. The three participant
-            endpoints do not check the HTTP method, so a request sent with the
-            wrong verb arrives with an empty body and comes back as{" "}
-            <Code>MISSING_PARAMETER</Code> rather than{" "}
-            <Code>405</Code>. The two authenticated endpoints below do check,
-            and answer <Code>405</Code>.
+            endpoints don&apos;t check the HTTP method, so a request sent with
+            the wrong verb arrives with an empty body and comes back as{" "}
+            <Code>MISSING_PARAMETER</Code> rather than <Code>405</Code>. The
+            two authenticated endpoints below do check, and answer{" "}
+            <Code>405</Code>.
           </Box>
         </Box>
         <GuidanceLine
@@ -89,10 +89,10 @@ export default function ApiReferencePage() {
           practice.
         </GuidanceLine>
         <GuidanceLine
-          href="/docs/experiments/sending-data#streaming-limits"
+          href="/docs/experiments/streaming#limits"
           linkText="Save-as-you-go limits"
         >
-          The trial size, session, abandonment and file-size limits that apply
+          The trial size, session, abandonment, and file-size limits that apply
           only to incremental sessions.
         </GuidanceLine>
       </DocsSection>
@@ -103,8 +103,8 @@ export default function ApiReferencePage() {
         </EndpointHeading>
         <Text maxW="70ch">
           Save a text file (CSV, JSON, etc.) to your experiment&apos;s storage.
-          If you have validation rules configured, DataPipe checks the data
-          before sending it on.
+          If you have validation rules set up, DataPipe checks the data before
+          sending it on.
         </Text>
         <Box overflowX="auto" w="100%">
           <ParamTable>
@@ -120,10 +120,10 @@ export default function ApiReferencePage() {
             </Param>
             <Param name="sessionId" type="string (optional)">
               The session returned by <Code>/api/session/</Code>, if this
-              experiment staged its trials as it went. It carries no data
-              itself: the <Code>data</Code> field above is still the
+              experiment staged its trials as it went. It carries no data of
+              its own. The <Code>data</Code> field above is still the
               submission. It only tells DataPipe which staged copy this
-              request supersedes, so DataPipe can discard it.
+              request replaces, so DataPipe can discard it.
             </Param>
           </ParamTable>
         </Box>
@@ -146,31 +146,30 @@ export default function ApiReferencePage() {
           Start an incremental session
         </EndpointHeading>
         <Text maxW="70ch">
-          Open a session so an experiment can send trials as they are produced,
-          rather than only at the end. A participant who abandons the experiment
-          partway then leaves behind a recoverable partial session instead of
-          nothing at all.
+          Open a session so an experiment can send trials as they happen,
+          rather than only at the end. A participant who abandons the
+          experiment partway through then leaves behind a recoverable partial
+          session instead of nothing at all.
         </Text>
         <Text maxW="70ch">
-          The{" "}
+          You won&apos;t usually call this yourself. The{" "}
           <ProseLink
             href="https://github.com/jspsych/jsPsych/tree/main/packages/extension-pipe"
             external
           >
             @jspsych/extension-pipe extension
           </ProseLink>{" "}
-          calls this for you by default, along with the staging writes that
-          follow, and{" "}
+          calls it by default, along with the staging writes that follow, and{" "}
           <ProseLink
             href="https://github.com/jspsych/datapipe/tree/main/packages/client"
             external
           >
             datapipe-client
           </ProseLink>{" "}
-          does the same for plain JavaScript, so you will not usually call it
-          directly. This page documents it because those writes go to a
-          Firebase Realtime Database rather than to this API, and this
-          response tells a client where to send them.
+          does the same when a plain JavaScript experiment starts a session
+          with it. It&apos;s documented here
+          because those writes go to a Firebase Realtime Database rather than
+          to this API, and this response tells a client where to send them.
         </Text>
         <Box overflowX="auto" w="100%">
           <ParamTable>
@@ -179,20 +178,20 @@ export default function ApiReferencePage() {
             </Param>
             <Param name="filename" type="string (optional)">
               The name this participant will submit under. Used only to name a
-              recovered partial session, so an abandoned run is identifiable
-              rather than opaque. A completed submission always uses the
-              filename sent to <Code>/api/data/</Code>.
+              recovered partial session, so an abandoned run is identifiable.
+              A completed submission always uses the filename sent to{" "}
+              <Code>/api/data/</Code>.
             </Param>
           </ParamTable>
         </Box>
         <Text maxW="70ch">
           The same checks as <Code>/api/data/</Code> run here, with the same
-          error codes: the experiment must exist, not be finalized, be accepting
-          data, and be under its session limit. Starting a session does{" "}
-          <strong>not</strong> consume one from that limit. The count is still
-          taken when a submission completes. A <Code>503</Code> with{" "}
+          error codes. The experiment must exist, not be finalized, be
+          accepting data, and be under its session limit. Starting a session
+          does <strong>not</strong> use up one of those sessions. The count is
+          still taken when a submission completes. A <Code>503</Code> with{" "}
           <Code>SESSION_START_ERROR</Code> means incremental upload is
-          unavailable, because the service is unreachable, because an
+          unavailable, whether because the service is unreachable, because an
           experiment already has an unusually large number of sessions open at
           once, or because it has been switched off entirely. The experiment
           should submit at the end, as it would without streaming.
@@ -217,11 +216,10 @@ export default function ApiReferencePage() {
           Trials are then written to{" "}
           <Code>staging/&lt;sessionId&gt;/trials/&lt;n&gt;</Code> in that
           database, each one a JSON string, numbered from zero and never
-          rewritten. The session is write-only: nothing can read it back, and
+          rewritten. The session is write-only. Nothing can read it back, and
           DataPipe tolerates a missing number rather than treating it as an
-          error. Send{" "}
-          <Code>sessionId</Code> with the final <Code>/api/data/</Code> request
-          to close it.
+          error. Send <Code>sessionId</Code> with the final{" "}
+          <Code>/api/data/</Code> request to close it.
         </Text>
       </DocsSection>
 
@@ -230,9 +228,9 @@ export default function ApiReferencePage() {
           Save base64-encoded data
         </EndpointHeading>
         <Text maxW="70ch">
-          Save a binary file (audio, video, images) encoded as a base64 string.
-          DataPipe decodes the string and stores the resulting file alongside the
-          experiment&apos;s other data.
+          Save a binary file (audio, video, images) encoded as a base64
+          string. DataPipe decodes the string and stores the resulting file
+          alongside the experiment&apos;s other data.
         </Text>
         <Box overflowX="auto" w="100%">
           <ParamTable>
@@ -255,8 +253,8 @@ export default function ApiReferencePage() {
           Get condition assignment
         </EndpointHeading>
         <Text maxW="70ch">
-          Get the next condition number for balanced assignment. Returns a value
-          from 0 to n−1, cycling sequentially (0, 1, 2, ..., 0, 1, 2, ...).
+          Get the next condition number for balanced assignment. Returns a
+          value from 0 to n−1, cycling in order (0, 1, 2, ..., 0, 1, 2, ...).
         </Text>
         <Box overflowX="auto" w="100%">
           <ParamTable>
@@ -284,8 +282,8 @@ export default function ApiReferencePage() {
           <Code>error</Code> code from the table below and a{" "}
           <Code>message</Code> describing the problem. When metadata is on,
           write responses also include a <Code>metadataMessage</Code> field
-          reporting what happened to the metadata file; it never affects whether
-          the data itself was stored.
+          reporting what happened to the metadata file. It never affects
+          whether the data itself was stored.
         </Text>
         <Box overflowX="auto" w="100%">
           <Table.Root variant="outline">
@@ -312,11 +310,12 @@ export default function ApiReferencePage() {
                   <Code>202</Code>
                 </Table.Cell>
                 <Table.Cell>
-                  Accepted and queued. DataPipe has your data safely but could
-                  not reach your storage provider yet, so it will retry
-                  automatically. <Code>error</Code> is <Code>null</Code>.{" "}
-                  <strong>Treat this as success and do not resubmit</strong>:
-                  retrying would store the participant&apos;s data twice.
+                  Accepted and queued. DataPipe has your data safely but
+                  couldn&apos;t reach your storage provider yet, so it will
+                  retry automatically. <Code>error</Code> is{" "}
+                  <Code>null</Code>.{" "}
+                  <strong>Treat this as success and do not resubmit.</strong>{" "}
+                  Retrying would store the participant&apos;s data twice.
                 </Table.Cell>
               </Table.Row>
               <Table.Row>
@@ -346,33 +345,52 @@ export default function ApiReferencePage() {
 
       <DocsSection id="error-codes" title="Error codes">
         <Text fontSize="sm" color="fg.muted" maxW="70ch">
-          Codes beginning <Code>OSF_</Code> are historical names kept for
-          backward compatibility. <Code>OSF_FILE_EXISTS</Code>,{" "}
-          <Code>OSF_UPLOAD_ERROR</Code> and <Code>OSF_UPLOAD_EXCEPTION</Code>{" "}
-          are returned for every storage provider, not only OSF.
+          <Code>FILE_EXISTS</Code>, <Code>UPLOAD_ERROR</Code>, and{" "}
+          <Code>UPLOAD_EXCEPTION</Code> are returned for every storage
+          provider. <Code>INVALID_OSF_TOKEN</Code> occurs only on experiments
+          still collecting to OSF, which is why it still names it.
         </Text>
         <Text fontSize="sm" color="fg.muted" maxW="70ch">
-          <Code>INVALID_OSF_TOKEN</Code>, <Code>INVALID_REFRESH_TOKEN</Code>{" "}
-          and <Code>PROVIDER_TOKEN_EXPIRED</Code> never appear as a rejection
-          any more: a connected account whose credential has expired, been
-          revoked, or gone invalid is queued for retry instead (
-          <Code>202</Code>, <Code>OSF_UPLOAD_QUEUED</Code>), the same as a
-          provider outage, since reconnecting the account fixes it with no
-          code change. They are documented below because a queued entry&apos;s{" "}
-          <Code>failureReason</Code> still names them, and so does the
-          failure-notification email. <Code>PROVIDER_NOT_CONNECTED</Code> is
-          the one credential code still rejected outright: there is no
-          connection at all for a retry to succeed against.
+          <Code>INVALID_OSF_TOKEN</Code>, <Code>INVALID_REFRESH_TOKEN</Code>,
+          and <Code>PROVIDER_TOKEN_EXPIRED</Code> no longer reject a
+          submission. If a connected account&apos;s credential has expired,
+          been revoked, or gone invalid, DataPipe queues the submission for
+          retry (<Code>202</Code>, <Code>error: null</Code>), the same as a
+          provider outage, because reconnecting the account fixes it. They
+          are listed below because a queued entry&apos;s{" "}
+          <Code>failureReason</Code> and the failure-notification email still
+          name them. <Code>PROVIDER_NOT_CONNECTED</Code> is the one credential
+          code still rejected outright: with no connection at all, a retry has
+          nothing to succeed against.
         </Text>
+        <Box
+          borderWidth="1px"
+          borderColor="border"
+          borderRadius="md"
+          p={4}
+          maxW="70ch"
+        >
+          <Text fontSize="sm" fontWeight="semibold" mb={2}>
+            Renamed on 16 September 2026
+          </Text>
+          <Text fontSize="sm" color="fg.muted">
+            Three codes dropped their <Code>OSF_</Code> prefix:{" "}
+            <Code>OSF_FILE_EXISTS</Code> → <Code>FILE_EXISTS</Code>,{" "}
+            <Code>OSF_UPLOAD_ERROR</Code> → <Code>UPLOAD_ERROR</Code>, and{" "}
+            <Code>OSF_UPLOAD_EXCEPTION</Code> → <Code>UPLOAD_EXCEPTION</Code>.
+            They are returned on every provider, so the old names described
+            nothing. If your experiment compares <Code>error</Code> against one
+            of the old strings, that comparison no longer matches and the
+            branch stops running — most often a retry that regenerates a
+            filename after <Code>OSF_FILE_EXISTS</Code>. Match the new names,
+            or both while you roll experiments over. The HTTP status codes are
+            unchanged, so anything branching on those is unaffected.
+          </Text>
+        </Box>
         <Text fontSize="sm" color="fg.muted" maxW="70ch">
-          The same applies to the <Code>message</Code> text: several messages
-          still name OSF whatever provider an experiment actually uses. For
-          example, a queued upload reports &ldquo;Data received. OSF upload
-          will be retried automatically&rdquo; on Google Drive, Dataverse, and
-          Zenodo alike. Read
-          &ldquo;OSF&rdquo; in a message as &ldquo;your storage
-          provider&rdquo;, and match on the <Code>error</Code> code, not the
-          message, when writing code.
+          The <Code>message</Code> text is human-readable only, and is
+          reworded without notice. When writing code, match on the{" "}
+          <Code>error</Code> code, not the message.
         </Text>
         <Box overflowX="auto" w="100%">
           <Table.Root variant="outline">
@@ -414,11 +432,11 @@ export default function ApiReferencePage() {
                 Condition assignment is not enabled for this experiment.
               </ErrorRow>
               <ErrorRow code="SESSION_LIMIT_REACHED" status={400}>
-                The experiment has reached its session limit. Raise the limit in
-                the dashboard.
+                The experiment has reached its session limit. Raise the limit
+                in the dashboard.
               </ErrorRow>
               <ErrorRow code="INVALID_DATA" status={400}>
-                The data did not pass the validation rules configured for this
+                The data did not pass the validation rules set for this
                 experiment.
               </ErrorRow>
               <ErrorRow code="INVALID_BASE64_DATA" status={400}>
@@ -429,11 +447,11 @@ export default function ApiReferencePage() {
                 submission, so it did not store the data. It keeps the
                 submission and recovers it automatically in the background.
               </ErrorRow>
-              <ErrorRow code="OSF_FILE_EXISTS" status={400}>
+              <ErrorRow code="FILE_EXISTS" status={400}>
                 A file with this name already exists in the experiment&apos;s
                 storage. Filenames must be unique.
               </ErrorRow>
-              <ErrorRow code="OSF_UPLOAD_ERROR" status={400}>
+              <ErrorRow code="UPLOAD_ERROR" status={400}>
                 The storage provider rejected the upload.
               </ErrorRow>
               <ErrorRow code="PROVIDER_NOT_CONNECTED" status={400}>
@@ -443,7 +461,7 @@ export default function ApiReferencePage() {
               <ErrorRow code="PROVIDER_TOKEN_EXPIRED" status="202 (queued)">
                 The API token for the storage provider has expired. The
                 submission is queued and retried automatically rather than
-                rejected -- the owner must still create a new token and
+                rejected. The owner must still create a new token and
                 reconnect it, since retrying alone cannot fix an expired
                 static token, but no participant sees an error for it.
               </ErrorRow>
@@ -463,7 +481,7 @@ export default function ApiReferencePage() {
               <ErrorRow code="TOKEN_RESOLUTION_ERROR" status={500}>
                 DataPipe could not resolve the owner&apos;s storage credentials.
               </ErrorRow>
-              <ErrorRow code="OSF_UPLOAD_EXCEPTION" status={500}>
+              <ErrorRow code="UPLOAD_EXCEPTION" status={500}>
                 An unexpected error occurred while uploading to the storage
                 provider.
               </ErrorRow>
@@ -483,14 +501,14 @@ export default function ApiReferencePage() {
         <Text maxW="70ch">
           List the queued uploads DataPipe is holding for an experiment, or
           download them. This is the endpoint behind the queued files panel on
-          the dashboard, and the scriptable way to recover data that has not
-          reached your storage provider.
+          the dashboard, and the scriptable way to recover data that
+          hasn&apos;t reached your storage provider.
         </Text>
         <Text maxW="70ch">
-          Unlike the three participant endpoints, this one is authenticated:
-          send a Firebase ID token for the account that owns the experiment as{" "}
-          <Code>Authorization: Bearer &lt;token&gt;</Code>. Anything other than{" "}
-          <Code>GET</Code> gets <Code>405</Code>.
+          Unlike the three participant endpoints, this one is authenticated.
+          Send a Firebase ID token for the account that owns the experiment
+          as <Code>Authorization: Bearer &lt;token&gt;</Code>. Anything other
+          than <Code>GET</Code> gets <Code>405</Code>.
         </Text>
         <Box overflowX="auto" w="100%">
           <ParamTable>
@@ -503,21 +521,21 @@ export default function ApiReferencePage() {
               original bytes for base64 submissions.
             </Param>
             <Param name="downloadAll" type="query string (optional)">
-              Set to <Code>true</Code> to receive every waiting, in-flight and
-              failed file for the experiment as one ZIP.
+              Set to <Code>true</Code> to receive every waiting, in-flight,
+              and failed file for the experiment as one ZIP.
             </Param>
           </ParamTable>
         </Box>
         <Text maxW="70ch">
           With no <Code>download</Code> or <Code>downloadAll</Code>, the
-          response is <Code>200</Code> with an <Code>entries</Code> array and a{" "}
-          <Code>count</Code>, newest first. Each entry carries{" "}
+          response is <Code>200</Code> with an <Code>entries</Code> array and
+          a <Code>count</Code>, newest first. Each entry carries{" "}
           <Code>id</Code>, <Code>filename</Code>, <Code>dataType</Code>,{" "}
           <Code>status</Code>, <Code>errorCode</Code>, <Code>retryCount</Code>,{" "}
           <Code>maxRetries</Code>, <Code>createdAt</Code>,{" "}
-          <Code>lastAttemptAt</Code>, <Code>nextRetryAt</Code> and{" "}
+          <Code>lastAttemptAt</Code>, <Code>nextRetryAt</Code>, and{" "}
           <Code>failureReason</Code>. Only entries that are{" "}
-          <Code>pending</Code>, <Code>processing</Code> or <Code>failed</Code>{" "}
+          <Code>pending</Code>, <Code>processing</Code>, or <Code>failed</Code>{" "}
           are listed. A completed upload leaves the queue.
         </Text>
         <Box>
@@ -602,7 +620,7 @@ export default function ApiReferencePage() {
                 </Table.Cell>
                 <Table.Cell>
                   DataPipe could not read a queued upload. Nothing has been
-                  deleted. Try again, or fetch the files individually.
+                  deleted. Try again, or fetch the files one at a time.
                 </Table.Cell>
               </Table.Row>
             </Table.Body>
@@ -633,14 +651,14 @@ export default function ApiReferencePage() {
           </ParamTable>
         </Box>
         <Text maxW="70ch">
-          <strong>The response does not tell you the outcome.</strong> Merging a
-          whole study takes longer than the 60-second request ceiling, so a
-          successful call returns <Code>202</Code> with{" "}
+          <strong>The response doesn&apos;t tell you the outcome.</strong>{" "}
+          Merging a whole study takes longer than the 60-second request
+          ceiling, so a successful call returns <Code>202</Code> with{" "}
           <Code>{`{ "status": "queued" }`}</Code> and the work runs in the
           background. Watch the experiment&apos;s dashboard, which reports{" "}
-          <em>queued</em>, then <em>running</em>, then the result. Calling again
-          while a pass is in flight returns <Code>202</Code> with the current
-          status rather than starting a second one.
+          <em>queued</em>, then <em>running</em>, then the result. Calling
+          again while a pass is in flight returns <Code>202</Code> with the
+          current status rather than starting a second one.
         </Text>
         <Box overflowX="auto" w="100%">
           <Table.Root variant="outline">
@@ -667,7 +685,7 @@ export default function ApiReferencePage() {
                 </Table.Cell>
                 <Table.Cell>
                   <Code>{`{ "status": "already-finalized" }`}</Code>. Nothing to
-                  do; finalizing is permanent.
+                  do. Finalizing is permanent.
                 </Table.Cell>
               </Table.Row>
               <Table.Row>
@@ -718,7 +736,8 @@ export default function ApiReferencePage() {
           Statuses the dashboard reports
         </Heading>
         <Text maxW="70ch">
-          The outcome lands on the experiment record. The full vocabulary is:
+          The outcome lands on the experiment record. These are all the
+          possible statuses:
         </Text>
         <Box overflowX="auto" w="100%">
           <Table.Root variant="outline">
@@ -743,8 +762,8 @@ export default function ApiReferencePage() {
                 It had already been finalized.
               </ErrorRow>
               <ErrorRow code="not-eligible" status="refused">
-                This storage provider has no file-count ceiling to relieve.
-                Today that means anything other than Zenodo.
+                This storage provider has no file-count ceiling to work
+                around. Today that means anything other than Zenodo.
               </ErrorRow>
               <ErrorRow code="queued-uploads-pending" status="refused">
                 Uploads are still waiting to be stored, and they belong inside

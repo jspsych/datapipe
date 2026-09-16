@@ -143,7 +143,7 @@ describe("saveData", () => {
         ok: true,
         status: 202,
         error: null,
-        message: "Data received. OSF upload will be retried automatically.",
+        message: "Data received. The upload will be retried automatically.",
       }));
 
       const result = await saveData({ experimentID: "EXP12345", filename: "p01.csv", data: "x" });
@@ -153,7 +153,7 @@ describe("saveData", () => {
     });
 
     it("is not ok when the server reports an error", async () => {
-      mockFetch(() => ({ ok: false, status: 400, error: "OSF_FILE_EXISTS", message: "exists" }));
+      mockFetch(() => ({ ok: false, status: 400, error: "FILE_EXISTS", message: "exists" }));
 
       const result = await saveData({ experimentID: "EXP12345", filename: "p01.csv", data: "x" });
 

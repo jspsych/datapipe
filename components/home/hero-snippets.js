@@ -39,7 +39,6 @@ export const snippets = [
       { role: "string", text: '"your_id"' },
       { role: "fg", text: ",\n" },
       { role: "fg", text: "      filename: " },
-      { role: "fg", text: "() => " },
       { role: "string", text: "`${subject_id}.csv`" },
       { role: "fg", text: "\n    }\n  }]\n});" },
     ],

@@ -38,7 +38,7 @@ export default function SendingDataPage() {
     <>
       <PageHeader
         title="Sending data from your experiment"
-        purpose="Send data from a jsPsych experiment or plain JavaScript, and know what each response means."
+        purpose="The code that sends data from a jsPsych experiment or plain JavaScript, and what each response means."
       />
 
       {/* One <CodeHints> instance, not one per section (docs IA plan §2.4
@@ -59,87 +59,80 @@ export default function SendingDataPage() {
             @jspsych/extension-pipe extension
           </ProseLink>
           . Register it when you set up jsPsych and it saves your data on its
-          own: no save trial to add, and by default it sends each
+          own. There&apos;s no save trial to add, and by default it sends each
           trial as it happens rather than waiting until the experiment ends.
           The panel below is the same one on your experiment dashboard, where{" "}
-          <Code>YOUR_EXPERIMENT_ID</Code> is already replaced with the real
-          value. Copy from there when you are ready to run.
+          <Code>YOUR_EXPERIMENT_ID</Code> is already filled in. Copy from there
+          when you&apos;re ready to run.
         </Text>
         <CodeHints expId="YOUR_EXPERIMENT_ID" />
         <Text maxW="70ch">
           The code is the same whichever storage provider you chose. Your
-          experiment never names a provider.
+          experiment never has to name a provider.
         </Text>
+        <GuidanceLine href="/docs/experiments/streaming" linkText="Saving as you go">
+          What sending each trial as it happens does for a participant who
+          drops out, and the limits it runs under.
+        </GuidanceLine>
         <Text maxW="70ch" color="fg.muted" fontSize="sm">
-          An experiment already built on the older{" "}
+          If you built an experiment on the older{" "}
           <ProseLink
             href="https://github.com/jspsych/jspsych-contrib/tree/main/packages/plugin-pipe"
             external
           >
             jsPsychPipe plugin
           </ProseLink>{" "}
-          and its save trial keeps working. It is not the recommended choice for
-          a new experiment, but nothing about it is broken.
+          and its save trial, it still works. We don&apos;t recommend it for
+          new experiments, but nothing about it is broken.
         </Text>
       </DocsSection>
 
       <DocsSection id="plain-javascript" title="Plain JavaScript">
         <Text maxW="70ch">
-          You do not need jsPsych, or any framework at all. Use{" "}
+          You don&apos;t need jsPsych, or any framework at all. Use{" "}
           <ProseLink href="https://www.npmjs.com/package/datapipe-client" external>
             datapipe-client
           </ProseLink>
-          , a small library with no jsPsych in it. The menu at the top right of
-          the panel above switches every sample to it.
+          , a small library with no jsPsych in it. The menu at the top right
+          of the panel above switches every sample to it.
         </Text>
         <CodeBlock language="html">
           {`<script src="https://unpkg.com/datapipe-client"></script>`}
         </CodeBlock>
         <Text maxW="70ch">
-          That exposes a <Code>DataPipe</Code> global. With a bundler,{" "}
+          That gives you a <Code>DataPipe</Code> global. If you use a bundler,{" "}
           <Code>npm install datapipe-client</Code> instead. Either way you get
           one function for each JavaScript tab in the panel:{" "}
           <Code>saveData</Code>, <Code>createSession</Code>,{" "}
-          <Code>saveBase64Data</Code> and <Code>getCondition</Code>.
+          <Code>saveBase64Data</Code>, and <Code>getCondition</Code>.
         </Text>
         <Text maxW="70ch">
           Send whatever your experiment produces. The data string is stored
-          byte for byte, under the filename you give it.
+          byte for byte under the filename you give it.
         </Text>
         <Text maxW="70ch">
-          Two things about the library are worth knowing before you read the reference,
-          because both are easy to get wrong and neither fails loudly:
+          One thing to know about the library before you read the reference,
+          because it&apos;s easy to get wrong and doesn&apos;t fail loudly:{" "}
+          <strong>
+            <Code>getCondition</Code> throws, and nothing else does.
+          </strong>{" "}
+          Saving fails quietly on purpose, because a failed upload is retried
+          and the data is still in the browser. A condition is different. It
+          usually decides which timeline a participant runs, so there&apos;s
+          no sensible fallback. Catch the error and decide what the
+          participant sees, rather than letting them run the wrong condition.
         </Text>
-        <List.Root maxW="70ch" gap={2} ps={6}>
-          <List.Item>
-            <strong>
-              <Code>getCondition</Code> throws, and nothing else does.
-            </strong>{" "}
-            Saving is written to fail quietly, because a failed upload is
-            retried and the data is still in the browser. A condition is not
-            like that: it usually decides which timeline a participant runs, so
-            there is no value to fall back to. Catch it and decide what the
-            participant sees, rather than letting them run the wrong condition.
-          </List.Item>
-          <List.Item>
-            <strong>
-              Call <Code>flush()</Code> before you read <Code>sessionId</Code>.
-            </strong>{" "}
-            A session starts in the background, and until it has, the id is an
-            empty string. Submitting without it leaves DataPipe unable to match
-            your file to the staged copy, so it recovers that copy separately
-            and you get a spurious <Code>.partial.json</Code> alongside a
-            complete file.
-          </List.Item>
-        </List.Root>
         <Text maxW="70ch">
-          The library is a thin layer over DataPipe&apos;s HTTP API, and you can
-          call that API yourself instead: saving data, saving a file, and
+          The library is a thin layer over DataPipe&apos;s HTTP API, and you
+          can call that API yourself instead. Saving data, saving a file, and
           requesting a condition are each one <Code>POST</Code> with a JSON
-          body. You give up two things. Compression becomes your job (see{" "}
+          body carrying your experiment ID, a filename, and the data as a
+          string. You give up two things. Compression becomes your job (see{" "}
           <ProseLink href="#request-size-limits">Request size limits</ProseLink>
-          ), and saving as you go is impractical, because it stages each trial
-          in a Firebase Realtime Database rather than posting it to DataPipe.
+          ), and{" "}
+          <ProseLink href="/docs/experiments/streaming">saving as you go</ProseLink>{" "}
+          is impractical, because it writes each trial to a database rather
+          than posting it to DataPipe.
         </Text>
         <GuidanceLine
           href="https://github.com/jspsych/datapipe/tree/main/packages/client"
@@ -149,238 +142,86 @@ export default function SendingDataPage() {
           Every function, its options, and what it returns.
         </GuidanceLine>
         <GuidanceLine href="/docs/api" linkText="API reference">
-          Every field, response code, and error code, for all three participant
+          Every field, response code, and error code for all three participant
           endpoints.
         </GuidanceLine>
       </DocsSection>
 
-      <DocsSection id="saving-as-you-go" title="Saving as you go">
-        <Text maxW="70ch">
-          Without it, DataPipe sees a session&apos;s data exactly once, when
-          the experiment finishes. If a participant closes the tab, loses
-          their connection, or their browser crashes at trial 199 of 200,{" "}
-          <strong>all 199 trials are lost</strong>. DataPipe never saw any of
-          them. On an online panel, that is common.
-        </Text>
-        <Text maxW="70ch">
-          The <Code>@jspsych/extension-pipe</Code> extension sends each trial
-          as it is produced, and it does this by default. Registering it, as
-          shown above, is the whole setup. Add{" "}
-          <Code>stream: false</Code> to its <Code>params</Code> to turn
-          streaming off and submit once at the end instead.
-        </Text>
-        <Text maxW="70ch">
-          Plain JavaScript can stream too, with{" "}
-          <ProseLink href="#plain-javascript">datapipe-client</ProseLink>
-          &apos;s <Code>createSession</Code>. Unlike the extension, it does not
-          stream by default: your experiment opts in by starting a session. The{" "}
-          <strong>Save as you go</strong> tab under JavaScript in the panel
-          above has the code.
-        </Text>
-        <Text maxW="70ch">
-          Three things to know before you rely on it:
-        </Text>
-        <List.Root maxW="70ch" gap={2} ps={6}>
-          <List.Item>
-            <strong>A completed session is unchanged.</strong> Whatever your
-            experiment submits at the end (your whole dataset, in your chosen
-            format, stored under the filename you gave it) is the file that
-            lands in your storage. What DataPipe held during the session is
-            deleted as soon as that submission lands.
-          </List.Item>
-          <List.Item>
-            <strong>An abandoned session becomes a second kind of file.</strong>{" "}
-            DataPipe assembles the trials it received and stores them as{" "}
-            <Code>&lt;your filename&gt;-&lt;id&gt;.partial.json</Code>: JSON
-            even if your experiment submits CSV, because it is rebuilt from
-            individual trials rather than from the string your experiment would
-            have sent. The short id keeps two participants who happened to use
-            the same filename from colliding on the same recovered file. Plan
-            for that in your analysis, and treat a partial file as a participant
-            who did not finish. Partial sessions do not count toward your
-            session limit.
-          </List.Item>
-          <List.Item>
-            <strong>It cannot break your experiment.</strong> If a session
-            cannot be started (the experiment is switched off, the participant
-            is offline), the experiment runs and submits exactly as it would
-            without it. The same is true of every individual trial write.
-          </List.Item>
-        </List.Root>
-        <Text maxW="70ch">
-          While a study is running, your experiment&apos;s dashboard shows how
-          many participants are part-way through and how long each has been
-          going, updating as they start, finish, or lose their connection. A
-          participant whose connection drops is shown as{" "}
-          <strong>Connection lost — may resume</strong> for 10 minutes, then{" "}
-          <strong>Stopped — being recovered</strong> once DataPipe begins turning
-          what they did into a partial file.
-        </Text>
-        <GuidanceLine href="/docs/privacy#what-we-store" linkText="What DataPipe stores">
-          Where staged trials live while a session is running, and how they
-          differ from the copies DataPipe encrypts.
-        </GuidanceLine>
-      </DocsSection>
-
-      <DocsSection id="streaming-limits" title="Limits">
-        <Text maxW="70ch">
-          Save as you go enforces the limits below on every request. None of
-          them is configurable, and hitting one never breaks your
-          experiment: streaming carries on and a completed submission is
-          unaffected. What each one actually costs a participant is the
-          partial-file safety net for someone who never finishes, not the
-          data your experiment collects.
-        </Text>
-        <List.Root maxW="70ch" gap={2} ps={6}>
-          {/* MAX_TRIAL_BYTES, functions/src/staging-assembly.ts (mirrored in
-              database.rules.json's per-trial `.length` cap) */}
-          <List.Item>
-            <strong>16 KiB per trial.</strong> A trial larger than that is
-            refused by the database: the write for that one trial fails, and
-            streaming continues with the next one. A completed session still sends
-            your whole dataset in its final submission, so that trial is only
-            missing from the partial file DataPipe would recover if the
-            participant never finished.
-          </List.Item>
-          {/* MAX_TRIALS_PER_SESSION, functions/src/staging-assembly.ts
-              (mirrored in database.rules.json's `$seq` pattern) */}
-          <List.Item>
-            <strong>1,000 trials per session.</strong> The 1,001st trial and
-            every one after it are refused the same way an oversized trial
-            is. Again, only the partial-file safety net is affected: the
-            final submission is not built from staged trials, so it is
-            unaffected.
-          </List.Item>
-          {/* ABANDON_GRACE_MS and SESSION_TTL_MS,
-              functions/src/staging-assembly.ts */}
-          <List.Item>
-            <strong>10 minutes to reconnect, 24 hours to finish.</strong> If a
-            participant&apos;s connection drops and DataPipe sees no reconnect
-            and no further trial from them for 10 minutes, the session is
-            treated as abandoned and turned into a partial file the next time
-            the sweep runs. Reconnecting, or getting even one more trial
-            through, within that window keeps the session going as if
-            nothing happened. Regardless of any of that, every session
-            expires 24 hours after it started and is recovered the same way
-            whether or not a disconnect was ever recorded.
-          </List.Item>
-          {/* MAX_DISCONNECTS, functions/src/staging-assembly.ts (mirrored in
-              database.rules.json's 1..20 slot pattern) */}
-          <List.Item>
-            <strong>20 disconnects and 20 reconnects per session.</strong> A
-            participant whose connection drops and recovers more than 20
-            times stops having further drops recorded, so the 10-minute
-            abandonment clock keeps being measured from the last drop that
-            was recorded rather than the most recent real one. They are still
-            recovered eventually, at the 24-hour expiry if nothing else,
-            but the fast path may miss them.
-          </List.Item>
-          {/* MAX_OPEN_SESSIONS_PER_EXPERIMENT,
-              functions/src/staging-assembly.ts */}
-          <List.Item>
-            <strong>500 sessions open per experiment at once.</strong> A
-            participant who requests a session while 500 are already open for
-            your experiment gets none (the same response as when
-            incremental upload is switched off) and their experiment runs
-            and submits exactly as it would without it. Nothing about their
-            data is different.
-          </List.Item>
-          {/* MAX_ASSEMBLED_BYTES and MAX_FILENAME_LENGTH,
-              functions/src/staging-assembly.ts */}
-          <List.Item>
-            <strong>24 MiB per recovered file, 200-character filenames.</strong>{" "}
-            A recovered partial file stops growing at 24 MiB: trials beyond
-            that point are left out of the file DataPipe assembles. The
-            filename you give when starting a session is capped at 200
-            characters, and is silently shortened past that when used to name
-            a recovered file; it never affects the filename you submit on a
-            clean completion.
-          </List.Item>
-        </List.Root>
-      </DocsSection>
-
       <DocsSection id="filenames-must-be-unique" title="Filenames must be unique">
         <Text maxW="70ch">
-          Two submissions to the same experiment can never share a filename:
-          the second one is rejected with{" "}
-          <Code>OSF_FILE_EXISTS</Code> and is not stored. That code name is
-          historical: the rule applies on every storage provider. Generate a
-          fresh random ID per participant and build the filename from it, as the
-          samples above do. Do not use a counter your experiment maintains, and
-          do not reuse a name after a failed attempt.
+          Two submissions to the same experiment can never share a filename.
+          The second one is rejected with <Code>FILE_EXISTS</Code> and
+          isn&apos;t stored. Generate a fresh random ID per participant and
+          build the filename from it, as the samples above do. (This code was
+          called <Code>OSF_FILE_EXISTS</Code> before 16 September 2026.)
         </Text>
         <GuidanceLine href="/docs/data/files" linkText="Filenames, archives and your storage">
-          DataPipe, not your storage provider, enforces this; what
-          happens to a duplicate differs by provider.
+          How the check works, and what each provider does with a duplicate.
         </GuidanceLine>
       </DocsSection>
 
       <DocsSection id="media-and-binary-files" title="Media and binary files">
         <Text maxW="70ch">
-          Base64 data collection lets you send binary files (audio
-          recordings, video, or images) encoded as base64 strings. DataPipe
-          decodes the string and stores the resulting file alongside the rest of
-          your experiment&apos;s data. Each request sends one file at a time.
+          Base64 data collection lets you send binary files (audio recordings,
+          video, or images) encoded as base64 strings. DataPipe decodes the
+          string and stores the resulting file alongside the rest of your
+          experiment&apos;s data. Each request sends one file.
         </Text>
         <Text maxW="70ch">Three things to know before you rely on it:</Text>
         <List.Root maxW="70ch" gap={2} ps={6}>
           <List.Item>
-            It has its own switch, which works independently of{" "}
+            It has its own switch, independent of{" "}
             <strong>Accept new data</strong>. Turn on{" "}
-            <strong>Accept base64 file uploads</strong> on the
-            dashboard, or these requests are rejected with{" "}
-            <Code>BASE64DATA_COLLECTION_NOT_ACTIVE</Code>. Equally, this
-            switch keeps accepting files after you have turned off{" "}
-            <strong>Accept new data</strong>. Turn both off when a study ends.
+            <strong>Accept base64 file uploads</strong> on the dashboard, or
+            these requests are rejected with{" "}
+            <Code>BASE64DATA_COLLECTION_NOT_ACTIVE</Code>. The flip side is
+            that this switch keeps accepting files after you&apos;ve turned
+            off <strong>Accept new data</strong>. Turn both off when a study
+            ends.
           </List.Item>
           <List.Item>
-            Your validation rules do not apply to it. DataPipe checks only that
-            the string really is base64; it cannot tell what the decoded file
-            contains, which is why the switch exists separately and why it is
-            worth turning off outside active collection.
+            Your validation rules don&apos;t apply to it. DataPipe checks only
+            that the string really is base64. It can&apos;t tell what the
+            decoded file contains, which is why the switch is separate and why
+            it&apos;s worth turning off outside active collection.
           </List.Item>
           <List.Item>
-            It does not count toward your session limit, and it is not blocked
-            by one. A file upload can still arrive after an experiment has hit
-            its cap on data submissions.
+            It doesn&apos;t count toward your session limit, and it isn&apos;t
+            blocked by one. A file upload can still arrive after an experiment
+            has hit its cap on data submissions.
           </List.Item>
         </List.Root>
         <GuidanceLine href="/docs/experiments/validation#session-limits" linkText="Session limits">
-          What the session cap does and does not cover.
+          What the session cap does and doesn&apos;t cover.
         </GuidanceLine>
       </DocsSection>
 
       <DocsSection id="request-size-limits" title="Request size limits">
         <Text maxW="70ch">
-          {/* "Yes." dropped from the front of this sentence: it answered the
-              FAQ question "Is there a limit on how much data I can send?",
-              which is now a section heading rather than a question. Nothing
-              else in the four paragraphs is changed. */}
-          DataPipe has a <strong>32 MB limit</strong> on the size of a
-          single request. This limit is enforced by the server infrastructure
-          and cannot be increased. Most experiment data is well under this limit:
-          a typical jsPsych dataset is 50 KB to 5 MB.
+          A single request to DataPipe can be at most <strong>32 MB</strong>.
+          The server infrastructure enforces this limit, and it can&apos;t be
+          raised. Most experiment data is well under it. A typical jsPsych
+          dataset is 50 KB to 5 MB.
         </Text>
         <Text maxW="70ch">
           The extension and <Code>datapipe-client</Code> both compress request
-          bodies with gzip before sending, as does version 0.6.0 or later of the
-          older{" "}
+          bodies with gzip before sending, and so does version 0.6.0 or later
+          of the older{" "}
           <ProseLink
             href="https://github.com/jspsych/jspsych-contrib/tree/main/packages/plugin-pipe"
             external
           >
             @jspsych-contrib/plugin-pipe
           </ProseLink>{" "}
-          plugin. Text data (JSON, CSV) typically compresses by 2–10x, which
-          effectively raises the upload limit to roughly 60–300 MB for most
-          experiment data. Compression requires no configuration.
+          plugin. Text data (JSON, CSV) typically shrinks by 2–10x, which in
+          practice raises the ceiling to roughly 60–300 MB for most experiment
+          data. Compression needs no setup.
         </Text>
         <Text maxW="70ch">
-          Compression is less effective for binary data sent to the base64
-          endpoint (video or audio recordings) because binary data does not
-          compress as well as text. If you need to send individual files
-          larger than about 25 MB through the base64 endpoint, they may still
-          exceed the limit even after compression.
+          Compression helps less with binary data sent to the base64 endpoint,
+          such as video or audio recordings, because binary data doesn&apos;t
+          compress as well as text. Individual files larger than about 25 MB
+          may still exceed the limit even after compression.
         </Text>
         <Text maxW="70ch">
           If you call the API yourself rather than through the extension or{" "}
@@ -393,27 +234,26 @@ export default function SendingDataPage() {
             CompressionStream API
           </ProseLink>{" "}
           and set the <Code>Content-Encoding: gzip</Code> header. The server
-          will decompress the body automatically.
+          decompresses it automatically.
         </Text>
         <Text maxW="70ch">
           A request that is still over 32 MB never reaches DataPipe&apos;s own
-          code: the hosting infrastructure rejects it before any endpoint runs.
-          DataPipe gives no error response, and nothing in your experiment
-          dashboard explains it; your request gets back a
-          bare <Code>500 Internal Error</Code> (or a plain network failure,
-          depending on the client), and unlike a queued{" "}
-          <Code>202</Code>, the data is not held anywhere for retry. If
-          participants are hitting this, shrink the payload: split large
-          recordings into smaller files, lower a sampling rate, or
-          send data more often instead of once at the end. Retrying the
-          same request will not help.
+          code. The hosting infrastructure rejects it before any endpoint runs,
+          so DataPipe can&apos;t give you an error response and nothing on
+          your dashboard explains it. Your request gets back a bare{" "}
+          <Code>500 Internal Error</Code>, or a plain network failure
+          depending on the client, and unlike a queued <Code>202</Code>, the
+          data isn&apos;t held anywhere for retry. If participants are hitting
+          this, shrink the payload: split large recordings into smaller files,
+          lower a sampling rate, or send data more often instead of once at the
+          end. Retrying the same request won&apos;t help.
         </Text>
       </DocsSection>
 
       <DocsSection id="what-the-response-means" title="What the response means">
         <Text maxW="70ch">
-          In normal operation every submission gets one of three answers, and
-          only one of them means you should do something about it.
+          In normal operation, every submission gets one of three answers, and
+          only one of them means you need to do something.
         </Text>
         <List.Root maxW="70ch" gap={3} ps={6}>
           <List.Item>
@@ -428,26 +268,28 @@ export default function SendingDataPage() {
             </Text>:{" "}
             accepted, not delivered yet. DataPipe is holding the data and will
             keep trying your provider on its own.{" "}
-            <strong>Do not resubmit</strong>: the session is already counted,
-            and a second submission under the same filename would be rejected as
-            a duplicate.
+            <strong>Treat it as success and don&apos;t resubmit.</strong>
           </List.Item>
           <List.Item>
             <Text as="span" fontWeight="semibold">
               400
             </Text>:{" "}
             rejected, and nothing was stored. The <Code>error</Code> field in
-            the response body names the reason: data collection switched off,
-            the session limit reached, a duplicate filename, or data that failed
+            the response body says why: data collection switched off, the
+            session limit reached, a duplicate filename, or data that failed
             validation.
           </List.Item>
         </List.Root>
         <Text maxW="70ch">
           Responses from the data endpoint also carry a{" "}
           <Code>metadataMessage</Code> field. It reports what DataPipe did with
-          your Psych-DS metadata; it never decides whether a submission is
+          your Psych-DS metadata. It never decides whether a submission is
           accepted.
         </Text>
+        <GuidanceLine href="/docs/data/failures" linkText="When an upload fails">
+          What a 202 means for your data, and where to find the file while it
+          waits.
+        </GuidanceLine>
         <GuidanceLine href="/docs/api#responses" linkText="Responses">
           The full status table, with every error code and what to do about it.
         </GuidanceLine>

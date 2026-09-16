@@ -339,7 +339,7 @@ describe("6. 210-bug resurrection: metadataFileRef explicitly null, no metadata 
 
     // Today, this always fails: metadata-block.ts's create branch checks
     // `status !== 210` on a response that never returns 210, so it throws
-    // MESSAGES.OSF_UPLOAD_ERROR unconditionally, even though the upload
+    // MESSAGES.UPLOAD_ERROR unconditionally, even though the upload
     // itself succeeded.
     expect(response.status).toBe(201);
 

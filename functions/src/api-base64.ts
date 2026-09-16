@@ -169,8 +169,8 @@ export const apiBase64 = onRequest(
     );
     if (claimOutcome === "duplicate") {
       await cleanupPending(pendingPath);
-      res.status(400).json(MESSAGES.OSF_FILE_EXISTS);
-      await writeLog(experimentID, "logError", MESSAGES.OSF_FILE_EXISTS, logContext);
+      res.status(400).json(MESSAGES.FILE_EXISTS);
+      await writeLog(experimentID, "logError", MESSAGES.FILE_EXISTS, logContext);
       return;
     }
     try {
@@ -184,14 +184,14 @@ export const apiBase64 = onRequest(
         claimToken: tokenFailureClaimToken,
       });
       await cleanupPending(pendingPath); // queue-upload has its own copy
-      res.status(202).json(MESSAGES.OSF_UPLOAD_QUEUED);
+      res.status(202).json(MESSAGES.UPLOAD_QUEUED);
       await writeLog(experimentID, "saveBase64DataQueued", undefined, logContext);
       // The original credential-specific message, not a generic queued
       // notice -- see the matching comment in api-data.ts.
       await writeLog(experimentID, "logError", {...errorMessage, detail: tokenResult.detail}, logContext);
       return;
     } catch {
-      res.status(500).json(MESSAGES.OSF_UPLOAD_EXCEPTION);
+      res.status(500).json(MESSAGES.UPLOAD_EXCEPTION);
       await writeLog(experimentID, "logError", {...errorMessage, detail: tokenResult.detail}, logContext);
       return;
     }
@@ -230,15 +230,15 @@ export const apiBase64 = onRequest(
           claimToken,
         });
         await cleanupPending(pendingPath); // queue-upload has its own copy
-        res.status(202).json(MESSAGES.OSF_UPLOAD_QUEUED);
+        res.status(202).json(MESSAGES.UPLOAD_QUEUED);
         // Held for retry, not stored and not refused -- see the matching
         // comment in api-data.ts and the header of write-log.ts.
         await writeLog(experimentID, "saveBase64DataQueued", undefined, logContext);
-        await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail: `Collision cache rehydration failed: ${detail}`}, logContext);
+        await writeLog(experimentID, "logError", {...MESSAGES.UPLOAD_EXCEPTION, detail: `Collision cache rehydration failed: ${detail}`}, logContext);
         return;
       } catch {
-        res.status(500).json(MESSAGES.OSF_UPLOAD_EXCEPTION);
-        await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail}, logContext);
+        res.status(500).json(MESSAGES.UPLOAD_EXCEPTION);
+        await writeLog(experimentID, "logError", {...MESSAGES.UPLOAD_EXCEPTION, detail}, logContext);
         return;
       }
     }
@@ -248,8 +248,8 @@ export const apiBase64 = onRequest(
   if (!claimResult.claimed) {
     if (claimResult.reason === "duplicate") {
       await cleanupPending(pendingPath);
-      res.status(400).json(MESSAGES.OSF_FILE_EXISTS);
-      await writeLog(experimentID, "logError", MESSAGES.OSF_FILE_EXISTS, logContext);
+      res.status(400).json(MESSAGES.FILE_EXISTS);
+      await writeLog(experimentID, "logError", MESSAGES.FILE_EXISTS, logContext);
       return;
     }
 
@@ -265,13 +265,13 @@ export const apiBase64 = onRequest(
         claimToken,
       });
       await cleanupPending(pendingPath); // queue-upload has its own copy
-      res.status(202).json(MESSAGES.OSF_UPLOAD_QUEUED);
+      res.status(202).json(MESSAGES.UPLOAD_QUEUED);
       await writeLog(experimentID, "saveBase64DataQueued", undefined, logContext);
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail: "Collision cache rehydrating"}, logContext);
+      await writeLog(experimentID, "logError", {...MESSAGES.UPLOAD_EXCEPTION, detail: "Collision cache rehydrating"}, logContext);
       return;
     } catch {
-      res.status(500).json(MESSAGES.OSF_UPLOAD_EXCEPTION);
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail: "Collision cache rehydrating"}, logContext);
+      res.status(500).json(MESSAGES.UPLOAD_EXCEPTION);
+      await writeLog(experimentID, "logError", {...MESSAGES.UPLOAD_EXCEPTION, detail: "Collision cache rehydrating"}, logContext);
       return;
     }
   }
@@ -296,11 +296,11 @@ export const apiBase64 = onRequest(
         claimToken,
       });
       await cleanupPending(pendingPath); // queue-upload has its own copy
-      res.status(202).json(MESSAGES.OSF_UPLOAD_QUEUED);
+      res.status(202).json(MESSAGES.UPLOAD_QUEUED);
       await writeLog(experimentID, "saveBase64DataQueued", undefined, logContext);
       return;
     } catch {
-      res.status(500).json(MESSAGES.OSF_UPLOAD_EXCEPTION);
+      res.status(500).json(MESSAGES.UPLOAD_EXCEPTION);
       return;
     }
   }
@@ -329,13 +329,13 @@ export const apiBase64 = onRequest(
         claimToken,
       });
       await cleanupPending(pendingPath); // queue-upload has its own copy
-      res.status(202).json(MESSAGES.OSF_UPLOAD_QUEUED);
+      res.status(202).json(MESSAGES.UPLOAD_QUEUED);
       await writeLog(experimentID, "saveBase64DataQueued", undefined, logContext);
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail}, logContext);
+      await writeLog(experimentID, "logError", {...MESSAGES.UPLOAD_EXCEPTION, detail}, logContext);
       return;
     } catch {
-      res.status(500).json(MESSAGES.OSF_UPLOAD_EXCEPTION);
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail}, logContext);
+      res.status(500).json(MESSAGES.UPLOAD_EXCEPTION);
+      await writeLog(experimentID, "logError", {...MESSAGES.UPLOAD_EXCEPTION, detail}, logContext);
       return;
     }
   }
@@ -348,7 +348,7 @@ export const apiBase64 = onRequest(
       await confirmClaim(experimentID, claimName, claimToken);
       // Logs before response — see the matching comment in api-data.ts:
       // responding first races observers of the log against the write.
-      await writeLog(experimentID, "logError", MESSAGES.OSF_FILE_EXISTS, logContext);
+      await writeLog(experimentID, "logError", MESSAGES.FILE_EXISTS, logContext);
       await writeLog(experimentID, "logError", {
         // See the matching comment in api-data.ts for why this entry carries
         // an `error` code of its own.
@@ -357,7 +357,7 @@ export const apiBase64 = onRequest(
         direction: "cache-free-provider-conflict",
       }, logContext);
       await cleanupPending(pendingPath);
-      res.status(400).json(MESSAGES.OSF_FILE_EXISTS);
+      res.status(400).json(MESSAGES.FILE_EXISTS);
       return;
     }
     // Queue all other failures for retry. The claim stays pending so the
@@ -372,13 +372,13 @@ export const apiBase64 = onRequest(
         claimToken,
       });
       await cleanupPending(pendingPath); // queue-upload has its own copy
-      res.status(202).json(MESSAGES.OSF_UPLOAD_QUEUED);
+      res.status(202).json(MESSAGES.UPLOAD_QUEUED);
       await writeLog(experimentID, "saveBase64DataQueued", undefined, logContext);
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.providerStatus, osfStatusText: result.providerMessage}, logContext);
+      await writeLog(experimentID, "logError", {...MESSAGES.UPLOAD_ERROR, osfStatus: result.providerStatus, osfStatusText: result.providerMessage}, logContext);
       return;
     } catch {
-      res.status(400).json(MESSAGES.OSF_UPLOAD_ERROR);
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.providerStatus, osfStatusText: result.providerMessage}, logContext);
+      res.status(400).json(MESSAGES.UPLOAD_ERROR);
+      await writeLog(experimentID, "logError", {...MESSAGES.UPLOAD_ERROR, osfStatus: result.providerStatus, osfStatusText: result.providerMessage}, logContext);
       return;
     }
   }

@@ -301,10 +301,10 @@ describe("apiData", () => {
       filename,
     });
 
-    // 202, OSF_UPLOAD_QUEUED — error: null, so the jsPsych plugin treats
+    // 202, UPLOAD_QUEUED — error: null, so the jsPsych plugin treats
     // this as success.
     expect(response.status).toBe(202);
-    expect(response.body).toEqual(MESSAGES.OSF_UPLOAD_QUEUED);
+    expect(response.body).toEqual(MESSAGES.UPLOAD_QUEUED);
 
     const docId = uploadQueueDocId("base64-testexp-active", filename);
     const queueDoc = await db.collection("uploadQueue").doc(docId).get();
@@ -346,7 +346,7 @@ describe("apiData", () => {
 
     const first = await saveDataWithStatus({ experimentID, data: "test", filename });
     expect(first.status).toBe(202);
-    expect(first.body).toEqual(MESSAGES.OSF_UPLOAD_QUEUED);
+    expect(first.body).toEqual(MESSAGES.UPLOAD_QUEUED);
 
     const firstClaimToken = (await db.collection("uploadQueue").doc(docId).get()).data()
       .claimToken;
@@ -354,7 +354,7 @@ describe("apiData", () => {
 
     const second = await saveDataWithStatus({ experimentID, data: "test", filename });
     expect(second.status).toBe(400);
-    expect(second.body).toEqual(MESSAGES.OSF_FILE_EXISTS);
+    expect(second.body).toEqual(MESSAGES.FILE_EXISTS);
 
     // The first submission's queued payload was not replaced by the rejected
     // repeat.

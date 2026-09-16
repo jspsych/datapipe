@@ -33,100 +33,100 @@ export default function AboutDataPipePage() {
     <>
       <PageHeader
         title="About DataPipe"
-        purpose="What DataPipe costs, how it's funded, the risks of using it, and where to get help."
+        purpose="What DataPipe costs, who pays for it, what could go wrong, and where to get help."
       />
 
       <DocsSection id="cost" title="Cost">
         <Text maxW="70ch">DataPipe is free to use.</Text>
         <Text maxW="70ch">
-          The expensive parts of running an online experiment (hosting files
-          and storing data) are handled by services you already have access to:
-          GitHub Pages for hosting, and Google Drive, Dataverse, or Zenodo for
-          storage. DataPipe is a lightweight bridge between them, which makes it
-          inexpensive to operate.
+          The expensive parts of running an online experiment, hosting the
+          experiment and storing the data, are done by services you already
+          have: GitHub Pages for hosting, and Google Drive, Dataverse, or
+          Zenodo for storage. DataPipe is a small bridge between them, so it
+          costs very little to run.
         </Text>
       </DocsSection>
 
       <DocsSection id="funding" title="Funding">
         <Text maxW="70ch">
-          DataPipe is hosted on Google Firebase. Current resource consumption is
-          less than $1 per month. The{" "}
+          DataPipe runs on Google Firebase and currently costs less than $1 a
+          month. The{" "}
           <ProseLink
             href="https://opencollective.com/jspsych#category-BUDGET"
             external
           >
-            jsPsych Open Collective account
+            jsPsych Open Collective
           </ProseLink>{" "}
-          has funding reserves to sustain the service, and we keep costs and
-          available funds public so you can judge the service&apos;s long-term
-          viability. A{" "}
+          holds reserves to keep it running, and we keep both the costs and the
+          available funds public so you can judge for yourself how sustainable
+          the service is. A{" "}
           <ProseLink
             href="https://opencollective.com/jspsych#category-CONTRIBUTE"
             external
           >
             donation of a few dollars
           </ProseLink>{" "}
-          covers roughly the lifetime cost of providing DataPipe to one
-          researcher.
+          covers roughly what it costs to provide DataPipe to one researcher
+          for good.
         </Text>
       </DocsSection>
 
       <DocsSection id="risks" title="Risks">
-        <Text maxW="70ch">Using DataPipe carries a few risks:</Text>
+        <Text maxW="70ch">
+          A few things are worth knowing before you rely on DataPipe. Each
+          has its own page.
+        </Text>
         <List.Root as="ol" maxW="70ch" gap={3} ps={6}>
           <List.Item>
             <Text as="span" fontWeight="semibold">
               Authorization tokens.
             </Text>{" "}
-            DataPipe needs permission to write to your storage account, and all
-            tokens are stored encrypted. For Google Drive and Zenodo you
-            authorize DataPipe directly, and it manages and refreshes those
-            tokens for you. For Dataverse you supply an API token, so create one
-            specifically for DataPipe and revoke it when you are done collecting
-            data. You can disconnect any provider from your account settings at
-            any time.
+            DataPipe needs permission to write to your storage account, and it
+            holds that permission as an encrypted token.{" "}
+            <ProseLink href="/docs/account#how-credentials-are-stored">
+              How credentials are stored
+            </ProseLink>
           </List.Item>
           <List.Item>
             <Text as="span" fontWeight="semibold">
               Fake or spam data.
             </Text>{" "}
-            As with any online experiment, a technically savvy user could submit
-            fabricated data or spam files to your storage. DataPipe provides
-            validation rules and session limits to reduce this risk.
+            Anyone who reads your experiment&apos;s code can see its
+            experiment ID, and that ID is all it takes to submit.{" "}
+            <ProseLink href="/docs/experiments/validation#security-posture">
+              Security posture
+            </ProseLink>
           </List.Item>
           <List.Item>
             <Text as="span" fontWeight="semibold">
               Support availability.
             </Text>{" "}
-            DataPipe is not a commercial product and has no dedicated support
-            team. The developers of jsPsych maintain it and answer what they
-            can. The{" "}
+            DataPipe is not a commercial product and has no support team. The
+            jsPsych developers maintain it and answer what they can, and the{" "}
             <ProseLink href="https://github.com/jspsych/datapipe" external>
               source code is open
-            </ProseLink>{" "}
-            and thoroughly tested, and the service runs on Google Cloud
-            infrastructure.
+            </ProseLink>
+            .
           </List.Item>
         </List.Root>
       </DocsSection>
 
       <DocsSection id="support" title="Support">
         <Text maxW="70ch">
-          If you have a question or a problem, first check the{" "}
+          If you have a question or run into a problem, start with the{" "}
           <ProseLink
             href="https://github.com/jspsych/datapipe/issues"
             external
           >
-            GitHub repository issues
-          </ProseLink>{" "}
-          to see whether it has already been answered. If not, post a new issue
-          there. If you need to reach the developers directly, the{" "}
-          <ProseLink href="/contact">contact page</ProseLink> has an email
-          address.
+            issues on GitHub
+          </ProseLink>
+          . Someone may have hit the same thing already. If not, open a new
+          issue there. To reach the developers directly, use the email address
+          on the <ProseLink href="/contact">contact page</ProseLink>.
         </Text>
         <Text maxW="70ch">
-          If what you need is the reference for the DataPipe paper, that moved
-          to <ProseLink href="/docs/citation">Citing DataPipe</ProseLink>.
+          Looking for the reference to the DataPipe paper? It has its own page:{" "}
+          <ProseLink href="/docs/citation">Citing DataPipe</ProseLink>.
         </Text>
       </DocsSection>
     </>
