@@ -150,9 +150,10 @@ export default function SendingDataPage() {
       <DocsSection id="filenames-must-be-unique" title="Filenames must be unique">
         <Text maxW="70ch">
           Two submissions to the same experiment can never share a filename.
-          The second one is rejected with <Code>OSF_FILE_EXISTS</Code> and
+          The second one is rejected with <Code>FILE_EXISTS</Code> and
           isn&apos;t stored. Generate a fresh random ID per participant and
-          build the filename from it, as the samples above do.
+          build the filename from it, as the samples above do. (This code was
+          called <Code>OSF_FILE_EXISTS</Code> before 16 September 2026.)
         </Text>
         <GuidanceLine href="/docs/data/files" linkText="Filenames, archives and your storage">
           How the check works, and what each provider does with a duplicate.

@@ -345,20 +345,39 @@ export default function ApiReferencePage() {
 
       <DocsSection id="error-codes" title="Error codes">
         <Text fontSize="sm" color="fg.muted" maxW="70ch">
-          Codes beginning <Code>OSF_</Code> are historical names kept for
-          backward compatibility. <Code>OSF_FILE_EXISTS</Code>,{" "}
-          <Code>OSF_UPLOAD_ERROR</Code>, and <Code>OSF_UPLOAD_EXCEPTION</Code>{" "}
-          are returned for every storage provider, not only OSF.{" "}
-          <Code>INVALID_OSF_TOKEN</Code> and <Code>INVALID_REFRESH_TOKEN</Code>{" "}
-          occur only on experiments still collecting to OSF.
+          <Code>FILE_EXISTS</Code>, <Code>UPLOAD_ERROR</Code>, and{" "}
+          <Code>UPLOAD_EXCEPTION</Code> are returned for every storage
+          provider. <Code>INVALID_OSF_TOKEN</Code> and{" "}
+          <Code>INVALID_REFRESH_TOKEN</Code> occur only on experiments still
+          collecting to OSF, which is why those two still name it.
         </Text>
+        <Box
+          borderWidth="1px"
+          borderColor="border"
+          borderRadius="md"
+          p={4}
+          maxW="70ch"
+        >
+          <Text fontSize="sm" fontWeight="semibold" mb={2}>
+            Renamed on 16 September 2026
+          </Text>
+          <Text fontSize="sm" color="fg.muted">
+            Three codes dropped their <Code>OSF_</Code> prefix:{" "}
+            <Code>OSF_FILE_EXISTS</Code> → <Code>FILE_EXISTS</Code>,{" "}
+            <Code>OSF_UPLOAD_ERROR</Code> → <Code>UPLOAD_ERROR</Code>, and{" "}
+            <Code>OSF_UPLOAD_EXCEPTION</Code> → <Code>UPLOAD_EXCEPTION</Code>.
+            They are returned on every provider, so the old names described
+            nothing. If your experiment compares <Code>error</Code> against one
+            of the old strings, that comparison no longer matches and the
+            branch stops running — most often a retry that regenerates a
+            filename after <Code>OSF_FILE_EXISTS</Code>. Match the new names,
+            or both while you roll experiments over. The HTTP status codes are
+            unchanged, so anything branching on those is unaffected.
+          </Text>
+        </Box>
         <Text fontSize="sm" color="fg.muted" maxW="70ch">
-          The same goes for the <Code>message</Code> text. Several messages
-          still say OSF whatever provider an experiment actually uses. For
-          example, a queued upload reports &ldquo;Data received. OSF upload
-          will be retried automatically&rdquo; on Google Drive, Dataverse, and
-          Zenodo alike. Read &ldquo;OSF&rdquo; in a message as &ldquo;your
-          storage provider&rdquo;, and when writing code, match on the{" "}
+          The <Code>message</Code> text is human-readable only, and is
+          reworded without notice. When writing code, match on the{" "}
           <Code>error</Code> code, not the message.
         </Text>
         <Box overflowX="auto" w="100%">
@@ -416,11 +435,11 @@ export default function ApiReferencePage() {
                 submission, so it did not store the data. It keeps the
                 submission and recovers it automatically in the background.
               </ErrorRow>
-              <ErrorRow code="OSF_FILE_EXISTS" status={400}>
+              <ErrorRow code="FILE_EXISTS" status={400}>
                 A file with this name already exists in the experiment&apos;s
                 storage. Filenames must be unique.
               </ErrorRow>
-              <ErrorRow code="OSF_UPLOAD_ERROR" status={400}>
+              <ErrorRow code="UPLOAD_ERROR" status={400}>
                 The storage provider rejected the upload.
               </ErrorRow>
               <ErrorRow code="PROVIDER_NOT_CONNECTED" status={400}>
@@ -443,7 +462,7 @@ export default function ApiReferencePage() {
               <ErrorRow code="TOKEN_RESOLUTION_ERROR" status={500}>
                 DataPipe could not resolve the owner&apos;s storage credentials.
               </ErrorRow>
-              <ErrorRow code="OSF_UPLOAD_EXCEPTION" status={500}>
+              <ErrorRow code="UPLOAD_EXCEPTION" status={500}>
                 An unexpected error occurred while uploading to the storage
                 provider.
               </ErrorRow>

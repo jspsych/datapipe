@@ -136,7 +136,7 @@ try {
         );
 
         if (!response.success) {
-          throw new Error(MESSAGES.OSF_UPLOAD_ERROR.message);
+          throw new Error(MESSAGES.UPLOAD_ERROR.message);
         }
 
         // Only track a ref we can actually use later. If the provider's 201
@@ -194,7 +194,7 @@ try {
       //When a ref and firestore metadata both exist, updating is done with respect to firestore.
       if (metadataFileRef && firestoreMetadata) {
 
-        metadataMessage = MESSAGES.METADATA_IN_OSF_AND_FIRESTORE;
+        metadataMessage = MESSAGES.METADATA_IN_PROVIDER_AND_FIRESTORE;
 
         // Incoming metadata is used to update firestore metadata.
         const updatedMetadata = await updateMetadata(firestoreMetadata, incomingMetadata);
@@ -222,7 +222,7 @@ try {
       //When a ref exists but firestore does not have metadata, updating is done with respect to OSF.
       else if (metadataFileRef && !firestoreMetadata) {
 
-        metadataMessage = MESSAGES.METADATA_IN_OSF_NOT_IN_FIRESTORE;
+        metadataMessage = MESSAGES.METADATA_IN_PROVIDER_NOT_IN_FIRESTORE;
 
         //Metadata is downloaded from the provider, and is compared to incoming metadata to produce an updated version.
         const downloadResult = await provider.downloadFile(auth, container, metadataFileRef);
@@ -252,7 +252,7 @@ try {
       // When no ref exists but firestore has metadata, the metadata file is (re)created in the provider.
       else if (!metadataFileRef && firestoreMetadata) {
 
-        metadataMessage = MESSAGES.METADATA_IN_FIRESTORE_NOT_IN_OSF;
+        metadataMessage = MESSAGES.METADATA_IN_FIRESTORE_NOT_IN_PROVIDER;
 
         // Incoming metadata is used to update firestore metadata.
         const updatedMetadata = await updateMetadata(firestoreMetadata, incomingMetadata);
@@ -265,7 +265,7 @@ try {
       // When neither a ref nor firestore metadata exist, the metadata is created in the provider and firestore.
       else {
 
-        metadataMessage = MESSAGES.METADATA_NOT_IN_FIRESTORE_OR_OSF;
+        metadataMessage = MESSAGES.METADATA_NOT_IN_FIRESTORE_OR_PROVIDER;
 
         //Incoming metadata is uploaded to firestore and the provider.
 

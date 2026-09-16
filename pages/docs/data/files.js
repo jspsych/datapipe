@@ -41,7 +41,7 @@ export default function FilenamesArchivesAndYourStoragePage() {
         <Box as="ul" pl={5} listStyleType="disc" maxW="70ch">
           <Box as="li" mb={2}>
             <strong>The name is already taken</strong>:{" "}
-            <Code>400 OSF_FILE_EXISTS</Code>. Nothing is stored, and the
+            <Code>400 FILE_EXISTS</Code>. Nothing is stored, and the
             participant&apos;s submission is rejected. Give each submission a
             name you know is unique, such as one built from a random ID.
           </Box>

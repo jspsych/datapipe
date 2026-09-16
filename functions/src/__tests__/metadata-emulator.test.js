@@ -21,9 +21,9 @@
 // metadata-ref-emulator.test.js.
 //
 // Notably, mock-server.ts's complete absence of a PUT route means the two
-// "not in OSF" scenarios in the original file (METADATA_NOT_IN_FIRESTORE_OR_OSF
-// and METADATA_IN_FIRESTORE_NOT_IN_OSF) could only reach putFileOSF via a 404
-// from the mock. In the METADATA_IN_FIRESTORE_NOT_IN_OSF case this fed
+// "not in OSF" scenarios in the original file (METADATA_NOT_IN_FIRESTORE_OR_PROVIDER
+// and METADATA_IN_FIRESTORE_NOT_IN_PROVIDER) could only reach putFileOSF via a 404
+// from the mock. In the METADATA_IN_FIRESTORE_NOT_IN_PROVIDER case this fed
 // straight into the (now-removed) `status !== 210` bug in metadata-block.ts:
 // the create branch always threw, and the request as a whole FAILED --
 // but the old test only asserted `response.metadataMessage`, never
@@ -243,7 +243,7 @@ describe("runTransaction", () => {
     });
 
     expect(response.status).toBe(201);
-    expect(response.body.metadataMessage).toEqual(MESSAGES.METADATA_IN_OSF_NOT_IN_FIRESTORE.metadataMessage);
+    expect(response.body.metadataMessage).toEqual(MESSAGES.METADATA_IN_PROVIDER_NOT_IN_FIRESTORE.metadataMessage);
     expect(mockOSF.getUpdateCount(refId)).toBe(1);
   });
 
@@ -264,7 +264,7 @@ describe("runTransaction", () => {
     });
 
     expect(response.status).toBe(201);
-    expect(response.body.metadataMessage).toEqual(MESSAGES.METADATA_NOT_IN_FIRESTORE_OR_OSF.metadataMessage);
+    expect(response.body.metadataMessage).toEqual(MESSAGES.METADATA_NOT_IN_FIRESTORE_OR_PROVIDER.metadataMessage);
     expect(mockOSF.getCreateCount("dataset_description.json")).toBe(1);
   });
 
@@ -288,7 +288,7 @@ describe("runTransaction", () => {
     });
 
     expect(response.status).toBe(201);
-    expect(response.body.metadataMessage).toEqual(MESSAGES.METADATA_IN_OSF_AND_FIRESTORE.metadataMessage);
+    expect(response.body.metadataMessage).toEqual(MESSAGES.METADATA_IN_PROVIDER_AND_FIRESTORE.metadataMessage);
     expect(mockOSF.getUpdateCount(refId)).toBe(1);
   });
 
@@ -317,7 +317,7 @@ describe("runTransaction", () => {
     });
 
     expect(response.status).toBe(201);
-    expect(response.body.metadataMessage).toEqual(MESSAGES.METADATA_IN_FIRESTORE_NOT_IN_OSF.metadataMessage);
+    expect(response.body.metadataMessage).toEqual(MESSAGES.METADATA_IN_FIRESTORE_NOT_IN_PROVIDER.metadataMessage);
     expect(mockOSF.getCreateCount("dataset_description.json")).toBe(1);
   });
 
