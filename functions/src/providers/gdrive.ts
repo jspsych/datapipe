@@ -185,7 +185,7 @@ async function findFolder(
   // otherwise pick DIFFERENT folders and keep fragmenting the tree. Sorting
   // makes every caller converge on one, which is what stops a race from
   // compounding once it has happened. Preventing it in the first place is
-  // createDataContainer's job (see the eager folder creation there).
+  // ensureDerivedPaths's job (see the eager folder creation there).
   return files.map((file) => file.id).sort()[0];
 }
 
@@ -369,35 +369,43 @@ export const gdriveProvider: StorageProvider = {
     // names, so there's nothing to find-or-create here.
     const folderId = await createFolder(auth, name, targetParentId);
 
-    // Create the Psych-DS folder chain NOW, so the write path only ever finds
-    // it. findOrCreateFolder is find-then-create with no atomicity, and Drive
-    // offers no create-if-absent, so a burst of first-time submissions to a
-    // brand-new nested path races and produces sibling folders with the same
-    // name. Confirmed live rather than theorised: 8 concurrent writes to one
-    // new path produced 8 folders (spike gate H, 2026-08-21).
-    //
-    // That is exactly the designed-for load -- requirement 6 is 30-100
-    // students inside a minute, and on a fresh metadataActive experiment those
-    // are all first-time writes to data/raw/. No data is lost (listFiles
-    // recurses and collects by leaf name) but the researcher's Drive folder
-    // ends up with the tree duplicated, which is not a valid Psych-DS layout.
-    //
-    // Created unconditionally rather than only for metadataActive experiments:
-    // metadata can be switched on at any time, long after the container
-    // exists, and two empty folders cost far less than the race they remove.
-    // Best-effort -- a failure here must not fail experiment creation, since
-    // the write path can still create them itself.
+    return { provider: "gdrive", folderId };
+  },
+
+  // Pre-creates the Psych-DS data/raw chain at the one moment that is
+  // guaranteed race-free: a researcher switching metadata ON, before any
+  // submission exists (see StorageProvider.ensureDerivedPaths for why that
+  // guarantee holds and the spike gate H evidence for why it matters).
+  //
+  // This used to run unconditionally inside createDataContainer, on the
+  // theory that metadata could be switched on at any time, long after the
+  // container exists. That theory is false: firestore.rules
+  // (metadataChoiceRespected/hasCollectedData) and MetadataControl.js's own
+  // hasCollectedData freeze metadataActive the instant the experiment has
+  // data, so the only time it can ever be switched on is before the first
+  // submission -- exactly the same one-writer moment this hook now runs at.
+  // Creating it at container-creation time instead meant every gdrive
+  // experiment paid for two empty folders it would never use, since new
+  // experiments default metadataActive to false (create-experiment.ts never
+  // sets it).
+  async ensureDerivedPaths(auth: ResolvedAuth, container: ContainerRef): Promise<void> {
+    const gdriveContainer = container as GdriveContainerRef;
+
+    // Best-effort -- a failure here must not surface to the researcher
+    // flipping the switch, since the write path can still create these
+    // folders itself the first time a submission needs them. See
+    // findOrCreateFolder's docstring and StorageProvider.ensureDerivedPaths
+    // for why doing it here, rather than leaving it to the write path, is
+    // what removes the race in the first place (spike gate H, 2026-08-21).
     try {
-      const dataId = await findOrCreateFolder(auth, "data", folderId);
+      const dataId = await findOrCreateFolder(auth, "data", gdriveContainer.folderId);
       await findOrCreateFolder(auth, "raw", dataId);
     } catch (e) {
       console.warn(
-        `gdrive: could not pre-create the data/raw folders for ${folderId}; the write path will create them on demand:`,
+        `gdrive: could not pre-create the data/raw folders for ${gdriveContainer.folderId}; the write path will create them on demand:`,
         e instanceof Error ? e.message : e
       );
     }
-
-    return { provider: "gdrive", folderId };
   },
 
   // No storedNameFor: Drive stores a path prefix as real nested FOLDERS, and

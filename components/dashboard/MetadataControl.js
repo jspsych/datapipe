@@ -2,20 +2,48 @@ import { Badge } from "@chakra-ui/react";
 
 import { setDoc, doc } from "firebase/firestore";
 
-import { db } from "../../lib/firebase";
+import { auth, db } from "../../lib/firebase";
 import SettingsRow from "../ui/SettingsRow";
 import { SwitchTable } from "./SectionPanel";
+
+// Fire-and-forget call to the best-effort pre-creation endpoint
+// (functions/src/ensure-derived-paths.ts), made right after a successful ON
+// flip -- the one moment firestore.rules guarantees the experiment still has
+// zero submissions (metadataChoiceRespected/hasCollectedData below), so it's
+// the same race-free moment gdrive.ts's ensureDerivedPaths relies on (spike
+// gate H, 2026-08-21). Never awaited into writeMetadataActive's returned
+// promise and its own failure is swallowed: this exists only to remove a
+// race the write path already tolerates, so it must never make the switch
+// itself look like it failed.
+async function requestEnsureDerivedPaths(expId) {
+  const idToken = await auth.currentUser.getIdToken();
+  await fetch("/api/ensurederivedpaths", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({ experimentID: expId }),
+  });
+}
 
 // Returns the promise uncaught -- see the note in ExperimentActive.js. The two
 // empty catches that used to live here (activateMetadata / deactivateMetadata)
 // meant a failed write left the switch showing metadata production as on while
 // Firestore said off.
 function writeMetadataActive(expId, active) {
-  return setDoc(
+  const write = setDoc(
     doc(db, `experiments/${expId}`),
     { metadataActive: active },
     { merge: true }
   );
+  // Only on the ON transition -- switching off never needs a container laid
+  // out. Chained off `write`, not run alongside it, so this never fires
+  // ahead of the Firestore write actually landing.
+  if (active) {
+    write.then(() => requestEnsureDerivedPaths(expId)).catch(() => {});
+  }
+  return write;
 }
 
 // Whether this experiment has already collected data, and therefore whether

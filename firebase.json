@@ -94,6 +94,10 @@
         "function": "apifinalize"
       },
       {
+        "source": "/api/ensurederivedpaths",
+        "function": "ensurederivedpaths"
+      },
+      {
         "source": "/api/sendcontactemailverification",
         "function": "sendcontactemailverification"
       },
