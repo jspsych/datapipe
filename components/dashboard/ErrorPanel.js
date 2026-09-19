@@ -1,4 +1,11 @@
-import { Box, Accordion, Alert, Table, Text } from "@chakra-ui/react";
+import { useEffect, useRef, useState } from "react";
+import { Box, Accordion, Table, Text, Button } from "@chakra-ui/react";
+
+import { auth } from "../../lib/firebase";
+import { relativeErrorTime, visibleErrors } from "../../lib/error-panel";
+import SectionPanel from "./SectionPanel";
+import StatusIndicator from "../ui/StatusIndicator";
+import FormErrorAlert from "../ui/FormErrorAlert";
 
 // How many rows to render. `logs/{id}.errors` is now capped at 50 by
 // write-log.ts (MAX_ERROR_ENTRIES), but the recent ones are still the only
@@ -43,10 +50,34 @@ function formatErrorTime(time) {
   }).format(date);
 }
 
+// Fire-and-forget-ISH: awaited by the button below, but nothing here writes
+// to Firestore directly. Same Bearer/idToken shape as FinalizeControl.js's
+// requestFinalize -- a human sentence is thrown on any non-2xx response
+// rather than the server's raw body, because the only failure modes a
+// researcher can hit here (offline, a dropped connection) have nothing to do
+// with what functions/src/clear-errors.ts might say about them.
+async function requestClearErrors(experimentId) {
+  const user = auth.currentUser;
+  const idToken = await user.getIdToken();
+  const response = await fetch("/api/clearerrors", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({ experimentID: experimentId }),
+  });
+  if (!response.ok) {
+    throw new Error(
+      "Could not clear this list -- it is unchanged. Check your connection and try again."
+    );
+  }
+}
+
 /**
  * ErrorPanel — the record of submissions the API rejected for this experiment.
  *
- * Three things were wrong with the previous version, all of them frontend:
+ * Three things were wrong with the ORIGINAL version, all of them frontend:
  *
  * 1. IT COULD WHITE-SCREEN THE PAGE. It called `errors.map(...)` with no
  *    guard, while `functions/src/write-log.ts` wrote `logError` (an
@@ -68,83 +99,178 @@ function formatErrorTime(time) {
  *    applies just as much here. The code survives as fine print, because it is
  *    what a researcher pastes into a bug report.
  *
- * 3. IT COULD NOT BE DISMISSED OR AGED OUT. `logError` is a counter that
- *    nothing ever resets, so a single typo during piloting in January is still
- *    announcing "There was an error in data upload" in July. A permanent red
- *    banner is a cry-wolf signal that trains researchers to ignore the one
- *    indicator that matters. Without a backend change the honest fix is
- *    temporal framing: the heading says these were *recorded*, past tense, and
- *    the time of the most recent one is stated on the face of the panel, so an
- *    old resolved problem cannot pass itself off as a live one.
+ * 3. IT COULD NOT BE CLEARED. `logError` is a counter nothing ever reset, so
+ *    a single typo during piloting in January was still announcing "There
+ *    was an error" in July -- a permanent alarm trains researchers to ignore
+ *    the one indicator that matters. THIS IS NOW FIXED: the "Clear this
+ *    list" button below calls `functions/src/clear-errors.ts`, a server
+ *    route (firestore.rules grants clients `read`/`create` on `logs/{id}` but
+ *    never `update`, so a client-side clear is not possible). It writes a
+ *    watermark (`errorsClearedAt`/`logErrorCleared`), never the lifetime
+ *    counters themselves -- see `lib/error-panel.js`'s `visibleErrors`, which
+ *    is what turns that watermark into the count and rows rendered here.
+ *    Clearing is non-destructive (the lifetime record survives, for support
+ *    and for the operator's cross-experiment queries), which is why its
+ *    button is neutral, not `brandRed`.
  *
- * Color: `variant="subtle"` on `brandRed` rather than `variant="solid"` on
- * Chakra's stock red. Subtle pairs brandRed.subtle with brandRed.fg -- 50 with
- * 700 in light, 900 with 300 in dark -- both clearing the 4.5:1 body floor,
- * where the solid fill put `sm` and `xs` body text on a saturated red at
- * roughly 3.5:1. brandRed is also DESIGN.md §5's irreversible-destruction hue,
- * which fits: these are submissions that were refused and are not coming back.
+ * Color: this used to be a filled `Alert.Root status="error"
+ * colorPalette="brandRed" variant="subtle"` -- a permanently red block for a
+ * record that, per point 3 above, could never age out or be dismissed. Two
+ * problems followed from stacking "permanent" on top of "loud": a
+ * still-relevant alarm and a six-month-old non-issue looked identical, and
+ * DESIGN.md §5 reserves `brandRed` for IRREVERSIBLE DESTRUCTION (account/
+ * experiment deletion) -- a log of past rejections is neither destructive nor,
+ * now that it can be cleared, un-actionable. This renders instead as the same
+ * quiet `SectionPanel` (`bg.panel`, 1px `border`) the sibling "DataPipe could
+ * not check for queued uploads" notice uses in
+ * pages/admin/[experiment_id].js, carrying red in exactly two places: the
+ * `StatusIndicator`'s icon (`status.error`, DESIGN.md §1's brandRed alias,
+ * 5.92:1 light / 4.86:1 dark) and a 3px `status.error` LEFT border -- an
+ * accent, not a fill, so it reads as "this needs attention" without
+ * shouting it, in either mode, and without a single red background or red
+ * body-text pixel anywhere in the panel.
  *
  * @param {Array<object>|undefined} errors - The `logs/{id}.errors` array, now
  *   capped at the 50 most recent by the backend. Tolerates undefined, null,
  *   empty, and malformed entries.
- * @param {number|undefined} totalCount - `logs/{id}.logError`, the true
- *   lifetime count. The `errors` array is capped, so its length understates
- *   the total on any experiment that has been rejected more than fifty times.
- *   Falls back to the array length when absent.
+ * @param {number|undefined} totalCount - `logs/{id}.logError`, the lifetime
+ *   count. Combined with `logErrorCleared` (below) by `visibleErrors` to get
+ *   the count SINCE THE LAST CLEAR, which is what the headline reports.
+ * @param {number|undefined} logErrorCleared - `logs/{id}.logErrorCleared`,
+ *   the value `logError` held the moment of the last clear. Absent if the
+ *   list has never been cleared.
+ * @param {*} [errorsClearedAt] - `logs/{id}.errorsClearedAt`, a
+ *   Timestamp-shaped value. Absent if the list has never been cleared.
+ * @param {string} experimentId - Passed to `/api/clearerrors` when "Clear
+ *   this list" is clicked.
  */
-export default function ErrorPanel({ errors, totalCount }) {
+export default function ErrorPanel({
+  errors,
+  totalCount,
+  logErrorCleared,
+  errorsClearedAt,
+  experimentId,
+}) {
+  const { count, rows } = visibleErrors({
+    errors,
+    logError: totalCount,
+    logErrorCleared,
+    errorsClearedAt,
+  });
+
+  const [clearing, setClearing] = useState(false);
+  const [clearErrorMsg, setClearErrorMsg] = useState("");
+
+  // Guards a setState after the researcher navigates away, or after a
+  // successful clear has already made the parent's Firestore listener
+  // unmount this panel, mid-request.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
   // The guard that stops the non-atomic backend write from white-screening
-  // the page. `logError > 0` with no `errors` array is a state the backend
-  // can genuinely produce, and the honest render for it is nothing at all --
-  // there is no information here to show.
-  const all = Array.isArray(errors) ? errors.filter(Boolean) : [];
-  if (all.length === 0) return null;
+  // the page, now expressed in terms of the count SINCE THE LAST CLEAR
+  // rather than the raw array: `count === 0` covers both "nothing was ever
+  // rejected" and "everything that was rejected has since been cleared",
+  // and there is no information to show in either case.
+  if (count === 0) return null;
 
-  // Entries are appended, so the tail is the most recent. The array is not
-  // re-sorted by `time`: entries written before the Timestamp change carry a
-  // formatted string instead, and a mixed-type sort would scramble the order
-  // that insertion already gets right.
-  const recent = all.slice(-MAX_ROWS).reverse();
-  const latestTime = formatErrorTime(recent[0]?.time);
+  // Entries are appended, so the tail of `rows` is the most recent (the
+  // array is not re-sorted by `time`: entries written before the Timestamp
+  // change carry a formatted string instead, and a mixed-type sort would
+  // scramble the order that insertion already gets right).
+  const recent = rows.slice(-MAX_ROWS).reverse();
+  const mostRecent = rows[rows.length - 1];
 
-  // The headline counts every rejection ever recorded, which is `logError` --
-  // NOT the length of a capped array. Getting this wrong would tell a
-  // researcher with 300 rejections that they had 50.
-  const total = typeof totalCount === "number" && totalCount > 0 ? totalCount : all.length;
+  async function handleClear() {
+    setClearing(true);
+    setClearErrorMsg("");
+    try {
+      await requestClearErrors(experimentId);
+      // No success handling here on purpose: the parent page's Firestore
+      // listener on logs/{id} will pick up errorsClearedAt/logErrorCleared
+      // and this component will stop rendering (count becomes 0) on its own.
+    } catch (err) {
+      if (mounted.current) {
+        setClearErrorMsg(
+          err instanceof Error && err.message
+            ? err.message
+            : "Could not clear this list -- it is unchanged. Check your connection and try again."
+        );
+      }
+    } finally {
+      if (mounted.current) setClearing(false);
+    }
+  }
+
+  // The body sentence. "When there is no usable time: just the first
+  // sentence" covers both `!mostRecent` (count > 0 but every visible row was
+  // filtered out -- possible because `errors` is capped at 50 and because
+  // string-time rows are hidden once a clear has happened) and a real
+  // timestamp that fails to parse.
+  let recentPhrase = null;
+  if (mostRecent) {
+    if (typeof mostRecent.time === "string") {
+      recentPhrase = <>The most recent was on {mostRecent.time}.</>;
+    } else {
+      const relative = relativeErrorTime(mostRecent.time);
+      if (relative) {
+        const absolute = formatErrorTime(mostRecent.time);
+        recentPhrase = (
+          <>
+            The most recent was{" "}
+            {/* `title` here is supplementary detail (the exact timestamp),
+                not a status signal, so DESIGN.md §5's "status is never...
+                behind a tooltip" rule does not apply -- the relative phrase
+                itself is already the always-visible text. */}
+            <Box as="span" title={absolute || undefined}>
+              {relative}
+            </Box>
+            .
+          </>
+        );
+      }
+    }
+  }
 
   return (
-    <Alert.Root status="error" colorPalette="brandRed" variant="subtle">
-      <Alert.Indicator />
-      <Box flex="1" minW={0}>
-        <Alert.Title mb={2}>
-          {total === 1
+    <SectionPanel borderLeftWidth="3px" borderLeftColor="status.error">
+      <StatusIndicator
+        status="error"
+        label={
+          count === 1
             ? "One submission to this experiment was rejected."
-            : `${total} submissions to this experiment were rejected.`}
-        </Alert.Title>
-        <Text fontSize="sm" mb={4}>
-          {latestTime
-            ? `These submissions did not reach your storage provider. The most recent was ${latestTime}. If you have since fixed the problem, this list will not clear on its own -- it is a running record, not a live alarm.`
-            : "These submissions did not reach your storage provider. This is a running record of past rejections, not a live alarm -- it does not clear on its own."}
-        </Text>
+            : `${count} submissions to this experiment were rejected.`
+        }
+      />
+      <Text fontSize="sm" color="fg.muted" mt={2} mb={4}>
+        These submissions did not reach your storage provider.
+        {recentPhrase && <> {recentPhrase}</>}
+      </Text>
+
+      {/* `rows` can be empty with `count > 0` (the 50-entry cap, or every
+          visible row being a legacy string-time entry hidden by a clear) --
+          the headline above still has to be honest, but there is nothing to
+          put in a table. */}
+      {rows.length > 0 && (
         <Accordion.Root collapsible>
           <Accordion.Item value="error-logs">
             <Accordion.ItemTrigger>
               <Box as="span" flex="1" textAlign="left" fontSize="sm">
-                {total > MAX_ROWS
-                  ? `Show the ${MAX_ROWS} most recent of ${total}`
+                {count > MAX_ROWS
+                  ? `Show the ${MAX_ROWS} most recent of ${count}`
                   : "Show what was rejected"}
               </Box>
               <Accordion.ItemIndicator />
             </Accordion.ItemTrigger>
             <Accordion.ItemContent pb={4}>
-              <Box
-                bg="bg.panel"
-                color="fg"
-                borderWidth="1px"
-                borderColor="border"
-                borderRadius="md"
-                overflowX="auto"
-              >
+              {/* No border/bg of its own -- SectionPanel already supplies
+                  both, and repeating them here read as a box inside a box. */}
+              <Box overflowX="auto">
                 <Table.Root variant="line" size="sm">
                   <Table.Header>
                     <Table.Row>
@@ -192,7 +318,22 @@ export default function ErrorPanel({ errors, totalCount }) {
             </Accordion.ItemContent>
           </Accordion.Item>
         </Accordion.Root>
-      </Box>
-    </Alert.Root>
+      )}
+
+      <Button
+        size="sm"
+        variant="outline"
+        colorPalette="gray"
+        loading={clearing}
+        disabled={clearing}
+        onClick={handleClear}
+        mt={4}
+      >
+        Clear this list
+      </Button>
+      {clearErrorMsg && <FormErrorAlert mt={2}>{clearErrorMsg}</FormErrorAlert>}
+    </SectionPanel>
   );
 }
+
+export { formatErrorTime };
