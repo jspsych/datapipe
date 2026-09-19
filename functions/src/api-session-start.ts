@@ -43,7 +43,6 @@
 // accepted, which is the same behaviour two concurrent submissions have always
 // had.
 
-import { onRequest } from "firebase-functions/v2/https";
 import type { Request } from "firebase-functions/v2/https";
 import type { Response } from "express";
 import { DocumentSnapshot } from "firebase-admin/firestore";
@@ -62,12 +61,12 @@ import {
   streamingEnabled,
 } from "./staging.js";
 
-// Plain handler, exported so participant-api.ts (functions/src/
-// participant-api.ts) can dispatch to it alongside apiConditionHandler --
-// see that module's header for why session and condition share ONE deployed
-// function but are kept OUT of dashboardapi. apiSessionStart below stays a
-// thin onRequest wrapper around this for exactly one more release, so the
-// standalone function keeps working while hosting cuts over -- see index.ts.
+// Plain handler, dispatched from participant-api.ts (functions/src/
+// participant-api.ts) alongside apiConditionHandler -- see that module's
+// header for why session and condition share ONE deployed function
+// (participantapi) but are kept OUT of dashboardapi. This used to also back
+// a standalone onRequest export, apiSessionStart, kept for one release during
+// the rollout; that wrapper is gone now that participantapi has taken over.
 export async function apiSessionStartHandler(req: Request, res: Response): Promise<void> {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
@@ -203,11 +202,3 @@ export async function apiSessionStartHandler(req: Request, res: Response): Promi
     maxDisconnects: MAX_DISCONNECTS,
   });
 }
-
-// Kept for one release only -- the standalone "apisessionstart" function
-// stays deployed alongside participantApi so the two-step rollout
-// (participant-api.ts's header) never lets hosting's rewrite point at a
-// function that does not exist yet. Remove this export, and index.ts's
-// re-export of it, in the follow-up that removes the old standalone
-// functions once participantApi has deployed and hosting has cut over.
-export const apiSessionStart = onRequest({ cors: true }, apiSessionStartHandler);

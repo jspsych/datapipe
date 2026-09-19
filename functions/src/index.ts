@@ -6,18 +6,12 @@ import { apiData } from "./api-data.js";
 // mirror: the four submission gates run here, against Firestore, and only an
 // unforgeable server-minted session id reaches RTDB.
 //
-// apiSessionStart and apiCondition below, plus apiBase64, are KEPT FOR ONE
-// RELEASE ONLY as standalone exports -- see participant-api.ts's header and
-// api-data.ts's ROUTING NOTE for why. The follow-up PR (step 2 of the
-// rollout) removes these three exports once participantApi and apiData's
-// "/api/base64" route have deployed and every test/doc reference has moved
-// off the standalone function names.
-import { apiSessionStart } from "./api-session-start.js";
-import { apiCondition } from "./api-condition.js";
-import { apiBase64 } from "./api-base64.js";
-// Merges apiSessionStart and apiCondition into ONE deployed function -- see
-// participant-api.ts's header for why these two (and not apiData/apiBase64,
-// and not dashboardapi) share a pool.
+// apiSessionStart and apiCondition used to also be their own standalone
+// onRequest exports here, as did apiBase64 -- kept for one release during the
+// participant-api consolidation's rollout (see participant-api.ts's header
+// and api-data.ts's ROUTING NOTE). All three are now dispatched exclusively
+// from participantApi and apiData, respectively; the standalone exports and
+// their imports are gone.
 import { participantApi } from "./participant-api.js";
 import { scheduledTokenRefresh } from "./scheduled-token-refresh.js";
 // The consolidated sweep: upload retry, staging sweep, mail retry and pending
@@ -64,9 +58,6 @@ setGlobalOptions({
 
 export {
   apiData as apidata,
-  apiSessionStart as apisessionstart,
-  apiCondition as apicondition,
-  apiBase64 as apibase64,
   scheduledTokenRefresh as scheduledtokenrefresh,
   scheduledSweep as scheduledsweep,
   onStagingDisconnect as onstagingdisconnect,

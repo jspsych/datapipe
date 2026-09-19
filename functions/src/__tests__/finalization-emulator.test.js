@@ -23,6 +23,7 @@ import { randomUUID, createHash } from "crypto";
 import { inflateRawSync } from "zlib";
 import express from "express";
 import { PSYCHDS_IGNORE_CONTENT } from "@jspsych/metadata";
+import { fnUrl } from "./helpers/fn-url.js";
 
 const ZENODO_PORT = 3590;
 const BUCKET_ID = "finalization-bucket";
@@ -756,7 +757,9 @@ describe("F5. finalization is permanent", () => {
         finalizedAt: Timestamp.now(),
       });
 
-    const response = await fetch(`http://localhost:5001/datapipe-test/us-central1/apibase64`, {
+    // apibase64 no longer deploys as its own function -- its handler is now
+    // dispatched from within apidata (see api-data.ts's ROUTING NOTE).
+    const response = await fetch(fnUrl("/api/base64"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

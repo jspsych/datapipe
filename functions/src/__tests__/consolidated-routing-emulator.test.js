@@ -1,23 +1,30 @@
 /**
  * @jest-environment node
  *
- * Step 1 of the participant-api consolidation (functions/src/participant-api.ts,
- * and api-data.ts's "/api/base64" dispatch): this suite proves the NEW entry
- * points work, side by side with the OLD standalone functions -- which stay
- * deployed and are exercised by their own existing suites (staging-emulator,
- * get-condition-emulator, base64data-emulator, data-emulator). Neither set of
- * tests is rewritten here; see the PR description for why that split is
- * deliberate for this commit.
+ * Coverage for the participant-api consolidation's entry points:
+ * participantapi (functions/src/participant-api.ts, dispatching /api/session
+ * and /api/condition) and apidata's own "/api/base64" route (api-data.ts).
+ *
+ * This suite originally (step 1 of the rollout) proved these new entry
+ * points matched the OLD standalone apisessionstart/apicondition/apibase64
+ * functions response for response, while both sets stayed deployed side by
+ * side. Step 2 (this commit) removes those standalone functions entirely --
+ * see index.ts, api-session-start.ts, api-condition.ts, api-base64.ts -- so
+ * there is nothing left to compare against. What remains is direct coverage
+ * of the new entry points' own behavior, which is what every OTHER suite
+ * that used to hit apisessionstart/apicondition/apibase64 also now asserts,
+ * via fnUrl (see staging-emulator.test.js, get-condition-emulator.test.js,
+ * base64data-emulator.test.js, and the rest -- grep the repo for fnUrl if
+ * this comment goes stale).
  *
  * Covers:
  *   - fnUrl("/api/base64") (apidata's own "/api/base64" route) accepts a
- *     valid upload and rejects an invalid one exactly like apibase64 does.
+ *     valid upload and rejects an invalid one.
  *   - apidata at its bare URL and at apidata/api/data both behave as the data
  *     endpoint -- the dispatcher's default branch, which direct invocations
  *     (this suite, and any caller using the raw function URL) depend on.
  *   - fnUrl("/api/session") and fnUrl("/api/condition") (participantapi)
- *     match the old apisessionstart / apicondition functions for one success
- *     and one failure case each.
+ *     each have a success and a failure case.
  *   - An unknown path on participantapi 404s the same way dashboardapi's
  *     dispatcher does.
  *
@@ -44,16 +51,13 @@ process.env.FIREBASE_STORAGE_EMULATOR_HOST = "localhost:9199";
 jest.setTimeout(30000);
 
 const FUNCTIONS_BASE = "http://localhost:5001/datapipe-test/us-central1";
-const OLD_APIBASE64_URL = `${FUNCTIONS_BASE}/apibase64`;
-const OLD_APISESSIONSTART_URL = `${FUNCTIONS_BASE}/apisessionstart`;
-const OLD_APICONDITION_URL = `${FUNCTIONS_BASE}/apicondition`;
 const APIDATA_BARE_URL = `${FUNCTIONS_BASE}/apidata`;
 const APIDATA_API_DATA_URL = `${FUNCTIONS_BASE}/apidata/api/data`;
 const PARTICIPANTAPI_BASE = `${FUNCTIONS_BASE}/participantapi`;
 
-const NEW_APIBASE64_URL = fnUrl("/api/base64");
-const NEW_APISESSIONSTART_URL = fnUrl("/api/session");
-const NEW_APICONDITION_URL = fnUrl("/api/condition");
+const APIBASE64_URL = fnUrl("/api/base64");
+const APISESSION_URL = fnUrl("/api/session");
+const APICONDITION_URL = fnUrl("/api/condition");
 
 async function post(url, body) {
   const response = await fetch(url, {
@@ -144,9 +148,8 @@ beforeAll(async () => {
   });
   createdExperimentIds.push(inactiveDataExperimentID);
 
-  const oldSessionExperimentID = `consolidated-session-old-${randomUUID()}`;
-  const newSessionExperimentID = `consolidated-session-new-${randomUUID()}`;
-  const sessionFixture = {
+  const sessionExperimentID = `consolidated-session-${randomUUID()}`;
+  await db.collection("experiments").doc(sessionExperimentID).set({
     active: true,
     activeBase64: false,
     activeConditionAssignment: false,
@@ -162,17 +165,16 @@ beforeAll(async () => {
     limitSessions: false,
     storageProvider: "gdrive",
     providerContainer: { kind: "gdrive", folderId: "consolidated-folder" },
-  };
-  await db.collection("experiments").doc(oldSessionExperimentID).set(sessionFixture);
-  await db.collection("experiments").doc(newSessionExperimentID).set(sessionFixture);
-  createdExperimentIds.push(oldSessionExperimentID, newSessionExperimentID);
+  });
+  createdExperimentIds.push(sessionExperimentID);
 
-  const oldConditionExperimentID = `consolidated-condition-old-${randomUUID()}`;
-  const newConditionExperimentID = `consolidated-condition-new-${randomUUID()}`;
-  const conditionFixture = { activeConditionAssignment: true, nConditions: 1, currentCondition: 0 };
-  await db.collection("experiments").doc(oldConditionExperimentID).set(conditionFixture);
-  await db.collection("experiments").doc(newConditionExperimentID).set(conditionFixture);
-  createdExperimentIds.push(oldConditionExperimentID, newConditionExperimentID);
+  const conditionExperimentID = `consolidated-condition-${randomUUID()}`;
+  await db.collection("experiments").doc(conditionExperimentID).set({
+    activeConditionAssignment: true,
+    nConditions: 1,
+    currentCondition: 0,
+  });
+  createdExperimentIds.push(conditionExperimentID);
 
   // Stashed on the module-level fixtures object below rather than re-derived
   // per test.
@@ -180,10 +182,8 @@ beforeAll(async () => {
   fixtures.base64ExperimentID = base64ExperimentID;
   fixtures.invalidBase64ExperimentID = invalidBase64ExperimentID;
   fixtures.inactiveDataExperimentID = inactiveDataExperimentID;
-  fixtures.oldSessionExperimentID = oldSessionExperimentID;
-  fixtures.newSessionExperimentID = newSessionExperimentID;
-  fixtures.oldConditionExperimentID = oldConditionExperimentID;
-  fixtures.newConditionExperimentID = newConditionExperimentID;
+  fixtures.sessionExperimentID = sessionExperimentID;
+  fixtures.conditionExperimentID = conditionExperimentID;
 });
 
 afterAll(async () => {
@@ -197,21 +197,15 @@ afterAll(async () => {
 });
 
 describe("apidata's own /api/base64 route", () => {
-  it("rejects invalid base64 exactly like apibase64 does", async () => {
-    const oldResponse = await post(OLD_APIBASE64_URL, {
-      experimentID: fixtures.invalidBase64ExperimentID,
-      data: "{'not': 'base64'}",
-      filename: "whatever",
-    });
-    const newResponse = await post(NEW_APIBASE64_URL, {
+  it("rejects invalid base64 data", async () => {
+    const response = await post(APIBASE64_URL, {
       experimentID: fixtures.invalidBase64ExperimentID,
       data: "{'not': 'base64'}",
       filename: "whatever",
     });
 
-    expect(newResponse.status).toBe(oldResponse.status);
-    expect(newResponse.body).toEqual(oldResponse.body);
-    expect(newResponse.body).toEqual(MESSAGES.INVALID_BASE64_DATA);
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual(MESSAGES.INVALID_BASE64_DATA);
   });
 
   it("accepts a valid base64 upload and uploads the decoded bytes", async () => {
@@ -219,7 +213,7 @@ describe("apidata's own /api/base64 route", () => {
     const originalBytes = Buffer.from("bytes routed through apidata's /api/base64 dispatch");
     const payload = `data:application/octet-stream;base64,${originalBytes.toString("base64")}`;
 
-    const response = await post(NEW_APIBASE64_URL, {
+    const response = await post(APIBASE64_URL, {
       experimentID: fixtures.base64ExperimentID,
       data: payload,
       filename,
@@ -263,58 +257,43 @@ describe("apidata's default branch (the data endpoint)", () => {
 });
 
 describe("participantapi -- /api/session", () => {
-  it("matches apisessionstart's failure case: a missing experiment id", async () => {
-    const oldResponse = await post(OLD_APISESSIONSTART_URL, {});
-    const newResponse = await post(NEW_APISESSIONSTART_URL, {});
+  it("requires an experiment id", async () => {
+    const response = await post(APISESSION_URL, {});
 
-    expect(newResponse.status).toBe(oldResponse.status);
-    expect(newResponse.body).toEqual(oldResponse.body);
-    expect(newResponse.body).toEqual(MESSAGES.MISSING_PARAMETER);
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual(MESSAGES.MISSING_PARAMETER);
   });
 
-  it("matches apisessionstart's success case (session id aside)", async () => {
-    const oldResponse = await post(OLD_APISESSIONSTART_URL, {
-      experimentID: fixtures.oldSessionExperimentID,
-      filename: "p01.csv",
-    });
-    const newResponse = await post(NEW_APISESSIONSTART_URL, {
-      experimentID: fixtures.newSessionExperimentID,
+  it("admits a session for an open experiment", async () => {
+    const response = await post(APISESSION_URL, {
+      experimentID: fixtures.sessionExperimentID,
       filename: "p01.csv",
     });
 
-    expect(oldResponse.status).toBe(200);
-    expect(newResponse.status).toBe(200);
-    expect(typeof newResponse.body.sessionId).toBe("string");
-    expect(newResponse.body.sessionId.length).toBeGreaterThanOrEqual(20);
-    // Every field except the (necessarily distinct) sessionId must agree.
-    const { sessionId: _old, ...oldRest } = oldResponse.body;
-    const { sessionId: _new, ...newRest } = newResponse.body;
-    expect(newRest).toEqual(oldRest);
+    expect(response.status).toBe(200);
+    expect(typeof response.body.sessionId).toBe("string");
+    expect(response.body.sessionId.length).toBeGreaterThanOrEqual(20);
+    expect(response.body.databaseURL).toEqual(expect.any(String));
+    expect(response.body.maxTrialBytes).toEqual(expect.any(Number));
+    expect(response.body.maxDisconnects).toEqual(expect.any(Number));
   });
 });
 
 describe("participantapi -- /api/condition", () => {
-  it("matches apicondition's failure case: a missing experiment id", async () => {
-    const oldResponse = await post(OLD_APICONDITION_URL, {});
-    const newResponse = await post(NEW_APICONDITION_URL, {});
+  it("requires an experiment id", async () => {
+    const response = await post(APICONDITION_URL, {});
 
-    expect(newResponse.status).toBe(oldResponse.status);
-    expect(newResponse.body).toEqual(oldResponse.body);
-    expect(newResponse.body).toEqual(MESSAGES.MISSING_PARAMETER);
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual(MESSAGES.MISSING_PARAMETER);
   });
 
-  it("matches apicondition's success case", async () => {
-    const oldResponse = await post(OLD_APICONDITION_URL, {
-      experimentID: fixtures.oldConditionExperimentID,
-    });
-    const newResponse = await post(NEW_APICONDITION_URL, {
-      experimentID: fixtures.newConditionExperimentID,
+  it("returns a condition assignment", async () => {
+    const response = await post(APICONDITION_URL, {
+      experimentID: fixtures.conditionExperimentID,
     });
 
-    expect(oldResponse.status).toBe(200);
-    expect(newResponse.status).toBe(200);
-    expect(newResponse.body).toEqual(oldResponse.body);
-    expect(newResponse.body).toEqual({ message: "Success", condition: 0 });
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ message: "Success", condition: 0 });
   });
 });
 

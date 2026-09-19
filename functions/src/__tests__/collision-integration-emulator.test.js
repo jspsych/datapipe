@@ -5,8 +5,9 @@
 // RED-phase integration tests for step 3a (docs/provider-migration-design.md,
 // scratchpad/step3a-collision-cache-spec.md), cases 13-17 of the test plan.
 //
-// These exercise the deployed-in-emulator apidata/apibase64 functions end to
-// end against a mock OSF server, following the pattern in
+// These exercise the deployed-in-emulator apidata function (both its default
+// /api/data behavior and its dispatched /api/base64 route -- see
+// api-data.ts) end to end against a mock OSF server, following the pattern in
 // early-persist-emulator.test.js: a self-contained express server started on
 // an OS-assigned port (`listen(0)`) rather than the shared, fixed-port
 // mock-server.ts used by metadata-emulator.test.js. Two reasons for that
@@ -31,6 +32,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import { randomUUID, createHash } from "crypto";
 import express from "express";
 import MESSAGES from "../api-messages";
+import { fnUrl } from "./helpers/fn-url.js";
 
 process.env.FIRESTORE_EMULATOR_HOST = "localhost:8080";
 
@@ -44,7 +46,7 @@ const sampleData = `[{"trial_type":"html-keyboard-response","trial_index":1,"tim
 const sampleBase64 = Buffer.from("collision cache integration payload").toString("base64");
 
 async function saveData(body) {
-  const response = await fetch("http://localhost:5001/datapipe-test/us-central1/apidata", {
+  const response = await fetch(fnUrl("/api/data"), {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "*/*" },
     body: JSON.stringify(body),
@@ -53,8 +55,10 @@ async function saveData(body) {
   return { status: response.status, body: message };
 }
 
+// apibase64 no longer deploys as its own function -- its handler is now
+// dispatched from within apidata (see api-data.ts's ROUTING NOTE).
 async function saveBase64Data(body) {
-  const response = await fetch("http://localhost:5001/datapipe-test/us-central1/apibase64", {
+  const response = await fetch(fnUrl("/api/base64"), {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "*/*" },
     body: JSON.stringify(body),

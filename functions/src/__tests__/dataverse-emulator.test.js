@@ -3,9 +3,10 @@
  */
 
 // End-to-end coverage for the Dataverse adapter, driving the REAL deployed
-// apidata/apibase64 functions inside the Functions emulator against a
-// self-contained mock Dataverse installation -- the house pattern established
-// by gdrive-emulator.test.js.
+// apidata function (both its default /api/data behavior and its dispatched
+// /api/base64 route -- see api-data.ts) inside the Functions emulator
+// against a self-contained mock Dataverse installation -- the house pattern
+// established by gdrive-emulator.test.js.
 //
 // HOW THE MOCK IS REACHED. Dataverse is federated, so serverUrl is
 // per-connection/per-container data rather than a provider constant:
@@ -46,6 +47,7 @@ import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { randomUUID } from "crypto";
 import express from "express";
 import MESSAGES from "../api-messages";
+import { fnUrl } from "./helpers/fn-url.js";
 
 process.env.FIRESTORE_EMULATOR_HOST = "localhost:8080";
 process.env.FIREBASE_STORAGE_EMULATOR_HOST = "localhost:9199";
@@ -71,8 +73,12 @@ const CONTENTION_MESSAGE = "Failed to add file to dataset.";
 const SAME_CONTENT_MESSAGE =
   "This file has the same content as prior.json that is in the dataset. \nFailed to add file to dataset.";
 
-async function postTo(fn, body) {
-  const response = await fetch(`http://localhost:5001/datapipe-test/us-central1/${fn}`, {
+// url: a full URL, as fnUrl(apiPath) returns it -- not a bare function name.
+// apibase64 no longer deploys as its own function (its handler is now
+// dispatched from within apidata -- see api-data.ts's ROUTING NOTE), so this
+// suite reaches it the same way a real request does, through fnUrl.
+async function postTo(url, body) {
+  const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "*/*" },
     body: JSON.stringify(body),
@@ -87,8 +93,8 @@ async function postTo(fn, body) {
   return { status: response.status, body: message };
 }
 
-const saveData = (body) => postTo("apidata", body);
-const saveBase64 = (body) => postTo("apibase64", body);
+const saveData = (body) => postTo(fnUrl("/api/data"), body);
+const saveBase64 = (body) => postTo(fnUrl("/api/base64"), body);
 
 // Buffer-based multipart parser. Deliberately NOT the split-on-string
 // approach gdrive's suite uses: the base64 case below uploads bytes that are

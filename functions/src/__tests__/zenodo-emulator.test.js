@@ -3,9 +3,11 @@
  */
 
 // End-to-end coverage for the Zenodo adapter, driving the REAL deployed
-// apidata/apibase64 functions inside the Functions emulator against a
-// self-contained mock Zenodo -- the same shape as gdrive-emulator.test.js,
-// which is the house pattern for provider write-path coverage.
+// apidata function (both its default /api/data behavior and its dispatched
+// /api/base64 route -- see api-data.ts) inside the Functions emulator
+// against a self-contained mock Zenodo -- the same shape as
+// gdrive-emulator.test.js, which is the house pattern for provider
+// write-path coverage.
 //
 // HOW THE MOCK IS REACHED. Zenodo's adapter allowlists zenodo.org and
 // sandbox.zenodo.org (providers/zenodo.ts's ALLOWED_HOSTS), so unlike
@@ -45,6 +47,7 @@ import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { randomUUID } from "crypto";
 import express from "express";
 import MESSAGES from "../api-messages";
+import { fnUrl } from "./helpers/fn-url.js";
 
 process.env.FIRESTORE_EMULATOR_HOST = "localhost:8080";
 process.env.FIREBASE_STORAGE_EMULATOR_HOST = "localhost:9199";
@@ -70,8 +73,12 @@ const sampleData = `[{"trial_type":"html-keyboard-response","trial_index":1,"tim
 // here would let a regression in that regex pass unnoticed.
 const CAP_MESSAGE = "Uploading selected files will result in exceeding the max amount per record.";
 
-async function postTo(fn, body) {
-  const response = await fetch(`http://localhost:5001/datapipe-test/us-central1/${fn}`, {
+// url: a full URL, as fnUrl(apiPath) returns it -- not a bare function name.
+// apibase64 no longer deploys as its own function (its handler is now
+// dispatched from within apidata -- see api-data.ts's ROUTING NOTE), so this
+// suite reaches it the same way a real request does, through fnUrl.
+async function postTo(url, body) {
+  const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "*/*" },
     body: JSON.stringify(body),
@@ -89,8 +96,8 @@ async function postTo(fn, body) {
   return { status: response.status, body: message };
 }
 
-const saveData = (body) => postTo("apidata", body);
-const saveBase64 = (body) => postTo("apibase64", body);
+const saveData = (body) => postTo(fnUrl("/api/data"), body);
+const saveBase64 = (body) => postTo(fnUrl("/api/base64"), body);
 
 // A self-contained mock Zenodo covering the legacy deposit API plus the
 // files-REST bucket endpoint -- the exact pair the adapter targets, and only
