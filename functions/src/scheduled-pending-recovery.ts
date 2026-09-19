@@ -20,6 +20,28 @@ const MAX_FILES_PER_RUN = 10;
 
 const MAX_RETRIES = 5;
 
+// The two failureReason strings a recovered pending object can be promoted
+// with. QueuePanel's Reason column (lib/upload-queue.js) and the
+// upload-failure email copy both match on these verbatim -- keep them in
+// sync with that file's REASON_COPY if either string ever changes.
+//
+// METADATA_KEPT_FAILURE_REASON: the pending copy was kept on purpose because
+// api-data.ts's METADATA_ERROR branch refused the submission (no Psych-DS
+// metadata could be generated) but chose to keep the raw file rather than
+// discard it -- see persist-pending.ts's markPendingKept. This entry was
+// NEVER an upload attempt of any kind, so it must not read like one.
+//
+// INTERRUPTED_UPLOAD_FAILURE_REASON: the generic case -- and the fallback
+// when a pending object carries no keptReason at all, i.e. every pending
+// object written before markPendingKept existed, and every one persisted by
+// a request that OOM-crashed or timed out before it could reach any refusal
+// branch at all. "Interrupted" is genuinely descriptive here: the original
+// request really did not finish.
+export const METADATA_KEPT_FAILURE_REASON =
+  "Kept after a metadata failure (raw data stored without Psych-DS files)";
+export const INTERRUPTED_UPLOAD_FAILURE_REASON =
+  "Recovered from interrupted upload (server restart or memory limit)";
+
 /**
  * Runs every 15 minutes -- scheduled-sweep.ts's `jobsDueAt` gates this in on
  * every third tick of its 5-minute cron, since recovery this cheap and this
@@ -84,8 +106,17 @@ export async function recoverPendingUploads(prefix: string = PENDING_PREFIX) {
 
     console.log(`Recovering pending data: ${file.name}`);
 
+    // Read from the SAME getMetadata() call already made for the age check
+    // above rather than a second round-trip. Custom metadata is written by
+    // persist-pending.ts's markPendingKept; absent on a pending object that
+    // was never labeled (every object written before markPendingKept
+    // existed, and every object persisted by a request that never reached a
+    // labeling branch), which is exactly the population that should keep
+    // getting the generic INTERRUPTED_UPLOAD_FAILURE_REASON below.
+    const keptReason = metadata.metadata?.keptReason as string | undefined;
+
     try {
-      await promoteToQueue(file);
+      await promoteToQueue(file, keptReason);
       processed++;
     } catch (e) {
       const detail = e instanceof Error ? e.message : "Unknown error";
@@ -106,9 +137,16 @@ export async function recoverPendingUploads(prefix: string = PENDING_PREFIX) {
  * 3. Copy the data to upload-queue/ storage (where queue-status API expects it)
  * 4. Create an uploadQueue Firestore document
  * 5. Clean up the pending-data/ file
+ *
+ * @param keptReason - The pending object's `keptReason` custom metadata
+ *   (persist-pending.ts's markPendingKept), when the caller already read it.
+ *   Optional and additive: recoverPendingUploads passes it through from the
+ *   getMetadata() call it already makes for the age check; a direct caller
+ *   (tests, or a future one) can omit it and gets today's generic reason.
  */
 export async function promoteToQueue(
-  file: ReturnType<ReturnType<typeof storage.bucket>["file"]>
+  file: ReturnType<ReturnType<typeof storage.bucket>["file"]>,
+  keptReason?: string
 ) {
   // Read the envelope
   let envelope;
@@ -225,7 +263,10 @@ export async function promoteToQueue(
       lastAttemptAt: null,
       nextRetryAt,
       completedAt: null,
-      failureReason: "Recovered from interrupted upload (server restart or memory limit)",
+      failureReason:
+        keptReason === "metadata-failure"
+          ? METADATA_KEPT_FAILURE_REASON
+          : INTERRUPTED_UPLOAD_FAILURE_REASON,
       deduplicationKey,
       sessionIncremented: false,
     };

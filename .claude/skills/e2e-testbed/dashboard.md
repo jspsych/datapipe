@@ -137,28 +137,51 @@ not shown."
 
 ## Queue — `components/dashboard/QueuePanel.js`
 
-Rendered only when something is queued. It is an alert containing a table, not
-a modal. Row statuses: `pending` → **"Retrying"**, `processing` → **"Retrying
-now"**, `failed` → **"Failed"**.
+Rendered only when something is queued. Every entry is one of three KINDS,
+classified by `lib/upload-queue.js`'s `queueEntryKind` (same classifier the
+header chip uses, so the two can never disagree):
+
+- **`failed`** — `status === "failed"`. Every retry was used up.
+- **`waiting`** — held on purpose and never attempted: `lastAttemptAt` is
+  still null, `retryCount` is still 0, and `failureReason` is one of the
+  known held/kept/recovered reasons (a recovered partial session, a raw file
+  kept after a metadata failure, a hold for compaction or a cold collision
+  cache). Row status **"Waiting to be stored"** (`processing` →
+  **"Storing now"**), sub-line **"First attempt in `<n>`"**.
+- **`retrying`** — everything else pending/processing, i.e. DataPipe has
+  already tried a provider write at least once. Row status **"Retrying"**
+  (`processing` → **"Retrying now"**), sub-line **"Next retry in `<n>`"**.
+
+The panel's own visual weight follows the same three-way split
+(`summarizeQueue(entries).tone`): a filled `error` alert only when something
+has genuinely `failed`; a quiet bordered panel (orange left edge) when
+something is `retrying` but nothing has failed; a plain bordered panel with no
+colour at all when everything present is only `waiting`. Do not expect the
+filled alert (`find`'s `role="alert"`) on an all-waiting or all-retrying
+queue — only a permanent failure gets it.
 
 There is **no retry button** — retries are server-side. The only controls are
 **"Download all as ZIP"**, a per-row icon button with
-`aria-label="Download <filename>"`, and an accordion trigger **"Why did these
-uploads fail?"** whose body is hidden until clicked.
+`aria-label="Download <filename>"`, and an accordion trigger **"What is
+happening to these files?"** (was "Why did these uploads fail?") whose body is
+hidden until clicked.
 
-The alert title is `<n> files could not be uploaded to your storage provider.`
-when all have failed, or `<n> files did not upload to your storage provider.`
-otherwise.
+The headline text depends on which kinds are present — see
+`components/dashboard/QueuePanel.js`'s `summaryText` for the exact four cases
+(all failed / failed + others / retrying, maybe some waiting / all waiting).
+An all-waiting queue never says "did not upload" or anything implying a
+failure; a `METADATA_ERROR` recovery entry no longer says "server restart or
+memory limit" — see endpoints.md.
 
 When the queue drains, a notice reads **"All queued uploads completed
 successfully."** and **auto-hides after 8 seconds** — do not build an assertion
 that depends on catching it.
 
-**Prefer `GET /api/queuestatus?experimentID=<id>` over this panel.** It is the
-only way to see `retryCount` and `lastAttemptAt`, and therefore the only way to
-tell "queued, never attempted" from "attempted and failed" — the panel says
-"Retrying" for both. See [endpoints.md](endpoints.md) for the call and where to
-read the ID token. OBSERVED 2026-09-19.
+**`GET /api/queuestatus?experimentID=<id>` is still useful** for the raw
+`retryCount`/`lastAttemptAt`/`failureReason` fields, but is no longer the
+*only* way to tell "queued, never attempted" from "attempted and failed" — the
+dashboard panel itself now makes that distinction (waiting vs. retrying). See
+[endpoints.md](endpoints.md) for the call and where to read the ID token.
 
 ## Errors — `components/dashboard/ErrorPanel.js`
 

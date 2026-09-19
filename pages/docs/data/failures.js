@@ -210,12 +210,22 @@ export default function WhenAnUploadFailsPage() {
 
       <DocsSection id="the-queued-files-panel" title="The queued files panel">
         <Text maxW="70ch">
-          Whenever an experiment has uploads waiting, its dashboard shows a
-          status line reading{" "}
-          <em>&ldquo;N uploads waiting to be stored&rdquo;</em>. It&apos;s a
-          warning while every upload is still retrying, and becomes an error
-          as soon as any one of them has used up its attempts. The panel
-          below it lists the files.
+          Whenever an experiment has queued uploads, its dashboard shows a
+          status line: <em>&ldquo;N upload(s) waiting to be stored&rdquo;</em>{" "}
+          when nothing has been attempted yet, <em>&ldquo;N upload(s)
+          failed&rdquo;</em> once any one of them has used up its attempts, and
+          a plain (uncoloured) badge in between if everything queued is simply
+          waiting its turn -- DataPipe reserves the orange warning for
+          uploads it has actually tried and not yet landed. The panel below
+          it lists the files.
+        </Text>
+        <Text maxW="70ch">
+          Not every queued file has been attempted. A file can be held before
+          DataPipe has tried to store it at all -- recovered from a session
+          that did not finish, kept after a metadata problem, or paused while
+          DataPipe reorganizes your provider&apos;s storage -- and the panel
+          says so plainly (&ldquo;Waiting to be stored&rdquo;) rather than
+          describing it as a failed or retrying upload.
         </Text>
         <Text maxW="70ch">Each row tells you:</Text>
         <Box as="ul" pl={5} listStyleType="disc" maxW="70ch">
@@ -224,12 +234,13 @@ export default function WhenAnUploadFailsPage() {
             under.
           </Box>
           <Box as="li" mb={2}>
-            <strong>Status</strong>: waiting, being uploaded right now, or
-            failed, plus when the next retry is due.
+            <strong>Status</strong>: waiting to be stored, retrying, being
+            uploaded/stored right now, or failed, plus when the next (or
+            first) attempt is due.
           </Box>
           <Box as="li" mb={2}>
-            <strong>Reason</strong>: a plain-language description of what went
-            wrong.
+            <strong>Reason</strong>: a plain-language description of why the
+            file is here -- not always a failure.
           </Box>
           <Box as="li" mb={2}>
             <strong>Stored for</strong>: how much of the retention window is
@@ -237,9 +248,9 @@ export default function WhenAnUploadFailsPage() {
           </Box>
         </Box>
         <Text maxW="70ch">
-          The panel also has a &ldquo;Why did these uploads fail?&rdquo;
-          section listing the common causes, and the download controls
-          described below.
+          The panel also has a &ldquo;What is happening to these
+          files?&rdquo; section explaining the three states above, and the
+          download controls described below.
         </Text>
       </DocsSection>
 

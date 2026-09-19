@@ -19,7 +19,11 @@ process.env.FIREBASE_CONFIG = JSON.stringify({
 const { randomUUID } = require("crypto");
 const { getFirestore } = require("firebase-admin/firestore");
 const { getStorage } = require("firebase-admin/storage");
-const { promoteToQueue } = require("../../lib/scheduled-pending-recovery.js");
+const {
+  promoteToQueue,
+  METADATA_KEPT_FAILURE_REASON,
+  INTERRUPTED_UPLOAD_FAILURE_REASON,
+} = require("../../lib/scheduled-pending-recovery.js");
 const { persistPending } = require("../../lib/persist-pending.js");
 // The expected path comes from the layout module rather than being spelled
 // out here: this suite's job is to prove recovery agrees with the Psych-DS
@@ -176,5 +180,71 @@ describe("scheduled-pending-recovery propagates the envelope's dataType", () => 
 
     expect(doc.exists).toBe(true);
     expect(doc.data().dataType).toBe("data");
+  });
+});
+
+// keptReason threading: api-data.ts's METADATA_ERROR branch labels the
+// pending object it keeps (persist-pending.ts's markPendingKept) so this
+// promotion can tell "kept on purpose, no metadata" apart from the generic
+// "something interrupted the request" case. recoverPendingUploads reads the
+// label off the SAME getMetadata() call it already makes for the staleness
+// check and passes it through as promoteToQueue's second, optional
+// parameter -- these tests exercise that parameter and, separately, prove
+// the storage emulator actually round-trips the custom metadata
+// markPendingKept writes (recoverPendingUploads' classification depends on
+// that read succeeding).
+describe("scheduled-pending-recovery threads keptReason into the promoted failureReason", () => {
+  it("promotes with METADATA_KEPT_FAILURE_REASON when the pending object carries keptReason: metadata-failure", async () => {
+    const experimentID = `recovery-test-metadata-kept-${randomUUID()}`;
+    await seedExperiment(experimentID, false);
+
+    const filename = "kept-after-metadata.json";
+    const storagePath = await persistPending(experimentID, filename, "[]");
+    const file = bucket.file(storagePath);
+
+    // Simulate persist-pending.ts's markPendingKept -- the exact same
+    // setMetadata call api-data.ts's METADATA_ERROR branch triggers.
+    await file.setMetadata({ metadata: { keptReason: "metadata-failure" } });
+
+    // Round-trip proof: the storage emulator DOES preserve custom metadata
+    // written this way -- confirmed here rather than assumed, since
+    // recoverPendingUploads' whole classification depends on this read
+    // returning what was written.
+    const [metadata] = await file.getMetadata();
+    expect(metadata.metadata).toEqual(
+      expect.objectContaining({ keptReason: "metadata-failure" })
+    );
+
+    await promoteToQueue(file, metadata.metadata?.keptReason);
+
+    const expectedDedupKey = `${experimentID}:${filename}`;
+    const docId = expectedDedupKey.replace(/[/\\]/g, "_");
+    createdQueueDocIds.push(docId);
+    const doc = await db.collection("uploadQueue").doc(docId).get();
+
+    expect(doc.exists).toBe(true);
+    expect(doc.data().failureReason).toBe(METADATA_KEPT_FAILURE_REASON);
+  });
+
+  it("promotes with the generic INTERRUPTED_UPLOAD_FAILURE_REASON when the pending object carries no keptReason", async () => {
+    const experimentID = `recovery-test-generic-reason-${randomUUID()}`;
+    await seedExperiment(experimentID, false);
+
+    const filename = "no-keptreason.json";
+    const storagePath = await persistPending(experimentID, filename, "[]");
+    const file = bucket.file(storagePath);
+
+    // No markPendingKept call here -- every pending object persisted before
+    // that existed, and every one persisted by a request that never reached
+    // a labeling branch, looks like this.
+    await promoteToQueue(file);
+
+    const expectedDedupKey = `${experimentID}:${filename}`;
+    const docId = expectedDedupKey.replace(/[/\\]/g, "_");
+    createdQueueDocIds.push(docId);
+    const doc = await db.collection("uploadQueue").doc(docId).get();
+
+    expect(doc.exists).toBe(true);
+    expect(doc.data().failureReason).toBe(INTERRUPTED_UPLOAD_FAILURE_REASON);
   });
 });

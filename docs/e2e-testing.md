@@ -49,8 +49,10 @@ One timing is worth knowing before it surprises you: an abandoned session is
 recovered by the five-minute sweep, but the sweep only **queues** it. A queue
 entry with no provider error code waits an hour for its first upload attempt,
 so a `.partial.json` reaches storage roughly 65–75 minutes after the dropout.
-In the meantime the dashboard's queue panel describes it as an upload that did
-not go through. That is expected.
+In the meantime the dashboard's queue panel shows it as **"Waiting to be
+stored"** — DataPipe has recovered the data but has not tried to upload it
+yet, which is what actually happened; it is no longer described as a failed
+or retrying upload. That is expected.
 
 And one ordering rule: **switch data collection off last.** While an experiment
 is not `active`, the staging sweep *discards* every session still staged for it
@@ -68,12 +70,14 @@ the same list as `knownIssues` so a driver does not flag them.
   deliberately keeps the pending copy — "scheduled-pending-recovery salvages it
   later instead of losing it outright" — because `METADATA_ERROR` means
   metadata generation failed, not that the participant's data was refused, and
-  the policy is never to destroy raw data over that. Within the next
-  pending-recovery slot the entry appears with `failureReason: "Recovered from
-  interrupted upload (server restart or memory limit)"`. **That wording is
-  misleading for this case**: no server restarted and no memory limit was hit.
-  Worth rewording one day. Note also that the retry worker re-checks
-  `finalized` but not `active`.
+  the policy is never to destroy raw data over that. The pending object is now
+  labeled (`persist-pending.ts`'s `markPendingKept`), so within the next
+  pending-recovery slot the entry appears with `failureReason: "Kept after a
+  metadata failure (raw data stored without Psych-DS files)"`, and the
+  dashboard shows it as kind `waiting` ("Waiting to be stored") rather than a
+  retry or a failure — accurate, since DataPipe has never attempted a provider
+  write for it. Note also that the retry worker re-checks `finalized` but not
+  `active` — that gap is unchanged by this.
 - **One `.psychds-ignore` per upload on Google Drive**, rather than one per
   experiment. `metadata-derived-upload.ts` dedupes on the provider's
   `NAME_CONFLICT`, and Drive permits duplicate names, so the dedupe never

@@ -13,7 +13,7 @@ import { DerivedFile, uploadPathFor } from "./metadata-derived-files.js";
 import { uploadDerivedFiles, queueDerivedFiles } from "./metadata-derived-upload.js";
 import resolveToken, { classifyTokenFailure } from "./resolve-token.js";
 import queueUpload from "./queue-upload.js";
-import { persistPending, cleanupPending } from "./persist-pending.js";
+import { persistPending, cleanupPending, markPendingKept } from "./persist-pending.js";
 import { getProviderForExperiment, claimNameFor } from "./providers/index.js";
 import { WriteResult, ResolvedAuth } from "./providers/types.js";
 import { claimFilename, claimFilenameWithoutCredentials, confirmClaim, CollisionCacheUnavailableError } from "./collision-cache.js";
@@ -411,6 +411,11 @@ export async function apiDataHandler(req: Request, res: Response): Promise<void>
       // salvages it later instead of losing it outright.
       res.status(400).json(metadataResponse);
       await writeLog(experimentID, "logError", {...MESSAGES.METADATA_ERROR, detail: metadataResponse.message}, logContext);
+      // Label WHY the pending copy was kept, so scheduled-pending-recovery.ts
+      // can promote it with a reason that says "no Psych-DS metadata" instead
+      // of its generic OOM/restart wording. Best-effort and after the
+      // response/log above -- see markPendingKept's doc comment.
+      await markPendingKept(pendingPath, "metadata-failure");
       return;
     }
 

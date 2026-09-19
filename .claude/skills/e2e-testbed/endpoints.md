@@ -62,14 +62,20 @@ scenario order matters.
 
 **A `METADATA_ERROR` refusal comes back.** The pending Cloud Storage copy is
 deliberately kept ("scheduled-pending-recovery salvages it later instead of
-losing it outright"), so within the next pending-recovery slot — `:00`, `:15`,
-`:30`, `:45`, for entries older than ~15 minutes — a queue entry appears for
-that filename with `failureReason: "Recovered from interrupted upload (server
-restart or memory limit)"`. EXPECT this after any `METADATA_ERROR` probe.
-`METADATA_ERROR` means metadata generation failed, not that the participant's
-data was refused, and the policy is never to destroy raw data over it. Note
-that the retry worker re-checks `finalized` but **not** `active`. OBSERVED
-2026-09-19: three such entries, one per refusal.
+losing it outright"), and is now also labeled with custom metadata
+(`keptReason: "metadata-failure"`, `persist-pending.ts`'s `markPendingKept`),
+so within the next pending-recovery slot — `:00`, `:15`, `:30`, `:45`, for
+entries older than ~15 minutes — a queue entry appears for that filename with
+`failureReason: "Kept after a metadata failure (raw data stored without
+Psych-DS files)"`. EXPECT this after any `METADATA_ERROR` probe. On the
+dashboard this entry now renders as kind `waiting` — status **"Waiting to be
+stored"**, not "Retrying" — because DataPipe has never attempted a provider
+write for it; see dashboard.md's Queue section. `METADATA_ERROR` means
+metadata generation failed, not that the participant's data was refused, and
+the policy is never to destroy raw data over it. Note that the retry worker
+re-checks `finalized` but **not** `active`. OBSERVED 2026-09-19: three such
+entries, one per refusal (pre-dates this wording change; the entries
+themselves, not this exact failureReason string, were what was observed).
 
 ## `POST /api/base64`
 

@@ -39,6 +39,7 @@ import StatusIndicator from "../../components/ui/StatusIndicator";
 import SectionPanel from "../../components/dashboard/SectionPanel";
 import { STORAGE_PROVIDERS } from "../../lib/provider-config";
 import { visibleErrors } from "../../lib/error-panel";
+import { summarizeQueue } from "../../lib/upload-queue";
 
 export async function getServerSideProps() {
   return { props: {} };
@@ -102,6 +103,11 @@ function ExperimentPageDashboard({ experiment_id }) {
   const [, , liveError, liveSnapshot] = useCollectionData(liveRef);
   const liveSessions =
     liveSnapshot?.docs.map((d) => ({ id: d.id, ...d.data() })) || [];
+  // Same classifier QueuePanel.js uses for its own body, so the header chip
+  // and the panel it summarizes can never disagree about whether an
+  // all-waiting queue (nothing attempted, nothing failed) is worth an orange
+  // "warning" badge -- it isn't; see lib/upload-queue.js.
+  const queueSummary = summarizeQueue(queueEntries);
 
   const uploadError = logs?.logError;
   const errorLog = logs?.errors;
@@ -264,15 +270,12 @@ function ExperimentPageDashboard({ experiment_id }) {
               )}
               {queueEntries.length > 0 && (
                 <StatusIndicator
-                  status={
-                    queueEntries.some((e) => e.status === "failed")
-                      ? "error"
-                      : "warning"
+                  status={queueSummary.tone}
+                  label={
+                    queueSummary.failed > 0
+                      ? `${plural(queueSummary.failed, "upload")} failed`
+                      : `${plural(queueEntries.length, "upload")} waiting to be stored`
                   }
-                  label={`${plural(
-                    queueEntries.length,
-                    "upload"
-                  )} waiting to be stored`}
                 />
               )}
               {showErrorPanel && (
