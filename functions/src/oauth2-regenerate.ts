@@ -1,11 +1,22 @@
-import { onRequest } from "firebase-functions/v2/https";
+import type { Request } from "firebase-functions/v2/https";
+import type { Response } from "express";
 import { db, auth } from "./app.js";
 import MESSAGES from "./api-messages.js";
 import { refreshAndUpdateUser } from "./refresh-token.js";
 import { decrypt } from "./crypto-utils.js";
 import { UserData } from "./interfaces.js";
 
-export const oauth2Regenerate = onRequest({ cors: true }, async (req, res) => {
+// Plain handler, not an onRequest export -- dispatched from dashboard-api.ts
+// along with 14 other low-traffic dashboard endpoints, merged into ONE
+// deployed function (dashboardapi) so they share warm instances.
+//
+// NOT converted to use require-user.ts's shared helper: this endpoint reads
+// `uid` from the request BODY first and compares it against the decoded
+// token (verifyOwnership's shape, just header-transported instead of
+// body-transported), which is a different contract from requireUser's
+// token-is-the-only-identity check -- forcing it through that helper would
+// change the 403 case.
+export async function oauth2RegenerateHandler(req: Request, res: Response): Promise<void> {
 try {
     if (req.method !== 'POST') {
       res.status(405).json({ error: 'Method not allowed' });
@@ -82,4 +93,4 @@ try {
       error: 'Internal server error'
     });
   }
-});
+}

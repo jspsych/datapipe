@@ -15,7 +15,8 @@
 // caller bug, not a provider problem) degrades to 200 { warnings: [] }
 // rather than blocking or confusing experiment setup.
 
-import { onRequest } from "firebase-functions/v2/https";
+import type { Request } from "firebase-functions/v2/https";
+import type { Response } from "express";
 import { db } from "./app.js";
 import { verifyOwnership } from "./connect-provider.js";
 import resolveToken from "./resolve-token.js";
@@ -23,7 +24,10 @@ import { getProvider } from "./providers/index.js";
 import { StorageProviderId } from "./providers/types.js";
 import { ExperimentData, UserData } from "./interfaces.js";
 
-export const providerSetupWarnings = onRequest({ cors: true }, async (req, res) => {
+// Plain handler, not an onRequest export -- dispatched from dashboard-api.ts
+// along with 14 other low-traffic dashboard endpoints, merged into ONE
+// deployed function (dashboardapi) so they share warm instances.
+export async function providerSetupWarningsHandler(req: Request, res: Response): Promise<void> {
   try {
     if (req.method !== "POST") {
       res.status(405).json({ error: "Method not allowed" });
@@ -124,4 +128,4 @@ export const providerSetupWarnings = onRequest({ cors: true }, async (req, res) 
     );
     res.status(200).json({ warnings: [] });
   }
-});
+}

@@ -35,27 +35,27 @@
       },
       {
         "source": "/api/oauth2callback",
-        "function": "oauth2callback"
+        "function": "dashboardapi"
       },
       {
         "source": "/api/oauth2regenerate",
-        "function": "oauth2regenerate"
+        "function": "dashboardapi"
       },
       {
         "source": "/api/checkemailconflict",
-        "function": "checkemailconflict"
+        "function": "dashboardapi"
       },
       {
         "source": "/api/generateoauthstate",
-        "function": "generateoauthstate"
+        "function": "dashboardapi"
       },
       {
         "source": "/api/saveosftoken",
-        "function": "saveosftoken"
+        "function": "dashboardapi"
       },
       {
         "source": "/api/getosftoken",
-        "function": "getosftoken"
+        "function": "dashboardapi"
       },
       {
         "source": "/api/queuestatus",
@@ -63,31 +63,31 @@
       },
       {
         "source": "/api/createexperiment",
-        "function": "createexperiment"
+        "function": "dashboardapi"
       },
       {
         "source": "/api/connectprovider",
-        "function": "connectprovider"
+        "function": "dashboardapi"
       },
       {
         "source": "/api/connectstatictokenprovider",
-        "function": "connectstatictokenprovider"
+        "function": "dashboardapi"
       },
       {
         "source": "/api/disconnectprovider",
-        "function": "disconnectprovider"
+        "function": "dashboardapi"
       },
       {
         "source": "/api/getprovideraccesstoken",
-        "function": "getprovideraccesstoken"
+        "function": "dashboardapi"
       },
       {
         "source": "/api/providersetupwarnings",
-        "function": "providersetupwarnings"
+        "function": "dashboardapi"
       },
       {
         "source": "/api/deleteaccount",
-        "function": "deleteaccount"
+        "function": "dashboardapi"
       },
       {
         "source": "/api/finalize",
@@ -95,15 +95,15 @@
       },
       {
         "source": "/api/ensurederivedpaths",
-        "function": "ensurederivedpaths"
+        "function": "dashboardapi"
       },
       {
         "source": "/api/sendcontactemailverification",
-        "function": "sendcontactemailverification"
+        "function": "dashboardapi"
       },
       {
         "source": "/api/verifycontactemail",
-        "function": "verifycontactemail"
+        "function": "dashboardapi"
       }
     ]
   },

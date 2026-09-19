@@ -8,9 +8,6 @@ import { apiData } from "./api-data.js";
 import { apiSessionStart } from "./api-session-start.js";
 import { apiCondition } from "./api-condition.js";
 import { apiBase64 } from "./api-base64.js";
-import { oauth2Callback } from "./oauth2-callback.js";
-import { oauth2Regenerate } from "./oauth2-regenerate.js";
-import { checkEmailConflict } from "./check-email-conflict.js";
 import { scheduledTokenRefresh } from "./scheduled-token-refresh.js";
 import { scheduledUploadRetry } from "./scheduled-upload-retry.js";
 import { scheduledPendingRecovery } from "./scheduled-pending-recovery.js";
@@ -37,26 +34,19 @@ import { onMailCreated } from "./mail-delivery.js";
 // onDocumentCreated trigger does not re-fire on updates, so before this existed
 // a `retryable` ERROR was retried by nobody.
 import { scheduledMailRetry } from "./scheduled-mail-retry.js";
-// The verification round trip (plan §2.2, §5 package P3): a resend-capable
-// send + a hash-checked verify, both bearer-token onRequest endpoints in the
-// same shape as deleteAccount / apiQueueStatus below.
-import { sendContactEmailVerification } from "./send-contact-email-verification.js";
-import { verifyContactEmail } from "./verify-contact-email.js";
 import { apiQueueStatus } from "./api-queue-status.js";
-import { generateOAuthState } from "./generate-oauth-state.js";
-import { connectProvider, connectStaticTokenProvider, disconnectProvider } from "./connect-provider.js";
-import { saveOsfToken } from "./save-osf-token.js";
-import { getOsfToken } from "./get-osf-token.js";
 import { onUserDeleted } from "./on-user-deleted.js";
-import { deleteAccount } from "./delete-account.js";
-import { createExperiment } from "./create-experiment.js";
-import { getProviderAccessToken } from "./get-provider-access-token.js";
-import { providerSetupWarnings } from "./provider-setup-warnings.js";
 import { apiFinalize, finalizeTask } from "./api-finalize.js";
-// Best-effort race removal for a metadata-ON transition (docs in
-// ensure-derived-paths.ts) -- called by MetadataControl.js right after a
-// successful metadataActive write, never as part of experiment creation.
-import { ensureDerivedPaths } from "./ensure-derived-paths.js";
+// createexperiment, connectprovider, connectstatictokenprovider,
+// disconnectprovider, deleteaccount, generateoauthstate, oauth2callback,
+// saveosftoken, getprovideraccesstoken, providersetupwarnings,
+// checkemailconflict, sendcontactemailverification, verifycontactemail,
+// oauth2regenerate, getosftoken, and ensurederivedpaths used to each be their
+// own onRequest export here. All 16 are low-traffic dashboard endpoints, not
+// the submission hot path, so each paid its own always-cold instance pool for
+// no benefit -- they are now dispatched from ONE function. See
+// dashboard-api.ts's header for the full rationale.
+import { dashboardApi } from "./dashboard-api.js";
 
 setGlobalOptions({
   maxInstances: 20
@@ -67,9 +57,6 @@ export {
   apiSessionStart as apisessionstart,
   apiCondition as apicondition,
   apiBase64 as apibase64,
-  oauth2Callback as oauth2callback,
-  oauth2Regenerate as oauth2regenerate,
-  checkEmailConflict as checkemailconflict,
   scheduledTokenRefresh as scheduledtokenrefresh,
   scheduledUploadRetry as scheduleduploadretry,
   scheduledPendingRecovery as scheduledpendingrecovery,
@@ -80,21 +67,9 @@ export {
   onUploadFailure as onuploadfailure,
   onMailCreated as onmailcreated,
   scheduledMailRetry as scheduledmailretry,
-  sendContactEmailVerification as sendcontactemailverification,
-  verifyContactEmail as verifycontactemail,
   apiQueueStatus as apiqueuestatus,
-  generateOAuthState as generateoauthstate,
-  connectProvider as connectprovider,
-  connectStaticTokenProvider as connectstatictokenprovider,
-  disconnectProvider as disconnectprovider,
-  saveOsfToken as saveosftoken,
-  getOsfToken as getosftoken,
   onUserDeleted as onuserdeleted,
-  deleteAccount as deleteaccount,
-  createExperiment as createexperiment,
-  getProviderAccessToken as getprovideraccesstoken,
-  providerSetupWarnings as providersetupwarnings,
   apiFinalize as apifinalize,
   finalizeTask as finalizetask,
-  ensureDerivedPaths as ensurederivedpaths
+  dashboardApi as dashboardapi
 };

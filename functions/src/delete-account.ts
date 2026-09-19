@@ -1,6 +1,8 @@
-import { onRequest } from "firebase-functions/v2/https";
+import type { Request } from "firebase-functions/v2/https";
+import type { Response } from "express";
 import { auth } from "./app.js";
 import { purgeUserData } from "./purge-user-data.js";
+import { requireUser } from "./require-user.js";
 
 // Account deletion, moved server-side.
 //
@@ -26,31 +28,20 @@ import { purgeUserData } from "./purge-user-data.js";
 // stolen session token would be enough to destroy an account.
 const MAX_AUTH_AGE_SECONDS = 5 * 60;
 
-export const deleteAccount = onRequest({ cors: true }, async (req, res) => {
+// Plain handler, not an onRequest export -- dispatched from dashboard-api.ts
+// along with 14 other low-traffic dashboard endpoints, merged into ONE
+// deployed function (dashboardapi) so they share warm instances.
+export async function deleteAccountHandler(req: Request, res: Response): Promise<void> {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
     return;
   }
 
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    res.status(401).json({ error: "Authentication required" });
-    return;
-  }
-
-  let uid: string;
-  let authTime: number;
-  try {
-    const idToken = authHeader.split("Bearer ")[1];
-    // checkRevoked: a researcher who signed out everywhere should not be able
-    // to delete the account with a token minted before that.
-    const decodedToken = await auth.verifyIdToken(idToken, true);
-    uid = decodedToken.uid;
-    authTime = decodedToken.auth_time;
-  } catch {
-    res.status(401).json({ error: "Invalid authentication token" });
-    return;
-  }
+  // checkRevoked: a researcher who signed out everywhere should not be able
+  // to delete the account with a token minted before that.
+  const authResult = await requireUser(req, res, { checkRevoked: true });
+  if (!authResult) return;
+  const { uid, authTime } = authResult;
 
   const tokenAgeSeconds = Date.now() / 1000 - authTime;
   if (tokenAgeSeconds > MAX_AUTH_AGE_SECONDS) {
@@ -77,4 +68,4 @@ export const deleteAccount = onRequest({ cors: true }, async (req, res) => {
         "Could not finish deleting your account. Nothing was lost -- please try again.",
     });
   }
-});
+}

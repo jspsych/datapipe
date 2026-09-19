@@ -21,12 +21,14 @@
 // same 403-for-both convention for "doesn't exist" and "not yours" so this
 // endpoint never confirms which experiment ids exist to a caller who
 // doesn't already own one.
-import { onRequest } from "firebase-functions/v2/https";
-import { db, auth } from "./app.js";
+import type { Request } from "firebase-functions/v2/https";
+import type { Response } from "express";
+import { db } from "./app.js";
 import resolveToken from "./resolve-token.js";
 import { getProviderForExperiment } from "./providers/index.js";
 import { ResolvedAuth, StorageProvider, ContainerRef } from "./providers/types.js";
 import { ExperimentData, UserData } from "./interfaces.js";
+import { requireUser } from "./require-user.js";
 
 function experimentRef(experimentID: string) {
   return db.collection("experiments").doc(experimentID);
@@ -42,27 +44,18 @@ function hasCollectedData(expData: ExperimentData): boolean {
   return (typeof expData.sessions === "number" && expData.sessions > 0) || !!expData.collisionCache;
 }
 
-export const ensureDerivedPaths = onRequest({ cors: true }, async (req, res) => {
+// Plain handler, not an onRequest export -- dispatched from dashboard-api.ts
+// along with 15 other low-traffic dashboard endpoints, merged into ONE
+// deployed function (dashboardapi) so they share warm instances.
+export async function ensureDerivedPathsHandler(req: Request, res: Response): Promise<void> {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
     return;
   }
 
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    res.status(401).json({ error: "Authentication required" });
-    return;
-  }
-
-  let uid: string;
-  try {
-    const idToken = authHeader.split("Bearer ")[1];
-    const decodedToken = await auth.verifyIdToken(idToken);
-    uid = decodedToken.uid;
-  } catch {
-    res.status(401).json({ error: "Invalid authentication token" });
-    return;
-  }
+  const authResult = await requireUser(req, res);
+  if (!authResult) return;
+  const { uid } = authResult;
 
   const experimentID = req.body?.experimentID as string | undefined;
   if (!experimentID) {
@@ -137,4 +130,4 @@ export const ensureDerivedPaths = onRequest({ cors: true }, async (req, res) => 
   }
 
   res.status(200).json({ status: "ok" });
-});
+}
