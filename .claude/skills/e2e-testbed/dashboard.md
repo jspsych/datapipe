@@ -81,7 +81,7 @@ on.
 | **"Accept new data"** | everything; `closed-experiment` turns it off |
 | **"Accept base64 file uploads"** | the `base64-*` scenarios |
 | **"Assign conditions in sequence"** | the `vanilla-condition*` scenarios |
-| **"Check submissions before storing them"** | setup — see below |
+| **"Check submissions before storing them"** | nothing — leave it on; see below |
 | **"Generate Psych-DS metadata"** | setup — see below |
 | **"Stop after a set number of sessions"** | session-cap checks |
 
@@ -92,16 +92,19 @@ On failure the switch snaps back and shows a sentence beginning "Could not
 change data collection…". If the experiment is finalized the switch is disabled
 with "Locked because this experiment has been finalized…".
 
-### Two setup traps
+### Validation: leave it alone
 
-**Validation is ON by default, and requires `trial_type`.**
 `create-experiment.ts` sets `useValidation ?? true` and
-`requiredFields ?? ["trial_type"]`. The plain-JavaScript testbed page emits
-`trial_index, task, stimulus, response, rt, correct` and no `trial_type`, so
-every vanilla submission is refused with `INVALID_DATA` until you remove that
-chip (the × on the `trial_type` tag) or switch **"Check submissions before
-storing them"** off. Confirmed in code; the 2026-09-19 run removed the chip
-pre-emptively and so never saw the rejection.
+`requiredFields ?? ["trial_type"]`, so a new experiment refuses any submission
+without a `trial_type` column. Both testbed pages satisfy it — jsPsych writes
+the field from each plugin's `info.name`, and the plain-JavaScript page emits
+`trial_type: "letter-keyboard-response"` — so **no setup is needed**. Recorded
+here only because it is where to look if a scenario is unexpectedly refused
+with `INVALID_DATA`. The `validation-failure` scenario omits the column on
+purpose, via `?failvalidation=1`; every other scenario needs the defaults
+intact.
+
+### The one setup trap
 
 **"Generate Psych-DS metadata" locks permanently once data exists** — "Locked
 because this experiment has collected data". Set it before the first

@@ -127,6 +127,10 @@ experiment still hands out conditions.
 
 ## Probes
 
+Cover at least: `/api/base64` with a valid and an invalid payload,
+`/api/condition`, `/api/session`, a request missing a required parameter, and
+every one of those against an experiment ID that does not exist.
+
 Paste into the JavaScript tool with a testbed tab focused. Set `EXP` first.
 
 ```js

@@ -16,7 +16,7 @@ Keep the headings; they are what makes two runs comparable.
 | Provider | Google Drive — `My Drive/DataPipe/e2e-YYYYMMDD-HHMM` |
 | Manifest | published / local checkout / prose fallback |
 | Result contract | present / absent (verdicts read off the log) |
-| Setup deviations | e.g. removed the `trial_type` required field; validation off; metadata on |
+| Setup deviations | e.g. Psych-DS metadata on; any dashboard default changed |
 
 ## Scenarios
 

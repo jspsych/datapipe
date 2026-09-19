@@ -86,10 +86,14 @@ the same list as `knownIssues` so a driver does not flag them.
 - **Loading a page starts a session**, so a page opened and abandoned before
   the first keypress still leaves a live-session row behind. Never assert on
   the number of sessions in progress.
-- **A new experiment ships with validation on and `trial_type` required**
-  (`create-experiment.ts`). The plain-JavaScript testbed page emits no
-  `trial_type`, so its submissions are refused until that chip is removed or
-  validation is switched off.
+
+And one product default worth knowing, though it is not an issue for the
+testbed any more: **a new experiment ships with validation on and `trial_type`
+required** (`create-experiment.ts`). Both testbed pages now emit that field, so
+no setup is needed — but it is where to look if a run is unexpectedly refused
+with `INVALID_DATA`. Note that a validation refusal, unlike a metadata one,
+happens *before* `persistPending`, so nothing is kept and nothing reappears in
+the queue later.
 
 ## Recommended follow-up: a headless job
 
@@ -102,11 +106,11 @@ A Playwright job would look like this: read `scenarios.json`, filter to
 e2e experiment whose ID is a repository variable), open each scenario URL with
 `run` set to the commit SHA, poll
 `document.documentElement.dataset.testbedStatus`, read `window.__testbed`, and
-assert the `expectPage` block. Six of the fourteen scenarios qualify today
+assert the `expectPage` block. Seven of the fifteen scenarios qualify today
 (`clean-finish`, `baseline-no-streaming`, `ended-early`, `vanilla-streaming`,
-`vanilla-uncompressed`, `duplicate-rejection`, plus `failed-final-submission`
-for its page-level half), and the `base64-*` pair joins them if the shared
-experiment leaves base64 uploads switched on.
+`vanilla-uncompressed`, `duplicate-rejection`, `validation-failure`, plus
+`failed-final-submission` for its page-level half), and the `base64-*` pair
+joins them if the shared experiment leaves base64 uploads switched on.
 
 Playwright runs in the page's own world, so `window.__testbed` is directly
 readable there — the DOM mirror exists for browser extensions, which evaluate
@@ -147,10 +151,10 @@ that actually breaks on a deploy.
 **What the maintainer would have to set up**, in the order the value arrives:
 
 1. A long-lived e2e experiment on `datapipe-test` with data collection,
-   conditions and base64 uploads all on, **validation off or `trial_type`
-   removed**, and its ID in a repository variable. That alone unlocks the
-   participant half. Decide about Psych-DS metadata at creation — the setting
-   locks once the experiment has data.
+   conditions and base64 uploads all on, validation left at its default, and
+   its ID in a repository variable. That alone unlocks the participant half.
+   Decide about Psych-DS metadata at creation — the setting locks once the
+   experiment has data.
 2. A Playwright workflow triggered on `workflow_run` after **Deploy to Test**
    succeeds, reading `scenarios.json` from the published testbed so the two
    repos stay in step without a submodule.

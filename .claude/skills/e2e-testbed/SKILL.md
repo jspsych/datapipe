@@ -10,19 +10,13 @@ The testbed is two participant-facing pages at
 that send real data to a real DataPipe experiment. Every run publishes a
 machine-readable result, so you assert on it instead of reading a log.
 `scenarios.json` beside those pages says what to run, **in what order**, and
-what to expect.
+what to expect. Lines marked OBSERVED were confirmed by a live run against
+`datapipe-test` on 2026-09-19; the rest is read off the source.
 
-Parts of this runbook were confirmed by a live run against `datapipe-test` on
-2026-09-19; those are marked OBSERVED. The rest is read off the source and is
-still unverified.
-
-Reference files in this directory:
-
-- [endpoints.md](endpoints.md) — status codes and bodies for every participant
-  endpoint, taken from the handlers, plus copy-paste direct probes.
-- [dashboard.md](dashboard.md) — click paths and the literal UI strings to
-  assert on.
-- [output-template.md](output-template.md) — the write-up you must produce.
+Reference files here: [endpoints.md](endpoints.md) (status and error codes per
+endpoint, from the handlers, plus copy-paste probes),
+[dashboard.md](dashboard.md) (click paths and the literal UI strings), and
+[output-template.md](output-template.md) (the write-up you must produce).
 
 ## 1. Before you touch anything
 
@@ -36,13 +30,11 @@ Reference files in this directory:
 - **Open testbed pages in NEW tabs** (`tabs_create_mcp`). Never navigate the
   user's dashboard tab away.
 - **Native dialogs freeze the browser extension.** DataPipe's dashboard has
-  none: every confirmation is an in-page Chakra dialog (`ConfirmDialog`), and a
-  repo-wide grep for `window.confirm` / `alert` / `prompt` finds nothing in
-  application code. OBSERVED 2026-09-19: none encountered, including the Google
-  Picker, which is an in-page overlay. Still avoid the **"Choose Drive
-  folder"** button on `/admin/new` and any **"Connect …"** button on
-  `/admin/account` (a full-page OAuth navigation). Neither is needed below. If
-  a native dialog ever does appear, the extension is stuck — say so and stop.
+  none — every confirmation is an in-page Chakra dialog, and none was hit on
+  2026-09-19 ([dashboard.md](dashboard.md) has the audit). Still avoid **"Choose
+  Drive folder"** on `/admin/new` and any **"Connect …"** on `/admin/account`,
+  which navigates the whole tab to OAuth. Neither is needed below. If a native
+  dialog ever does appear, the extension is stuck — say so and stop.
 - **Always use a fresh experiment**, titled `e2e-YYYYMMDD-HHMM`. Record its ID.
   Do not reuse an old one: duplicate-filename scenarios depend on a clean
   collision cache.
@@ -79,19 +71,15 @@ Full click path and literal strings: [dashboard.md](dashboard.md). In short:
    and there is no copy button. Budget ~10 s for the create call.
 5. In **"Data collection"**, switch **"Accept new data"** on and wait for the
    transient **"Saved"** badge.
-6. **Two setup traps, each of which costs a run.** Details in
-   [dashboard.md](dashboard.md); handle them now:
-   - **Validation is ON by default with `trial_type` required.** The
-     plain-JavaScript page emits no `trial_type`, so every vanilla scenario is
-     refused with `INVALID_DATA` until you remove that chip or switch **"Check
-     submissions before storing them"** off.
-   - **"Generate Psych-DS metadata" locks permanently once data exists.**
-     Decide before the first submission. With it on, raw files live under
-     `data/raw/` and a body that is not parseable CSV/JSON is refused with
-     `METADATA_ERROR`.
-   Record whichever you chose in the write-up: the experiment is no longer in
-   its default state, and that changes what later runs mean.
-7. Open the folder link (**"Open folder"**) in a new tab and keep it — you will
+6. **Leave validation alone.** A new experiment requires a `trial_type` field
+   and both testbed pages emit one, so nothing needs changing. If a scenario is
+   unexpectedly refused with `INVALID_DATA`, that is where to look.
+7. **"Generate Psych-DS metadata" locks permanently once data exists.** Decide
+   now, before the first submission: with it on, raw files live under
+   `data/raw/` and a body that is not parseable CSV/JSON is refused with
+   `METADATA_ERROR`. Record which way you set it — the experiment is then no
+   longer in its default state.
+8. Open the folder link (**"Open folder"**) in a new tab and keep it — you will
    come back to it for every `expectStorage` check.
 
 ## 4. Load the manifest
@@ -150,11 +138,10 @@ For each scenario in the manifest:
 6. Poll `document.documentElement.dataset.testbedStatus` every 2 s until it is
    `finished`, `failed` or `aborted`, or `timing.pageRun` has been exceeded by
    60 s. Then read the JSON text of `#testbed-result`.
-   **Read the DOM, not `window.__testbed`.** The two carry the same object, but
-   an extension evaluating JavaScript does so in an isolated world and may not
-   see a page global. (Unverified — the 2026-09-19 run hit this against a
-   testbed build that predated the contract entirely — but DOM reads always
-   work, so there is no reason to depend on the global.)
+   **Read the DOM, not `window.__testbed`.** Both carry the same object, but an
+   extension evaluates JavaScript in an isolated world and may not see a page
+   global. (Unverified — but DOM reads always work, so nothing is gained by
+   depending on the global.)
 7. Compare against `expectPage`: the final `status`, and for each expected
    request label the HTTP `status` and, on failures, the `error` **code**.
    Never assert on a `message` string — see [endpoints.md](endpoints.md). A
@@ -183,55 +170,38 @@ on the log region always worked.
 
 ## 6. Direct endpoint probes
 
-Run these from the JavaScript context of an open testbed tab (CORS is open on
-`/api/*`, and a `fetch` from that origin behaves exactly like a participant's).
-They need no page and take seconds. Payloads and expected bodies:
-[endpoints.md](endpoints.md).
-
-Cover at least: `/api/base64` with a valid and an invalid payload,
-`/api/condition`, `/api/session`, a request missing a required parameter, and
-every one of those against an experiment ID that does not exist.
+Run these from the JavaScript context of an open testbed tab — CORS is open on
+`/api/*`, so a `fetch` from there behaves exactly like a participant's. They
+need no page and take seconds. Payloads, expected bodies and the full list to
+cover: [endpoints.md](endpoints.md).
 
 Each probe against the real experiment writes a log entry that shows up in the
-dashboard's error panel. That is expected; note it so a later reader does not
-read the probes as failures.
-
-**Use no-trailing-slash URLs when checking that a route is gone.**
-`/api/foo/` 308-redirects to `/api/foo`, and `fetch` reports the CORS-less 404
-as "Failed to fetch" rather than a status. OBSERVED 2026-09-19.
+dashboard's error panel. Expected; note it, so a later reader does not read the
+probes as failures.
 
 ## 7. The queue, without the dashboard
 
-`GET /api/queuestatus?experimentID=<id>` with an `Authorization: Bearer
-<Firebase ID token>` header returns the queue entries with `status`,
-`retryCount`, `lastAttemptAt`, `nextRetryAt` and `failureReason`. This is
-better evidence than the queue panel, and it is the only way to see
-`lastAttemptAt: null` — which is what distinguishes "queued, never tried" from
-"tried and failed". It is also how you check `closed-experiment`'s
-`runAfterCondition`.
-
-Read the ID token from the `datapipe-test.web.app` origin's IndexedDB:
-`firebaseLocalStorageDb` → `firebaseLocalStorage` → first record →
-`value.stsTokenManager.accessToken`. OBSERVED 2026-09-19.
+`GET /api/queuestatus?experimentID=<id>` with the account's Firebase ID token
+is better evidence than the queue panel, and the only way to see
+`lastAttemptAt: null` — which distinguishes "queued, never tried" from "tried
+and failed". It is also how you check `closed-experiment`'s
+`runAfterCondition`. The call and where to read the token:
+[endpoints.md](endpoints.md).
 
 ## 8. Server-side verification — optional
 
 If the Firebase MCP tools are authenticated, for the run's time window:
-
-- `functions_get_logs` for `apidata`, `participantapi`, `dashboardapi`,
-  `scheduledsweep`, `compactiontask` — any `severity>=ERROR` entry is worth
-  reporting even if every scenario passed.
-- `firestore_get_document` on `logs/<experimentID>` — the counters
-  (`saveData`, `saveDataSucceeded`, `saveDataQueued`) should add up to the
-  submissions you made.
-- `firestore_query_collection` on `uploadQueue` filtered to the experiment —
-  what is still queued, and each entry's `nextRetryAt`.
+`functions_get_logs` for `apidata`, `participantapi`, `dashboardapi`,
+`scheduledsweep` and `compactiontask` (any `severity>=ERROR` is worth
+reporting even if every scenario passed); `logs/<experimentID>`, whose
+`saveData` / `saveDataSucceeded` / `saveDataQueued` counters should add up to
+the submissions you made; and `uploadQueue` filtered to the experiment.
 
 **This is not a gate, and it frequently is not available**: on 2026-09-19 both
 the MCP tools and the local `firebase` CLI returned 401. Do not attempt to log
-in. Record the whole section as **not observed** in the write-up rather than
-leaving it blank — a blank section reads as "clean", and the function
-inventory in §2 is part of what goes unverified when this fails.
+in. Record the whole section as **not observed** rather than leaving it blank —
+a blank section reads as "clean", and the function inventory in §2 goes
+unverified with it.
 
 ## 9. Deferred checks
 
@@ -239,51 +209,40 @@ Scenarios with `deferredCheck: true` cannot finish inside a run. The staging
 sweep only **queues** a recovered session, and a queue entry with no provider
 error code waits an hour for its first attempt — so a `.partial.json` lands in
 storage roughly **65–75 minutes** after the dropout, not 15. Until then the
-dashboard describes it as an upload that did not go through, with
-`retryCount: 0` and `lastAttemptAt: null`. That is known behaviour, not a bug.
-Measured 2026-09-19: abandoned tab → queue entry in 12 minutes, `nextRetryAt`
-exactly +60 minutes.
+dashboard calls it an upload that did not go through, with `retryCount: 0` and
+`lastAttemptAt: null`. Known behaviour. Measured 2026-09-19: queued 12 minutes
+after the tab closed, `nextRetryAt` exactly +60 minutes.
 
 Record, per deferred scenario: the exact filename stem to look for, the folder,
 and the wall-clock time to check. Mark the scenario `DEFERRED`, never `PASS`.
 
-**Three things that look like bugs and are not.** Do not report them as
-findings. The manifest's `knownIssues` and `docs/e2e-testing.md` have the
-reasoning; in short:
-
-- A `400 METADATA_ERROR` refusal keeps its pending copy on purpose and
-  reappears within the next pending-recovery slot (`:00/:15/:30/:45`) as a
-  queue entry reading *"Recovered from interrupted upload (server restart or
-  memory limit)"*. The wording is misleading; the behaviour is deliberate.
-- One `.psychds-ignore` per upload on Google Drive, not one per experiment.
-- Live-session rows from pages that opened and never ran a trial.
+**Before reporting anything as a finding, read "Known issues a run will trip
+over" in `docs/e2e-testing.md`** (the manifest's `knownIssues` says the same).
+Four things there look like bugs and are not.
 
 ## 10. Report
 
 Write [output-template.md](output-template.md), filled in, to
-`e2e-reports/<YYYY-MM-DD>-<shortsha>.md`. `e2e-reports/` is gitignored: a
-report is a per-run artifact about a test deployment, not documentation, and
-this repo is public. Paste anything worth keeping into the PR or an issue.
+`e2e-reports/<YYYY-MM-DD>-<shortsha>.md`. That directory is gitignored: a run's
+output is a per-run artifact about a test deployment, not documentation, in a
+public repo. Paste anything worth keeping into the PR or an issue.
 
 Every scenario gets `PASS`, `FAIL`, `DEFERRED` or `SKIPPED` **with evidence** —
-the HTTP statuses and error codes from the result's `requests`, the filenames
-you actually saw in Drive, the dashboard strings you matched. "Looked fine" is
-not evidence. Say explicitly what was **not observed**, including anything §8
-could not reach. End with everything that surprised you, including anything the
-manifest expected that the deployment did not do — the manifest is meant to be
+statuses and error codes from the result's `requests`, filenames you actually
+saw in Drive, dashboard strings you matched. "Looked fine" is not evidence. Say
+explicitly what was **not observed**, including anything §8 could not reach,
+and end with everything that surprised you — the manifest is meant to be
 corrected.
 
 ## 11. Cleanup
 
 - Switch **"Accept new data"** off on the e2e experiment, and any switch a
   scenario turned on ("Assign conditions in sequence", "Accept base64 file
-  uploads"). Note any setup change you made — removing the `trial_type`
-  required field, switching validation off — so the next reader knows the
-  experiment is not in its default state.
-- **Do not delete the experiment or any stored file**, and do not delete the
-  experiment as cleanup even after the deferred checks clear. Deferred checks
-  need the folder intact for another hour, and the maintainer decides when an
-  e2e experiment goes.
-- Close the tabs you opened. Leave the user's own tabs alone. If the tooling
-  refuses to close one (it dissolves its tab group once the others are gone),
-  say which tab is still open rather than leaving it unmentioned.
+  uploads"). Note any setup change you made, such as the Psych-DS metadata
+  toggle, so the next reader knows the experiment is not in its default state.
+- **Do not delete the experiment or any stored file**, not even after the
+  deferred checks clear. They need the folder intact for another hour, and the
+  maintainer decides when an e2e experiment goes.
+- Close the tabs you opened; leave the user's own alone. If the tooling refuses
+  to close one — it dissolves its tab group once the others are gone — say
+  which tab is still open rather than leaving it unmentioned.
