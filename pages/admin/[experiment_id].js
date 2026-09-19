@@ -39,7 +39,7 @@ import StatusIndicator from "../../components/ui/StatusIndicator";
 import SectionPanel from "../../components/dashboard/SectionPanel";
 import { STORAGE_PROVIDERS } from "../../lib/provider-config";
 import { visibleErrors } from "../../lib/error-panel";
-import { summarizeQueue } from "../../lib/upload-queue";
+import { summarizeQueue, queueToneStatus } from "../../lib/upload-queue";
 
 export async function getServerSideProps() {
   return { props: {} };
@@ -270,7 +270,7 @@ function ExperimentPageDashboard({ experiment_id }) {
               )}
               {queueEntries.length > 0 && (
                 <StatusIndicator
-                  status={queueSummary.tone}
+                  status={queueToneStatus(queueSummary.tone)}
                   label={
                     queueSummary.failed > 0
                       ? `${plural(queueSummary.failed, "upload")} failed`

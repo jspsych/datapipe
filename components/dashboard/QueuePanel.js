@@ -14,6 +14,7 @@ import { auth } from "../../lib/firebase";
 import {
   queueEntryKind,
   summarizeQueue,
+  queueToneStatus,
   friendlyReason,
   timeRemaining,
 } from "../../lib/upload-queue";
@@ -61,7 +62,7 @@ function rowStatusIndicator(kind, entry) {
   // kind === "waiting"
   return (
     <StatusIndicator
-      status="neutral"
+      status="waiting"
       label={entry.status === "processing" ? "Storing now" : "Waiting to be stored"}
       nowrap
     />
@@ -485,7 +486,7 @@ export default function QueuePanel({ entries, experimentId }) {
         ? { borderLeftWidth: "3px", borderLeftColor: "status.warning" }
         : {})}
     >
-      <StatusIndicator status={summary.tone === "warning" ? "warning" : "neutral"} label={title} />
+      <StatusIndicator status={queueToneStatus(summary.tone)} label={title} />
       <Text fontSize="sm" color="fg.muted" mt={2} mb={4}>
         {description}
       </Text>

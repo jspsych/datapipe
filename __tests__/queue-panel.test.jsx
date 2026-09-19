@@ -582,3 +582,28 @@ describe("QueuePanel — downloads still call /api/queuestatus", () => {
     );
   });
 });
+
+describe("QueuePanel — the waiting status has its own icon", () => {
+  const waiting = {
+    id: "w1",
+    filename: "data/raw/a.partial.json",
+    status: "pending",
+    retryCount: 0,
+    lastAttemptAt: null,
+    failureReason: "Recovered from an abandoned session (40 trials)",
+    createdAt: { toDate: () => new Date() },
+  };
+
+  it("renders a clock, not a minus sign, for the headline and the row of an all-waiting queue", () => {
+    const { container } = render(
+      <ChakraProvider value={system}>
+        <QueuePanel entries={[waiting]} experimentId="exp1" />
+      </ChakraProvider>
+    );
+    // lucide stamps each icon with a class naming it. Two clocks: the panel's
+    // headline and the row's status cell. No minus sign anywhere -- beside
+    // "waiting to be stored" it read as a stray dash.
+    expect(container.querySelectorAll("svg.lucide-clock")).toHaveLength(2);
+    expect(container.querySelector("svg.lucide-minus")).toBeNull();
+  });
+});

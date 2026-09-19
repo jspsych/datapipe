@@ -1,5 +1,5 @@
 import { HStack, Text } from "@chakra-ui/react";
-import { CircleCheck, TriangleAlert, CircleX, Minus } from "lucide-react";
+import { CircleCheck, TriangleAlert, CircleX, Minus, Clock } from "lucide-react";
 
 /**
  * StatusIndicator
@@ -68,6 +68,12 @@ const STATUS_ICONS = {
   warning: TriangleAlert,
   error: CircleX,
   neutral: Minus,
+  // Work DataPipe is doing on its own schedule: nothing has failed and nothing
+  // is asked of the researcher. It has its own icon because `neutral`'s minus
+  // sign, next to a label like "Waiting to be stored", reads as a stray dash
+  // rather than as a status. It deliberately has NO colour of its own -- see
+  // STATUS_COLORS -- because waiting is not a warning.
+  waiting: Clock,
 };
 
 // Raw CSS color strings (Chakra's generated custom properties), not Chakra
@@ -78,6 +84,7 @@ const STATUS_COLORS = {
   warning: "var(--chakra-colors-status-warning)",
   error: "var(--chakra-colors-status-error)",
   neutral: "var(--chakra-colors-status-neutral)",
+  waiting: "var(--chakra-colors-status-neutral)",
 };
 
 export default function StatusIndicator({ status, label, size = 16, nowrap = false }) {
