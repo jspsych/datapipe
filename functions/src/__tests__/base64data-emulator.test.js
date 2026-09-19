@@ -320,7 +320,11 @@ describe("apiData", () => {
     const pendingFiles = await listPendingFiles("base64-testexp-active");
     expect(pendingFiles.some((f) => f.name.includes(filename))).toBe(false);
 
-    const logDoc = await waitForLog(db, "base64-testexp-active", "saveBase64DataQueued", 1);
+    // Wait on logError, not saveBase64DataQueued: the handler writes the
+    // queued counter FIRST and the error (with its errorsByCode bucket) in a
+    // separate transaction after it, so polling for the counter can return a
+    // document the second write has not reached yet.
+    const logDoc = await waitForLog(db, "base64-testexp-active", "logError", 1);
     expect(logDoc.data().saveBase64DataQueued).toBe(1);
     expect(logDoc.data().errorsByCode.INVALID_OSF_TOKEN).toBe(1);
   });
