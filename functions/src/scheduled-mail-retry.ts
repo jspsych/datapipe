@@ -64,7 +64,6 @@
 //    retention and ageing out -- run ahead of that check, because neither
 //    spends any quota and both matter most during an outage.
 
-import { onSchedule } from "firebase-functions/v2/scheduler";
 import { Timestamp } from "firebase-admin/firestore";
 import { mailCollection, uploadFailureExperimentID } from "./mail.js";
 import {
@@ -406,19 +405,26 @@ export async function sweepRetryableMail(nowMs = Date.now()): Promise<SweepRepor
   return report;
 }
 
-// Every 10 minutes. Cheap by construction: the steady state is two indexed
-// queries returning nothing, and a shut breaker still costs only those two plus
-// one document read.
-//
-// No `retry` config. A failed sweep is a logged line and the next pass tries
-// again ten minutes later, which is what a sweeper is for -- replaying a failed
-// sweep would stack passes on top of each other for no benefit.
-export const scheduledMailRetry = onSchedule(
-  { schedule: "*/10 * * * *", memory: "256MiB" },
-  async () => {
-    const report = await sweepRetryableMail();
-    if (report.scanned > 0 || report.paused) {
-      console.log(`scheduled-mail-retry: ${JSON.stringify(report)}`);
-    }
+/**
+ * Runs every 10 minutes -- scheduled-sweep.ts's `jobsDueAt` gates this in on
+ * every other tick of its 5-minute cron, since a sweep this cheap does not
+ * need a dedicated Cloud Scheduler job. Cheap by construction: the steady
+ * state is two indexed queries returning nothing, and a shut breaker still
+ * costs only those two plus one document read.
+ *
+ * No `retry` config on the consolidated scheduled function, and none here
+ * either when this ran alone. A failed sweep is a logged line and the next
+ * pass tries again ten minutes later, which is what a sweeper is for --
+ * replaying a failed sweep would stack passes on top of each other for no
+ * benefit.
+ *
+ * Was its own `onSchedule` export; folded into scheduled-sweep.ts (see that
+ * file's header for why). This is now a plain function the sweep calls in
+ * sequence, not a Cloud Function itself.
+ */
+export async function runMailRetry() {
+  const report = await sweepRetryableMail();
+  if (report.scanned > 0 || report.paused) {
+    console.log(`scheduled-mail-retry: ${JSON.stringify(report)}`);
   }
-);
+}
