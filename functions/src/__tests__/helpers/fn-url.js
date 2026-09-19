@@ -12,6 +12,15 @@
 // files already use (see e.g. staging-emulator.test.js, session-id-
 // validation-emulator.test.js), defaulting to the values every suite in this
 // repo assumes when they are unset.
+//
+// Two more mergers, same idea: /api/session and /api/condition now dispatch
+// from participantapi (functions/src/participant-api.ts), and /api/base64
+// now dispatches from WITHIN apidata itself (functions/src/api-data.ts's own
+// req.path check) rather than being its own function. /api/data stays
+// unmerged -- apidata's dispatcher treats anything that is not
+// "/api/base64" (including a bare "/", which is what a direct
+// function-URL/test hit looks like) as the data endpoint, so the plain
+// (non-merged) URL still reaches it.
 
 const FUNCTIONS_HOST = process.env.FUNCTIONS_HOST || "localhost:5001";
 const PROJECT_ID = process.env.PROJECT_ID || "datapipe-test";
@@ -42,11 +51,13 @@ const ROUTES = {
   // finalizeTask (the onTaskDispatched half) is NOT reachable over HTTP at
   // all, so it has no entry here.
   "/api/finalize": { fn: "dashboardapi", merged: true },
+  // -- merged into participantapi (functions/src/participant-api.ts) --
+  "/api/session": { fn: "participantapi", merged: true },
+  "/api/condition": { fn: "participantapi", merged: true },
+  // -- merged into apidata itself (functions/src/api-data.ts's dispatcher) --
+  "/api/base64": { fn: "apidata", merged: true },
   // -- untouched, still their own function --
   "/api/data": { fn: "apidata" },
-  "/api/session": { fn: "apisessionstart" },
-  "/api/condition": { fn: "apicondition" },
-  "/api/base64": { fn: "apibase64" },
   "/api/queuestatus": { fn: "apiqueuestatus" },
 };
 

@@ -1,4 +1,6 @@
 import { onRequest } from "firebase-functions/v2/https";
+import type { Request } from "firebase-functions/v2/https";
+import type { Response } from "express";
 import { randomUUID } from "crypto";
 import { DocumentReference, DocumentData, DocumentSnapshot } from "firebase-admin/firestore";
 import { db } from "./app.js";
@@ -34,9 +36,12 @@ import { ExperimentData, UserData } from './interfaces';
 // seconds regardless (pages/docs/api.js "Limits"); this value still matters
 // because it lets the instance keep running server-side past that point to
 // finish rehydrating the cache for every request after this one.
-export const apiBase64 = onRequest(
-  { cors: true, memory: "512MiB", concurrency: 1, maxInstances: 100, timeoutSeconds: 300 },
-  async (req, res) => {
+// Extracted so apiData (api-data.ts) can dispatch "/api/base64" here too --
+// see the ROUTING NOTE above apiDataHandler in that file. apiBase64 below
+// stays a thin onRequest wrapper around this, with its OWN options
+// (maxInstances: 100, unchanged) -- do not alter memory, concurrency,
+// maxInstances, or timeoutSeconds here.
+export async function apiBase64Handler(req: Request, res: Response): Promise<void> {
   const { experimentID, data, filename } = req.body;
 
   if (!experimentID || !data || !filename) {
@@ -395,4 +400,14 @@ export const apiBase64 = onRequest(
   await cleanupPending(pendingPath);
 
   res.status(201).json(MESSAGES.SUCCESS);
-});
+}
+
+// Kept for one release only -- the standalone "apibase64" function stays
+// deployed alongside apiData's new "/api/base64" route so hosting's rewrite
+// never points at a function ahead of its own deploy. Remove this export,
+// and index.ts's re-export of it, in the follow-up. Options unchanged from
+// before extraction -- see the long comment above apiBase64Handler.
+export const apiBase64 = onRequest(
+  { cors: true, memory: "512MiB", concurrency: 1, maxInstances: 100, timeoutSeconds: 300 },
+  apiBase64Handler
+);

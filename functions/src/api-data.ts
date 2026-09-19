@@ -1,4 +1,6 @@
 import { onRequest } from "firebase-functions/v2/https";
+import type { Request } from "firebase-functions/v2/https";
+import type { Response } from "express";
 import { randomUUID } from "crypto";
 import { FieldValue, DocumentReference, DocumentData, DocumentSnapshot } from "firebase-admin/firestore";
 import validateJSON from "./validate-json.js";
@@ -18,6 +20,7 @@ import { claimFilename, claimFilenameWithoutCredentials, confirmClaim, Collision
 import { isCompactionInFlight, COMPACTION_HOLD_REASON } from "./compaction-gate.js";
 import { discardSession, isValidSessionId } from "./staging.js";
 import { ExperimentData, UserData, RequestBody } from './interfaces';
+import { apiBase64Handler } from "./api-base64.js";
 
 // maxInstances: 200, overriding index.ts's global 20 (which still governs
 // every OTHER function). Sized for the design doc's own worst case -- a
@@ -73,9 +76,19 @@ import { ExperimentData, UserData, RequestBody } from './interfaces';
 // rehydration on every single request. 200 also covers this endpoint's other
 // slow paths uniformly (the provider upload itself, metadata derivation) for
 // direct Cloud Run invocations that bypass Hosting.
-export const apiData = onRequest(
-  { cors: true, memory: "512MiB", concurrency: 1, maxInstances: 200, timeoutSeconds: 300 },
-  async (req, res) => {
+//
+// ROUTING NOTE (apiBase64 folded in below): apiData is now a small dispatcher
+// in front of this handler and apiBase64Handler (api-base64.ts) -- normalized
+// req.path === "/api/base64" goes to apiBase64Handler, everything else
+// (including "/", which is what a direct function-URL invocation or this
+// file's own tests send) goes here, to apiDataHandler. The DEFAULT branch
+// must stay apiDataHandler, never a 404: a bare "/" is exactly what a request
+// that bypasses Hosting's "/api/data" rewrite looks like, and that has to
+// keep working unchanged. Once the standalone apiBase64 export is removed in
+// the follow-up, apiData and apiBase64 share this one 200-instance pool.
+// apiBase64 itself keeps its own maxInstances (100) as a thin wrapper around
+// the same handler -- see api-base64.ts.
+export async function apiDataHandler(req: Request, res: Response): Promise<void> {
   const { experimentID, data, filename, sessionId }: RequestBody = req.body;
 
   if (!experimentID || !data || !filename) {
@@ -674,4 +687,21 @@ export const apiData = onRequest(
   await uploadDerivedFiles(derivedFiles, derivedTarget, auth);
 
   res.status(201).json({...MESSAGES.SUCCESS, metadataMessage});
-});
+}
+
+// apiData's onRequest options are UNCHANGED from before this dispatcher
+// existed -- see the long comment above apiDataHandler for why every one of
+// these values is load-bearing (real out-of-memory incidents). Do not alter
+// memory, concurrency, maxInstances, or timeoutSeconds here.
+export const apiData = onRequest(
+  { cors: true, memory: "512MiB", concurrency: 1, maxInstances: 200, timeoutSeconds: 300 },
+  async (req, res) => {
+    const path =
+      req.path.length > 1 && req.path.endsWith("/") ? req.path.slice(0, -1) : req.path;
+    if (path === "/api/base64") {
+      await apiBase64Handler(req, res);
+      return;
+    }
+    await apiDataHandler(req, res);
+  }
+);

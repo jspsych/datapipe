@@ -5,9 +5,20 @@ import { apiData } from "./api-data.js";
 // (docs/streaming-ingest-design.md). Replaces the design's openExperiments
 // mirror: the four submission gates run here, against Firestore, and only an
 // unforgeable server-minted session id reaches RTDB.
+//
+// apiSessionStart and apiCondition below, plus apiBase64, are KEPT FOR ONE
+// RELEASE ONLY as standalone exports -- see participant-api.ts's header and
+// api-data.ts's ROUTING NOTE for why. The follow-up PR (step 2 of the
+// rollout) removes these three exports once participantApi and apiData's
+// "/api/base64" route have deployed and every test/doc reference has moved
+// off the standalone function names.
 import { apiSessionStart } from "./api-session-start.js";
 import { apiCondition } from "./api-condition.js";
 import { apiBase64 } from "./api-base64.js";
+// Merges apiSessionStart and apiCondition into ONE deployed function -- see
+// participant-api.ts's header for why these two (and not apiData/apiBase64,
+// and not dashboardapi) share a pool.
+import { participantApi } from "./participant-api.js";
 import { scheduledTokenRefresh } from "./scheduled-token-refresh.js";
 import { scheduledUploadRetry } from "./scheduled-upload-retry.js";
 import { scheduledPendingRecovery } from "./scheduled-pending-recovery.js";
@@ -71,5 +82,6 @@ export {
   apiQueueStatus as apiqueuestatus,
   onUserDeleted as onuserdeleted,
   finalizeTask as finalizetask,
-  dashboardApi as dashboardapi
+  dashboardApi as dashboardapi,
+  participantApi as participantapi
 };

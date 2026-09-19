@@ -23,15 +23,15 @@
       },
       {
         "source": "/api/session",
-        "function": "apisessionstart"
+        "function": "participantapi"
       },
       {
         "source": "/api/condition",
-        "function": "apicondition"
+        "function": "participantapi"
       },
       {
         "source": "/api/base64",
-        "function": "apibase64"
+        "function": "apidata"
       },
       {
         "source": "/api/oauth2callback",

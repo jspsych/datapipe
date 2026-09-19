@@ -1,12 +1,17 @@
 import { onRequest } from "firebase-functions/v2/https";
+import type { Request } from "firebase-functions/v2/https";
+import type { Response } from "express";
 import { DocumentReference, DocumentData, DocumentSnapshot } from "firebase-admin/firestore";
 import { db } from "./app.js";
 import writeLog from "./write-log.js";
 import MESSAGES from "./api-messages.js";
 import { ExperimentData } from './interfaces';
 
-
-export const apiCondition = onRequest({ cors: true }, async (req, res) => {
+// Plain handler, exported so participant-api.ts can dispatch to it alongside
+// apiSessionStartHandler -- see that module's header. apiCondition below
+// stays a thin onRequest wrapper around this for exactly one more release --
+// see index.ts.
+export async function apiConditionHandler(req: Request, res: Response): Promise<void> {
   const { experimentID } = req.body;
 
   if (!experimentID) {
@@ -70,4 +75,8 @@ export const apiCondition = onRequest({ cors: true }, async (req, res) => {
 
   res.status(200).json({ message: "Success", condition: condition });
   return;
-});
+}
+
+// Kept for one release only -- see the matching comment on apiSessionStart
+// in api-session-start.ts.
+export const apiCondition = onRequest({ cors: true }, apiConditionHandler);
