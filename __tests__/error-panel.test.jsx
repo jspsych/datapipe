@@ -11,7 +11,7 @@ jest.mock("../lib/firebase", () => ({
   db: {},
 }));
 
-import ErrorPanel from "../components/dashboard/ErrorPanel";
+import ErrorPanel, { METADATA_KEPT_NOTE } from "../components/dashboard/ErrorPanel";
 
 function renderPanel(props) {
   return render(
@@ -84,7 +84,7 @@ describe("ErrorPanel — rendering", () => {
   it("renders just the first sentence when count > 0 but no row has a usable time", () => {
     renderPanel({ errors: [], totalCount: 2 });
     expect(
-      screen.getByText("These submissions did not reach your storage provider.")
+      screen.getByText("DataPipe refused these submissions.")
     ).toBeInTheDocument();
     expect(screen.queryByText(/The most recent was/i)).not.toBeInTheDocument();
   });
@@ -96,7 +96,7 @@ describe("ErrorPanel — rendering", () => {
     // one run of sibling text nodes under the same <Text>.
     expect(
       screen.getByText(
-        "These submissions did not reach your storage provider. The most recent was on 19/09/2026, 13:00:18 GMT-4."
+        "DataPipe refused these submissions. The most recent was on 19/09/2026, 13:00:18 GMT-4."
       )
     ).toBeInTheDocument();
   });
@@ -118,6 +118,27 @@ describe("ErrorPanel — rendering", () => {
   it("still renders a 'Clear this list' button in that no-visible-rows case", () => {
     renderPanel({ errors: [], totalCount: 3 });
     expect(screen.getByRole("button", { name: /clear this list/i })).toBeInTheDocument();
+  });
+});
+
+describe("ErrorPanel — the refusal that keeps the data", () => {
+  const row = (error) => ({ error, message: "m", detail: "d", time: recentTimestamp });
+
+  it("says the raw data was kept on a METADATA_ERROR row, and only there", () => {
+    renderPanel({
+      errors: [row("FILE_EXISTS"), row("METADATA_ERROR"), row("INVALID_DATA")],
+      totalCount: 3,
+    });
+    fireEvent.click(screen.getByText("Show what was rejected"));
+    // One note for the one METADATA_ERROR row: api-data.ts keeps the pending
+    // copy for that code alone, so saying it on any other row would be false.
+    expect(screen.getAllByText(METADATA_KEPT_NOTE)).toHaveLength(1);
+  });
+
+  it("does not claim the submissions never reached storage", () => {
+    renderPanel({ errors: [row("METADATA_ERROR")], totalCount: 1 });
+    expect(screen.queryByText(/did not reach your storage provider/)).toBeNull();
+    expect(screen.getByText(/DataPipe refused these submissions\./)).toBeInTheDocument();
   });
 });
 

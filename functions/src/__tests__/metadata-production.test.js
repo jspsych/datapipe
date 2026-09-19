@@ -170,7 +170,7 @@ describe('produceMetadata', () => {
   });
 
   it('throws a clean error instead of a TypeError when the trial array is empty', async () => {
-    await expect(produceMetadata('[]')).rejects.toThrow('Invalid metadata generated');
+    await expect(produceMetadata('[]')).rejects.toThrow(/No columns were found in the submitted data/);
   });
 
   it('throws a clean error for a bare JSON object instead of letting it reach generate()', async () => {

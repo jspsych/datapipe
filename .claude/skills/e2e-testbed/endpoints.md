@@ -24,8 +24,9 @@ Error bodies are always `{ "error": CODE, "message": "…" }`. Success bodies ar
 `{...MESSAGES.METADATA_ERROR, message: errorMessage}` — it replaces the message
 with the specific failure text, so the wire message for `METADATA_ERROR` is not
 the string in `api-messages.ts`. OBSERVED 2026-09-19: `400
-{"error":"METADATA_ERROR","message":"Invalid metadata generated"}`. That is by
-design; treat the whole `message` field as free text on every endpoint.
+{"error":"METADATA_ERROR","message":"Invalid metadata generated"}` (that text
+has since been reworded to "No columns were found in the submitted data…",
+which is exactly why it must not be asserted on). That is by design; treat the whole `message` field as free text on every endpoint.
 
 ## `POST /api/data`
 
