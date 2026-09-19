@@ -24,15 +24,21 @@
 // Firestore triggers are at-least-once with retries for up to 7 days, so
 // delivery is durable. Duplicate delivery is harmless: compaction takes a
 // lease and a second invocation returns "leased-elsewhere".
+//
+// This trigger itself no longer RUNS a pass -- it only decides whether one is
+// worth starting, at 256MiB, and hands off to compaction-task.ts's
+// compactionTask (a Cloud Task) the moment it decides yes. That hop is what
+// lets the almost-always-early-return path stay cheap: the 1GiB/540s a pass
+// actually needs is now paid only by the task, only when a pass is actually
+// going to happen. At-least-once-plus-lease is unaffected by the hop --
+// duplicate task dispatches are exactly as harmless as duplicate trigger
+// deliveries were, for the same reason (the lease).
 
-import { onDocumentUpdated, onDocumentWritten } from "firebase-functions/v2/firestore";
+import { onDocumentUpdated } from "firebase-functions/v2/firestore";
 import { getProvider } from "./providers/index.js";
 import { StorageProviderId } from "./providers/types.js";
-import { compactExperiment, WATERMARK_RATIO } from "./compaction.js";
-
-// Runtime shared by both triggers: a pass holds one batch in memory at once,
-// bounded by compaction.ts's MAX_BATCH_BYTES plus the assembled zip.
-const RUNTIME = { memory: "1GiB" as const, timeoutSeconds: 540 };
+import { WATERMARK_RATIO } from "./compaction.js";
+import { enqueueCompaction } from "./compaction-task.js";
 
 // Deliberately high. It is the per-submission file count the watermark
 // estimate assumes, used only to decide whether examining the record is worth
@@ -76,7 +82,11 @@ export function mayHaveCrossedWatermark(
 // The provider's cap, or null when this experiment is not eligible for
 // compaction at all. Reads only the document already in the event payload --
 // no Firestore reads -- so an ineligible experiment costs nothing.
-function capFor(data: FirebaseFirestore.DocumentData | undefined): number | null {
+//
+// Exported for upload-queue-trigger.ts, which runs the identical eligibility
+// check against a document it had to read explicitly (unlike this trigger, it
+// has no experiment document already in hand).
+export function capFor(data: FirebaseFirestore.DocumentData | undefined): number | null {
   const provider = data?.storageProvider as StorageProviderId | undefined;
   if (!provider) {
     return null;
@@ -88,7 +98,8 @@ function capFor(data: FirebaseFirestore.DocumentData | undefined): number | null
   }
 }
 
-function leaseHeld(data: FirebaseFirestore.DocumentData | undefined): boolean {
+// Exported for the same reason as capFor above.
+export function leaseHeld(data: FirebaseFirestore.DocumentData | undefined): boolean {
   const until = data?.compaction?.compactingUntil as FirebaseFirestore.Timestamp | undefined;
   return !!until && until.toMillis() > Date.now();
 }
@@ -96,12 +107,14 @@ function leaseHeld(data: FirebaseFirestore.DocumentData | undefined): boolean {
 /**
  * Fires on every experiment document update, which means every submission.
  *
- * Everything before the compactExperiment call is decided from the event
- * payload alone, so a submission to a non-capped provider -- the overwhelming
- * majority -- costs one invocation that returns without a single read.
+ * Everything here is decided from the event payload alone, so a submission to
+ * a non-capped provider -- the overwhelming majority -- costs one invocation
+ * that returns without a single read and without renting the 1GiB instance
+ * compaction-task.ts's compactionTask needs: this trigger runs at 256MiB, and
+ * enqueueCompaction is a cheap Cloud Tasks call, not the pass itself.
  */
 export const onExperimentGrew = onDocumentUpdated(
-  { document: "experiments/{experimentID}", ...RUNTIME },
+  { document: "experiments/{experimentID}", memory: "256MiB" },
   async (event) => {
     const before = event.data?.before.data();
     const after = event.data?.after.data();
@@ -126,71 +139,6 @@ export const onExperimentGrew = onDocumentUpdated(
       return;
     }
 
-    const result = await compactExperiment(event.params.experimentID);
-    logResult(result);
+    await enqueueCompaction(event.params.experimentID);
   }
 );
-
-/**
- * Fires on upload-queue writes, covering the two cases `sessions` cannot see.
- *
- * QUOTA_EXCEEDED means the provider has already refused a write for lack of
- * room — the most urgent signal there is, and the one that makes a researcher's
- * hand-uploaded files eventually visible to us despite producing no event of
- * their own.
- *
- * A completed entry means the retry worker just landed a file WITHOUT
- * `sessions` moving, because that submission incremented it when it first
- * arrived and failed. A draining backlog is otherwise invisible.
- */
-export const onUploadQueueChanged = onDocumentWritten(
-  { document: "uploadQueue/{docId}", ...RUNTIME },
-  async (event) => {
-    const before = event.data?.before.data();
-    const after = event.data?.after.data();
-    if (!after) {
-      return;
-    }
-
-    const blocked = after.status === "pending" && after.providerErrorCode === "QUOTA_EXCEEDED";
-    const justLanded = after.status === "completed" && before?.status !== "completed";
-    if (!blocked && !justLanded) {
-      return;
-    }
-
-    const experimentID = after.experimentID as string | undefined;
-    if (!experimentID) {
-      return;
-    }
-
-    // Unlike the experiment trigger there is no document in hand to pre-filter
-    // on, so eligibility is settled inside compactExperiment. A blocked entry
-    // is worth the read regardless: it is proof the record is already full.
-    const result = await compactExperiment(experimentID);
-    logResult(result);
-  }
-);
-
-function logResult(result: ReturnType<typeof compactExperiment> extends Promise<infer R> ? R : never) {
-  if (result.status === "compacted") {
-    console.log(
-      `compaction: ${result.experimentID} sealed ${result.archived} file(s) into ${result.archiveName} ` +
-        `(${result.fileCountBefore} -> ${result.fileCountAfter} files)`
-    );
-    if (result.recoveredFromSaturation) {
-      // Not a failure -- the pass succeeded by staging the archive over one of
-      // its own batch members. Worth seeing, because it means a burst outran
-      // the watermark and the headroom constants may need revisiting.
-      console.warn(
-        `compaction: ${result.experimentID} was at the file cap and recovered via a staged archive`
-      );
-    }
-    if (result.undeleted) {
-      console.warn(
-        `compaction: ${result.experimentID} left ${result.undeleted} original(s) undeleted; they will be skipped next pass`
-      );
-    }
-  } else if (result.status === "failed") {
-    console.error(`compaction: ${result.experimentID} failed: ${result.detail}`);
-  }
-}

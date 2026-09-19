@@ -16,31 +16,35 @@
 // drains. A 24-hour floor backstops a queue that flaps.
 //
 // ---------------------------------------------------------------------------
-// WHY A DEDICATED TRIGGER, AND NOT THE OTHER TWO OBVIOUS PLACES
+// WHY THIS IS A DEDICATED STATE MACHINE, AND NOT A HOOK INSIDE queueUpload
 // ---------------------------------------------------------------------------
 //
-// Not a hook inside queueUpload: scheduled-pending-recovery.ts writes
-// uploadQueue documents by hand in its own transaction and never calls it, and
-// the signal that actually matters -- handleRetryFailure in
-// scheduled-upload-retry.ts -- is not in that path at all. A Firestore trigger
-// sees every writer, including writers not yet written.
+// scheduled-pending-recovery.ts writes uploadQueue documents by hand in its
+// own transaction and never calls queueUpload, and the signal that actually
+// matters -- handleRetryFailure in scheduled-upload-retry.ts -- is not in that
+// path at all. A Firestore trigger sees every writer, including writers not
+// yet written.
 //
-// Not folded into onUploadQueueChanged (compaction-triggers.ts), even though
-// it watches the exact same collection path. That function's runtime and
-// throw semantics belong to COMPACTION: it runs at 1GiB/540s because a pass
-// holds a batch and an assembled zip in memory, and anything it throws is a
-// compaction failure. Enqueuing mail there would mean a mail-write error
-// re-runs a compaction pass, and a compaction error suppresses a
-// notification -- two unrelated concerns sharing one retry envelope. Separate
-// concerns, separate functions, 256MiB here because this one reads two
-// documents and writes two.
+// handleQueueWrite itself, though, is called from upload-queue-trigger.ts's
+// onUploadQueueChanged -- the SAME deployed trigger that also runs compaction
+// discovery against this collection. That used to be a harder call: compaction
+// ran inline in that trigger at 1GiB/540s (a pass holds a batch and an
+// assembled zip in memory), so folding mail in would have meant a mail-write
+// error re-running a compaction pass and a compaction error suppressing a
+// notification -- two unrelated concerns sharing one runtime and one retry
+// envelope. That objection is gone now that compaction itself runs in a
+// dedicated Cloud Task (compaction-task.ts): the trigger only decides whether
+// to enqueue one, at 256MiB, which is the same weight class this module always
+// was. What still keeps the two concerns apart is upload-queue-trigger.ts's
+// own two independent try/catch blocks around them -- see that module's
+// header -- so an error in one is still logged and attributed without ever
+// reaching, retrying, or suppressing the other.
 //
 // Firestore triggers are at-least-once, so the same event can arrive twice.
 // That is harmless by construction: the second delivery finds notifiedAt
 // already set and takes the count-only branch. It cannot produce a second
 // mail.
 
-import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import { db } from "./app.js";
 import { contactEmailRecipient, enqueueMail, newMailRef } from "./mail.js";
@@ -469,26 +473,11 @@ export async function handleQueueWrite(
   return "noop";
 }
 
-// 256MiB: this reads two documents and one single-result query, and writes
-// two documents. Nothing here holds a payload -- the queue entry's bytes live
-// in Cloud Storage, and this function never touches them.
-//
-// No `retry: true`. An error here is logged and dropped rather than replayed
-// for up to seven days, which is the right trade for a notification: the flag
+// No exported trigger here any more -- upload-queue-trigger.ts's
+// onUploadQueueChanged calls handleQueueWrite directly, in its own try/catch,
+// alongside compaction discovery. See that module's header for the retry
+// posture (still no `retry: true`, for the same reason as always: the flag
 // write and the mail create are one commit, so a failed attempt leaves the
-// episode closed, and the NEXT failure on the same experiment re-decides from
-// scratch. A replay storm on a notification path would be worse than a missed
-// notification.
-export const onUploadFailure = onDocumentWritten(
-  { document: "uploadQueue/{docId}", memory: "256MiB" },
-  async (event) => {
-    const outcome = await handleQueueWrite(
-      event.data?.before.data(),
-      event.data?.after.data(),
-      event.params.docId
-    );
-    if (outcome !== "noop") {
-      console.log(`upload-failure-notify: ${event.params.docId} -> ${outcome}`);
-    }
-  }
-);
+// episode closed and the NEXT failure on the same experiment re-decides from
+// scratch -- a replay storm on a notification path would be worse than a
+// missed notification).

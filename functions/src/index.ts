@@ -31,10 +31,13 @@ import { scheduledSweep } from "./scheduled-sweep.js";
 // disconnect/reconnect slots, which the rules cap at 40 writes per session.
 // Keeps the researcher's live-sessions dashboard current. See its header.
 import { onStagingDisconnect } from "./staging-disconnect-trigger.js";
-import { onExperimentGrew, onUploadQueueChanged } from "./compaction-triggers.js";
-// A SECOND trigger on uploadQueue/{docId}, deliberately not folded into
-// onUploadQueueChanged above -- see the header of upload-failure-notify.ts.
-import { onUploadFailure } from "./upload-failure-notify.js";
+import { onExperimentGrew } from "./compaction-triggers.js";
+// The one deployed trigger on uploadQueue/{docId}: failure-notify
+// (upload-failure-notify.ts) and compaction discovery, each in its own
+// try/catch -- see upload-queue-trigger.ts's header for why they share a
+// function instead of being two triggers on the same path.
+import { onUploadQueueChanged } from "./upload-queue-trigger.js";
+import { compactionTask } from "./compaction-task.js";
 // Delivery for the `mail` collection. Replaces the deprecated Firebase
 // "Trigger Email" extension with a direct Resend send (Amazon SES until AWS
 // denied production access); mail.ts's document contract is unchanged through
@@ -69,7 +72,7 @@ export {
   onStagingDisconnect as onstagingdisconnect,
   onExperimentGrew as onexperimentgrew,
   onUploadQueueChanged as onuploadqueuechanged,
-  onUploadFailure as onuploadfailure,
+  compactionTask as compactiontask,
   onMailCreated as onmailcreated,
   apiQueueStatus as apiqueuestatus,
   onUserDeleted as onuserdeleted,
