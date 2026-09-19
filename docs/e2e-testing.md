@@ -52,6 +52,45 @@ so a `.partial.json` reaches storage roughly 65–75 minutes after the dropout.
 In the meantime the dashboard's queue panel describes it as an upload that did
 not go through. That is expected.
 
+And one ordering rule: **switch data collection off last.** While an experiment
+is not `active`, the staging sweep *discards* every session still staged for it
+(`scheduled-staging-sweep.ts`, "THE SECOND DOOR") rather than recovering it. A
+run on 2026-09-19 closed the experiment for the closed-experiment check while
+an earlier session was still waiting out its grace period, and spent the rest
+of the session investigating a recovery bug that does not exist.
+
+## Known issues a run will trip over
+
+These are real, expected, and not worth reporting again. The manifest carries
+the same list as `knownIssues` so a driver does not flag them.
+
+- **A `METADATA_ERROR` refusal comes back as a queue entry.** `api-data.ts`
+  deliberately keeps the pending copy — "scheduled-pending-recovery salvages it
+  later instead of losing it outright" — because `METADATA_ERROR` means
+  metadata generation failed, not that the participant's data was refused, and
+  the policy is never to destroy raw data over that. Within the next
+  pending-recovery slot the entry appears with `failureReason: "Recovered from
+  interrupted upload (server restart or memory limit)"`. **That wording is
+  misleading for this case**: no server restarted and no memory limit was hit.
+  Worth rewording one day. Note also that the retry worker re-checks
+  `finalized` but not `active`.
+- **One `.psychds-ignore` per upload on Google Drive**, rather than one per
+  experiment. `metadata-derived-upload.ts` dedupes on the provider's
+  `NAME_CONFLICT`, and Drive permits duplicate names, so the dedupe never
+  fires. Harmless but untidy, and it means file counts must be taken by
+  filename pattern rather than folder total.
+- **Assert on `error`, never on `message`.** `metadata-block.ts` returns
+  `{...MESSAGES.METADATA_ERROR, message: errorMessage}`, replacing the message
+  with the specific failure text — so the wire message is not the string in
+  `api-messages.ts`. By design.
+- **Loading a page starts a session**, so a page opened and abandoned before
+  the first keypress still leaves a live-session row behind. Never assert on
+  the number of sessions in progress.
+- **A new experiment ships with validation on and `trial_type` required**
+  (`create-experiment.ts`). The plain-JavaScript testbed page emits no
+  `trial_type`, so its submissions are refused until that chip is removed or
+  validation is switched off.
+
 ## Recommended follow-up: a headless job
 
 The scenarios marked `automation: "full"` in the manifest need nothing but a
@@ -59,12 +98,19 @@ browser: open a URL, wait, read `window.__testbed`. Those could run without a
 person after every **Deploy to Test**.
 
 A Playwright job would look like this: read `scenarios.json`, filter to
-`automation === "full"`, create nothing (reuse one long-lived e2e experiment
-whose ID is a repository variable), open each scenario URL with `run` set to
-the commit SHA, poll `document.documentElement.dataset.testbedStatus`, read
-`window.__testbed`, and assert the `expectPage` block. Roughly eight of the
-fourteen scenarios qualify today, including the base64 and duplicate-rejection
-paths.
+`automation === "full"`, sort by `order`, create nothing (reuse one long-lived
+e2e experiment whose ID is a repository variable), open each scenario URL with
+`run` set to the commit SHA, poll
+`document.documentElement.dataset.testbedStatus`, read `window.__testbed`, and
+assert the `expectPage` block. Six of the fourteen scenarios qualify today
+(`clean-finish`, `baseline-no-streaming`, `ended-early`, `vanilla-streaming`,
+`vanilla-uncompressed`, `duplicate-rejection`, plus `failed-final-submission`
+for its page-level half), and the `base64-*` pair joins them if the shared
+experiment leaves base64 uploads switched on.
+
+Playwright runs in the page's own world, so `window.__testbed` is directly
+readable there — the DOM mirror exists for browser extensions, which evaluate
+JavaScript in an isolated world.
 
 **What it would verify.** That the Hosting rewrites resolve to the right
 consolidated functions; that `/api/data`, `/api/base64`, `/api/session` and
@@ -91,15 +137,20 @@ that actually breaks on a deploy.
 - **Tab close and network toggling** — `abandoned-tab` and `brief-dropout`.
   Playwright can do both (`page.close()`, `context.setOffline(true)`), but the
   assertion that matters is the recovered partial in storage 75 minutes later,
-  which no per-deploy job should wait for.
+  which no per-deploy job should wait for. `brief-dropout` is the interesting
+  one: a browser extension cannot go offline at all, so a headless job is the
+  *only* way that scenario ever runs unattended. It is marked `manual` in the
+  manifest for exactly that reason.
 - **The deferred checks** generally. They belong in a separate scheduled job,
   or in the human runbook.
 
 **What the maintainer would have to set up**, in the order the value arrives:
 
 1. A long-lived e2e experiment on `datapipe-test` with data collection,
-   conditions and base64 uploads all on, and its ID in a repository variable.
-   That alone unlocks the participant half.
+   conditions and base64 uploads all on, **validation off or `trial_type`
+   removed**, and its ID in a repository variable. That alone unlocks the
+   participant half. Decide about Psych-DS metadata at creation — the setting
+   locks once the experiment has data.
 2. A Playwright workflow triggered on `workflow_run` after **Deploy to Test**
    succeeds, reading `scenarios.json` from the published testbed so the two
    repos stay in step without a submodule.

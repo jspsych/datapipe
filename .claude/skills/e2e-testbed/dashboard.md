@@ -4,6 +4,9 @@ Click paths and the literal strings to match on. All quoted text is copied from
 the components, so `find` and `get_page_text` can match it exactly — including
 the em dashes in the live-session states. Sources are named per section.
 
+Lines marked **OBSERVED 2026-09-19** were confirmed by a live run against
+`datapipe-test`. Everything else is read off the components.
+
 ## Routes
 
 | Page | Route |
@@ -56,28 +59,53 @@ full-page OAuth navigation). Dataverse instead opens an inline form with
    email", "Description"; Zenodo requires "Author name", "Description".
 5. **"Create experiment"** → redirects to `/admin/<experimentID>`.
 
-The experiment ID is in the URL and beside the label **"Experiment ID"**
-(`components/dashboard/ExperimentInfo.js`). There is no copy button anywhere in
-the app.
+**Read the experiment ID from `location.pathname`** after that redirect. It is
+also beside the label **"Experiment ID"**
+(`components/dashboard/ExperimentInfo.js`), and there is no copy button
+anywhere in the app. OBSERVED 2026-09-19: the create call took 1.3 s; budget
+~10 s.
 
 ## Switches — `components/dashboard/ExperimentActive.js`
 
-All four live in the **"Data collection"** section of `/admin/<id>`, autosave on
-toggle, and show a "Saved" flag (`role="status"`) on success. No confirmation.
+All live in the **"Data collection"** section of `/admin/<id>`, autosave on
+toggle, and show a transient "Saved" badge (`role="status"`) on success. No
+confirmation.
+
+**Click the visible switch track, not the hidden `<input type=checkbox>`.**
+OBSERVED 2026-09-19: clicking the input by element reference did nothing, even
+though it carries the accessible name. Wait for the "Saved" badge before moving
+on.
 
 | Switch | Used by |
 |---|---|
 | **"Accept new data"** | everything; `closed-experiment` turns it off |
 | **"Accept base64 file uploads"** | the `base64-*` scenarios |
 | **"Assign conditions in sequence"** | the `vanilla-condition*` scenarios |
+| **"Check submissions before storing them"** | setup — see below |
+| **"Generate Psych-DS metadata"** | setup — see below |
 | **"Stop after a set number of sessions"** | session-cap checks |
 
 Turning conditions on reveals a number field **"How many conditions?"**
-(minimum 2), which autosaves with its own "Saved" flag.
+(minimum 2), which autosaves with its own "Saved" flag. Triple-click, type, Tab.
 
 On failure the switch snaps back and shows a sentence beginning "Could not
 change data collection…". If the experiment is finalized the switch is disabled
 with "Locked because this experiment has been finalized…".
+
+### Two setup traps
+
+**Validation is ON by default, and requires `trial_type`.**
+`create-experiment.ts` sets `useValidation ?? true` and
+`requiredFields ?? ["trial_type"]`. The plain-JavaScript testbed page emits
+`trial_index, task, stimulus, response, rt, correct` and no `trial_type`, so
+every vanilla submission is refused with `INVALID_DATA` until you remove that
+chip (the × on the `trial_type` tag) or switch **"Check submissions before
+storing them"** off. Confirmed in code; the 2026-09-19 run removed the chip
+pre-emptively and so never saw the rejection.
+
+**"Generate Psych-DS metadata" locks permanently once data exists** — "Locked
+because this experiment has collected data". Set it before the first
+submission or not at all. OBSERVED 2026-09-19.
 
 ## Live sessions — `components/dashboard/LiveSessionsPanel.js`
 
@@ -91,6 +119,14 @@ Exact status strings:
 - **`Connection lost — may resume`** — disconnected, inside the 10-minute grace.
 - **`Stopped — being recovered`** — disconnected past the grace; the sweep will
   take it.
+
+All three OBSERVED 2026-09-19, in that sequence, with the row disappearing once
+the partial was queued.
+
+**Never assert on the NUMBER of sessions in progress.** Loading the jsPsych page
+opens a session before any trial runs, so a page opened and navigated away from
+leaves a row behind until the sweep clears it. OBSERVED 2026-09-19: two such
+rows. Match the row belonging to this run instead.
 
 "Running for" renders as `under a minute`, `<n> min`, `<h> h <m> min` or
 `<h> h`. Above 25 rows a footer reads "<n> more sessions are in progress and
@@ -114,6 +150,12 @@ otherwise.
 When the queue drains, a notice reads **"All queued uploads completed
 successfully."** and **auto-hides after 8 seconds** — do not build an assertion
 that depends on catching it.
+
+**Prefer `GET /api/queuestatus?experimentID=<id>` over this panel.** It is the
+only way to see `retryCount` and `lastAttemptAt`, and therefore the only way to
+tell "queued, never attempted" from "attempted and failed" — the panel says
+"Retrying" for both. See [endpoints.md](endpoints.md) for the call and where to
+read the ID token. OBSERVED 2026-09-19.
 
 ## Errors — `components/dashboard/ErrorPanel.js`
 
@@ -145,8 +187,17 @@ text is **"Open folder"**, opening
 deposition".)
 
 With Psych-DS metadata on, raw submissions go to `<title>/data/raw/` and the
-folder also holds derived CSVs. With it off, everything is at the folder root.
-Base64 uploads always go to the root.
+folder also holds derived CSVs (`subject-…_data.csv`, one per upload) plus
+`dataset_description.json`. With it off, everything is at the folder root.
+Base64 uploads always go to the root — `/api/base64` applies no Psych-DS layout
+and runs no metadata block.
+
+**Count files by this run's filename stem, never by folder total.** A
+`.psychds-ignore` accumulates **one per successful upload** rather than one per
+experiment: `metadata-derived-upload.ts` dedupes on the provider's
+`NAME_CONFLICT`, and Drive permits duplicate names, so the dedupe never fires.
+OBSERVED 2026-09-19: 5 copies after 5 uploads. A pre-existing DataPipe bug —
+report it as a known issue, not a finding.
 
 ## Other traps
 
@@ -157,3 +208,22 @@ Base64 uploads always go to the root.
 - Renaming an experiment (`Title.js`) is icon-only: `aria-label="Rename
   experiment"`, then `aria-label="Save new name"` or `"Cancel renaming"`.
 - The experiment list links to `/admin/<id>` from the title text, not a button.
+
+## Timings measured on 2026-09-19
+
+Use these to size waits, not as assertions.
+
+| | |
+|---|---|
+| jsPsych page, `auto=1` | 1.1–1.7 s per trial |
+| Vanilla page, `auto=1` | 400 ms per trial |
+| `POST /api/data` that writes to Drive | 2–4.5 s |
+| `POST /api/createexperiment` | 1.3 s |
+| Warm `dashboardapi` calls | 190–370 ms |
+| Refusals that never reach a provider | 270–480 ms |
+| Abandoned tab → queue entry | ~12 min |
+| Queue entry → first Drive attempt | +60 min |
+
+No dramatic cold start was seen after a deploy: the first `dashboardapi` call
+was 745 ms. `participantapi`'s genuinely-first call is made inside the page by
+the extension and is not visible, so its cold start remains unmeasured.

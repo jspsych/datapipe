@@ -20,6 +20,13 @@ imposes a **hard 60-second ceiling** regardless of the function's own timeout.
 Error bodies are always `{ "error": CODE, "message": "…" }`. Success bodies are
 `{ "message": "Success" }`, plus `metadataMessage` when metadata is on.
 
+**Assert on `error`, never on `message`.** `metadata-block.ts` returns
+`{...MESSAGES.METADATA_ERROR, message: errorMessage}` — it replaces the message
+with the specific failure text, so the wire message for `METADATA_ERROR` is not
+the string in `api-messages.ts`. OBSERVED 2026-09-19: `400
+{"error":"METADATA_ERROR","message":"Invalid metadata generated"}`. That is by
+design; treat the whole `message` field as free text on every endpoint.
+
 ## `POST /api/data`
 
 Body: `experimentID`, `filename`, `data`, optional `sessionId`.
@@ -34,6 +41,7 @@ Body: `experimentID`, `filename`, `data`, optional `sessionId`.
 | "Accept new data" off | `400` | `DATA_COLLECTION_NOT_ACTIVE` |
 | Session cap reached | `400` | `SESSION_LIMIT_REACHED` |
 | Fails the experiment's validation rules | `400` | `INVALID_DATA` |
+| Metadata on, and the body is not parseable CSV/JSON | `400` | `METADATA_ERROR` |
 | Filename already taken | `400` | `FILE_EXISTS` |
 | Owner has no connection for the provider | `400` | `PROVIDER_NOT_CONNECTED` |
 | Credential exists but is unusable | `202` | queued; the credential code is logged, not returned |
@@ -47,7 +55,20 @@ probe only proves the code you expect if every earlier gate passes.
 
 `FILE_EXISTS` and `INVALID_DATA` deliberately leave staged trials alone, so a
 streamed session refused for either reason is still recoverable by the sweep.
-The four experiment-state gates discard staging instead.
+The four experiment-state gates discard staging instead — and so does the
+sweep itself, later, if the experiment has since been switched off. That is why
+scenario order matters.
+
+**A `METADATA_ERROR` refusal comes back.** The pending Cloud Storage copy is
+deliberately kept ("scheduled-pending-recovery salvages it later instead of
+losing it outright"), so within the next pending-recovery slot — `:00`, `:15`,
+`:30`, `:45`, for entries older than ~15 minutes — a queue entry appears for
+that filename with `failureReason: "Recovered from interrupted upload (server
+restart or memory limit)"`. EXPECT this after any `METADATA_ERROR` probe.
+`METADATA_ERROR` means metadata generation failed, not that the participant's
+data was refused, and the policy is never to destroy raw data over it. Note
+that the retry worker re-checks `finalized` but **not** `active`. OBSERVED
+2026-09-19: three such entries, one per refusal.
 
 ## `POST /api/base64`
 
@@ -153,9 +174,29 @@ await Promise.all([
 ```
 
 ```js
-// Expect 405 {"error":"Method not allowed"} -- the only endpoint that checks.
+// Expect 405 {"error":"Method not allowed"} -- /api/session and
+// /api/queuestatus are the two endpoints that check the method.
 await fetch(`${BASE}/api/session/`, { method: "GET" }).then((r) => r.status);
 ```
+
+```js
+// The queue, without the dashboard. Better evidence than the queue panel: it
+// is the only way to see lastAttemptAt: null, which distinguishes "queued,
+// never tried" from "tried and failed". Token: IndexedDB on the
+// datapipe-test.web.app origin, firebaseLocalStorageDb ->
+// firebaseLocalStorage -> first record -> value.stsTokenManager.accessToken.
+await fetch(`${BASE}/api/queuestatus?experimentID=${EXP}`, {
+  headers: { Authorization: `Bearer ${idToken}` },
+}).then((r) => r.json());
+// -> { entries: [{ id, filename, dataType, status, errorCode, retryCount,
+//                  maxRetries, createdAt, lastAttemptAt, nextRetryAt,
+//                  failureReason }], count }
+```
+
+**Trailing slashes.** `/api/foo/` 308-redirects to `/api/foo`, and `fetch`
+surfaces the CORS-less 404 behind that redirect as "Failed to fetch" rather
+than a status. When checking that a route is *gone*, use the no-slash URL or
+`curl`. OBSERVED 2026-09-19.
 
 Every probe that names a real experiment writes to `logs/<experimentID>`, so
 the dashboard's error panel will show the deliberate failures. Say so in the
