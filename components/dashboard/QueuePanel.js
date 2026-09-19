@@ -11,7 +11,12 @@ import {
 } from "@chakra-ui/react";
 import { Download } from "lucide-react";
 import { auth } from "../../lib/firebase";
-import { queueEntryKind, summarizeQueue, friendlyReason } from "../../lib/upload-queue";
+import {
+  queueEntryKind,
+  summarizeQueue,
+  friendlyReason,
+  timeRemaining,
+} from "../../lib/upload-queue";
 import StatusIndicator from "../ui/StatusIndicator";
 import FormErrorAlert from "../ui/FormErrorAlert";
 import SectionPanel from "./SectionPanel";
@@ -37,15 +42,19 @@ import SectionPanel from "./SectionPanel";
 // tells "waiting" (held, unattempted) apart from "retrying" (attempted,
 // failed, coming back around), and this function renders each kind
 // distinctly rather than reusing the same badge for both.
+// `nowrap` keeps each short label on one line -- at the table's usual width
+// "Waiting to be stored" was breaking onto two lines while the Reason column
+// beside it, which is prose, had the room to absorb a wrap instead.
 function rowStatusIndicator(kind, entry) {
   if (kind === "failed") {
-    return <StatusIndicator status="error" label="Failed" />;
+    return <StatusIndicator status="error" label="Failed" nowrap />;
   }
   if (kind === "retrying") {
     return (
       <StatusIndicator
         status="warning"
         label={entry.status === "processing" ? "Retrying now" : "Retrying"}
+        nowrap
       />
     );
   }
@@ -54,6 +63,7 @@ function rowStatusIndicator(kind, entry) {
     <StatusIndicator
       status="neutral"
       label={entry.status === "processing" ? "Storing now" : "Waiting to be stored"}
+      nowrap
     />
   );
 }
@@ -62,7 +72,13 @@ function nextRetryText(nextRetryAt) {
   if (!nextRetryAt) return null;
   const t = nextRetryAt.toDate ? nextRetryAt.toDate() : new Date(nextRetryAt);
   const msUntil = t.getTime() - Date.now();
-  if (msUntil <= 0) return "soon";
+  // The retry worker runs on a flat */5 cron (functions/src/scheduled-sweep.ts),
+  // ungated -- see scheduled-sweep-core.ts's jobsDueAt, which gives upload
+  // retry the full 5-minute cadence every other gated job is a multiple of.
+  // A `nextRetryAt` already in the past just means the next tick hasn't run
+  // yet, so "within 5 minutes" is the honest bound, not "soon" (which read as
+  // indefinite next to a sibling row's concrete "in 37m").
+  if (msUntil <= 0) return "within 5 minutes";
   const minUntil = Math.ceil(msUntil / (60 * 1000));
   if (minUntil >= 60) {
     const hours = Math.floor(minUntil / 60);
@@ -76,30 +92,35 @@ function nextRetryText(nextRetryAt) {
 // not a retry -- "Next retry in 57m" on a file that has never been tried
 // reads as a failure that already happened. Same underlying field, different
 // sentence per kind.
+//
+// `ms={6}` (1.5rem = 24px) lines this up under StatusIndicator's LABEL, not
+// its icon: icon size 16 + the icon/label `gap={2}` (0.5rem = 8px) = 24px,
+// both theme spacing tokens rather than a measured pixel offset. If
+// StatusIndicator's default icon size or gap ever changes, this drifts with
+// it and needs a matching update.
 function rowSubline(kind, entry) {
   if (kind === "failed") return null;
   if (!(entry.status === "pending" || entry.status === "processing")) return null;
   const text = nextRetryText(entry.nextRetryAt);
   if (!text) return null;
   return (
-    <Text fontSize="xs" color="fg.muted" mt={2}>
+    <Text fontSize="xs" color="fg.muted" mt={2} ms={6}>
       {kind === "waiting" ? "First attempt" : "Next retry"} {text}
     </Text>
   );
 }
 
-function timeRemaining(createdAt) {
-  if (!createdAt) return null;
-  const created = createdAt.toDate ? createdAt.toDate() : new Date(createdAt);
-  const expiresAt = created.getTime() + 7 * 24 * 60 * 60 * 1000;
-  const msLeft = expiresAt - Date.now();
-  if (msLeft <= 0) return "expiring soon";
-  const hoursLeft = Math.floor(msLeft / (60 * 60 * 1000));
-  if (hoursLeft >= 24) {
-    const days = Math.floor(hoursLeft / 24);
-    return `${days}d ${hoursLeft % 24}h`;
-  }
-  return `${hoursLeft}h`;
+// A metadata-active experiment's queue entries carry the storage path
+// (`data/raw/<name>`, see functions/src/metadata-derived-files.ts's
+// uploadPathFor), not just the original filename -- that prefix is provider
+// layout, not something the researcher who submitted this file chose or
+// needs to see. The Filename column and the saved download both show only
+// the part after the last slash; the full value is still what gets sent to
+// the download endpoint and what appears in the `title` attribute for anyone
+// who needs to confirm the exact path.
+function basename(filename) {
+  const idx = filename?.lastIndexOf("/") ?? -1;
+  return idx === -1 ? filename : filename.slice(idx + 1);
 }
 
 async function fetchFile(experimentId, entryId) {
@@ -212,12 +233,20 @@ export default function QueuePanel({ entries, experimentId }) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = entry.filename;
+      // `a.download` is a suggested filename, not a path -- a browser either
+      // strips or mangles the "/" in a metadata-active entry's stored path
+      // (`data/raw/<name>`) rather than creating folders, so the full value
+      // bought nothing but an odd-looking save-as name. The blob/object-URL
+      // download this function does never sends the server's own
+      // Content-Disposition header (functions/src/api-queue-status.ts sets
+      // one, but it is unused here) -- this attribute is the only thing that
+      // names the saved file, so it is what has to carry the basename.
+      a.download = basename(entry.filename);
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
       console.error("Download failed:", e);
-      const stored = timeRemaining(entry.createdAt);
+      const stored = timeRemaining(entry, Date.now());
       setDownloadError(
         `Could not download ${entry.filename}. DataPipe still has this file` +
           (stored ? ` for another ${stored}` : "") +
@@ -315,8 +344,13 @@ export default function QueuePanel({ entries, experimentId }) {
     </Accordion.Root>
   );
 
+  // Right-aligned and pulled in close to the table (`mb={3}`, DESIGN.md §4's
+  // within-a-row rhythm) rather than sharing the accordion's `mb={4}`
+  // breathing room above it -- this button acts on the table's rows, not on
+  // the accordion, and used to read as the accordion's own trailing content
+  // because it sat at the same left edge with the same gap on both sides.
   const downloadAllButton = (
-    <HStack mb={4}>
+    <HStack w="100%" justifyContent="flex-end" mb={3}>
       {/* Was `variant="solid" colorPalette="gray"`, which put gray.200 on
           the old orange.600 fill at 2.81:1 -- under the 3:1 floor WCAG
           1.4.11 sets for a control's boundary. Outline on the panel's own
@@ -345,8 +379,12 @@ export default function QueuePanel({ entries, experimentId }) {
               §8.1 bans for section eyebrows. */}
           <Table.ColumnHeader>Filename</Table.ColumnHeader>
           <Table.ColumnHeader>Status</Table.ColumnHeader>
+          {/* No `whiteSpace="nowrap"` here: this is the one column that is
+              prose (the provider-error explanation), so it is the column
+              that absorbs the row's horizontal space and wraps instead of
+              the short Filename/Status/Kept-for-another columns around it. */}
           <Table.ColumnHeader>Reason</Table.ColumnHeader>
-          <Table.ColumnHeader>Stored for</Table.ColumnHeader>
+          <Table.ColumnHeader whiteSpace="nowrap">Kept for another</Table.ColumnHeader>
           <Table.ColumnHeader>
             <Box as="span" srOnly>
               Download
@@ -359,7 +397,9 @@ export default function QueuePanel({ entries, experimentId }) {
           const kind = queueEntryKind(entry);
           return (
             <Table.Row key={entry.id}>
-              <Table.Cell>{entry.filename}</Table.Cell>
+              <Table.Cell title={entry.filename} wordBreak="break-all">
+                {basename(entry.filename)}
+              </Table.Cell>
               <Table.Cell>
                 {rowStatusIndicator(kind, entry)}
                 {rowSubline(kind, entry)}
@@ -371,7 +411,7 @@ export default function QueuePanel({ entries, experimentId }) {
               </Table.Cell>
               <Table.Cell>
                 <Text fontSize="sm" color="fg.muted" whiteSpace="nowrap">
-                  {timeRemaining(entry.createdAt) || "—"}
+                  {timeRemaining(entry, Date.now()) || "—"}
                 </Text>
               </Table.Cell>
               <Table.Cell>

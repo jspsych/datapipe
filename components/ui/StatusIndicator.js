@@ -56,6 +56,11 @@ import { CircleCheck, TriangleAlert, CircleX, Minus } from "lucide-react";
  *   the icon -- this is the one place status is stated in words, not
  *   inferred from color or shape.
  * @param {number} [size=16] - Icon size in px (~16-18 recommended).
+ * @param {boolean} [nowrap=false] - Set `whiteSpace: nowrap` on the label.
+ *   Added for QueuePanel.js's Status column, whose short labels ("Waiting to
+ *   be stored") were breaking onto two lines at the table's usual width
+ *   while the Reason column next to them had all the room to absorb a wrap
+ *   instead. Off by default so every other caller keeps wrapping normally.
  */
 
 const STATUS_ICONS = {
@@ -75,7 +80,7 @@ const STATUS_COLORS = {
   neutral: "var(--chakra-colors-status-neutral)",
 };
 
-export default function StatusIndicator({ status, label, size = 16 }) {
+export default function StatusIndicator({ status, label, size = 16, nowrap = false }) {
   if (process.env.NODE_ENV !== "production" && !label) {
     console.error(
       "StatusIndicator: `label` is required. Status must never be " +
@@ -90,7 +95,7 @@ export default function StatusIndicator({ status, label, size = 16 }) {
   return (
     <HStack gap={2} display="inline-flex" alignItems="center">
       <Icon aria-hidden="true" size={size} color={color} />
-      <Text fontSize="sm" color="fg">
+      <Text fontSize="sm" color="fg" whiteSpace={nowrap ? "nowrap" : undefined}>
         {label}
       </Text>
     </HStack>

@@ -243,8 +243,8 @@ export default function WhenAnUploadFailsPage() {
             file is here -- not always a failure.
           </Box>
           <Box as="li" mb={2}>
-            <strong>Stored for</strong>: how much of the retention window is
-            left.
+            <strong>Kept for another</strong>: how much of the retention
+            window is left.
           </Box>
         </Box>
         <Text maxW="70ch">
