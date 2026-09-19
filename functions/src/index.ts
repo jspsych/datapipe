@@ -40,11 +40,6 @@ import { onUploadFailure } from "./upload-failure-notify.js";
 // denied production access); mail.ts's document contract is unchanged through
 // both swaps, so nothing on the write side moved.
 import { onMailCreated } from "./mail-delivery.js";
-// Re-drives mail whose failure has since stopped being true (a quota that has
-// rolled over, a blip that has passed). onMailCreated cannot: an
-// onDocumentCreated trigger does not re-fire on updates, so before this existed
-// a `retryable` ERROR was retried by nobody. Runs inside scheduledSweep above
-// (gated to every 10 minutes by jobsDueAt), not as its own scheduled function.
 import { apiQueueStatus } from "./api-queue-status.js";
 import { onUserDeleted } from "./on-user-deleted.js";
 import { finalizeTask } from "./api-finalize.js";
