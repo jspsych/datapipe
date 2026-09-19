@@ -694,20 +694,11 @@ describe("6. createDataContainer", () => {
       mockResponse({ status: 200, statusText: "OK", jsonBody: { id: "child-id-A", name: "My Experiment" } })
     );
 
-    // The Psych-DS chain is now created up front (find+create for "data",
-    // then find+create for "raw") so the write path never races to make it.
-    mockFetch.mockResolvedValueOnce(mockResponse({ status: 200, statusText: "OK", jsonBody: { files: [] } }));
-    mockFetch.mockResolvedValueOnce(
-      mockResponse({ status: 200, statusText: "OK", jsonBody: { id: "data-folder-id", name: "data" } })
-    );
-    mockFetch.mockResolvedValueOnce(mockResponse({ status: 200, statusText: "OK", jsonBody: { files: [] } }));
-    mockFetch.mockResolvedValueOnce(
-      mockResponse({ status: 200, statusText: "OK", jsonBody: { id: "raw-folder-id", name: "raw" } })
-    );
-
     const result = await gdriveProvider.createDataContainer(auth, { name: "My Experiment" });
 
-    expect(mockFetch).toHaveBeenCalledTimes(6);
+    // No Psych-DS chain here any more -- see "10. ensureDerivedPaths" below.
+    // createDataContainer only ever makes the experiment's own folder now.
+    expect(mockFetch).toHaveBeenCalledTimes(2);
 
     const findUrl = new URL(callArgs(0).url);
     expect(findUrl.searchParams.get("q")).toContain("name='DataPipe'");
@@ -733,20 +724,9 @@ describe("6. createDataContainer", () => {
       mockResponse({ status: 200, statusText: "OK", jsonBody: { id: "child-id-B", name: "My Experiment 2" } })
     );
 
-    // The Psych-DS chain is now created up front (find+create for "data",
-    // then find+create for "raw") so the write path never races to make it.
-    mockFetch.mockResolvedValueOnce(mockResponse({ status: 200, statusText: "OK", jsonBody: { files: [] } }));
-    mockFetch.mockResolvedValueOnce(
-      mockResponse({ status: 200, statusText: "OK", jsonBody: { id: "data-folder-id", name: "data" } })
-    );
-    mockFetch.mockResolvedValueOnce(mockResponse({ status: 200, statusText: "OK", jsonBody: { files: [] } }));
-    mockFetch.mockResolvedValueOnce(
-      mockResponse({ status: 200, statusText: "OK", jsonBody: { id: "raw-folder-id", name: "raw" } })
-    );
-
     const result = await gdriveProvider.createDataContainer(auth, { name: "My Experiment 2" });
 
-    expect(mockFetch).toHaveBeenCalledTimes(7);
+    expect(mockFetch).toHaveBeenCalledTimes(3);
 
     expect(JSON.parse(callArgs(1).options.body)).toEqual({
       name: "DataPipe",
@@ -770,24 +750,14 @@ describe("6. createDataContainer", () => {
     mockFetch.mockResolvedValueOnce(
       mockResponse({ status: 200, statusText: "OK", jsonBody: { id: "child-id-C", name: "My Experiment 3" } })
     );
-    // Then the Psych-DS chain, same as the other two paths.
-    mockFetch.mockResolvedValueOnce(mockResponse({ status: 200, statusText: "OK", jsonBody: { files: [] } }));
-    mockFetch.mockResolvedValueOnce(
-      mockResponse({ status: 200, statusText: "OK", jsonBody: { id: "data-folder-id", name: "data" } })
-    );
-    mockFetch.mockResolvedValueOnce(mockResponse({ status: 200, statusText: "OK", jsonBody: { files: [] } }));
-    mockFetch.mockResolvedValueOnce(
-      mockResponse({ status: 200, statusText: "OK", jsonBody: { id: "raw-folder-id", name: "raw" } })
-    );
 
     const result = await gdriveProvider.createDataContainer(auth, {
       name: "My Experiment 3",
       parentId: "picker-chosen-folder-id",
     });
 
-    // One call for the experiment folder -- no root find, no root create --
-    // then four for the Psych-DS chain.
-    expect(mockFetch).toHaveBeenCalledTimes(5);
+    // One call for the experiment folder -- no root find, no root create.
+    expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(JSON.parse(callArgs(0).options.body)).toEqual({
       name: "My Experiment 3",
       mimeType: "application/vnd.google-apps.folder",
@@ -964,7 +934,7 @@ describe("8. a failure inside the nested folder walk keeps its real error code",
 // path prefix as real nested FOLDERS and the file under its bare leaf name,
 // and listFiles collects every file it finds under that leaf regardless of
 // which folder it came from -- so the leaf is what the cache must hash.
-describe("9. the findOrCreateFolder race (spike gate H)", () => {
+describe("10. ensureDerivedPaths (the findOrCreateFolder race, spike gate H)", () => {
   // Confirmed live, not theorised: 8 concurrent writes to one brand-new nested
   // path produced 8 sibling folders with the same name (gate H, 2026-08-21).
   // findOrCreateFolder is find-then-create and Drive has no create-if-absent.
@@ -974,13 +944,19 @@ describe("9. the findOrCreateFolder race (spike gate H)", () => {
   // are all first-time writes to data/raw/. No data is lost (listFiles
   // recurses and collects by leaf) but the researcher's Drive tree ends up
   // duplicated, which is not a valid Psych-DS layout.
+  //
+  // This used to be pre-created unconditionally inside createDataContainer,
+  // on the premise that metadata could be switched on at any time, long
+  // after the container exists. That premise is false: firestore.rules
+  // freezes metadataActive the instant the experiment has data, so the only
+  // race-free moment is the metadata-ON transition itself -- which is what
+  // ensureDerivedPaths is called at (functions/src/ensure-derived-paths.ts),
+  // not container creation. See "6. createDataContainer" above for the
+  // regression coverage that the chain is NOT created there any more.
 
   it("pre-creates the data/raw chain so the write path never has to", async () => {
-    // The actual fix: make the folders at container-creation time, when there
-    // is exactly one caller and therefore no race.
-    mockFetch.mockResolvedValueOnce(
-      mockResponse({ status: 200, statusText: "OK", jsonBody: { id: "exp-folder", name: "E" } })
-    );
+    // The actual fix: make the folders when there is exactly one caller (the
+    // researcher flipping the switch) and therefore no race.
     mockFetch.mockResolvedValueOnce(mockResponse({ status: 200, statusText: "OK", jsonBody: { files: [] } }));
     mockFetch.mockResolvedValueOnce(
       mockResponse({ status: 200, statusText: "OK", jsonBody: { id: "data-id", name: "data" } })
@@ -990,28 +966,51 @@ describe("9. the findOrCreateFolder race (spike gate H)", () => {
       mockResponse({ status: 200, statusText: "OK", jsonBody: { id: "raw-id", name: "raw" } })
     );
 
-    await gdriveProvider.createDataContainer(auth, { name: "E", parentId: "p" });
+    await gdriveProvider.ensureDerivedPaths(auth, { provider: "gdrive", folderId: "exp-folder" });
 
     const created = mockFetch.mock.calls
       .filter(([, opts]) => opts.method === "POST")
       .map(([, opts]) => JSON.parse(opts.body));
     expect(created).toEqual([
-      { name: "E", mimeType: "application/vnd.google-apps.folder", parents: ["p"] },
       { name: "data", mimeType: "application/vnd.google-apps.folder", parents: ["exp-folder"] },
       { name: "raw", mimeType: "application/vnd.google-apps.folder", parents: ["data-id"] },
     ]);
   });
 
-  it("does not fail experiment creation if the chain cannot be pre-made", async () => {
-    // Best-effort: the write path can still create them on demand, so a
-    // failure here must not cost the researcher their experiment.
+  it("is idempotent: a second call finds the existing chain instead of duplicating it", async () => {
+    // Rehydrates from what the first call (or a since-happened first
+    // submission) already made, exercising findOrCreateFolder's find branch
+    // for both segments.
     mockFetch.mockResolvedValueOnce(
-      mockResponse({ status: 200, statusText: "OK", jsonBody: { id: "exp-folder-2", name: "E2" } })
+      mockResponse({
+        status: 200,
+        statusText: "OK",
+        jsonBody: { files: [{ id: "data-id", name: "data", mimeType: "application/vnd.google-apps.folder" }] },
+      })
     );
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({
+        status: 200,
+        statusText: "OK",
+        jsonBody: { files: [{ id: "raw-id", name: "raw", mimeType: "application/vnd.google-apps.folder" }] },
+      })
+    );
+
+    await gdriveProvider.ensureDerivedPaths(auth, { provider: "gdrive", folderId: "exp-folder" });
+
+    // Both calls were lookups (GET) -- no POST/create call at all.
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch.mock.calls.every(([, opts]) => opts.method === "GET")).toBe(true);
+  });
+
+  it("does not throw if the chain cannot be created (best-effort)", async () => {
+    // Best-effort: the write path can still create them on demand, so a
+    // failure here must not surface to the researcher flipping the switch.
     mockFetch.mockResolvedValueOnce(mockResponse({ status: 500, statusText: "Server Error" }));
 
-    const result = await gdriveProvider.createDataContainer(auth, { name: "E2", parentId: "p" });
-    expect(result).toEqual({ provider: "gdrive", folderId: "exp-folder-2" });
+    await expect(
+      gdriveProvider.ensureDerivedPaths(auth, { provider: "gdrive", folderId: "exp-folder-2" })
+    ).resolves.toBeUndefined();
   });
 
   it("converges on one folder when duplicates already exist", async () => {

@@ -53,6 +53,10 @@ import { createExperiment } from "./create-experiment.js";
 import { getProviderAccessToken } from "./get-provider-access-token.js";
 import { providerSetupWarnings } from "./provider-setup-warnings.js";
 import { apiFinalize, finalizeTask } from "./api-finalize.js";
+// Best-effort race removal for a metadata-ON transition (docs in
+// ensure-derived-paths.ts) -- called by MetadataControl.js right after a
+// successful metadataActive write, never as part of experiment creation.
+import { ensureDerivedPaths } from "./ensure-derived-paths.js";
 
 setGlobalOptions({
   maxInstances: 20
@@ -91,5 +95,6 @@ export {
   getProviderAccessToken as getprovideraccesstoken,
   providerSetupWarnings as providersetupwarnings,
   apiFinalize as apifinalize,
-  finalizeTask as finalizetask
+  finalizeTask as finalizetask,
+  ensureDerivedPaths as ensurederivedpaths
 };

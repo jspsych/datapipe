@@ -291,6 +291,37 @@ export interface StorageProvider {
   // that never produce a slashed path — see archivePathsFor in compaction.ts.
   archivePathFor?(storedName: string): string;
 
+  // Called once, when a researcher switches Psych-DS metadata ON for an
+  // experiment -- never at any other time, and never more than once per
+  // experiment in practice, because firestore.rules freezes metadataActive
+  // the instant the experiment has data (metadataChoiceRespected /
+  // hasCollectedData in firestore.rules, mirrored client-side by
+  // hasCollectedData in components/dashboard/MetadataControl.js). That
+  // freeze is what makes this call race-free: it can only ever run against a
+  // container with zero submissions, so there is exactly one caller, the
+  // same guarantee createDataContainer used to rely on when it pre-created
+  // this path unconditionally at container-creation time.
+  //
+  // Implement this ONLY for an adapter that materialises a path prefix as
+  // real nested containers, where findOrCreateFolder-style find-then-create
+  // has no atomicity and a burst of concurrent first-time writes to one
+  // brand-new nested path races and produces sibling containers with the
+  // same name -- confirmed live for Drive, not theorised: 8 concurrent
+  // writes to one new path produced 8 folders (spike gate H, 2026-08-21),
+  // which is exactly the designed-for load (requirement 6 is 30-100 students
+  // inside a minute, and on a fresh metadata-on experiment those are all
+  // first-time writes to data/raw/). An adapter that instead stores the
+  // prefix as part of a flat name (Zenodo folds every slash into "_") must
+  // NOT implement this: there is no nested container to race on, and
+  // flattening already resolves the concurrency correctly (see
+  // storedNameFor).
+  //
+  // Best-effort like refreshExpiringTokens above -- implementers must not
+  // throw, since the write path can still create the same layout on demand
+  // the first time a submission needs it. Omitting this hook is how a
+  // flat-namespace adapter spells "nothing to pre-create here".
+  ensureDerivedPaths?(auth: ResolvedAuth, container: ContainerRef): Promise<void>;
+
   // Removes a file. Required for any provider with a non-null maxFileCount,
   // since compaction cannot relieve a cap without it; optional otherwise, and
   // absent on providers DataPipe never deletes from. Never throws — failures
