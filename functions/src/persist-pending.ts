@@ -89,3 +89,33 @@ export async function cleanupPending(storagePath: string): Promise<void> {
     // but won't cause any issues. A scheduled cleanup can handle stragglers.
   }
 }
+
+/**
+ * Label a pending object with WHY it was kept, for scheduled-pending-
+ * recovery.ts's promoteToQueue to read back later via `file.getMetadata()`.
+ * Today the only reason is "metadata-failure" (api-data.ts's METADATA_ERROR
+ * branch), but the parameter is a string union rather than a boolean so a
+ * second reason can be added without renaming anything.
+ *
+ * Same best-effort shape as cleanupPending above, and for the same kind of
+ * reason: this is a label for a later reader, not part of the request's own
+ * correctness. api-data.ts calls this AFTER it has already responded 400 and
+ * written the log entry for a refusal it has fully handled -- a
+ * setMetadata failure here must never turn that handled refusal into a 500,
+ * and the fallback if the label never lands is simply the generic recovery
+ * reason scheduled-pending-recovery.ts already writes for every other
+ * orphaned pending object.
+ */
+export async function markPendingKept(
+  storagePath: string,
+  reason: "metadata-failure"
+): Promise<void> {
+  try {
+    const bucket = storage.bucket();
+    const file = bucket.file(storagePath);
+    await file.setMetadata({ metadata: { keptReason: reason } });
+  } catch {
+    // Non-critical: see doc comment above. Worst case, promoteToQueue falls
+    // back to the generic recovery reason it already writes.
+  }
+}
