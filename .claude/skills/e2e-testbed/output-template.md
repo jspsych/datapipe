@@ -15,20 +15,20 @@ Keep the headings; they are what makes two runs comparable.
 | Experiment | `<experimentID>` — title `e2e-YYYYMMDD-HHMM` |
 | Provider | Google Drive — `My Drive/DataPipe/e2e-YYYYMMDD-HHMM` |
 | Manifest | published / local checkout / prose fallback |
-| Result contract | present / absent (verdicts read off the log) |
+| Result contract | `schema: 2` / `schema: 1` (no `ready`, no trial counter) / absent (verdicts read off the log) |
 | Setup deviations | e.g. Psych-DS metadata on; any dashboard default changed |
 
 ## Scenarios
 
 | # | Scenario | Automation | Verdict | Evidence |
 |---|---|---|---|---|
-| 1 | `clean-finish` | full | PASS | `final-save` 201; `testbed-clean-finish-….csv` in the folder; no in-progress row afterwards |
+| 1 | `clean-finish` | full | PASS | `final-save` 201; `trialsCompleted` 20/20; `testbed-clean-finish-….csv` in the folder; no in-progress row afterwards |
 | … | | | | |
 
 `PASS` / `FAIL` / `DEFERRED` / `SKIPPED`. Evidence means HTTP statuses and
-error **codes** out of the result's `requests`, filenames actually seen in
-Drive, and the dashboard strings matched. Never "looked fine", and never a
-`message` string.
+error **codes** out of the result's `requests`, `trialsCompleted` against
+`trialsPlanned`, filenames actually seen in Drive, and the dashboard strings
+matched. Never "looked fine", and never a `message` string.
 
 List the scenarios in the `order` you ran them, and say if you departed from
 the manifest's order — it decides whether the recovery scenarios could pass.
@@ -59,8 +59,9 @@ For each `FAIL`, underneath the table:
 | `/api/session` GET | 405 Method not allowed | |
 | unknown experiment ×4 | 400 `EXPERIMENT_NOT_FOUND` | |
 
-These deliberately produce error-panel entries on the experiment. Say so, or
-the next reader will chase them.
+These deliberately produce rejections-panel entries on the experiment. Say so,
+or the next reader will chase them — and say whether you could see the panel at
+all: it is hidden whenever anything is queued.
 
 ## Queue state
 

@@ -15,13 +15,26 @@ JavaScript + `datapipe-client`, both configured entirely by URL parameters and
 both logging every request on screen. They send real data to a real experiment,
 so point them at **datapipe-test**, never production.
 
-**The result contract** — every run publishes `window.__testbed`: the final
-status, each request the page made with its HTTP status, the session id, the
-assigned condition, the filenames it claimed, and notes about the paths it
-cannot see (the extension's and the client's own requests). The same thing is
-mirrored onto `document.documentElement.dataset.testbedStatus` and into a
-collapsed `<pre id="testbed-result">` for drivers that cannot evaluate
-JavaScript. The testbed README describes the shape.
+**The result contract** — every run publishes `window.__testbed`: the status,
+how many trials have finished out of how many were planned, each request the
+page made with its HTTP status, the session id, the assigned condition, the
+filenames it claimed, and notes about the paths it cannot see (the extension's
+and the client's own requests). The same object is mirrored onto `<html>` as
+`data-testbed-status`, `data-testbed-trials-completed` and
+`data-testbed-trials-planned`, and into a collapsed `<pre id="testbed-result">`
+— and **that DOM mirror is the primary interface**, because a browser
+extension evaluates JavaScript in an isolated world and may not see a page
+global at all. The testbed README describes the shape.
+
+Schema 2 (2026-09-19) added the two things the first agent-driven run needed
+and did not have. A run is **`ready`** — loaded, valid, waiting for the
+participant's first keypress — before it is `running`, so a driver can tell
+"the page is up" from "the start key landed"; schema 1 published `running` from
+page load and a driver read it as trials advancing, wrongly, twice. And
+`trialsCompleted` / `trialsPlanned` make "act at trial N" a poll rather than a
+guess: the abandoned-tab scenario used to be timed off the clock, and the page
+finished before it could be abandoned. A driver should read `schema` and fall
+back if it is still 1.
 
 **The scenario manifest** — `site/scenarios.json` in that repo is the single
 source of truth for what to check: the URL parameters, the steps a driver has
@@ -86,10 +99,26 @@ the same list as `knownIssues` so a driver does not flag them.
 - **Assert on `error`, never on `message`.** `metadata-block.ts` returns
   `{...MESSAGES.METADATA_ERROR, message: errorMessage}`, replacing the message
   with the specific failure text — so the wire message is not the string in
-  `api-messages.ts`. By design.
+  `api-messages.ts`. By design, and the reword in #261 proves the point: the
+  same probe answered `"Invalid metadata generated"` in the morning and `"No
+  columns were found in the submitted data, so Psych-DS metadata could not be
+  generated. …"` in the evening, both 400 `METADATA_ERROR`. **Production still
+  answers the old string** until `test` is promoted to `main`, so a run pointed
+  at production sees the old copy — throughout the dashboard, not only here.
 - **Loading a page starts a session**, so a page opened and abandoned before
   the first keypress still leaves a live-session row behind. Never assert on
   the number of sessions in progress.
+- **The rejections panel is hidden while anything is queued.** It is not
+  missing; the parent renders one panel or the other. Since a recovered
+  partial waits an hour for its first storage attempt, checking a rejection
+  after a recovery scenario means waiting roughly 1 h 5 min for the queue to
+  drain. Check rejections *before* the recovery scenarios, or read the
+  refusal's status code from the page's own result instead.
+- **`sessionId` is null on every jsPsych-page run.**
+  `@jspsych/extension-pipe` 0.2.0 exposes no public way to read the session it
+  opened — the testbed says so in `notes` rather than reaching into the
+  extension's private field. The plain-JavaScript page, which calls
+  `datapipe-client` directly, does report one.
 
 And one product default worth knowing, though it is not an issue for the
 testbed any more: **a new experiment ships with validation on and `trial_type`
@@ -108,9 +137,10 @@ person after every **Deploy to Test**.
 A Playwright job would look like this: read `scenarios.json`, filter to
 `automation === "full"`, sort by `order`, create nothing (reuse one long-lived
 e2e experiment whose ID is a repository variable), open each scenario URL with
-`run` set to the commit SHA, poll
-`document.documentElement.dataset.testbedStatus`, read `window.__testbed`, and
-assert the `expectPage` block. Eight of the fifteen scenarios are marked `full` today:
+`run` set to the commit SHA, wait for `data-testbed-status` to read `ready`,
+send the start keypress, confirm it reads `running`, poll to a terminal status,
+read `window.__testbed`, and assert the `expectPage` block including
+`trialsCompleted === trialsPlanned`. Eight of the fifteen scenarios are marked `full` today:
 seven completely (`clean-finish`, `baseline-no-streaming`, `ended-early`,
 `vanilla-streaming`, `vanilla-uncompressed`, `duplicate-rejection`,
 `validation-failure`), and `failed-final-submission` for its page-level half
@@ -136,9 +166,9 @@ that actually breaks on a deploy.
   refresh token is a meaningful secret to keep, and it is not the same
   credential as anything DataPipe deploys with.
 - **Nothing on the dashboard.** The live-sessions panel, the queue panel and
-  the error panel are all behind a signed-in researcher. That needs a dedicated
-  Firebase Auth test account and its password in a secret, plus a sign-in step
-  that survives whatever the sign-in page does next.
+  the rejections panel are all behind a signed-in researcher. That needs a
+  dedicated Firebase Auth test account and its password in a secret, plus a
+  sign-in step that survives whatever the sign-in page does next.
 - **Anything needing a dashboard switch** — the closed-experiment, condition
   and base64 scenarios all begin by flipping a switch. Without a login the job
   would have to drive those flags another way, which means an admin path that
