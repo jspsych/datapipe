@@ -43,13 +43,14 @@ import { finalizeTask } from "./api-finalize.js";
 // createexperiment, connectprovider, connectstatictokenprovider,
 // disconnectprovider, deleteaccount, generateoauthstate, oauth2callback,
 // saveosftoken, getprovideraccesstoken, providersetupwarnings,
-// checkemailconflict, sendcontactemailverification, verifycontactemail,
-// ensurederivedpaths, and apiFinalize used to each be their own onRequest
-// export here. All 15 are low-traffic dashboard endpoints, not the submission
-// hot path, so each paid its own always-cold instance pool for no benefit --
-// they are now dispatched from ONE function. finalizeTask (onTaskDispatched,
-// NOT an onRequest endpoint) stays its own export -- see dashboard-api.ts's
-// and api-finalize.ts's headers for the full rationale.
+// checkemailconflict, sendcontactemailverification, verifycontactemail, and
+// ensurederivedpaths used to each be their own onRequest export here. All are
+// low-traffic dashboard endpoints, not the submission hot path, so each paid
+// its own always-cold instance pool for no benefit -- they are dispatched
+// from ONE function instead. apiFinalize and clearErrors joined the same
+// dispatcher directly, without ever having their own export. finalizeTask
+// (onTaskDispatched, NOT an onRequest endpoint) stays its own export -- see
+// dashboard-api.ts's and api-finalize.ts's headers for the full rationale.
 import { dashboardApi } from "./dashboard-api.js";
 
 setGlobalOptions({

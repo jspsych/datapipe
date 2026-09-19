@@ -313,6 +313,19 @@ export interface ExperimentData {
     errorsByCode?: Record<string, number>;
     errors?: ExperimentLogError[];
 
+    // Written only by clear-errors.ts, when a researcher clears the
+    // ErrorPanel from the dashboard. `logError`/`errorsByCode`/`errors`
+    // above are NEVER touched by that route -- they stay the lifetime
+    // record. Clearing only advances this watermark, which the frontend
+    // (lib/error-panel.js) subtracts against: the visible count is
+    // `logError - logErrorCleared`, and visible rows are `errors` entries
+    // timestamped strictly after `errorsClearedAt`.
+    errorsClearedAt?: FirebaseFirestore.Timestamp;
+    // The value `logError` held at the moment of the clear, captured in the
+    // same transaction as `errorsClearedAt` so the two always describe the
+    // same instant.
+    logErrorCleared?: number;
+
     // Activity window. `createdAt` is set once, when the experiment is
     // created; `lastRequestAt` moves on every logged request.
     createdAt?: FirebaseFirestore.Timestamp;

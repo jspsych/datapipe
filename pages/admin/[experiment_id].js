@@ -38,6 +38,7 @@ import GuidanceLine from "../../components/ui/GuidanceLine";
 import StatusIndicator from "../../components/ui/StatusIndicator";
 import SectionPanel from "../../components/dashboard/SectionPanel";
 import { STORAGE_PROVIDERS } from "../../lib/provider-config";
+import { visibleErrors } from "../../lib/error-panel";
 
 export async function getServerSideProps() {
   return { props: {} };
@@ -104,6 +105,17 @@ function ExperimentPageDashboard({ experiment_id }) {
 
   const uploadError = logs?.logError;
   const errorLog = logs?.errors;
+  // The count/rows a researcher is allowed to see, since the last time they
+  // cleared the panel (components/dashboard/ErrorPanel.js's "Clear this
+  // list") -- shared with ErrorPanel itself via lib/error-panel.js so the
+  // header chip below and the panel body can never disagree about whether
+  // there is anything to show.
+  const visibleErrorState = visibleErrors({
+    errors: errorLog,
+    logError: uploadError,
+    logErrorCleared: logs?.logErrorCleared,
+    errorsClearedAt: logs?.errorsClearedAt,
+  });
 
   // Track resolved state: show the success notice when the queue goes from
   // non-empty to empty.
@@ -179,7 +191,7 @@ function ExperimentPageDashboard({ experiment_id }) {
   // named here because the same condition drove both a status chip in the
   // header and a panel below it.
   const showErrorPanel =
-    !!uploadError && queueEntries.length === 0 && !showResolved;
+    visibleErrorState.count > 0 && queueEntries.length === 0 && !showResolved;
   // "N sessions in progress" is only a claim the page can back for an
   // experiment that streams (logs.startSession counts admissions). For one
   // that submits once at the end there is no such thing as in progress, and
@@ -298,12 +310,19 @@ function ExperimentPageDashboard({ experiment_id }) {
 
           {showResolved && <UploadsResolvedNotice />}
 
-          {/* `uploadError` is logs/{id}.logError -- the lifetime count. It is
-              passed alongside the array because write-log.ts caps the array
-              at 50 entries, so its length is a floor on the real number, not
-              the number itself. */}
+          {/* `uploadError` is logs/{id}.logError -- the lifetime count.
+              ErrorPanel derives the count SINCE THE LAST CLEAR itself (via
+              lib/error-panel.js), from the same raw fields passed here plus
+              logErrorCleared/errorsClearedAt, and also needs experimentId to
+              call /api/clearerrors. */}
           {showErrorPanel && (
-            <ErrorPanel errors={errorLog} totalCount={uploadError} />
+            <ErrorPanel
+              errors={errorLog}
+              totalCount={uploadError}
+              logErrorCleared={logs?.logErrorCleared}
+              errorsClearedAt={logs?.errorsClearedAt}
+              experimentId={experiment_id}
+            />
           )}
 
           {queueEntries.length > 0 && (

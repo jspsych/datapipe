@@ -1,7 +1,8 @@
 // Shared emulator-URL builder for the dashboardapi consolidation
-// (functions/src/dashboard-api.ts). Seventeen low-traffic dashboard endpoints
-// that used to each deploy as their own Cloud Function are now dispatched
-// from ONE function, keyed on req.path -- so a test that used to build
+// (functions/src/dashboard-api.ts). Eighteen low-traffic dashboard endpoints
+// (most of which used to each deploy as their own Cloud Function; a few,
+// like clearErrors, joined the dispatcher directly) are now dispatched from
+// ONE function, keyed on req.path -- so a test that used to build
 // http://localhost:5001/datapipe-test/us-central1/createexperiment now has to
 // hit http://localhost:5001/datapipe-test/us-central1/dashboardapi/api/createexperiment
 // instead. fnUrl(apiPath) is the one place that knows which of those two
@@ -51,6 +52,9 @@ const ROUTES = {
   // finalizeTask (the onTaskDispatched half) is NOT reachable over HTTP at
   // all, so it has no entry here.
   "/api/finalize": { fn: "dashboardapi", merged: true },
+  // clearErrors joined as an 18th route, for ErrorPanel.js's "Clear this
+  // list" button -- see dashboard-api.ts's and clear-errors.ts's headers.
+  "/api/clearerrors": { fn: "dashboardapi", merged: true },
   // -- merged into participantapi (functions/src/participant-api.ts) --
   "/api/session": { fn: "participantapi", merged: true },
   "/api/condition": { fn: "participantapi", merged: true },
