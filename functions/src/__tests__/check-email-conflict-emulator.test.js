@@ -16,13 +16,13 @@
 import { initializeApp, getApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { randomUUID } from "crypto";
+import { fnUrl } from "./helpers/fn-url.js";
 
 process.env.FIRESTORE_EMULATOR_HOST = "localhost:8080";
 jest.setTimeout(30000);
 
 const config = { projectId: "datapipe-test" };
-const FUNCTIONS_BASE = "http://localhost:5001/datapipe-test/us-central1";
-const CHECK_URL = `${FUNCTIONS_BASE}/checkemailconflict`;
+const CHECK_URL = fnUrl("/api/checkemailconflict");
 
 let db;
 

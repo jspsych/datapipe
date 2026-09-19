@@ -32,6 +32,7 @@ import { initializeApp, getApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { randomUUID } from "crypto";
 import express from "express";
+import { fnUrl } from "./helpers/fn-url.js";
 
 process.env.FIRESTORE_EMULATOR_HOST = "localhost:8080";
 jest.setTimeout(30000);
@@ -39,8 +40,10 @@ jest.setTimeout(30000);
 const config = { projectId: "datapipe-test" };
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 const DRIVE_PORT = 3579;
-const FUNCTIONS_BASE = "http://localhost:5001/datapipe-test/us-central1";
-const ENSURE_DERIVED_PATHS_URL = `${FUNCTIONS_BASE}/ensurederivedpaths`;
+// ensureDerivedPaths is now dispatched from dashboardapi (see
+// functions/src/dashboard-api.ts) instead of deploying as its own function --
+// fnUrl knows the difference.
+const ENSURE_DERIVED_PATHS_URL = fnUrl("/api/ensurederivedpaths");
 const AUTH_EMULATOR_SIGNUP_URL =
   "http://localhost:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake";
 

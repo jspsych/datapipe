@@ -49,6 +49,7 @@ import { initializeApp, getApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { randomUUID } from "crypto";
 import express from "express";
+import { fnUrl } from "./helpers/fn-url.js";
 
 process.env.FIRESTORE_EMULATOR_HOST = "localhost:8080";
 jest.setTimeout(30000);
@@ -63,7 +64,6 @@ const GDRIVE_REDIRECT_URI = "http://localhost:3000/oauth2/connect";
 const GDRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 const TOKEN_PORT = 3580;
 
-const FUNCTIONS_BASE = "http://localhost:5001/datapipe-test/us-central1";
 const AUTH_EMULATOR_SIGNUP_URL =
   "http://localhost:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake";
 
@@ -187,7 +187,7 @@ async function signUpEmulatorUser() {
 }
 
 async function generateState(provider) {
-  const res = await fetch(`${FUNCTIONS_BASE}/generateoauthstate`, {
+  const res = await fetch(fnUrl("/api/generateoauthstate"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(provider ? { provider } : {}),
@@ -233,11 +233,11 @@ async function postJson(url, payload) {
 }
 
 function callConnectProvider(payload) {
-  return postJson(`${FUNCTIONS_BASE}/connectprovider`, payload);
+  return postJson(fnUrl("/api/connectprovider"), payload);
 }
 
 function callDisconnectProvider(payload) {
-  return postJson(`${FUNCTIONS_BASE}/disconnectprovider`, payload);
+  return postJson(fnUrl("/api/disconnectprovider"), payload);
 }
 
 // ---- cases ----

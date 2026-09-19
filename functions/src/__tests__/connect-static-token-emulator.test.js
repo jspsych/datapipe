@@ -67,17 +67,25 @@ const AUTH_EMULATOR_SIGNUP_URL =
 const SERVER_URL = "https://dataverse.mock.test";
 
 let db;
-let connectStaticTokenProvider;
-let disconnectProvider;
+let connectStaticTokenProviderHandler;
+let disconnectProviderHandler;
 let isAllowedServerUrl;
 let decrypt;
 
 beforeAll(async () => {
   process.env.TOKEN_ENCRYPTION_KEY = TOKEN_ENCRYPTION_KEY;
 
-  ({ connectStaticTokenProvider, disconnectProvider, isAllowedServerUrl } = await import(
-    "../../lib/connect-provider.js"
-  ));
+  // connectStaticTokenProvider/disconnectProvider are now plain handlers
+  // (connectStaticTokenProviderHandler/disconnectProviderHandler), dispatched
+  // from dashboardapi (functions/src/dashboard-api.ts) instead of each being
+  // its own onRequest export -- the import names below changed to match, but
+  // this suite still drives them exactly as before: directly, in-process,
+  // through a throwaway Express server (see the header comment).
+  ({
+    connectStaticTokenProviderHandler,
+    disconnectProviderHandler,
+    isAllowedServerUrl,
+  } = await import("../../lib/connect-provider.js"));
   ({ db } = await import("../../lib/app.js"));
   ({ decrypt } = await import("../../lib/crypto-utils.js"));
 });
@@ -134,11 +142,11 @@ async function callHandler(handler, payload) {
 }
 
 function callConnectStaticTokenProvider(payload) {
-  return callHandler(connectStaticTokenProvider, payload);
+  return callHandler(connectStaticTokenProviderHandler, payload);
 }
 
 function callDisconnectProvider(payload) {
-  return callHandler(disconnectProvider, payload);
+  return callHandler(disconnectProviderHandler, payload);
 }
 
 async function getUserData(uid) {

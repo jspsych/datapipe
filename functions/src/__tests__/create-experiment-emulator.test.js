@@ -9,9 +9,10 @@
 // it isn't implemented, isn't exported from index.ts, and has no
 // firebase.json rewrite. Every request to its emulator URL therefore 404s
 // today -- a missing-behavior failure, not a mock-server/transport bug.
-// Following the lowercase function-name convention (apiData -> apidata,
-// connectProvider -> connectprovider), the URL under test is
-// http://localhost:5001/datapipe-test/us-central1/createexperiment.
+// The URL under test is built by helpers/fn-url.js -- createExperiment is now
+// dispatched from dashboardapi (functions/src/dashboard-api.ts) rather than
+// deploying as its own function, so the URL is no longer a bare lowercased
+// function name.
 //
 // Mock Google Drive: createDataContainer's two calls (find-or-create the
 // shared "DataPipe" root folder, then always-create the experiment folder)
@@ -44,6 +45,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import { randomUUID } from "crypto";
 import express from "express";
 import MESSAGES from "../api-messages";
+import { fnUrl } from "./helpers/fn-url.js";
 
 process.env.FIRESTORE_EMULATOR_HOST = "localhost:8080";
 jest.setTimeout(30000);
@@ -51,8 +53,10 @@ jest.setTimeout(30000);
 const config = { projectId: "datapipe-test" };
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 const DRIVE_PORT = 3579;
-const FUNCTIONS_BASE = "http://localhost:5001/datapipe-test/us-central1";
-const CREATE_EXPERIMENT_URL = `${FUNCTIONS_BASE}/createexperiment`;
+// createExperiment is now dispatched from dashboardapi (see
+// functions/src/dashboard-api.ts) instead of deploying as its own function --
+// fnUrl knows the difference.
+const CREATE_EXPERIMENT_URL = fnUrl("/api/createexperiment");
 const AUTH_EMULATOR_SIGNUP_URL =
   "http://localhost:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake";
 
