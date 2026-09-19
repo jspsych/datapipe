@@ -1,11 +1,13 @@
-import { onRequest } from "firebase-functions/v2/https";
-import { db, auth } from "./app.js";
+import type { Request } from "firebase-functions/v2/https";
+import type { Response } from "express";
+import { db } from "./app.js";
 import { contactEmailRecipient } from "./mail.js";
 import {
   VERIFICATIONS_COLLECTION,
   hashVerificationCode,
   hashContactEmail,
 } from "./send-contact-email-verification.js";
+import { requireUser } from "./require-user.js";
 
 // Redeem a 6-digit code and, on success, set the ONE flag no client can ever
 // write itself: users/{uid}.contactEmailVerified = true.
@@ -54,27 +56,18 @@ const NO_CODE_REQUESTED = {
   },
 };
 
-export const verifyContactEmail = onRequest({ cors: true }, async (req, res) => {
+// Plain handler, not an onRequest export -- dispatched from dashboard-api.ts
+// along with 14 other low-traffic dashboard endpoints, merged into ONE
+// deployed function (dashboardapi) so they share warm instances.
+export async function verifyContactEmailHandler(req: Request, res: Response): Promise<void> {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
     return;
   }
 
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    res.status(401).json({ error: "Authentication required" });
-    return;
-  }
-
-  let uid: string;
-  try {
-    const idToken = authHeader.split("Bearer ")[1];
-    const decodedToken = await auth.verifyIdToken(idToken);
-    uid = decodedToken.uid;
-  } catch {
-    res.status(401).json({ error: "Invalid authentication token" });
-    return;
-  }
+  const authResult = await requireUser(req, res);
+  if (!authResult) return;
+  const { uid } = authResult;
 
   const rawCode =
     typeof req.body?.code === "string" ? req.body.code.trim() : "";
@@ -203,4 +196,4 @@ export const verifyContactEmail = onRequest({ cors: true }, async (req, res) => 
       .status(500)
       .json({ error: "Could not verify the code. Please try again." });
   }
-});
+}

@@ -43,7 +43,8 @@
 // accepted, which is the same behaviour two concurrent submissions have always
 // had.
 
-import { onRequest } from "firebase-functions/v2/https";
+import type { Request } from "firebase-functions/v2/https";
+import type { Response } from "express";
 import { DocumentSnapshot } from "firebase-admin/firestore";
 import { db } from "./app.js";
 import writeLog from "./write-log.js";
@@ -60,7 +61,13 @@ import {
   streamingEnabled,
 } from "./staging.js";
 
-export const apiSessionStart = onRequest({ cors: true }, async (req, res) => {
+// Plain handler, dispatched from participant-api.ts (functions/src/
+// participant-api.ts) alongside apiConditionHandler -- see that module's
+// header for why session and condition share ONE deployed function
+// (participantapi) but are kept OUT of dashboardapi. This used to also back
+// a standalone onRequest export, apiSessionStart, kept for one release during
+// the rollout; that wrapper is gone now that participantapi has taken over.
+export async function apiSessionStartHandler(req: Request, res: Response): Promise<void> {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
     return;
@@ -194,4 +201,4 @@ export const apiSessionStart = onRequest({ cors: true }, async (req, res) => {
     // onDisconnect when it reaches this, rather than having stamps refused.
     maxDisconnects: MAX_DISCONNECTS,
   });
-});
+}

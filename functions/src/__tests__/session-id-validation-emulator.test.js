@@ -43,6 +43,7 @@ const { getDatabaseWithUrl } = require("firebase-admin/database");
 // Without this, getFirestore() below throws "The default Firebase app does
 // not exist" -- there is no other initializeApp() call anywhere in this file.
 require("../../lib/staging.js");
+const { fnUrl } = require("./helpers/fn-url.js");
 
 const FUNCTIONS_HOST = process.env.FUNCTIONS_EMULATOR_HOST || "localhost:5001";
 const PROJECT_ID = "datapipe-test";
@@ -67,7 +68,18 @@ async function post(fn, body) {
   return { status: response.status, body: await response.json() };
 }
 
-const startSession = (body) => post("apisessionstart", body);
+async function postUrl(url, body) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "*/*" },
+    body: JSON.stringify(body),
+  });
+  return { status: response.status, body: await response.json() };
+}
+
+// apisessionstart no longer deploys as its own function -- its handler is
+// now dispatched from participantapi (see participant-api.ts).
+const startSession = (body) => postUrl(fnUrl("/api/session"), body);
 const saveData = (body) => post("apidata", body);
 
 /** A fresh, open, Drive-backed experiment. Every test gets its own. */

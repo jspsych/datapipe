@@ -30,7 +30,6 @@ env:
   NEXT_PUBLIC_REDIRECT_URI: "https://datapipe-test.web.app/oauth2/callback"
   NEXT_PUBLIC_OAUTH_CALLBACK: "https://datapipe-test.web.app/api/oauth2callback"
   NEXT_PUBLIC_OAUTH_FINAL: "/admin"
-  NEXT_PUBLIC_OAUTH_REGENERATE: "https://datapipe-test.web.app/api/oauth2regenerate"
   NEXT_PUBLIC_GENERATE_STATE: "https://datapipe-test.web.app/api/generateoauthstate"
   NEXT_PUBLIC_BASE_URL: "https://datapipe-test.web.app"
   NEXT_PUBLIC_OSF_ENV: ""

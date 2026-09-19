@@ -35,7 +35,19 @@ const customJestConfig = {
   // Adding a package under `packages/` is enough to break the app's suite.
   //
   // Those packages are tested by their own CI job -- .github/workflows/client-test.yml.
-  testPathIgnorePatterns: ['<rootDir>/node_modules/', '<rootDir>/packages/'],
+  //
+  // functions/src/__tests__/helpers/ holds shared test SUPPORT code (e.g.
+  // fn-url.js), not suites of its own -- but Jest's default testMatch
+  // (`**/__tests__/**/*.[jt]s?(x)`) matches by directory name alone, so any
+  // .js file living under a __tests__/ folder is picked up as a test file
+  // regardless of what it contains, and fails with "must contain at least
+  // one test." Excluded here rather than renamed out of __tests__/, since
+  // that is where every sibling suite already imports it from.
+  testPathIgnorePatterns: [
+    '<rootDir>/node_modules/',
+    '<rootDir>/packages/',
+    '<rootDir>/functions/src/__tests__/helpers/',
+  ],
 }
 
 // createJestConfig is exported this way to ensure that next/jest can load the Next.js config which is async

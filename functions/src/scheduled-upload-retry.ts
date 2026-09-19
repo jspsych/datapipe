@@ -1,4 +1,3 @@
-import { onSchedule } from "firebase-functions/v2/scheduler";
 import { Timestamp } from "firebase-admin/firestore";
 import { db, storage } from "./app.js";
 import { getProvider, claimNameFor } from "./providers/index.js";
@@ -14,9 +13,9 @@ import { computeBackoffMs } from "./upload-backoff.js";
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
- * Scheduled function that runs every 5 minutes to retry failed uploads.
- * Processes up to 25 pending items per run, applies tiered exponential
- * backoff, and cleans up entries older than 7 days.
+ * Runs every 5 minutes (as part of scheduled-sweep.ts) to retry failed
+ * uploads. Processes up to 25 pending items per run, applies tiered
+ * exponential backoff, and cleans up entries older than 7 days.
  *
  * The 5-minute cadence (was hourly) is what makes the fast retry tier real:
  * queueUpload can set a 60-second nextRetryAt for CONTENTION/RATE_LIMITED
@@ -24,11 +23,16 @@ const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
  * hour. The query below already gates on `nextRetryAt <= now`, so slow-tier
  * items are unaffected by the faster cadence — they simply aren't due yet
  * most of the times this runs.
+ *
+ * Was its own `onSchedule` export; folded into scheduled-sweep.ts's single
+ * consolidated scheduled function (see that file's header for why). This is
+ * now a plain function the sweep calls in sequence, not a Cloud Function
+ * itself.
  */
-export const scheduledUploadRetry = onSchedule("*/5 * * * *", async () => {
+export async function runUploadRetry() {
   await retryPendingUploads();
   await cleanupOldEntries();
-});
+}
 
 /**
  * `ownerScope` is a TEST SEAM, defaulting to production behavior (every

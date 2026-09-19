@@ -1,7 +1,11 @@
-import { onRequest } from "firebase-functions/v2/https";
+import type { Request } from "firebase-functions/v2/https";
+import type { Response } from "express";
 import { db } from "./app.js";
 
-export const checkEmailConflict = onRequest({ cors: true }, async (req, res) => {
+// Plain handler, not an onRequest export -- dispatched from dashboard-api.ts
+// along with 14 other low-traffic dashboard endpoints, merged into ONE
+// deployed function (dashboardapi) so they share warm instances.
+export async function checkEmailConflictHandler(req: Request, res: Response): Promise<void> {
   try {
     if (req.method !== 'POST') {
       res.status(405).json({ error: 'Method not allowed' });
@@ -31,4 +35,4 @@ export const checkEmailConflict = onRequest({ cors: true }, async (req, res) => 
       error: 'Internal server error'
     });
   }
-});
+}

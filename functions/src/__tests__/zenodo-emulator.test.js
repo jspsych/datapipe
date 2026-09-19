@@ -3,9 +3,11 @@
  */
 
 // End-to-end coverage for the Zenodo adapter, driving the REAL deployed
-// apidata/apibase64 functions inside the Functions emulator against a
-// self-contained mock Zenodo -- the same shape as gdrive-emulator.test.js,
-// which is the house pattern for provider write-path coverage.
+// apidata function (both its default /api/data behavior and its dispatched
+// /api/base64 route -- see api-data.ts) inside the Functions emulator
+// against a self-contained mock Zenodo -- the same shape as
+// gdrive-emulator.test.js, which is the house pattern for provider
+// write-path coverage.
 //
 // HOW THE MOCK IS REACHED. Zenodo's adapter allowlists zenodo.org and
 // sandbox.zenodo.org (providers/zenodo.ts's ALLOWED_HOSTS), so unlike
@@ -29,12 +31,23 @@
 // here is everything that only appears once the full stack is involved --
 // the collision cache, the queue, metadata refs, and the flat-keyspace
 // hazard that spans the adapter and the cache together.
+//
+// THE LAST DESCRIBE BLOCK IS A DIFFERENT KIND OF TEST, AND DELIBERATELY LIVES
+// HERE RATHER THAN IN ITS OWN FILE: it is the real Cloud Tasks round trip for
+// compaction discovery (compaction-triggers.ts's onExperimentGrew ->
+// compaction-task.ts's compactionTask), and Zenodo is the only provider with a
+// file-count cap, so exercising it for real needs a live Zenodo-shaped
+// endpoint. This file already owns the one mock bound to port 3581 --
+// functions/.env.local's ZENODO_API_BASE fixes every Functions-emulator
+// process at that port for the whole run -- so reusing this mock's lifecycle
+// avoids a second listener racing this one for the bind.
 
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { randomUUID } from "crypto";
 import express from "express";
 import MESSAGES from "../api-messages";
+import { fnUrl } from "./helpers/fn-url.js";
 
 process.env.FIRESTORE_EMULATOR_HOST = "localhost:8080";
 process.env.FIREBASE_STORAGE_EMULATOR_HOST = "localhost:9199";
@@ -60,8 +73,12 @@ const sampleData = `[{"trial_type":"html-keyboard-response","trial_index":1,"tim
 // here would let a regression in that regex pass unnoticed.
 const CAP_MESSAGE = "Uploading selected files will result in exceeding the max amount per record.";
 
-async function postTo(fn, body) {
-  const response = await fetch(`http://localhost:5001/datapipe-test/us-central1/${fn}`, {
+// url: a full URL, as fnUrl(apiPath) returns it -- not a bare function name.
+// apibase64 no longer deploys as its own function (its handler is now
+// dispatched from within apidata -- see api-data.ts's ROUTING NOTE), so this
+// suite reaches it the same way a real request does, through fnUrl.
+async function postTo(url, body) {
+  const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "*/*" },
     body: JSON.stringify(body),
@@ -79,8 +96,8 @@ async function postTo(fn, body) {
   return { status: response.status, body: message };
 }
 
-const saveData = (body) => postTo("apidata", body);
-const saveBase64 = (body) => postTo("apibase64", body);
+const saveData = (body) => postTo(fnUrl("/api/data"), body);
+const saveBase64 = (body) => postTo(fnUrl("/api/base64"), body);
 
 // A self-contained mock Zenodo covering the legacy deposit API plus the
 // files-REST bucket endpoint -- the exact pair the adapter targets, and only
@@ -506,4 +523,87 @@ describe("Z8. cold collision cache rehydrates from the deposition listing", () =
     expect(expDataAfter.collisionCache.salt).toBe("z8-retained-salt");
     expect(expDataAfter.collisionCache.warmUntil.toMillis()).toBeGreaterThan(Date.now());
   });
+});
+
+describe("C-round-trip. compaction discovery through the real Cloud Tasks queue", () => {
+  // See the file header for why this lives here. Both cases below drive the
+  // REAL deployed onExperimentGrew via a genuine Firestore update -- nothing
+  // here calls compactExperiment or the trigger's `.run()` seam directly,
+  // unlike compaction-emulator.test.js.
+  //
+  // The Zenodo case is deliberately shaped to land on the below-watermark
+  // path (an empty mock record, one session) rather than a full archiving
+  // pass: the thing being proven is that compactionTask actually ran, not
+  // compaction's own correctness. compaction.lastCheckedAt is the proof --
+  // compaction.ts's noteCheck writes it on every completed pass, including
+  // below-watermark, and nothing writes it before compactExperiment is
+  // actually invoked (see runCompaction's "SURVEY FIRST" section: every
+  // return before the survey is a pure in-memory or single-document decision,
+  // and none of those paths touch compaction.*).
+
+  async function waitForExamined(experimentID, { timeoutMs = 20000, pollMs = 250 } = {}) {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const snap = await db.collection("experiments").doc(experimentID).get();
+      const data = snap.data();
+      if (data?.compaction?.lastCheckedAt) {
+        return data;
+      }
+      if (Date.now() > deadline) {
+        throw new Error(
+          `compaction never examined ${experimentID} within ${timeoutMs}ms ` +
+            `(no compaction.lastCheckedAt) -- last seen: ${JSON.stringify(data?.compaction ?? null)}`
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+  }
+
+  it("an uncapped provider's qualifying write enqueues nothing -- compaction.* stays untouched", async () => {
+    const experimentID = `compaction-rt-gdrive-${randomUUID()}`;
+    await db
+      .collection("experiments")
+      .doc(experimentID)
+      .set({
+        active: true,
+        owner: ZENODO_OWNER_ID,
+        sessions: 0,
+        storageProvider: "gdrive",
+        providerContainer: { provider: "gdrive", folderId: "compaction-rt-irrelevant" },
+      });
+
+    // Fires onExperimentGrew for real. capFor(after) is null for gdrive
+    // (capabilities.maxFileCount is null), so the trigger returns before a
+    // single read -- nothing is ever enqueued, and no compactionTask runs.
+    await db.collection("experiments").doc(experimentID).update({ sessions: 1 });
+
+    // An absence has nothing to poll FOR, so this waits out a window
+    // comfortably longer than the trigger + real task-dispatch latency the
+    // Zenodo case below actually needs, then checks once.
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+    const data = (await db.collection("experiments").doc(experimentID).get()).data();
+    expect(data.compaction).toBeUndefined();
+  }, 15000);
+
+  it("a Zenodo-shaped qualifying write reaches compactExperiment through a real Cloud Task", async () => {
+    const experimentID = `compaction-rt-zenodo-${randomUUID()}`;
+    await createZenodoExperiment(experimentID, {
+      sessions: 0,
+      collisionCache: { salt: "compaction-rt-salt" },
+    });
+
+    // Fires onExperimentGrew for real. Never examined before (no compaction.*
+    // yet), so mayHaveCrossedWatermark looks rather than infers; capFor is
+    // zenodo's 100, leaseHeld is false -- so this enqueues a real
+    // compactionTask, dispatched by the Cloud Tasks emulator.
+    await db.collection("experiments").doc(experimentID).update({ sessions: 1 });
+
+    const data = await waitForExamined(experimentID);
+    // The mock record is empty for this experimentID (a fresh depositionId),
+    // well under 80% of Zenodo's 100-file cap -- below-watermark. Reaching
+    // this conclusion still required a real listFiles call over the network
+    // to the mock, which is what proves the task ran.
+    expect(data.compaction.lastFileCount).toBe(0);
+    expect(data.compaction.sessionsAtLastCheck).toBe(1);
+  }, 30000);
 });

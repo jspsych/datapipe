@@ -1,8 +1,13 @@
-import { onRequest } from "firebase-functions/v2/https";
-import { db, auth } from "./app.js";
+import type { Request } from "firebase-functions/v2/https";
+import type { Response } from "express";
+import { db } from "./app.js";
 import { encrypt } from "./crypto-utils.js";
+import { requireUser } from "./require-user.js";
 
-export const saveOsfToken = onRequest({ cors: true }, async (req, res) => {
+// Plain handler, not an onRequest export -- dispatched from dashboard-api.ts
+// along with 14 other low-traffic dashboard endpoints, merged into ONE
+// deployed function (dashboardapi) so they share warm instances.
+export async function saveOsfTokenHandler(req: Request, res: Response): Promise<void> {
   try {
     if (req.method !== "POST") {
       res.status(405).json({ error: "Method not allowed" });
@@ -17,21 +22,9 @@ export const saveOsfToken = onRequest({ cors: true }, async (req, res) => {
     }
 
     // Verify Firebase Auth token
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      res.status(401).json({ error: "Authentication required" });
-      return;
-    }
-
-    let uid: string;
-    try {
-      const idToken = authHeader.split("Bearer ")[1];
-      const decodedToken = await auth.verifyIdToken(idToken);
-      uid = decodedToken.uid;
-    } catch {
-      res.status(401).json({ error: "Invalid authentication token" });
-      return;
-    }
+    const authResult = await requireUser(req, res);
+    if (!authResult) return;
+    const { uid } = authResult;
 
     // Validate the token against OSF API
     let osfTokenValid = false;
@@ -66,4 +59,4 @@ export const saveOsfToken = onRequest({ cors: true }, async (req, res) => {
     );
     res.status(500).json({ error: "Internal server error" });
   }
-});
+}

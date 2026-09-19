@@ -40,12 +40,14 @@
 // writing this field, so its presence is a genuine signal, not something a
 // researcher could forge to make the dashboard show a finalized state that
 // never happened.
-import { onRequest } from "firebase-functions/v2/https";
+import type { Request } from "firebase-functions/v2/https";
+import type { Response } from "express";
 import { onTaskDispatched } from "firebase-functions/v2/tasks";
 import { Timestamp, FieldValue } from "firebase-admin/firestore";
-import { db, auth, functions } from "./app.js";
+import { db, functions } from "./app.js";
 import { finalizeExperiment } from "./finalization.js";
 import { ExperimentData, FinalizationState } from "./interfaces.js";
+import { requireUser } from "./require-user.js";
 
 // Task-queue functions cap at 1800s (see module header). finalizeExperiment
 // streams rather than buffers (docs/finalization-spec.md's "why streaming,
@@ -61,7 +63,13 @@ function isInFlight(status: FinalizationState["status"] | undefined): boolean {
   return status === "queued" || status === "running";
 }
 
-export const apiFinalize = onRequest({ cors: true }, async (req, res) => {
+// Plain handler, not an onRequest export -- dispatched from dashboard-api.ts
+// along with the other low-traffic dashboard endpoints, merged into ONE
+// deployed function (dashboardapi) so they share warm instances. finalizeTask
+// below is unaffected: it is a separate onTaskDispatched export, not an
+// onRequest handler, and stays exactly where it is (see the module header on
+// why it must).
+export async function apiFinalizeHandler(req: Request, res: Response): Promise<void> {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
     return;
@@ -69,21 +77,9 @@ export const apiFinalize = onRequest({ cors: true }, async (req, res) => {
 
   // Same Bearer/verifyIdToken shape as api-queue-status.ts, per
   // docs/finalization-spec.md's Phase 4 instructions.
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    res.status(401).json({ error: "Authentication required" });
-    return;
-  }
-
-  let uid: string;
-  try {
-    const idToken = authHeader.split("Bearer ")[1];
-    const decodedToken = await auth.verifyIdToken(idToken);
-    uid = decodedToken.uid;
-  } catch {
-    res.status(401).json({ error: "Invalid authentication token" });
-    return;
-  }
+  const authResult = await requireUser(req, res);
+  if (!authResult) return;
+  const { uid } = authResult;
 
   const experimentID = req.body?.experimentID as string | undefined;
   if (!experimentID) {
@@ -164,7 +160,7 @@ export const apiFinalize = onRequest({ cors: true }, async (req, res) => {
   }
 
   res.status(202).json({ status: "queued" });
-});
+}
 
 export const finalizeTask = onTaskDispatched<{ experimentID: string }>(
   {

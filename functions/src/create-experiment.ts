@@ -18,7 +18,8 @@
 // and after the change stay uniform for every other consumer (api-data.ts,
 // the dashboard, etc.).
 
-import { onRequest } from "firebase-functions/v2/https";
+import type { Request } from "firebase-functions/v2/https";
+import type { Response } from "express";
 import { FieldValue } from "firebase-admin/firestore";
 import { customAlphabet } from "nanoid";
 import { db } from "./app.js";
@@ -47,7 +48,11 @@ interface ExperimentSettingsOverrides {
   maxSessions?: number;
 }
 
-export const createExperiment = onRequest({ cors: true }, async (req, res) => {
+// Plain handler, not an onRequest export -- dispatched from dashboard-api.ts,
+// which merges this and 14 other low-traffic dashboard endpoints into ONE
+// deployed function (dashboardapi) so they share warm instances instead of
+// each paying its own cold start.
+export async function createExperimentHandler(req: Request, res: Response): Promise<void> {
   try {
     if (req.method !== "POST") {
       res.status(405).json({ error: "Method not allowed" });
@@ -255,4 +260,4 @@ export const createExperiment = onRequest({ cors: true }, async (req, res) => {
     console.error("Error creating experiment:", error instanceof Error ? error.message : "Unknown error");
     res.status(500).json({ error: "Failed to create experiment" });
   }
-});
+}

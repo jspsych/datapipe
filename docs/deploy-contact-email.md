@@ -438,7 +438,7 @@ when quota runs out:
 |---|---|---|
 | Nature | **Realtime.** Someone is watching a form. | **Deferrable.** Still true an hour later. |
 | Delivered by | The request itself, synchronously | `onmailcreated`, then the sweeper |
-| Retried? | **Never** | Yes, `scheduledmailretry` |
+| Retried? | **Never** | Yes, `scheduledsweep` (10-minute-gated mail-retry pass) |
 | On failure | 503, vague message, cooldown **kept** | Stays queued, swept later |
 
 **The cooldown is kept on failure, and that is deliberate.** It used to be

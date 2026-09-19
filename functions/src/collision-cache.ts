@@ -34,8 +34,10 @@ export const STALE_PENDING_TAKEOVER_MS = 15 * 60 * 1000; // 15 minutes
 
 // 5.5 minutes. Written ONCE, at initial lease acquisition (see rehydrate()
 // below), and must outlive the longest request that could legitimately still
-// be holding it: apiData/apiBase64 now run with timeoutSeconds: 300 (see the
-// comments on both onRequest calls) specifically so rehydrate() -- which
+// be holding it: apiData (api-data.ts) runs with timeoutSeconds: 300 -- and
+// apiBase64Handler now runs under those same options, dispatched from within
+// apiData rather than its own onRequest call (see the comment above
+// apiDataHandler) -- specifically so rehydrate() -- which
 // lists every file a provider container holds and bulk-writes one Firestore
 // claim per file in batches of 500 -- has room to finish for a legacy
 // experiment with thousands of files. A lease that could expire before Cloud

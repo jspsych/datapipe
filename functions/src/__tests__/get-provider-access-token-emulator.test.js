@@ -10,9 +10,9 @@
 // accounts:signUp, encrypted-token seeding/decryption) and
 // create-experiment-emulator.test.js (postJson/signUpEmulatorUser helpers).
 //
-// Per index.ts's lowercase export convention (getProviderAccessToken ->
-// getprovideraccesstoken), the URL under test is
-// http://localhost:5001/datapipe-test/us-central1/getprovideraccesstoken.
+// getProviderAccessToken is dispatched from dashboardapi (functions/src/
+// dashboard-api.ts) rather than deploying as its own function -- the URL
+// under test is built by helpers/fn-url.js.
 //
 // No new mock Drive/token server is started here: the happy-path case seeds
 // an UNEXPIRED connectedAccounts.gdrive entry (same shape
@@ -26,13 +26,13 @@ import { initializeApp, getApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { randomUUID } from "crypto";
 import MESSAGES from "../api-messages";
+import { fnUrl } from "./helpers/fn-url.js";
 
 process.env.FIRESTORE_EMULATOR_HOST = "localhost:8080";
 jest.setTimeout(30000);
 
 const config = { projectId: "datapipe-test" };
-const FUNCTIONS_BASE = "http://localhost:5001/datapipe-test/us-central1";
-const GET_TOKEN_URL = `${FUNCTIONS_BASE}/getprovideraccesstoken`;
+const GET_TOKEN_URL = fnUrl("/api/getprovideraccesstoken");
 const AUTH_EMULATOR_SIGNUP_URL =
   "http://localhost:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake";
 

@@ -1,4 +1,3 @@
-import { onSchedule } from "firebase-functions/v2/scheduler";
 import { Timestamp } from "firebase-admin/firestore";
 import { db, storage } from "./app.js";
 import { readPendingEnvelope, cleanupPending } from "./persist-pending.js";
@@ -22,23 +21,27 @@ const MAX_FILES_PER_RUN = 10;
 const MAX_RETRIES = 5;
 
 /**
- * Scheduled function that runs every 15 minutes to recover data that was
- * persisted to Cloud Storage but never uploaded to OSF (e.g., because the
- * original api-data function OOM-crashed).
+ * Runs every 15 minutes -- scheduled-sweep.ts's `jobsDueAt` gates this in on
+ * every third tick of its 5-minute cron, since recovery this cheap and this
+ * tolerant of delay does not need a dedicated Cloud Scheduler job -- to
+ * recover data that was persisted to Cloud Storage but never uploaded to a
+ * provider (e.g., because the original api-data function OOM-crashed).
  *
- * Instead of attempting the OSF upload directly, this function promotes
+ * Instead of attempting the provider upload directly, this function promotes
  * orphaned pending files into the existing uploadQueue system. This means:
  * - The data immediately appears in the researcher's dashboard QueuePanel
- * - The existing scheduled-upload-retry handles retries with exponential backoff
+ * - The existing scheduled-upload-retry (runUploadRetry) handles retries with
+ *   exponential backoff
  * - The researcher can download the data manually if all retries fail
  * - No duplicate retry infrastructure is needed
+ *
+ * Was its own `onSchedule` export; folded into scheduled-sweep.ts (see that
+ * file's header for why). This is now a plain function the sweep calls in
+ * sequence, not a Cloud Function itself.
  */
-export const scheduledPendingRecovery = onSchedule(
-  { schedule: "*/15 * * * *", memory: "256MiB" },
-  async () => {
-    await recoverPendingUploads();
-  }
-);
+export async function runPendingRecovery() {
+  await recoverPendingUploads();
+}
 
 /**
  * `prefix` exists as a TEST SEAM and defaults to the production behavior of

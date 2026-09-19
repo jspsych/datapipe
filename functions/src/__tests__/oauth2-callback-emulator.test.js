@@ -59,6 +59,7 @@ import { initializeApp, getApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { randomUUID } from "crypto";
 import express from "express";
+import { fnUrl } from "./helpers/fn-url.js";
 
 process.env.FIRESTORE_EMULATOR_HOST = "localhost:8080";
 jest.setTimeout(30000);
@@ -69,9 +70,8 @@ const config = { projectId: "datapipe-test" };
 const TOKEN_ENCRYPTION_KEY = "ab".repeat(32);
 const OSF_PORT = 3591;
 
-const FUNCTIONS_BASE = "http://localhost:5001/datapipe-test/us-central1";
-const CALLBACK_URL = `${FUNCTIONS_BASE}/oauth2callback`;
-const GENERATE_STATE_URL = `${FUNCTIONS_BASE}/generateoauthstate`;
+const CALLBACK_URL = fnUrl("/api/oauth2callback");
+const GENERATE_STATE_URL = fnUrl("/api/generateoauthstate");
 const AUTH_EMULATOR_SIGNUP_URL =
   "http://localhost:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake";
 

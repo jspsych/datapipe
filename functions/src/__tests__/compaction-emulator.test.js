@@ -66,6 +66,25 @@ jest.mock("node-fetch", () => ({
   default: (...args) => globalThis.fetch(...args),
 }));
 
+// compaction-triggers.ts and upload-queue-trigger.ts no longer run a pass
+// inline -- they hand off to compaction-task.ts's compactionTask over a real
+// Cloud Task (functions.taskQueue(...).enqueue). That hop needs the Cloud
+// Tasks emulator, which this in-process suite deliberately does not start
+// (see the file header: driven entirely through the v2 `.run()` seam, no
+// functions emulator). So enqueueCompaction is replaced with a stand-in that
+// calls the SAME compactExperiment this file already imports, directly and
+// synchronously -- preserving what "C9. event-driven discovery" below is
+// actually testing (does the trigger decide correctly, and does a pass that
+// runs land against the mock) without needing a real task queue.
+// mockEnqueueCompaction (the "mock" prefix) is what makes it legal for this
+// factory to close over a variable assigned later, in beforeAll, once
+// compactExperiment itself has been dynamically imported -- see Jest's
+// out-of-scope-variable rule for jest.mock factories.
+const mockEnqueueCompaction = jest.fn();
+jest.mock("../../lib/compaction-task.js", () => ({
+  enqueueCompaction: (...args) => mockEnqueueCompaction(...args),
+}));
+
 const md5 = (buffer) => createHash("md5").update(buffer).digest("hex");
 
 // --------------------------------------------------------------------------
@@ -273,10 +292,16 @@ beforeAll(async () => {
   ARCHIVED = Math.min(SESSIONS - KEEP_LOOSE, compaction.MAX_BATCH_FILES);
   REMAINING = SESSIONS + 2 - ARCHIVED + 1; // sessions + 2 protected - sealed + 1 archive
 
+  // See the mock declared above: once compactExperiment exists, the stand-in
+  // enqueueCompaction runs a real pass against it instead of a real task queue.
+  mockEnqueueCompaction.mockImplementation((experimentID) => compactExperiment(experimentID));
+
   const triggers = await import("../../lib/compaction-triggers.js");
   onExperimentGrew = triggers.onExperimentGrew;
-  onUploadQueueChanged = triggers.onUploadQueueChanged;
   mayHaveCrossedWatermark = triggers.mayHaveCrossedWatermark;
+
+  const uploadQueueTrigger = await import("../../lib/upload-queue-trigger.js");
+  onUploadQueueChanged = uploadQueueTrigger.onUploadQueueChanged;
 
   const cache = await import("../../lib/collision-cache.js");
   claimDocId = cache.claimDocId;

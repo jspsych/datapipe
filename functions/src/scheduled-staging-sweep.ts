@@ -39,7 +39,6 @@
 // found nothing, so "lastRunAt is stale" and "lastError is set" are both
 // answerable without reading logs.
 
-import { onSchedule } from "firebase-functions/v2/scheduler";
 import { Timestamp } from "firebase-admin/firestore";
 import { db } from "./app.js";
 import queueUpload, { queueDocIdFor } from "./queue-upload.js";
@@ -130,16 +129,20 @@ export interface SweepStats {
   countersFixed: number;
 }
 
-export const scheduledStagingSweep = onSchedule(
-  // Every five minutes. Faster than scheduled-pending-recovery's fifteen,
-  // because what accumulates here is billed at the highest per-GB rate in the
-  // stack and because a researcher watching a live study should see recovered
-  // sessions within a coffee break, not a lunch break.
-  { schedule: "*/5 * * * *", memory: "256MiB" },
-  async () => {
-    await sweepAbandonedSessions();
-  }
-);
+/**
+ * Runs every five minutes, as part of scheduled-sweep.ts's consolidated
+ * sweep. Faster than pending-recovery's fifteen-minute gate, because what
+ * accumulates here is billed at the highest per-GB rate in the stack (RTDB,
+ * ~190x Cloud Storage) and because a researcher watching a live study should
+ * see recovered sessions within a coffee break, not a lunch break.
+ *
+ * Was its own `onSchedule` export; folded into scheduled-sweep.ts (see that
+ * file's header for why). This is now a plain function the sweep calls in
+ * sequence, not a Cloud Function itself.
+ */
+export async function runStagingSweep() {
+  await sweepAbandonedSessions();
+}
 
 /**
  * `only` exists as a TEST SEAM and defaults to the production behaviour of

@@ -1,12 +1,16 @@
-import { onRequest } from "firebase-functions/v2/https";
+import type { Request } from "firebase-functions/v2/https";
+import type { Response } from "express";
 import { DocumentReference, DocumentData, DocumentSnapshot } from "firebase-admin/firestore";
 import { db } from "./app.js";
 import writeLog from "./write-log.js";
 import MESSAGES from "./api-messages.js";
 import { ExperimentData } from './interfaces';
 
-
-export const apiCondition = onRequest({ cors: true }, async (req, res) => {
+// Plain handler, dispatched from participant-api.ts alongside
+// apiSessionStartHandler -- see that module's header. This used to also back
+// a standalone onRequest export, apiCondition, kept for one release during
+// the rollout; that wrapper is gone now that participantapi has taken over.
+export async function apiConditionHandler(req: Request, res: Response): Promise<void> {
   const { experimentID } = req.body;
 
   if (!experimentID) {
@@ -70,4 +74,4 @@ export const apiCondition = onRequest({ cors: true }, async (req, res) => {
 
   res.status(200).json({ message: "Success", condition: condition });
   return;
-});
+}

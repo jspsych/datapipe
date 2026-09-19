@@ -8,6 +8,7 @@ import { getStorage } from "firebase-admin/storage";
 import { randomUUID } from "crypto";
 import express from "express";
 import MESSAGES from "../api-messages";
+import { fnUrl } from "./helpers/fn-url.js";
 
 // Not imported from collision-cache.ts/lib -- see the matching comment in
 // data-emulator.test.js. Must match collision-cache.ts's own export.
@@ -19,18 +20,20 @@ process.env.FIRESTORE_EMULATOR_HOST = "localhost:8080";
 // queued submission -- mirrors early-persist-emulator.test.js.
 process.env.FIREBASE_STORAGE_EMULATOR_HOST = "localhost:9199";
 
+// apibase64 no longer deploys as its own function -- its handler is now
+// dispatched from within apidata (see api-data.ts's ROUTING NOTE), reached
+// over HTTP at /api/base64. fnUrl knows the difference.
+const APIBASE64_URL = fnUrl("/api/base64");
+
 async function saveData(body) {
-  const response = await fetch(
-    "http://localhost:5001/datapipe-test/us-central1/apibase64",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "*/*",
-      },
-      body: JSON.stringify(body),
-    }
-  );
+  const response = await fetch(APIBASE64_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "*/*",
+    },
+    body: JSON.stringify(body),
+  });
   const message = await response.json();
   return message;
 }
@@ -39,17 +42,14 @@ async function saveData(body) {
 // returns the parsed body, and the success path needs the 201 itself, not
 // just what MESSAGES.SUCCESS says.
 async function saveDataWithStatus(body) {
-  const response = await fetch(
-    "http://localhost:5001/datapipe-test/us-central1/apibase64",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "*/*",
-      },
-      body: JSON.stringify(body),
-    }
-  );
+  const response = await fetch(APIBASE64_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "*/*",
+    },
+    body: JSON.stringify(body),
+  });
   const message = await response.json();
   return { status: response.status, body: message };
 }
@@ -320,7 +320,11 @@ describe("apiData", () => {
     const pendingFiles = await listPendingFiles("base64-testexp-active");
     expect(pendingFiles.some((f) => f.name.includes(filename))).toBe(false);
 
-    const logDoc = await waitForLog(db, "base64-testexp-active", "saveBase64DataQueued", 1);
+    // Wait on logError, not saveBase64DataQueued: the handler writes the
+    // queued counter FIRST and the error (with its errorsByCode bucket) in a
+    // separate transaction after it, so polling for the counter can return a
+    // document the second write has not reached yet.
+    const logDoc = await waitForLog(db, "base64-testexp-active", "logError", 1);
     expect(logDoc.data().saveBase64DataQueued).toBe(1);
     expect(logDoc.data().errorsByCode.INVALID_OSF_TOKEN).toBe(1);
   });

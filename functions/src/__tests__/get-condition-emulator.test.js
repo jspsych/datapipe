@@ -5,12 +5,16 @@
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import MESSAGES from "../api-messages";
+import { fnUrl } from "./helpers/fn-url.js";
 
 process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080';
 
+// apicondition no longer deploys as its own function -- its handler is now
+// dispatched from participantapi (see participant-api.ts), reached over HTTP
+// at /api/condition. fnUrl knows the difference.
 async function getCondition(body) {
   const response = await fetch(
-    "http://localhost:5001/datapipe-test/us-central1/apicondition",
+    fnUrl("/api/condition"),
     {
       method: "POST",
       headers: {

@@ -7,7 +7,12 @@
 // the caller must already hold a valid Firebase idToken for the uid they
 // claim.
 
-import { onRequest } from "firebase-functions/v2/https";
+import type { Request } from "firebase-functions/v2/https";
+// Aliased: this file also does its own `fetch()` calls to exchange an OAuth
+// code, and needs the global fetch Response type (`let tokenResponse:
+// Response`) for those -- a bare `Response` import from express would shadow
+// it.
+import type { Response as ExpressResponse } from "express";
 import { FieldValue } from "firebase-admin/firestore";
 import { db, auth } from "./app.js";
 import { decrypt, encrypt } from "./crypto-utils.js";
@@ -44,7 +49,10 @@ export async function verifyOwnership(uid: string, idToken: string | undefined):
   }
 }
 
-export const connectProvider = onRequest({ cors: true }, async (req, res) => {
+// Plain handler, not an onRequest export -- dispatched from dashboard-api.ts
+// along with 14 other low-traffic dashboard endpoints, merged into ONE
+// deployed function (dashboardapi) so they share warm instances.
+export async function connectProviderHandler(req: Request, res: ExpressResponse): Promise<void> {
   try {
     if (req.method !== 'POST') {
       res.status(405).json({ error: 'Method not allowed' });
@@ -193,14 +201,14 @@ export const connectProvider = onRequest({ cors: true }, async (req, res) => {
     console.error('Error connecting provider:', error instanceof Error ? error.message : 'Unknown error');
     res.status(500).json({ error: 'Failed to connect provider' });
   }
-});
+}
 
 // Separate endpoint from connectProvider rather than a branch inside it: the
 // two flows share almost nothing. OAuth needs code+state+CSRF-state
 // validation against a third-party redirect; static-token needs a pasted
 // token+serverUrl with no redirect at all, so no CSRF state applies here.
 // Mixing them would tangle the validation of both.
-export const connectStaticTokenProvider = onRequest({ cors: true }, async (req, res) => {
+export async function connectStaticTokenProviderHandler(req: Request, res: ExpressResponse): Promise<void> {
   try {
     if (req.method !== 'POST') {
       res.status(405).json({ error: 'Method not allowed' });
@@ -305,9 +313,9 @@ export const connectStaticTokenProvider = onRequest({ cors: true }, async (req, 
     console.error('Error connecting static-token provider:', error instanceof Error ? error.message : 'Unknown error');
     res.status(500).json({ error: 'Failed to connect provider' });
   }
-});
+}
 
-export const disconnectProvider = onRequest({ cors: true }, async (req, res) => {
+export async function disconnectProviderHandler(req: Request, res: ExpressResponse): Promise<void> {
   try {
     if (req.method !== 'POST') {
       res.status(405).json({ error: 'Method not allowed' });
@@ -398,4 +406,4 @@ export const disconnectProvider = onRequest({ cors: true }, async (req, res) => 
     console.error('Error disconnecting provider:', error instanceof Error ? error.message : 'Unknown error');
     res.status(500).json({ error: 'Failed to disconnect provider' });
   }
-});
+}
