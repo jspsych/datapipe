@@ -1,9 +1,13 @@
-// ONE deployed Cloud Function fronting 14 low-traffic, bearer-token dashboard
+// ONE deployed Cloud Function fronting 15 low-traffic, bearer-token dashboard
 // HTTP endpoints: createExperiment, connectProvider,
 // connectStaticTokenProvider, disconnectProvider, deleteAccount,
 // generateOAuthState, oauth2Callback, saveOsfToken, getProviderAccessToken,
 // providerSetupWarnings, checkEmailConflict, sendContactEmailVerification,
-// verifyContactEmail, ensureDerivedPaths.
+// verifyContactEmail, ensureDerivedPaths, apiFinalize.
+// (apiFinalize is a researcher-facing, bearer-token endpoint like the rest --
+// it just enqueues a Cloud Task rather than doing its work inline.
+// finalizeTask, the task itself, is NOT part of this dispatcher -- see
+// api-finalize.ts's header for why that split is load-bearing.)
 //
 // WHY: `test` used to deploy each of these as its own function. Every one is
 // low-traffic -- dashboard clicks, not the submission hot path -- so each
@@ -48,6 +52,7 @@ import { checkEmailConflictHandler } from "./check-email-conflict.js";
 import { sendContactEmailVerificationHandler } from "./send-contact-email-verification.js";
 import { verifyContactEmailHandler } from "./verify-contact-email.js";
 import { ensureDerivedPathsHandler } from "./ensure-derived-paths.js";
+import { apiFinalizeHandler } from "./api-finalize.js";
 
 type Handler = (req: Request, res: Response) => void | Promise<void>;
 
@@ -69,6 +74,7 @@ const ROUTES: Record<string, Handler> = {
   "/api/sendcontactemailverification": sendContactEmailVerificationHandler,
   "/api/verifycontactemail": verifyContactEmailHandler,
   "/api/ensurederivedpaths": ensureDerivedPathsHandler,
+  "/api/finalize": apiFinalizeHandler,
 };
 
 export const dashboardApi = onRequest({ cors: true }, async (req, res) => {

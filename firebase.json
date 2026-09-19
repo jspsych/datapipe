@@ -83,7 +83,7 @@
       },
       {
         "source": "/api/finalize",
-        "function": "apifinalize"
+        "function": "dashboardapi"
       },
       {
         "source": "/api/ensurederivedpaths",

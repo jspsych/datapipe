@@ -36,15 +36,17 @@ import { onMailCreated } from "./mail-delivery.js";
 import { scheduledMailRetry } from "./scheduled-mail-retry.js";
 import { apiQueueStatus } from "./api-queue-status.js";
 import { onUserDeleted } from "./on-user-deleted.js";
-import { apiFinalize, finalizeTask } from "./api-finalize.js";
+import { finalizeTask } from "./api-finalize.js";
 // createexperiment, connectprovider, connectstatictokenprovider,
 // disconnectprovider, deleteaccount, generateoauthstate, oauth2callback,
 // saveosftoken, getprovideraccesstoken, providersetupwarnings,
-// checkemailconflict, sendcontactemailverification, verifycontactemail, and
-// ensurederivedpaths used to each be their own onRequest export here. All 14 are low-traffic dashboard endpoints, not
-// the submission hot path, so each paid its own always-cold instance pool for
-// no benefit -- they are now dispatched from ONE function. See
-// dashboard-api.ts's header for the full rationale.
+// checkemailconflict, sendcontactemailverification, verifycontactemail,
+// ensurederivedpaths, and apiFinalize used to each be their own onRequest
+// export here. All 15 are low-traffic dashboard endpoints, not the submission
+// hot path, so each paid its own always-cold instance pool for no benefit --
+// they are now dispatched from ONE function. finalizeTask (onTaskDispatched,
+// NOT an onRequest endpoint) stays its own export -- see dashboard-api.ts's
+// and api-finalize.ts's headers for the full rationale.
 import { dashboardApi } from "./dashboard-api.js";
 
 setGlobalOptions({
@@ -68,7 +70,6 @@ export {
   scheduledMailRetry as scheduledmailretry,
   apiQueueStatus as apiqueuestatus,
   onUserDeleted as onuserdeleted,
-  apiFinalize as apifinalize,
   finalizeTask as finalizetask,
   dashboardApi as dashboardapi
 };

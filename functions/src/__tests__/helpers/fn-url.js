@@ -1,5 +1,5 @@
 // Shared emulator-URL builder for the dashboardapi consolidation
-// (functions/src/dashboard-api.ts). Sixteen low-traffic dashboard endpoints
+// (functions/src/dashboard-api.ts). Seventeen low-traffic dashboard endpoints
 // that used to each deploy as their own Cloud Function are now dispatched
 // from ONE function, keyed on req.path -- so a test that used to build
 // http://localhost:5001/datapipe-test/us-central1/createexperiment now has to
@@ -38,13 +38,16 @@ const ROUTES = {
   // ensureDerivedPaths landed on `test` via PR #249, after the other 15 were
   // merged -- same treatment, added as a 16th route.
   "/api/ensurederivedpaths": { fn: "dashboardapi", merged: true },
+  // apiFinalize joined as a 17th route -- see dashboard-api.ts's header.
+  // finalizeTask (the onTaskDispatched half) is NOT reachable over HTTP at
+  // all, so it has no entry here.
+  "/api/finalize": { fn: "dashboardapi", merged: true },
   // -- untouched, still their own function --
   "/api/data": { fn: "apidata" },
   "/api/session": { fn: "apisessionstart" },
   "/api/condition": { fn: "apicondition" },
   "/api/base64": { fn: "apibase64" },
   "/api/queuestatus": { fn: "apiqueuestatus" },
-  "/api/finalize": { fn: "apifinalize" },
 };
 
 // apiPath: a hosting-facing path exactly as firebase.json's rewrite `source`
