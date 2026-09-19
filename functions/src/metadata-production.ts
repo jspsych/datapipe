@@ -19,6 +19,12 @@ export interface ProducedMetadata extends ExtractionResult {
   mainContent?: string;
 }
 
+// What a payload with nothing to describe gets told. In practice: an empty
+// trial array, or text that is neither JSON nor a CSV with a header row.
+export const NO_COLUMNS_MESSAGE =
+  'No columns were found in the submitted data, so Psych-DS metadata could not be generated. ' +
+  'The data must be a JSON array of trials or a CSV with a header row.';
+
 // Internal marker: the payload parsed as JSON but wasn't a trial array. Kept
 // private so it can only be thrown/caught here, never matched by message text.
 class NotATrialArrayError extends Error {}
@@ -80,7 +86,11 @@ export default async function produceMetadata(data: string): Promise<ProducedMet
     const incomingMetadata: Metadata = metadata.getMetadata() as Metadata;
 
     if (!incomingMetadata.variableMeasured?.length || !incomingMetadata.variableMeasured[0].name) {
-      throw new Error('Invalid metadata generated');
+      // Reaches the researcher twice: as the API response's `message`, and as
+      // the `detail` line in the dashboard's rejected-submissions panel. So it
+      // names the cause they can act on -- the submission had no columns -- not
+      // the symptom on this side of the library call.
+      throw new Error(NO_COLUMNS_MESSAGE);
     }
 
     // Nested array/object columns that generate() expanded into dotted

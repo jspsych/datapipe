@@ -14,6 +14,14 @@ import FormErrorAlert from "../ui/FormErrorAlert";
 // arrive.
 const MAX_ROWS = 20;
 
+// Exported so the test asserts on the constant, not a copy of the sentence.
+// "About half an hour": the recovery job takes pending copies older than 15
+// minutes on a 15-minute slot, and the retry worker picks the entry up on its
+// next 5-minute pass.
+export const METADATA_KEPT_NOTE =
+  "The raw data was kept. DataPipe stores it in your storage provider without " +
+  "Psych-DS metadata, usually within about half an hour.";
+
 /**
  * `time` on an error entry comes in two shapes and both are live at once:
  *
@@ -248,7 +256,7 @@ export default function ErrorPanel({
         }
       />
       <Text fontSize="sm" color="fg.muted" mt={2} mb={4}>
-        These submissions did not reach your storage provider.
+        DataPipe refused these submissions.
         {recentPhrase && <> {recentPhrase}</>}
       </Text>
 
@@ -297,6 +305,19 @@ export default function ErrorPanel({
                           {error?.detail && error?.message && (
                             <Text fontSize="sm" color="fg.muted" mt={2}>
                               {error.detail}
+                            </Text>
+                          )}
+                          {/* The one refusal that does NOT lose the data.
+                              api-data.ts deliberately keeps the pending copy
+                              when the metadata step fails, and
+                              scheduled-pending-recovery.ts stores it later
+                              without Psych-DS files. Said here, per row,
+                              because the panel's own sentence ("refused")
+                              would otherwise send a researcher looking for
+                              data that is in fact on its way. */}
+                          {error?.error === "METADATA_ERROR" && (
+                            <Text fontSize="sm" color="fg.muted" mt={2}>
+                              {METADATA_KEPT_NOTE}
                             </Text>
                           )}
                           {error?.error && (
