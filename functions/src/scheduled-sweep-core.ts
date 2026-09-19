@@ -40,6 +40,12 @@ export interface JobsDue {
  * job would simply not run that tick.
  */
 export function jobsDueAt(date: Date): JobsDue {
+  // An unparseable scheduleTime arrives here as an Invalid Date, whose NaN
+  // minutes fail BOTH modulo checks -- the gated jobs would silently not run.
+  // Fall back to the wall clock, which is at worst a few seconds off the slot.
+  if (Number.isNaN(date.getTime())) {
+    date = new Date();
+  }
   const slot = Math.floor(date.getUTCMinutes() / 5) * 5;
   return {
     mailRetry: slot % 10 === 0,
@@ -96,8 +102,9 @@ export async function runSweep(jobs: SweepJobs, due: JobsDue): Promise<void> {
         console.log(`scheduled-sweep: ${name} took ${elapsedMs}ms`);
       }
     } catch (e) {
-      const detail = e instanceof Error ? e.message : "Unknown error";
-      console.error(`scheduled-sweep: ${name} failed:`, detail);
+      // The error itself, not just its message: the stack is the only thing
+      // that says WHERE in a several-hundred-line job it came from.
+      console.error(`scheduled-sweep: ${name} failed:`, e);
       failed.push(name);
     }
   };

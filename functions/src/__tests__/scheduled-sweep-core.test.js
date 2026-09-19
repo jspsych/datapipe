@@ -59,6 +59,15 @@ describe("jobsDueAt", () => {
       expect(jobsDueAt(atMinute(m))).toEqual({ mailRetry: false, pendingRecovery: false });
     }
   });
+
+  test("an Invalid Date falls back to the wall clock instead of skipping both gated jobs", () => {
+    jest.useFakeTimers().setSystemTime(new Date("2026-01-01T00:30:02Z"));
+    try {
+      expect(jobsDueAt(new Date("not a timestamp"))).toEqual({ mailRetry: true, pendingRecovery: true });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });
 
 describe("runSweep", () => {

@@ -42,11 +42,10 @@ import { runPendingRecovery } from "./scheduled-pending-recovery.js";
 export const scheduledSweep = onSchedule(
   { schedule: "*/5 * * * *", memory: "512MiB", timeoutSeconds: 540 },
   async (event) => {
-    // scheduleTime is documented as always populated (real schedule fires
-    // give the Cloud Scheduler job's schedule time; a manual trigger gives
-    // the execution time) -- but it is untyped input from outside this
-    // process, so this falls back rather than letting an unparseable or
-    // absent value silently skip every gated job for the tick.
+    // scheduleTime is documented as always populated, but it is input from
+    // outside this process. Absent falls back here; present-but-unparseable
+    // is handled inside jobsDueAt. Either way a bad value must not silently
+    // skip every gated job for the tick.
     const scheduledAt = event.scheduleTime ? new Date(event.scheduleTime) : new Date();
     const due = jobsDueAt(scheduledAt);
 
