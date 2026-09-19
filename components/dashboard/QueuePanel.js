@@ -11,143 +11,10 @@ import {
 } from "@chakra-ui/react";
 import { Download } from "lucide-react";
 import { auth } from "../../lib/firebase";
+import { queueEntryKind, summarizeQueue, friendlyReason } from "../../lib/upload-queue";
 import StatusIndicator from "../ui/StatusIndicator";
 import FormErrorAlert from "../ui/FormErrorAlert";
-
-// Copy keyed off the provider-agnostic error taxonomy that adapters map their
-// own failures into (functions/src/providers/types.ts's ProviderErrorCode).
-// This is the preferred classification: guessing from an HTTP status (below)
-// was an OSF-era assumption that does not survive other providers -- Dataverse
-// returns 400 for BOTH write contention and quota-exceeded, so a status-based
-// map either mislabels them or, as before this change, shows the researcher a
-// raw string like "Provider error 400: Failed to add file to dataset."
-const PROVIDER_ERROR_COPY = {
-  // Contention is routine and self-resolving: some providers (Dataverse)
-  // accept only one write per container at a time, so simultaneous
-  // submissions collide.
-  CONTENTION:
-    "Your storage provider was busy with another upload from this experiment. This is normal when several participants finish at once.",
-  RATE_LIMITED: "Your storage provider rate-limited the request.",
-  AUTH_EXPIRED:
-    "Authentication error. Your storage provider connection may need to be refreshed.",
-  QUOTA_EXCEEDED:
-    "Your storage provider is out of space, or this file is larger than it allows.",
-  NAME_CONFLICT:
-    "A file with this name already exists in your storage provider.",
-  UNAVAILABLE: "Your storage provider was temporarily unavailable.",
-};
-
-// Overrides for the cases where one taxonomy code covers genuinely different
-// provider behavior and the generic wording above would send the researcher
-// looking in the wrong place. Keyed [code][storageProvider]; anything absent
-// falls back to the generic copy, which stays the default rather than the
-// exception. `storageProvider` is undefined on legacy OSF queue docs, which
-// simply misses here and falls back.
-//
-// Deliberately small. A per-provider string for every code would be six
-// entries times five adapters of copy to keep true, and most of it would just
-// restate the generic line -- the whole point of the taxonomy is that the
-// researcher's next action is usually the same whoever is storing the data.
-const PROVIDER_SPECIFIC_COPY = {
-  QUOTA_EXCEEDED: {
-    // Zenodo maps BOTH of its hard caps to QUOTA_EXCEEDED: the 50 GB
-    // per-file/per-record size limits, and the 100-files-per-record cap. The
-    // generic "out of space, or this file is larger than it allows" is
-    // actively wrong for the second one -- the record has room and the file is
-    // fine, it just cannot hold another entry -- and that is the EXPECTED
-    // failure at session 101, not an edge case, since the compaction that
-    // would keep a study under the cap is not built yet (see zenodo.ts's
-    // setupWarnings, which warns about this before collection starts).
-    zenodo:
-      "This Zenodo record has reached one of its limits: 100 files, or 50 GB. DataPipe does not yet combine sessions into archives, so further submissions will keep failing. Download these files and add them to the record yourself.",
-  },
-};
-
-// Copy for failures that carry NO taxonomy code, matched against the prose in
-// failureReason. Two populations land here: queue docs written before
-// providerErrorCode existed, and — the larger group — every failure that never
-// reached the provider at all, since only a provider WriteResult produces a
-// code. Those are written in six places across api-data.ts, api-base64.ts and
-// scheduled-upload-retry.ts; each distinct prefix they emit has an entry here.
-//
-// ORDER MATTERS. The interpolated `detail` on a cache or cached-data failure
-// can itself contain "fetch failed", so the specific prefixes must be tested
-// before the generic network match below, or a rehydration failure would be
-// reported as a connection problem.
-//
-// Matching on prose is the same fragility PROVIDER_ERROR_COPY was introduced
-// to escape, and it stays fragile: change a string on the writing side and the
-// copy here silently reverts to showing that raw string. The durable fix is a
-// structured stage field on the queue doc alongside providerErrorCode; this is
-// deliberately the cheaper version, and it is also the only thing that can
-// work for docs already in Firestore.
-const REASON_COPY = [
-  [
-    /Token resolution (failed|exception)/,
-    "DataPipe could not authenticate with your storage provider. Reconnect it from your account page, then upload this file manually.",
-  ],
-  [
-    /Collision cache rehydration failed/,
-    "DataPipe could not read the existing files in your storage provider, so it could not safely check whether this filename was already used.",
-  ],
-  [
-    /Collision cache rehydrating/,
-    "DataPipe was still checking this experiment's existing filenames when this submission arrived.",
-  ],
-  [
-    /(Owner user not found|Experiment not found)/,
-    "The experiment or account this upload belonged to no longer exists. Download the file now if you still need it.",
-  ],
-  [
-    // The saved copy is what the download button serves, so if it cannot be
-    // read the researcher must not be told to just download it.
-    /Failed to read cached data/,
-    "DataPipe could not read its own saved copy of this submission, so it cannot be uploaded or downloaded. Please report this.",
-  ],
-  [/(interrupted upload|memory limit)/, "Upload was interrupted by a server restart or memory limit."],
-  [/(Upload exception|fetch failed)/, "Could not connect to your storage provider."],
-];
-
-function reasonCopy(reason) {
-  if (!reason) return null;
-  for (const [pattern, copy] of REASON_COPY) {
-    if (pattern.test(reason)) return copy;
-  }
-  // Older queue docs say "OSF error <status>"; current writes say
-  // "Provider error <status>". Both must keep mapping.
-  const status = reason.match(/(?:OSF|Provider) error (\d{3})/)?.[1];
-  if (status === "503" || status === "502") {
-    return "Your storage provider was temporarily unavailable.";
-  }
-  if (status === "429") {
-    return "Your storage provider rate-limited the request.";
-  }
-  if (status === "401" || status === "403") {
-    return "Authentication error. Your storage provider connection may need to be refreshed.";
-  }
-  return reason;
-}
-
-// Reassurance that is only true while retries are still running. Appended to
-// the copy above for pending/processing entries and withheld once an entry has
-// exhausted its retries -- a failed row used to sit under a "Failed" badge
-// still telling the researcher the upload "is being retried automatically",
-// which reads as "no action needed" at the exact moment manual recovery is the
-// only thing that will save the file.
-const STILL_RETRYING_SUFFIX = {
-  CONTENTION: " It is being retried automatically.",
-};
-
-function friendlyReason(entry) {
-  const code = entry?.providerErrorCode;
-  const copy =
-    PROVIDER_SPECIFIC_COPY[code]?.[entry?.storageProvider] ?? PROVIDER_ERROR_COPY[code];
-  if (copy) {
-    const stillRetrying = entry?.status === "pending" || entry?.status === "processing";
-    return stillRetrying ? `${copy}${STILL_RETRYING_SUFFIX[code] ?? ""}` : copy;
-  }
-  return reasonCopy(entry?.failureReason);
-}
+import SectionPanel from "./SectionPanel";
 
 // Status rendering, rebuilt on StatusIndicator.
 //
@@ -155,31 +22,40 @@ function friendlyReason(entry) {
 // panel painted itself `Alert variant="solid"`, which fills the root with
 // `colorPalette.solid`; each row then rendered a `Badge variant="solid"` in
 // the SAME palette. Status warning -> orange.600 badge on an orange.600
-// panel: 1.00:1. Literally invisible. In the all-failed case the red "Failed"
-// badges disappeared into the red panel identically, "Failed" on the warning
-// panel measured 1.36:1, and the blue "Retrying now" chip measured 1.45:1 --
-// so the one surface in DataPipe whose entire job is telling a researcher
-// which participant files are about to be lost could not communicate which
-// files were about to be lost.
+// panel: 1.00:1. Literally invisible. StatusIndicator is icon + always-
+// visible text on `status.*` tokens, which satisfies DESIGN.md §5's "status
+// is never color-alone".
 //
-// StatusIndicator is icon + always-visible text on `status.*` tokens, which
-// satisfies DESIGN.md §5's "status is never color-alone" and, because the
-// panel below is now `variant="subtle"`, sits on a readable ground: status.ok
-// 4.77/6.71, status.warning 6.63/7.80, status.error 5.92/4.86, status.neutral
-// 8.30/9.14 (light/dark). The blue `processing` entry is gone with it --
-// DESIGN.md §5 retires blue as a status and action color.
-const STATUS_LABELS = {
-  pending: { status: "warning", label: "Retrying" },
-  processing: { status: "warning", label: "Retrying now" },
-  failed: { status: "error", label: "Failed" },
-};
-
-function statusIndicator(status) {
-  const mapped = STATUS_LABELS[status] || {
-    status: "neutral",
-    label: status || "Unknown",
-  };
-  return <StatusIndicator status={mapped.status} label={mapped.label} />;
+// A SECOND thing was wrong, fixed separately (see lib/upload-queue.js's
+// header): the panel only ever knew "pending" (badged "Retrying") or
+// "failed". A pending/processing entry that DataPipe has never actually
+// tried to upload -- a recovered partial, a raw file kept after a metadata
+// failure, an upload held for compaction or a cold collision cache -- was
+// badged "Retrying" identically to one that had already failed and come back
+// for another attempt, and the panel told the researcher a file "did not
+// upload" that DataPipe had never tried to upload. `queueEntryKind` below
+// tells "waiting" (held, unattempted) apart from "retrying" (attempted,
+// failed, coming back around), and this function renders each kind
+// distinctly rather than reusing the same badge for both.
+function rowStatusIndicator(kind, entry) {
+  if (kind === "failed") {
+    return <StatusIndicator status="error" label="Failed" />;
+  }
+  if (kind === "retrying") {
+    return (
+      <StatusIndicator
+        status="warning"
+        label={entry.status === "processing" ? "Retrying now" : "Retrying"}
+      />
+    );
+  }
+  // kind === "waiting"
+  return (
+    <StatusIndicator
+      status="neutral"
+      label={entry.status === "processing" ? "Storing now" : "Waiting to be stored"}
+    />
+  );
 }
 
 function nextRetryText(nextRetryAt) {
@@ -194,6 +70,22 @@ function nextRetryText(nextRetryAt) {
     return `in ${hours}h${mins > 0 ? ` ${mins}m` : ""}`;
   }
   return `in ${minUntil}m`;
+}
+
+// A "waiting" row's nextRetryAt is when DataPipe will make its FIRST attempt,
+// not a retry -- "Next retry in 57m" on a file that has never been tried
+// reads as a failure that already happened. Same underlying field, different
+// sentence per kind.
+function rowSubline(kind, entry) {
+  if (kind === "failed") return null;
+  if (!(entry.status === "pending" || entry.status === "processing")) return null;
+  const text = nextRetryText(entry.nextRetryAt);
+  if (!text) return null;
+  return (
+    <Text fontSize="xs" color="fg.muted" mt={2}>
+      {kind === "waiting" ? "First attempt" : "Next retry"} {text}
+    </Text>
+  );
 }
 
 function timeRemaining(createdAt) {
@@ -220,10 +112,80 @@ async function fetchFile(experimentId, entryId) {
   );
 }
 
+const plural = (n, word) => `${n} ${word}${n !== 1 ? "s" : ""}`;
+
+// The four headline/body cases. `failed`/`retrying`/`waiting` are
+// summarizeQueue's counts. Kept as one function (rather than four call
+// sites) so the "is/are" agreement rules live in exactly one place.
+function summaryText({ failed, retrying, waiting }) {
+  if (failed > 0 && retrying === 0 && waiting === 0) {
+    return {
+      title: `${plural(failed, "file")} could not be uploaded to your storage provider.`,
+      description:
+        "All retries were exhausted. Download these files and upload them to your storage provider manually to prevent data loss.",
+    };
+  }
+
+  if (failed > 0) {
+    const more = retrying + waiting;
+    return {
+      title: `${plural(failed, "file")} could not be uploaded to your storage provider.`,
+      description:
+        "All retries were exhausted for these. Download them and upload them to your storage provider manually to prevent data loss. " +
+        `${more} more file${more !== 1 ? "s" : ""} ${more === 1 ? "is" : "are"} still being stored automatically.`,
+    };
+  }
+
+  if (retrying > 0) {
+    let description = "DataPipe is retrying automatically.";
+    if (waiting > 0) {
+      description += ` ${waiting} more file${waiting !== 1 ? "s" : ""} ${waiting === 1 ? "is" : "are"} waiting to be stored.`;
+    }
+    description += " You can also download the files now.";
+    return {
+      title: `${plural(retrying, "upload")} did not go through on the first try.`,
+      description,
+    };
+  }
+
+  // Only waiting entries.
+  return {
+    title:
+      waiting === 1
+        ? "One file is waiting to be stored."
+        : `${waiting} files are waiting to be stored.`,
+    description:
+      "DataPipe is storing these automatically; nothing has failed. You can download them now if you need them sooner.",
+  };
+}
+
 /**
- * QueuePanel — shows all queued uploads (pending + failed) with immediate
- * download access. Pending items are being retried automatically but the
- * researcher can download them right away without waiting.
+ * QueuePanel — shows every queued upload (waiting + retrying + failed) with
+ * immediate download access. Waiting and retrying items are handled by
+ * DataPipe automatically, but the researcher can download any of them right
+ * away without waiting.
+ *
+ * THREE VISUAL TREATMENTS, one shared body (title/description/accordion/
+ * download button/table), chosen by `summarizeQueue(entries).tone`:
+ *
+ *  - "error" (any permanent failure) keeps the strong, filled
+ *    `Alert.Root status="error" colorPalette="brandRed" variant="subtle"`
+ *    treatment this panel has always used. Deliberately not softened: a
+ *    permanently failed entry is the one state on this panel with an actual
+ *    data-loss deadline (the Cloud Storage payload is deleted 7-14 days after
+ *    createdAt), and it is the only one that needs a researcher to act.
+ *  - "warning" (retrying, nothing failed) gets the quiet treatment
+ *    ErrorPanel.js now uses: `SectionPanel` with a 3px `status.warning` left
+ *    border, the headline as a `StatusIndicator`, body copy in muted `sm`
+ *    text. Retries are normal, self-healing operation, not an alarm.
+ *  - "neutral" (only held/unattempted entries) is the same `SectionPanel`
+ *    with no coloured edge at all -- nothing here has failed or even been
+ *    attempted yet, so there is nothing to accent.
+ *
+ * The table drops its own bg/border box inside the two quiet variants, the
+ * same call ErrorPanel.js made for its accordion table: a box inside a box
+ * inside a bordered panel reads as visual noise, and SectionPanel already
+ * supplies the outer edge.
  */
 export default function QueuePanel({ entries, experimentId }) {
   const [downloading, setDownloading] = useState(null);
@@ -301,177 +263,197 @@ export default function QueuePanel({ entries, experimentId }) {
     }
   };
 
-  const pendingCount = entries.filter(
-    (e) => e.status === "pending" || e.status === "processing"
-  ).length;
-  const failedCount = entries.filter((e) => e.status === "failed").length;
-  const allFailed = failedCount > 0 && pendingCount === 0;
+  const summary = summarizeQueue(entries);
+  const { title, description } = summaryText(summary);
+  const quiet = summary.tone !== "error";
 
-  const plural = (n, word) => `${n} ${word}${n !== 1 ? "s" : ""}`;
+  const downloadErrorBlock = downloadError && (
+    <Box mb={4}>
+      <FormErrorAlert>{downloadError}</FormErrorAlert>
+    </Box>
+  );
 
-  let alertTitle;
-  let alertDescription;
+  const accordion = (
+    <Accordion.Root collapsible size="sm" mb={4}>
+      <Accordion.Item value="what-is-happening">
+        <Accordion.ItemTrigger>
+          <Box as="span" flex="1" textAlign="left" fontSize="sm">
+            What is happening to these files?
+          </Box>
+          <Accordion.ItemIndicator />
+        </Accordion.ItemTrigger>
+        <Accordion.ItemContent>
+          <Text fontSize="sm" pb={3}>
+            DataPipe tries to store each submission in your storage provider
+            the moment it arrives. A file is listed here when that has not
+            happened yet.
+          </Text>
+          <Box as="ul" fontSize="sm" pl={6} pb={3} listStyleType="disc">
+            <Box as="li" mb={2}>
+              <strong>Waiting to be stored</strong> — DataPipe recovered the
+              data from a session that did not finish, or kept the raw file
+              after a processing problem, and has not tried to store it yet.
+              Nothing has failed.
+            </Box>
+            <Box as="li" mb={2}>
+              <strong>Retrying</strong> — An attempt failed, usually because
+              your storage provider was busy or unavailable, or because
+              DataPipe&apos;s connection to it needs refreshing. DataPipe
+              tries again automatically.
+            </Box>
+            <Box as="li" mb={2}>
+              <strong>Failed</strong> — Every retry was used up. Download the
+              file and upload it to your storage provider yourself.
+            </Box>
+          </Box>
+          <Text fontSize="sm" pb={3}>
+            Files are stored for seven days, or up to fourteen if we
+            couldn&apos;t deliver a failure notification to you.
+          </Text>
+        </Accordion.ItemContent>
+      </Accordion.Item>
+    </Accordion.Root>
+  );
 
-  if (allFailed) {
-    alertTitle = `${plural(failedCount, "file")} could not be uploaded to your storage provider.`;
-    alertDescription = "All retries were exhausted. Download these files and upload them to your storage provider manually to prevent data loss.";
-  } else if (failedCount > 0) {
-    alertTitle = `${plural(entries.length, "file")} did not upload to your storage provider.`;
-    alertDescription = `${plural(pendingCount, "file")} still being retried. ${plural(failedCount, "file")} failed permanently. You can download all files below.`;
-  } else {
-    alertTitle = `${plural(pendingCount, "file")} did not upload to your storage provider.`;
-    alertDescription = "DataPipe is retrying automatically. You can also download the files now.";
+  const downloadAllButton = (
+    <HStack mb={4}>
+      {/* Was `variant="solid" colorPalette="gray"`, which put gray.200 on
+          the old orange.600 fill at 2.81:1 -- under the 3:1 floor WCAG
+          1.4.11 sets for a control's boundary. Outline on the panel's own
+          ground uses border gray.500 (4.50:1 light / 3.43:1 dark). It is
+          also correctly secondary: DESIGN.md §5 allows one primary per
+          screen, and on the experiment page that is not this button. */}
+      <Button
+        size="sm"
+        variant="outline"
+        colorPalette="gray"
+        loading={downloadingAll}
+        onClick={handleDownloadAll}
+      >
+        <Download size={14} />
+        Download all as ZIP
+      </Button>
+    </HStack>
+  );
+
+  const table = (
+    <Table.Root variant="line" size="sm">
+      <Table.Header>
+        <Table.Row>
+          {/* Sentence case, per DESIGN.md §3. The uppercase literals
+              here were the table-header instance of the same reflex
+              §8.1 bans for section eyebrows. */}
+          <Table.ColumnHeader>Filename</Table.ColumnHeader>
+          <Table.ColumnHeader>Status</Table.ColumnHeader>
+          <Table.ColumnHeader>Reason</Table.ColumnHeader>
+          <Table.ColumnHeader>Stored for</Table.ColumnHeader>
+          <Table.ColumnHeader>
+            <Box as="span" srOnly>
+              Download
+            </Box>
+          </Table.ColumnHeader>
+        </Table.Row>
+      </Table.Header>
+      <Table.Body>
+        {entries.map((entry) => {
+          const kind = queueEntryKind(entry);
+          return (
+            <Table.Row key={entry.id}>
+              <Table.Cell>{entry.filename}</Table.Cell>
+              <Table.Cell>
+                {rowStatusIndicator(kind, entry)}
+                {rowSubline(kind, entry)}
+              </Table.Cell>
+              <Table.Cell>
+                <Text fontSize="sm" color="fg">
+                  {friendlyReason(entry) || "—"}
+                </Text>
+              </Table.Cell>
+              <Table.Cell>
+                <Text fontSize="sm" color="fg.muted" whiteSpace="nowrap">
+                  {timeRemaining(entry.createdAt) || "—"}
+                </Text>
+              </Table.Cell>
+              <Table.Cell>
+                <IconButton
+                  aria-label={`Download ${entry.filename}`}
+                  size="xs"
+                  variant="ghost"
+                  loading={downloading === entry.id}
+                  onClick={() => handleDownload(entry)}
+                >
+                  <Download size={14} />
+                </IconButton>
+              </Table.Cell>
+            </Table.Row>
+          );
+        })}
+      </Table.Body>
+    </Table.Root>
+  );
+
+  // The table gets its own panel surface and border so it reads as a table
+  // rather than a stripe of paint inside the surrounding container, and
+  // scrolls horizontally instead of overflowing on a phone -- UNLESS the
+  // surrounding container is already one of the quiet SectionPanel variants,
+  // in which case that box-inside-a-box is dropped (ErrorPanel.js made the
+  // same call for its own table).
+  const tableBlock = quiet ? (
+    <Box overflowX="auto">{table}</Box>
+  ) : (
+    <Box
+      bg="bg.panel"
+      borderWidth="1px"
+      borderColor="border"
+      borderRadius="md"
+      overflowX="auto"
+      color="fg"
+    >
+      {table}
+    </Box>
+  );
+
+  if (summary.tone === "error") {
+    return (
+      // `variant="subtle"` instead of `solid`, and the palette named
+      // explicitly as `brandRed` rather than left to Chakra's stock red.
+      // DESIGN.md §5 reserves brandRed for irreversible destruction
+      // elsewhere in the app, but a permanently failed upload is the one
+      // queue state with a genuine, un-appealable deadline (the payload is
+      // deleted 7-14 days after createdAt) -- the loud treatment stays here
+      // on purpose. Subtle pairs colorPalette.subtle with colorPalette.fg:
+      // brandRed 700-on-50 = 5.92:1 light, 300-on-900 = 4.86:1 dark.
+      <Alert.Root status="error" colorPalette="brandRed" variant="subtle" role="alert">
+        <Alert.Indicator />
+        <Box flex="1" minW={0}>
+          <Alert.Title mb={2}>{title}</Alert.Title>
+          <Text fontSize="sm" mb={4}>
+            {description}
+          </Text>
+          {downloadErrorBlock}
+          {accordion}
+          {downloadAllButton}
+          {tableBlock}
+        </Box>
+      </Alert.Root>
+    );
   }
 
   return (
-    // `variant="subtle"` instead of `solid`, and the palette named explicitly
-    // as the brand hue rather than left to Chakra's stock orange/red.
-    // DESIGN.md §1: brandOrange has NO solid slot at all (every orange dark
-    // enough to hold white text has stopped being the brand orange), and
-    // brandRed is reserved for irreversible destruction, which a retrying
-    // upload is not. Subtle pairs colorPalette.subtle with colorPalette.fg:
-    // brandOrange 800-on-50 = 7.00 light, 300-on-900 dark; brandRed
-    // 700-on-50 light, 300-on-900 dark. Body text on the old solid fill was
-    // white-on-#ea580c = 3.56:1, failing at the `sm`/`xs` sizes this panel is
-    // built from.
-    <Alert.Root
-      status={allFailed ? "error" : "warning"}
-      colorPalette={allFailed ? "brandRed" : "brandOrange"}
-      variant="subtle"
+    <SectionPanel
+      {...(summary.tone === "warning"
+        ? { borderLeftWidth: "3px", borderLeftColor: "status.warning" }
+        : {})}
     >
-      <Alert.Indicator />
-      <Box flex="1" minW={0}>
-        <Alert.Title mb={2}>{alertTitle}</Alert.Title>
-        <Text fontSize="sm" mb={4}>{alertDescription}</Text>
-        {downloadError && (
-          <Box mb={4}>
-            <FormErrorAlert>{downloadError}</FormErrorAlert>
-          </Box>
-        )}
-        <Accordion.Root collapsible size="sm" mb={4}>
-          <Accordion.Item value="why">
-            <Accordion.ItemTrigger>
-              <Box as="span" flex="1" textAlign="left" fontSize="sm">
-                Why did these uploads fail?
-              </Box>
-              <Accordion.ItemIndicator />
-            </Accordion.ItemTrigger>
-            <Accordion.ItemContent>
-              <Text fontSize="sm" pb={3}>
-                When a participant submits data, DataPipe tries to upload it to
-                your storage provider immediately. If that fails, DataPipe saves a
-                copy and retries automatically. Common reasons include:
-              </Text>
-              <Box as="ul" fontSize="sm" pl={6} pb={3} listStyleType="disc">
-                <Box as="li" mb={2}>
-                  <strong>Server memory limit</strong> — Large data submissions
-                  can occasionally exceed the server&apos;s memory capacity.
-                </Box>
-                <Box as="li" mb={2}>
-                  <strong>Storage provider unavailable</strong> — Your storage
-                  provider may be temporarily down or rate-limiting requests.
-                </Box>
-                <Box as="li" mb={2}>
-                  <strong>Configuration issue</strong> — There may be a problem
-                  with your storage provider settings or authentication token.
-                </Box>
-              </Box>
-              <Text fontSize="sm" pb={3}>
-                Files are stored for seven days, or up to fourteen if we couldn&apos;t
-                deliver a failure notification to you. If retries don&apos;t succeed,
-                download the files and upload them to your storage provider manually.
-              </Text>
-            </Accordion.ItemContent>
-          </Accordion.Item>
-        </Accordion.Root>
-        <HStack mb={4}>
-          {/* Was `variant="solid" colorPalette="gray"`, which put gray.200 on
-              the old orange.600 fill at 2.81:1 -- under the 3:1 floor WCAG
-              1.4.11 sets for a control's boundary. Outline on the panel's own
-              ground uses border gray.500 (4.50:1 light / 3.43:1 dark). It is
-              also correctly secondary: DESIGN.md \u00a75 allows one primary per
-              screen, and on the experiment page that is not this button. */}
-          <Button
-            size="sm"
-            variant="outline"
-            colorPalette="gray"
-            loading={downloadingAll}
-            onClick={handleDownloadAll}
-          >
-            <Download size={14} />
-            Download all as ZIP
-          </Button>
-        </HStack>
-        {/* The table gets its own panel surface and border so it reads as a
-            table rather than as a stripe of paint inside the alert, and
-            scrolls horizontally instead of overflowing on a phone -- the
-            5-column layout had no responsive strategy at all. */}
-        <Box
-          bg="bg.panel"
-          borderWidth="1px"
-          borderColor="border"
-          borderRadius="md"
-          overflowX="auto"
-          color="fg"
-        >
-          <Table.Root variant="line" size="sm">
-            <Table.Header>
-              <Table.Row>
-                {/* Sentence case, per DESIGN.md \u00a73. The uppercase literals
-                    here were the table-header instance of the same reflex
-                    \u00a78.1 bans for section eyebrows. */}
-                <Table.ColumnHeader>Filename</Table.ColumnHeader>
-                <Table.ColumnHeader>Status</Table.ColumnHeader>
-                <Table.ColumnHeader>Reason</Table.ColumnHeader>
-                <Table.ColumnHeader>Stored for</Table.ColumnHeader>
-                <Table.ColumnHeader>
-                  <Box as="span" srOnly>
-                    Download
-                  </Box>
-                </Table.ColumnHeader>
-              </Table.Row>
-            </Table.Header>
-            <Table.Body>
-              {entries.map((entry) => (
-                <Table.Row key={entry.id}>
-                  <Table.Cell>{entry.filename}</Table.Cell>
-                  <Table.Cell>
-                    {statusIndicator(entry.status)}
-                    {(entry.status === "pending" || entry.status === "processing") &&
-                      entry.nextRetryAt && (
-                        <Text fontSize="xs" color="fg.muted" mt={2}>
-                          Next retry {nextRetryText(entry.nextRetryAt)}
-                        </Text>
-                      )}
-                  </Table.Cell>
-                  <Table.Cell>
-                    <Text fontSize="sm" color="fg">
-                      {friendlyReason(entry) || "\u2014"}
-                    </Text>
-                  </Table.Cell>
-                  <Table.Cell>
-                    <Text fontSize="sm" color="fg.muted" whiteSpace="nowrap">
-                      {timeRemaining(entry.createdAt) || "\u2014"}
-                    </Text>
-                  </Table.Cell>
-                  <Table.Cell>
-                    <IconButton
-                      aria-label={`Download ${entry.filename}`}
-                      size="xs"
-                      variant="ghost"
-                      loading={downloading === entry.id}
-                      onClick={() => handleDownload(entry)}
-                    >
-                      <Download size={14} />
-                    </IconButton>
-                  </Table.Cell>
-                </Table.Row>
-              ))}
-            </Table.Body>
-          </Table.Root>
-        </Box>
-      </Box>
-    </Alert.Root>
+      <StatusIndicator status={summary.tone === "warning" ? "warning" : "neutral"} label={title} />
+      <Text fontSize="sm" color="fg.muted" mt={2} mb={4}>
+        {description}
+      </Text>
+      {downloadErrorBlock}
+      {accordion}
+      {downloadAllButton}
+      {tableBlock}
+    </SectionPanel>
   );
 }
 

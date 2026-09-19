@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ChakraProvider } from "@chakra-ui/react";
 import { system } from "../lib/theme";
 import "@testing-library/jest-dom";
@@ -11,6 +11,7 @@ jest.mock("../lib/firebase", () => ({
   db: {},
 }));
 
+import { auth } from "../lib/firebase";
 import QueuePanel from "../components/dashboard/QueuePanel";
 
 const entries = [
@@ -89,10 +90,11 @@ describe("QueuePanel — provider-neutral copy", () => {
     expect(screen.getByText("sub-01_data.csv")).toBeInTheDocument();
     expect(screen.getByText("sub-02_data.csv")).toBeInTheDocument();
 
-    // Alert title/description: "did not upload to OSF" -> "did not upload
-    // to your storage provider" (spec's own example phrasing).
+    // Alert title: e1 is now classified "waiting" (never attempted, held
+    // reason), e2/e3 are "failed" -- the "failed, with others still moving"
+    // headline case, not the old blanket "did not upload" wording.
     expect(
-      screen.getByText(/did not upload to your storage provider/i)
+      screen.getByText(/could not be uploaded to your storage provider/i)
     ).toBeInTheDocument();
     expect(
       screen.queryByText(/did not upload to OSF/i)
@@ -269,5 +271,250 @@ describe("QueuePanel provider error taxonomy", () => {
     // verbatim; the code is what decides the copy now.
     renderCodedPanel();
     expect(screen.queryByText(/^Provider error 400/)).not.toBeInTheDocument();
+  });
+});
+
+// -----------------------------------------------------------------------
+// Three-kind classification: waiting / retrying / failed, and the four
+// headline+body cases they produce. See lib/upload-queue.js's
+// queueEntryKind/summarizeQueue and QueuePanel.js's summaryText.
+// -----------------------------------------------------------------------
+
+const failedEntry = {
+  id: "k-failed",
+  filename: "sub-90_data.csv",
+  status: "failed",
+  failureReason: "Provider error 500: Internal Server Error",
+  createdAt: new Date(),
+};
+
+const retryingEntry = {
+  id: "k-retrying",
+  filename: "sub-91_data.csv",
+  status: "pending",
+  retryCount: 1,
+  lastAttemptAt: new Date(),
+  failureReason: "Upload exception: fetch failed",
+  createdAt: new Date(),
+  nextRetryAt: new Date(Date.now() + 57 * 60 * 1000),
+};
+
+// Never attempted, held for a known reason -- the "waiting" kind.
+const waitingEntry = {
+  id: "k-waiting-1",
+  filename: "sub-92_data.csv",
+  status: "pending",
+  retryCount: 0,
+  lastAttemptAt: null,
+  failureReason: "Compaction in progress",
+  createdAt: new Date(),
+  nextRetryAt: new Date(Date.now() + 57 * 60 * 1000),
+};
+
+const waitingEntry2 = {
+  id: "k-waiting-2",
+  filename: "sub-93_data.csv",
+  status: "pending",
+  retryCount: 0,
+  lastAttemptAt: null,
+  failureReason: "Collision cache rehydrating",
+  createdAt: new Date(),
+};
+
+function renderKinds(entries) {
+  return render(
+    <ChakraProvider value={system}>
+      <QueuePanel entries={entries} experimentId="exp1" />
+    </ChakraProvider>
+  );
+}
+
+describe("QueuePanel — headline/body, all four cases", () => {
+  it("all failed, singular", () => {
+    renderKinds([failedEntry]);
+    expect(
+      screen.getByText("1 file could not be uploaded to your storage provider.")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "All retries were exhausted. Download these files and upload them to your storage provider manually to prevent data loss."
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("all failed, plural", () => {
+    renderKinds([failedEntry, { ...failedEntry, id: "k-failed-2", filename: "sub-96.csv" }]);
+    expect(
+      screen.getByText("2 files could not be uploaded to your storage provider.")
+    ).toBeInTheDocument();
+  });
+
+  it("failed with others, singular 'more file is'", () => {
+    renderKinds([failedEntry, retryingEntry]);
+    expect(
+      screen.getByText("1 file could not be uploaded to your storage provider.")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/1 more file is still being stored automatically\./)
+    ).toBeInTheDocument();
+  });
+
+  it("failed with others, plural 'more files are'", () => {
+    renderKinds([failedEntry, retryingEntry, waitingEntry]);
+    expect(
+      screen.getByText(/2 more files are still being stored automatically\./)
+    ).toBeInTheDocument();
+  });
+
+  it("retrying only (nothing waiting, nothing failed)", () => {
+    renderKinds([retryingEntry]);
+    expect(
+      screen.getByText("1 upload did not go through on the first try.")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("DataPipe is retrying automatically. You can also download the files now.")
+    ).toBeInTheDocument();
+  });
+
+  it("retrying with waiting", () => {
+    renderKinds([retryingEntry, waitingEntry]);
+    expect(
+      screen.getByText("1 upload did not go through on the first try.")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "DataPipe is retrying automatically. 1 more file is waiting to be stored. You can also download the files now."
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("only waiting, singular ('One file is waiting to be stored.')", () => {
+    renderKinds([waitingEntry]);
+    expect(screen.getByText("One file is waiting to be stored.")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "DataPipe is storing these automatically; nothing has failed. You can download them now if you need them sooner."
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("only waiting, plural ('N files are waiting to be stored.')", () => {
+    renderKinds([waitingEntry, waitingEntry2]);
+    expect(screen.getByText("2 files are waiting to be stored.")).toBeInTheDocument();
+  });
+});
+
+describe("QueuePanel — row status by kind", () => {
+  it("a waiting row shows 'Waiting to be stored' and a 'First attempt' sub-line", () => {
+    renderKinds([waitingEntry]);
+    // "Waiting to be stored" also appears as an accordion bullet lead-in, so
+    // assert on the row itself rather than the bare string.
+    expect(screen.getByRole("row", { name: /Waiting to be stored/ })).toBeInTheDocument();
+    expect(screen.getByText(/First attempt/)).toBeInTheDocument();
+    // Never "Next retry" -- nothing has been attempted yet.
+    expect(screen.queryByText(/Next retry/)).not.toBeInTheDocument();
+  });
+
+  it("a retrying row shows 'Retrying' and a 'Next retry' sub-line", () => {
+    renderKinds([retryingEntry]);
+    expect(screen.getByRole("row", { name: /Retrying/ })).toBeInTheDocument();
+    expect(screen.getByText(/Next retry/)).toBeInTheDocument();
+    expect(screen.queryByText(/First attempt/)).not.toBeInTheDocument();
+  });
+
+  it("a failed row shows 'Failed' with no sub-line", () => {
+    renderKinds([failedEntry]);
+    // "Failed" also appears in the accordion's explanatory bullet, so assert
+    // on the row's own StatusIndicator rather than the bare string.
+    expect(screen.getByRole("row", { name: /Failed/ })).toBeInTheDocument();
+    expect(screen.queryByText(/Next retry|First attempt/)).not.toBeInTheDocument();
+  });
+});
+
+describe("QueuePanel — visual treatment follows tone, not just 'anything queued'", () => {
+  it("renders no filled alert when tone is warning (retrying, nothing failed)", () => {
+    renderKinds([retryingEntry]);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("renders no filled alert when tone is neutral (only waiting entries)", () => {
+    renderKinds([waitingEntry, waitingEntry2]);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("renders a filled alert as soon as any entry has failed", () => {
+    renderKinds([failedEntry, waitingEntry]);
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+});
+
+describe("QueuePanel — accordion", () => {
+  it("trigger reads the new 'What is happening to these files?' copy", () => {
+    renderKinds([waitingEntry]);
+    expect(screen.getByText("What is happening to these files?")).toBeInTheDocument();
+    expect(screen.queryByText("Why did these uploads fail?")).not.toBeInTheDocument();
+  });
+});
+
+describe("QueuePanel — an all-waiting queue never reads as a failure", () => {
+  it("says nothing about failing to upload or a server restart/memory limit", () => {
+    renderKinds([waitingEntry, waitingEntry2]);
+    expect(
+      screen.queryByText(/did not upload to your storage provider/i)
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/could not be uploaded/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/server restart or memory limit/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/interrupted/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("QueuePanel — downloads still call /api/queuestatus", () => {
+  const entry = {
+    id: "dl-1",
+    filename: "sub-99_data.csv",
+    status: "pending",
+    retryCount: 0,
+    lastAttemptAt: null,
+    failureReason: "Compaction in progress",
+    createdAt: new Date(),
+  };
+
+  let originalCurrentUser;
+
+  beforeEach(() => {
+    originalCurrentUser = auth.currentUser;
+    auth.currentUser = { getIdToken: jest.fn().mockResolvedValue("test-token") };
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      blob: () => Promise.resolve(new Blob(["data"])),
+    });
+    global.URL.createObjectURL = jest.fn(() => "blob:mock");
+    global.URL.revokeObjectURL = jest.fn();
+  });
+
+  afterEach(() => {
+    auth.currentUser = originalCurrentUser;
+    delete global.fetch;
+    jest.restoreAllMocks();
+  });
+
+  it("a per-row download hits /api/queuestatus?...&download=<entryId>", async () => {
+    renderKinds([entry]);
+    fireEvent.click(screen.getByRole("button", { name: `Download ${entry.filename}` }));
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    expect(global.fetch.mock.calls[0][0]).toBe(
+      `/api/queuestatus?experimentID=exp1&download=${entry.id}`
+    );
+  });
+
+  it("'Download all as ZIP' hits /api/queuestatus?...&downloadAll=true", async () => {
+    renderKinds([entry]);
+    fireEvent.click(screen.getByRole("button", { name: /Download all as ZIP/i }));
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    expect(global.fetch.mock.calls[0][0]).toBe(
+      "/api/queuestatus?experimentID=exp1&downloadAll=true"
+    );
   });
 });
