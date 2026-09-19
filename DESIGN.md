@@ -147,7 +147,8 @@ button fill.
 
 **Status** aliases onto the brand hues — one green, not two:
 `ok = brandGreen`, `warning = brandOrange`, `error = brandRed`, `neutral = fg.muted`
-(neutral; **no blue**). `brandLime` is legacy and should be deleted once
+(neutral; **no blue**). `waiting` is a fifth *status* but not a fifth hue: it borrows
+`status.neutral`, because work DataPipe is doing on its own schedule is not a warning. `brandLime` is legacy and should be deleted once
 `JsPsychIcon` is confirmed to be its only consumer.
 
 ### Logo
@@ -272,7 +273,9 @@ cannot carry alone gets a bordered container (see `SettingsSection` danger varia
   experiment deletion. Routine, reversible actions (disconnect a provider, unlink a
   sign-in method) are **neutral outline**. Red that means "routine" cannot also mean
   "final".
-- **Status trio** `ok` / `warning` / `error` (+ `neutral`), values in §1. **Status
+- **Status trio** `ok` / `warning` / `error` (+ `neutral`, and `waiting` — a clock in
+  the neutral hue, for something DataPipe will do by itself with nothing failed and
+  nothing asked of the researcher), values in §1. **Status
   is never color-alone or icon-alone: a visible text label is mandatory**, always
   rendered, never behind a tooltip or `title`. Non-text status marks still clear 3:1.
 - **Focus ring:** `2px solid {colorPalette}.focusRing` with a `2px` offset, on *every*
@@ -316,7 +319,7 @@ ship.
   in `sm`/`fg.muted` that says what the section is and what depends on it, and the
   section body. `variant="danger"` wraps the body in a `1px border.brandRed` container
   with `p={5}` and `rounded="md"`. Replaces `SectionLabel` entirely.
-- **`StatusIndicator`** — `status` (`ok`/`warning`/`error`/`neutral`) plus a
+- **`StatusIndicator`** — `status` (`ok`/`warning`/`error`/`neutral`/`waiting`) plus a
   **mandatory visible `label`**. Icon + text, always both, always rendered. No tooltip
   variant exists, so `OAuthTokenStatus`'s hover-only state cannot be reproduced.
   Replaces all three of the account page's competing status renderings.

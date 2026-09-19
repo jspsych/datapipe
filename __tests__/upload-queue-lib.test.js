@@ -1,4 +1,4 @@
-import { queueEntryKind, summarizeQueue, friendlyReason } from "../lib/upload-queue";
+import { queueEntryKind, summarizeQueue, friendlyReason, timeRemaining } from "../lib/upload-queue";
 
 // Real entry shapes, one per writer, as documented in lib/upload-queue.js's
 // header comment. Each omits fields the writer omits (never invents a field
@@ -228,5 +228,70 @@ describe("friendlyReason — new/changed rows", () => {
     expect(friendlyReason({ status: "pending", failureReason: metadataReason })).not.toMatch(
       /could not finish processing it when it arrived/i
     );
+  });
+});
+
+// -----------------------------------------------------------------------
+// timeRemaining -- the "Kept for another" column and the download-failure
+// message's "DataPipe still has this file for another {stored}" clause.
+// Pure and takes `now` as a parameter (see lib/upload-queue.js's header
+// comment on this function) so every case below is exact, not a race
+// against Date.now().
+// -----------------------------------------------------------------------
+
+describe("timeRemaining", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const NOW = Date.parse("2026-09-19T12:00:00Z");
+
+  it("falls back to createdAt + 7 days when retainUntil is absent", () => {
+    const entry = { createdAt: new Date(NOW - DAY) }; // 1 day old, no retainUntil
+    // 7 days minus the 1 day already elapsed = 6 days left.
+    expect(timeRemaining(entry, NOW)).toBe("6d 0h");
+  });
+
+  it("uses retainUntil when present, even though it disagrees with createdAt + 7 days", () => {
+    const entry = {
+      // createdAt alone would say ~6d, but an undelivered failure
+      // notification (functions/src/upload-retention.ts's
+      // extendRetentionForExperiment) has pushed the real expiry out to 10
+      // days from now -- retainUntil is what actually gates deletion
+      // (upload-retention.ts's retentionDecision), so it must win.
+      createdAt: new Date(NOW - DAY),
+      retainUntil: { toMillis: () => NOW + 10 * DAY },
+    };
+    expect(timeRemaining(entry, NOW)).toBe("10d 0h");
+  });
+
+  it("accepts a Firestore Timestamp-shaped retainUntil (toMillis) or a plain Date", () => {
+    const withTimestamp = timeRemaining(
+      { retainUntil: { toMillis: () => NOW + 2 * DAY } },
+      NOW
+    );
+    const withDate = timeRemaining({ retainUntil: new Date(NOW + 2 * DAY) }, NOW);
+    expect(withTimestamp).toBe("2d 0h");
+    expect(withDate).toBe("2d 0h");
+  });
+
+  it("returns 'expiring soon' once the deadline (from either field) has passed", () => {
+    expect(timeRemaining({ createdAt: new Date(NOW - 8 * DAY) }, NOW)).toBe(
+      "expiring soon"
+    );
+    expect(
+      timeRemaining(
+        { createdAt: new Date(NOW), retainUntil: { toMillis: () => NOW - 1000 } },
+        NOW
+      )
+    ).toBe("expiring soon");
+  });
+
+  it("returns null when there is no createdAt and no retainUntil to compute from", () => {
+    expect(timeRemaining({}, NOW)).toBeNull();
+  });
+
+  it("reports whole hours under a day, and days+hours at or above a day", () => {
+    expect(timeRemaining({ createdAt: new Date(NOW) }, NOW)).toBe("7d 0h");
+    expect(
+      timeRemaining({ retainUntil: { toMillis: () => NOW + 5 * 60 * 60 * 1000 } }, NOW)
+    ).toBe("5h");
   });
 });

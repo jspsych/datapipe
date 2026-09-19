@@ -15,6 +15,7 @@ describe("StatusIndicator", () => {
     ["warning", "Re-authentication required"],
     ["error", "Not connected"],
     ["neutral", "Not applicable"],
+    ["waiting", "Waiting to be stored"],
   ])("renders the visible label text for status=%s", (status, label) => {
     renderWithChakra(<StatusIndicator status={status} label={label} />);
 

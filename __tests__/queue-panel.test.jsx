@@ -429,6 +429,70 @@ describe("QueuePanel — row status by kind", () => {
     expect(screen.getByRole("row", { name: /Failed/ })).toBeInTheDocument();
     expect(screen.queryByText(/Next retry|First attempt/)).not.toBeInTheDocument();
   });
+
+  // A `nextRetryAt` already in the past used to render "soon" -- indefinite,
+  // and inconsistent with a sibling row's concrete "in 37m". The retry
+  // worker's cadence (functions/src/scheduled-sweep.ts's `*/5 * * * *`) gives
+  // an honest upper bound instead.
+  it("a waiting row with a past nextRetryAt reads 'First attempt within 5 minutes'", () => {
+    renderKinds([
+      { ...waitingEntry, nextRetryAt: new Date(Date.now() - 60 * 1000) },
+    ]);
+    expect(screen.getByText("First attempt within 5 minutes")).toBeInTheDocument();
+  });
+
+  it("a retrying row with a past nextRetryAt reads 'Next retry within 5 minutes'", () => {
+    renderKinds([
+      { ...retryingEntry, nextRetryAt: new Date(Date.now() - 60 * 1000) },
+    ]);
+    expect(screen.getByText("Next retry within 5 minutes")).toBeInTheDocument();
+  });
+});
+
+describe("QueuePanel — table header", () => {
+  // "Stored for" read as how long the file HAD been stored, when the value
+  // is actually time remaining before DataPipe deletes its own copy.
+  it("labels the retention column 'Kept for another', not 'Stored for'", () => {
+    renderKinds([waitingEntry]);
+    expect(
+      screen.getByRole("columnheader", { name: "Kept for another" })
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Stored for")).not.toBeInTheDocument();
+  });
+});
+
+describe("QueuePanel — filename column shows the basename", () => {
+  // Metadata-active experiments carry a storage-path prefix on `filename`
+  // (`data/raw/<name>`, see functions/src/metadata-derived-files.ts's
+  // uploadPathFor) that is provider layout, not something the researcher
+  // needs to see in the table.
+  const prefixedEntry = {
+    id: "k-prefixed",
+    filename: "data/raw/queue-ui-metadata-probe-2234.csv",
+    status: "pending",
+    retryCount: 0,
+    lastAttemptAt: null,
+    failureReason: "Compaction in progress",
+    createdAt: new Date(),
+  };
+
+  it("shows only the text after the last slash, with the full path in a title attribute", () => {
+    renderKinds([prefixedEntry]);
+    expect(
+      screen.getByText("queue-ui-metadata-probe-2234.csv")
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("data/raw/queue-ui-metadata-probe-2234.csv")
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTitle("data/raw/queue-ui-metadata-probe-2234.csv")
+    ).toBeInTheDocument();
+  });
+
+  it("leaves a filename with no path prefix unchanged", () => {
+    renderKinds([waitingEntry]);
+    expect(screen.getByText(waitingEntry.filename)).toBeInTheDocument();
+  });
 });
 
 describe("QueuePanel — visual treatment follows tone, not just 'anything queued'", () => {
@@ -516,5 +580,30 @@ describe("QueuePanel — downloads still call /api/queuestatus", () => {
     expect(global.fetch.mock.calls[0][0]).toBe(
       "/api/queuestatus?experimentID=exp1&downloadAll=true"
     );
+  });
+});
+
+describe("QueuePanel — the waiting status has its own icon", () => {
+  const waiting = {
+    id: "w1",
+    filename: "data/raw/a.partial.json",
+    status: "pending",
+    retryCount: 0,
+    lastAttemptAt: null,
+    failureReason: "Recovered from an abandoned session (40 trials)",
+    createdAt: { toDate: () => new Date() },
+  };
+
+  it("renders a clock, not a minus sign, for the headline and the row of an all-waiting queue", () => {
+    const { container } = render(
+      <ChakraProvider value={system}>
+        <QueuePanel entries={[waiting]} experimentId="exp1" />
+      </ChakraProvider>
+    );
+    // lucide stamps each icon with a class naming it. Two clocks: the panel's
+    // headline and the row's status cell. No minus sign anywhere -- beside
+    // "waiting to be stored" it read as a stray dash.
+    expect(container.querySelectorAll("svg.lucide-clock")).toHaveLength(2);
+    expect(container.querySelector("svg.lucide-minus")).toBeNull();
   });
 });
