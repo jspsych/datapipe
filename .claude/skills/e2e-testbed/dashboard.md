@@ -173,6 +173,23 @@ An all-waiting queue never says "did not upload" or anything implying a
 failure; a `METADATA_ERROR` recovery entry no longer says "server restart or
 memory limit" — see endpoints.md.
 
+**THE PANEL IS MID-POLISH.** A follow-up PR to `QueuePanel.js` is in flight,
+changing the `Stored for` column heading, the row sub-line ("soon"), how a
+filename is written (basename rather than the `data/raw/…` path), and the
+waiting icon. **Assert on the three kinds and on the panel's weight. Do not
+assert on column headings, sub-line wording or filename rendering** — and if
+they do not match, report "the panel is mid-polish", not a failure.
+
+OBSERVED 2026-09-19, new build, a queue of one and then two waiting entries:
+headline `One file is waiting to be stored.` / `2 files are waiting to be
+stored.`; body `DataPipe is storing these automatically; nothing has failed.
+You can download them now if you need them sooner.`; the panel measured with no
+fill and a uniform 1px neutral border, no coloured edge; header chip
+`— 1 upload waiting to be stored`, neutral, correctly pluralised. The
+`Retrying` and `Failed` rows were **not** produced — both need the Drive
+connection broken — so their icons and the orange/red panel treatments remain
+unverified.
+
 When the queue drains, a notice reads **"All queued uploads completed
 successfully."** and **auto-hides after 8 seconds** — do not build an assertion
 that depends on catching it.
@@ -183,12 +200,43 @@ that depends on catching it.
 dashboard panel itself now makes that distinction (waiting vs. retrying). See
 [endpoints.md](endpoints.md) for the call and where to read the ID token.
 
-## Errors — `components/dashboard/ErrorPanel.js`
+## Rejections — `components/dashboard/ErrorPanel.js`
 
-Shows the recent rejections for the experiment, each carrying the
-`api-messages.ts` code. Its body sits behind an accordion trigger reading
-either **"Show what was rejected"** or **"Show the <N> most recent of
-<total>"** — expand it before matching on codes.
+**Rendered only while the upload queue is empty.** The parent hides it whenever
+anything is queued, so any assertion about a rejection has to be made before a
+recovery scenario queues a partial — and that partial's first storage attempt
+is an hour after it was queued, so the panel stays away for roughly **1 h 5
+min**. OBSERVED 2026-09-19: the queue held the recovered partial continuously
+from 22:40Z, so the panel was never seen on the new build at all.
+
+A quiet `SectionPanel` with a **3px `status.error` left border** — an accent,
+not a fill. Do not look for `role="alert"`.
+
+| | Literal string |
+|---|---|
+| Headline | `<N> submissions to this experiment were rejected.` (`One submission …` at 1) |
+| Body | `DataPipe refused these submissions.` + `The most recent was <relative time>.` |
+| Accordion | `Show what was rejected`, or `Show the 50 most recent of <total>` |
+| Columns | `What happened` / `Time` |
+| Row | `message`, then `detail`, then `Code: <CODE>` |
+| Button | `Clear this list` (small, outline, neutral — not red) |
+
+**`METADATA_ERROR` rows carry an extra line**, because that refusal is the one
+that does not lose the data: *"The raw data was kept. DataPipe stores it in
+your storage provider without Psych-DS metadata, usually within about half an
+hour."* datapipe #261 also reworded the METADATA_ERROR `detail` itself — see
+[endpoints.md](endpoints.md) — but **the new wording has never been seen in
+this panel**, only on the wire.
+
+**Counts are since the last clear**, not lifetime: `lib/error-panel.js`'s
+`visibleErrors` returns `logError - logErrorCleared`, and rows older than
+`errorsClearedAt` are filtered out. So a "0 rejections" panel means "nothing
+since the last clear", and an earlier clear makes the count disagree with the
+number of probes you fired. **"Clear this list"** posts to `/api/clearerrors`
+with the account's ID token and moves the watermark; the lifetime counters are
+untouched. It has never been exercised by a run — if you get the chance, record
+the response status and whether the panel and the header chip disappear without
+a reload.
 
 ## Finalize — `components/dashboard/FinalizeControl.js`
 
@@ -225,6 +273,33 @@ experiment: `metadata-derived-upload.ts` dedupes on the provider's
 OBSERVED 2026-09-19: 5 copies after 5 uploads. A pre-existing DataPipe bug —
 report it as a known issue, not a finding.
 
+## What the browser tooling cannot do
+
+All OBSERVED 2026-09-19.
+
+- **`resize_window` reported success and changed nothing.** At 420 px and
+  440 px, `window.innerWidth` stayed pinned at 1710 (= `screen.width`) while
+  only `outerWidth` moved: the Chrome window was in macOS fullscreen, so the
+  renderer viewport does not follow the window bounds. **A responsive check
+  needs a Chrome window that is not fullscreen** — ask the user to leave
+  fullscreen rather than reporting a layout you did not see. Neither the
+  ~420 px nor the ~1280 px layout has ever been checked.
+- **Accordions animate.** The first screenshot of an expanded explainer caught
+  it mid-flight, clipped to a ~4 px sliver. Screenshot after it settles, or
+  measure the element (`data-state="open"`, a real `height`) instead. Not a
+  clipping bug.
+- **Background tabs are throttled.** A 20 s `setInterval` poller in a
+  backgrounded dashboard tab fired about once a minute. It still caught every
+  transition, but do not size a tight window off a background poll.
+- **The experiment pages follow the OS colour scheme and have no theme
+  toggle** — no `data-theme`, nothing in the accessibility tree. Whatever the
+  machine is set to is what you will screenshot; say which you saw. Light mode
+  has never been observed.
+- **Firebase ID tokens expire after about an hour.** A poller holding a
+  captured token started getting `401 {"error":"Invalid authentication token"}`
+  at 22:55Z. Re-read the token from IndexedDB on every poll — see
+  [endpoints.md](endpoints.md).
+
 ## Other traps
 
 - `components/dashboard/CodeHints.js` hides its snippets behind a language menu
@@ -247,8 +322,10 @@ Use these to size waits, not as assertions.
 | `POST /api/createexperiment` | 1.3 s |
 | Warm `dashboardapi` calls | 190–370 ms |
 | Refusals that never reach a provider | 270–480 ms |
-| Abandoned tab → queue entry | ~12 min |
+| Abandoned tab → queue entry | 10–12 min |
 | Queue entry → first Drive attempt | +60 min |
+| METADATA_ERROR refusal → queue entry | ~27 min (the next `:00`/`:15`/`:30`/`:45` slot) |
+| That entry → stored | ~5 min, so it is visible in the queue only briefly |
 
 No dramatic cold start was seen after a deploy: the first `dashboardapi` call
 was 745 ms. `participantapi`'s genuinely-first call is made inside the page by

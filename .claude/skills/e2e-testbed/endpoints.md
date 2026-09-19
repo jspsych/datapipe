@@ -23,10 +23,24 @@ Error bodies are always `{ "error": CODE, "message": "…" }`. Success bodies ar
 **Assert on `error`, never on `message`.** `metadata-block.ts` returns
 `{...MESSAGES.METADATA_ERROR, message: errorMessage}` — it replaces the message
 with the specific failure text, so the wire message for `METADATA_ERROR` is not
-the string in `api-messages.ts`. OBSERVED 2026-09-19: `400
-{"error":"METADATA_ERROR","message":"Invalid metadata generated"}` (that text
-has since been reworded to "No columns were found in the submitted data…",
-which is exactly why it must not be asserted on). That is by design; treat the whole `message` field as free text on every endpoint.
+the string in `api-messages.ts`. That is by design; treat the whole `message`
+field as free text on every endpoint.
+
+The rewording in datapipe #261 is the proof. The same probe, six hours apart:
+
+```
+17:00Z  {"error":"METADATA_ERROR","message":"Invalid metadata generated"}
+22:33Z  {"success":false,"error":"METADATA_ERROR","message":"No columns were
+         found in the submitted data, so Psych-DS metadata could not be
+         generated. The data must be a JSON array of trials or a CSV with a
+         header row.","metadataMessage":""}
+```
+
+Both OBSERVED, both 400, both `METADATA_ERROR`. The second is what `test`
+answers now (`functions/src/metadata-production.ts`); **production still
+answers the first until `test` is promoted to `main`**. `metadataMessage` is
+present and empty. A run that asserted on the message would have "failed" a
+deploy that changed nothing but the wording.
 
 ## `POST /api/data`
 
@@ -204,13 +218,26 @@ await fetch(`${BASE}/api/queuestatus?experimentID=${EXP}`, {
 //                  failureReason }], count }
 ```
 
-**Trailing slashes.** `/api/foo/` 308-redirects to `/api/foo`, and `fetch`
-surfaces the CORS-less 404 behind that redirect as "Failed to fetch" rather
-than a status. When checking that a route is *gone*, use the no-slash URL or
-`curl`. OBSERVED 2026-09-19.
+**Re-read that token on every poll.** Firebase ID tokens expire after about an
+hour, and a cached one starts answering `401 {"error":"Invalid authentication
+token"}` mid-session — OBSERVED at 22:55Z on 2026-09-19, on a poller that had
+captured the token once at the start. Reading it from IndexedDB each cycle
+fixed it. A long deferred check will always outlive the first token.
+
+**Trailing slashes.** On a LIVE endpoint the slash makes no difference: Firebase
+Hosting matches the rewrite either way (checked on datapipe-test, 2026-09-19 —
+same response, same latency, no redirect), which is why `datapipe-client` can
+build every URL as `/api/<path>/` (`endpoint()` in `packages/client/src/http.ts`)
+at no cost, and why the testbed records a library-issued request's URL with the
+slash and its own without. It bites only on a path with NO rewrite — a removed
+endpoint, a typo: that falls through to the Next.js app, is 308-redirected to
+the slashless form, and `fetch` surfaces the CORS-less 404 behind it as "Failed
+to fetch" rather than a status. When checking that a route is *gone*, use the
+no-slash URL or `curl`. OBSERVED 2026-09-19.
 
 Every probe that names a real experiment writes to `logs/<experimentID>`, so
-the dashboard's error panel will show the deliberate failures. Say so in the
+the dashboard's rejections panel will show the deliberate failures — whenever
+the upload queue is empty enough for that panel to render. Say so in the
 report.
 
 A `MISSING_PARAMETER` refusal returns before any log write, so those probes
