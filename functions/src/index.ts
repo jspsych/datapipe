@@ -40,9 +40,8 @@ import { apiFinalize, finalizeTask } from "./api-finalize.js";
 // createexperiment, connectprovider, connectstatictokenprovider,
 // disconnectprovider, deleteaccount, generateoauthstate, oauth2callback,
 // saveosftoken, getprovideraccesstoken, providersetupwarnings,
-// checkemailconflict, sendcontactemailverification, verifycontactemail,
-// oauth2regenerate, getosftoken, and ensurederivedpaths used to each be their
-// own onRequest export here. All 16 are low-traffic dashboard endpoints, not
+// checkemailconflict, sendcontactemailverification, verifycontactemail, and
+// ensurederivedpaths used to each be their own onRequest export here. All 14 are low-traffic dashboard endpoints, not
 // the submission hot path, so each paid its own always-cold instance pool for
 // no benefit -- they are now dispatched from ONE function. See
 // dashboard-api.ts's header for the full rationale.

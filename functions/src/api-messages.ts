@@ -74,19 +74,6 @@ const MESSAGES = {
     message:
       "The data are not valid according to the validation parameters set for this experiment.",
   },
-  // oauth2-regenerate.ts gates on user_data.usingPersonalToken, which every
-  // provider sets -- the handler names no provider at all. The old wording
-  // ("OSF API verification") told a Zenodo or Dataverse owner with a personal
-  // token to go look at OSF.
-  NOT_USING_OAUTH: {
-    error: "NOT_USING_OAUTH",
-    message:
-      "The user is not using OAuth for this provider's API verification"
-  },
-  OAUTH_NOT_SETUP: {
-    error: "OAUTH_NOT_SETUP",
-    message: "OAuth is not set up for this user"
-  },
   SESSION_LIMIT_REACHED: {
     error: "SESSION_LIMIT_REACHED",
     message: "The session limit for this experiment has been reached",

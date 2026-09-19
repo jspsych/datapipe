@@ -38,10 +38,6 @@
         "function": "dashboardapi"
       },
       {
-        "source": "/api/oauth2regenerate",
-        "function": "dashboardapi"
-      },
-      {
         "source": "/api/checkemailconflict",
         "function": "dashboardapi"
       },
@@ -51,10 +47,6 @@
       },
       {
         "source": "/api/saveosftoken",
-        "function": "dashboardapi"
-      },
-      {
-        "source": "/api/getosftoken",
         "function": "dashboardapi"
       },
       {

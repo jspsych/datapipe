@@ -1,11 +1,9 @@
-// ONE deployed Cloud Function fronting 16 low-traffic, bearer-token dashboard
+// ONE deployed Cloud Function fronting 14 low-traffic, bearer-token dashboard
 // HTTP endpoints: createExperiment, connectProvider,
 // connectStaticTokenProvider, disconnectProvider, deleteAccount,
 // generateOAuthState, oauth2Callback, saveOsfToken, getProviderAccessToken,
 // providerSetupWarnings, checkEmailConflict, sendContactEmailVerification,
-// verifyContactEmail, oauth2Regenerate, getOsfToken, ensureDerivedPaths.
-// (ensureDerivedPaths landed on `test` via PR #249 after the other 15 were
-// merged, as the same kind of endpoint -- see its own handler for details.)
+// verifyContactEmail, ensureDerivedPaths.
 //
 // WHY: `test` used to deploy each of these as its own function. Every one is
 // low-traffic -- dashboard clicks, not the submission hot path -- so each
@@ -44,13 +42,11 @@ import { deleteAccountHandler } from "./delete-account.js";
 import { generateOAuthStateHandler } from "./generate-oauth-state.js";
 import { oauth2CallbackHandler } from "./oauth2-callback.js";
 import { saveOsfTokenHandler } from "./save-osf-token.js";
-import { getOsfTokenHandler } from "./get-osf-token.js";
 import { getProviderAccessTokenHandler } from "./get-provider-access-token.js";
 import { providerSetupWarningsHandler } from "./provider-setup-warnings.js";
 import { checkEmailConflictHandler } from "./check-email-conflict.js";
 import { sendContactEmailVerificationHandler } from "./send-contact-email-verification.js";
 import { verifyContactEmailHandler } from "./verify-contact-email.js";
-import { oauth2RegenerateHandler } from "./oauth2-regenerate.js";
 import { ensureDerivedPathsHandler } from "./ensure-derived-paths.js";
 
 type Handler = (req: Request, res: Response) => void | Promise<void>;
@@ -72,8 +68,6 @@ const ROUTES: Record<string, Handler> = {
   "/api/checkemailconflict": checkEmailConflictHandler,
   "/api/sendcontactemailverification": sendContactEmailVerificationHandler,
   "/api/verifycontactemail": verifyContactEmailHandler,
-  "/api/oauth2regenerate": oauth2RegenerateHandler,
-  "/api/getosftoken": getOsfTokenHandler,
   "/api/ensurederivedpaths": ensureDerivedPathsHandler,
 };
 

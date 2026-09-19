@@ -30,13 +30,11 @@ const ROUTES = {
   "/api/generateoauthstate": { fn: "dashboardapi", merged: true },
   "/api/oauth2callback": { fn: "dashboardapi", merged: true },
   "/api/saveosftoken": { fn: "dashboardapi", merged: true },
-  "/api/getosftoken": { fn: "dashboardapi", merged: true },
   "/api/getprovideraccesstoken": { fn: "dashboardapi", merged: true },
   "/api/providersetupwarnings": { fn: "dashboardapi", merged: true },
   "/api/checkemailconflict": { fn: "dashboardapi", merged: true },
   "/api/sendcontactemailverification": { fn: "dashboardapi", merged: true },
   "/api/verifycontactemail": { fn: "dashboardapi", merged: true },
-  "/api/oauth2regenerate": { fn: "dashboardapi", merged: true },
   // ensureDerivedPaths landed on `test` via PR #249, after the other 15 were
   // merged -- same treatment, added as a 16th route.
   "/api/ensurederivedpaths": { fn: "dashboardapi", merged: true },

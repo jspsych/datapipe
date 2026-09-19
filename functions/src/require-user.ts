@@ -6,14 +6,9 @@
 // not interchangeable: this one has no uid to compare against, because the
 // caller does not send one -- the token itself IS the identity.
 //
-// Extracted here because five endpoints (delete-account.ts, save-osf-token.ts,
-// get-osf-token.ts, send-contact-email-verification.ts,
-// verify-contact-email.ts) copy-pasted this exact block. Adoption was
-// deliberately selective: oauth2-regenerate.ts looks similar at a glance but
-// reads `uid` from the request body FIRST and compares it against the decoded
-// token (same shape as verifyOwnership, just header-transported), which is a
-// different contract with a different 403 case -- it is left inline rather
-// than forced through this helper.
+// Extracted here because delete-account.ts, save-osf-token.ts,
+// send-contact-email-verification.ts, verify-contact-email.ts and
+// ensure-derived-paths.ts each copy-pasted this exact block.
 //
 // On failure this writes the 401 response itself and returns null, so callers
 // only need `const authResult = await requireUser(req, res); if (!authResult)

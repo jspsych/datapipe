@@ -30,6 +30,10 @@ already provider-agnostic and requiring no change. The OSF-specific surface:
 - **OAuth2 flow**: `oauth2-callback.ts`, `oauth2-regenerate.ts`, `refresh-token.ts`,
   `resolve-token.ts`, `generate-oauth-state.ts`, plus a parallel static
   Personal-Access-Token path (`save-osf-token.ts`, `get-osf-token.ts`).
+  (`oauth2-regenerate.ts` and `get-osf-token.ts` have since been deleted: both
+  existed to serve the browser, which stopped refreshing tokens when they were
+  encrypted at rest and stopped needing a raw token when OSF closed to new
+  experiments. Uploads always resolved tokens server-side, via `resolve-token.ts`.)
 - **File writes**: `put-file-osf.ts`, `update-file-osf.ts`, `subfolder.ts` — built
   on OSF's Waterbutler API. (STALE as of 2026-07-26: 409 is no longer the sole
   collision-detection mechanism — the Firestore collision cache in
