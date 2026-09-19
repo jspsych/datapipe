@@ -76,10 +76,11 @@ describe("queueEntryKind — real writer shapes", () => {
     expect(queueEntryKind(entry)).toBe("retrying");
   });
 
-  it("a held reason that HAS been attempted is retrying", () => {
-    // scheduled-upload-retry.ts's isCompactionInFlight branch: the retry
-    // worker's claim transaction already set lastAttemptAt before bouncing
-    // the entry back to "pending" with COMPACTION_HOLD_REASON again.
+  it("a held entry the retry worker bounced back without attempting it is still waiting", () => {
+    // scheduled-upload-retry.ts's isCompactionInFlight branch: the claim
+    // transaction stamped lastAttemptAt, then the entry went straight back to
+    // "pending" with COMPACTION_HOLD_REASON and retryCount untouched. No
+    // upload was attempted, so nothing has failed.
     const entry = {
       status: "pending",
       retryCount: 0,
@@ -87,7 +88,20 @@ describe("queueEntryKind — real writer shapes", () => {
       failureReason: "Compaction in progress",
       providerErrorCode: "CONTENTION",
     };
-    expect(queueEntryKind(entry)).toBe("retrying");
+    expect(queueEntryKind(entry)).toBe("waiting");
+  });
+
+  it("a held entry is still waiting during its first attempt", () => {
+    // The worker sets lastAttemptAt in the same write that flips the entry to
+    // "processing", before it has tried anything.
+    const entry = {
+      status: "processing",
+      retryCount: 0,
+      lastAttemptAt: { toDate: () => new Date("2026-09-19T11:00:00Z") },
+      failureReason: "Recovered from an abandoned session (50 trials)",
+      providerErrorCode: null,
+    };
+    expect(queueEntryKind(entry)).toBe("waiting");
   });
 
   it("a held reason with a non-zero retryCount is retrying", () => {
