@@ -148,7 +148,8 @@ export async function purgeUserData(uid: string): Promise<PurgeCounts> {
     }
 
     // Submissions that were persisted but never uploaded. Left behind, these
-    // are replayed by scheduledPendingRecovery forever.
+    // are replayed by scheduled-pending-recovery.ts's recovery pass (run from
+    // scheduledsweep) forever.
     const [pendingFiles] = await storage
       .bucket()
       .getFiles({ prefix: `pending-data/${experimentId}/` });
