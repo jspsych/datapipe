@@ -224,15 +224,16 @@ token"}` mid-session — OBSERVED at 22:55Z on 2026-09-19, on a poller that had
 captured the token once at the start. Reading it from IndexedDB each cycle
 fixed it. A long deferred check will always outlive the first token.
 
-**Trailing slashes.** `/api/foo/` 308-redirects to `/api/foo`, and `fetch`
-surfaces the CORS-less 404 behind that redirect as "Failed to fetch" rather
-than a status. When checking that a route is *gone*, use the no-slash URL or
-`curl`. OBSERVED 2026-09-19. `datapipe-client` builds **every** endpoint URL
-with the slash (`endpoint()` in `packages/client/src/http.ts`), so each request
-the client or `@jspsych/extension-pipe` makes pays for that redirect — which is
-why the testbed records a library-issued request's URL with the slash and its
-own without. Worth an upstream issue; nothing in this repo's handlers can fix
-it.
+**Trailing slashes.** On a LIVE endpoint the slash makes no difference: Firebase
+Hosting matches the rewrite either way (checked on datapipe-test, 2026-09-19 —
+same response, same latency, no redirect), which is why `datapipe-client` can
+build every URL as `/api/<path>/` (`endpoint()` in `packages/client/src/http.ts`)
+at no cost, and why the testbed records a library-issued request's URL with the
+slash and its own without. It bites only on a path with NO rewrite — a removed
+endpoint, a typo: that falls through to the Next.js app, is 308-redirected to
+the slashless form, and `fetch` surfaces the CORS-less 404 behind it as "Failed
+to fetch" rather than a status. When checking that a route is *gone*, use the
+no-slash URL or `curl`. OBSERVED 2026-09-19.
 
 Every probe that names a real experiment writes to `logs/<experimentID>`, so
 the dashboard's rejections panel will show the deliberate failures — whenever
