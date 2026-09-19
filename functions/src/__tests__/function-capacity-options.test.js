@@ -35,6 +35,15 @@ jest.mock('../../lib/providers/index.js', () => ({
 
 import { apiData } from '../../lib/api-data.js';
 import { apiBase64 } from '../../lib/api-base64.js';
+// Phase 3 of the Cloud Functions consolidation: compaction moved out of the
+// two Firestore triggers and into a dedicated Cloud Task
+// (compaction-task.ts), specifically so only the task pays for the 1GiB/540s
+// a pass needs and the triggers that almost always return early can run at
+// 256MiB instead. These imports reach the same providers/index.js mocked
+// above (through compaction.js/resolve-token.js), so no new ESM landmine.
+import { compactionTask } from '../../lib/compaction-task.js';
+import { onExperimentGrew } from '../../lib/compaction-triggers.js';
+import { onUploadQueueChanged } from '../../lib/upload-queue-trigger.js';
 
 // index.ts's setGlobalOptions({ maxInstances: 20 }) -- every function without
 // its own override is bounded by this. apiData/apiBase64 must exceed it, and
@@ -80,5 +89,23 @@ describe('apiBase64 capacity options (functions/src/api-base64.ts)', () => {
 
   it('sizes its ceiling below apiData, since base64 payloads run larger per request', () => {
     expect(apiBase64.__endpoint.maxInstances).toBeLessThan(apiData.__endpoint.maxInstances);
+  });
+});
+
+describe('compaction consolidation capacity options (functions/src/compaction-task.ts, compaction-triggers.ts, upload-queue-trigger.ts)', () => {
+  it('compactionTask keeps the 1GiB/540s a compaction pass actually needs', () => {
+    // Not a new number: this is exactly what onExperimentGrew/onUploadQueueChanged
+    // used to declare before the pass moved into its own Cloud Task. A pass
+    // holds a batch up to MAX_BATCH_BYTES plus the assembled zip in memory.
+    expect(compactionTask.__endpoint.availableMemoryMb).toBe(1024);
+    expect(compactionTask.__endpoint.timeoutSeconds).toBe(540);
+  });
+
+  it('onExperimentGrew runs at 256MiB now that it only decides whether to enqueue', () => {
+    expect(onExperimentGrew.__endpoint.availableMemoryMb).toBe(256);
+  });
+
+  it('onUploadQueueChanged runs at 256MiB, covering both failure-notify and compaction discovery', () => {
+    expect(onUploadQueueChanged.__endpoint.availableMemoryMb).toBe(256);
   });
 });
