@@ -90,6 +90,10 @@
         "function": "dashboardapi"
       },
       {
+        "source": "/api/clearerrors",
+        "function": "dashboardapi"
+      },
+      {
         "source": "/api/sendcontactemailverification",
         "function": "dashboardapi"
       },
