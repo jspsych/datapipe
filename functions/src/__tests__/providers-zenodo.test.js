@@ -19,12 +19,31 @@ const SERVER_URL = "https://sandbox.zenodo.org";
 const BUCKET_URL = "https://sandbox.zenodo.org/api/files/abc-123";
 const DEPOSITION_ID = 987654;
 
+// zenodo.ts imports the "node-fetch" package, which the mock above covers.
+// zenodo-oauth.ts -- reached from resolveToken's refresh path -- deliberately
+// uses the runtime's GLOBAL fetch instead, which that mock does not touch. Left
+// alone, a test that reaches the refresh path makes a live request to
+// sandbox.zenodo.org. Same stub convention as providers-zenodo-oauth.test.js;
+// the default implementation throws so that no test in this file can reach
+// the network by accident -- one that means to refresh says what comes back.
+const ORIGINAL_GLOBAL_FETCH = global.fetch;
+
+afterAll(() => {
+  global.fetch = ORIGINAL_GLOBAL_FETCH;
+});
+
 beforeEach(() => {
+  global.fetch = jest.fn(() => {
+    throw new Error("providers-zenodo.test.js: unexpected global fetch -- stub it in the test");
+  });
   mockFetch.mockClear();
   // zenodoOAuthHost() reads this at CALL time, so it has to be set per test
   // rather than at import. Pinned to the sandbox so it agrees with SERVER_URL
   // below and a stray real-host URL in an assertion stands out.
   process.env.ZENODO_ENV = "sandbox.";
+  // An override here would take precedence over ZENODO_ENV in zenodoTokenUrl()
+  // and send the refresh assertion below looking at the wrong host.
+  delete process.env.ZENODO_TOKEN_URL;
 });
 
 afterAll(() => {
@@ -131,11 +150,26 @@ describe("1. resolveToken", () => {
   // moves up to MAX_BATCH_BYTES in a single call.
   it("treats a token expiring within the margin as already stale", async () => {
     const userData = connected({ tokenExpiresAt: Date.now() + 30 * 1000 });
-    // Refreshing needs Firestore, which this suite has no emulator for, so
-    // assert the decision rather than the outcome: it must NOT hand back the
-    // nearly-dead token.
-    const result = await zenodoProvider.resolveToken(userData, "owner-uid").catch(() => null);
-    expect(result?.token).not.toBe("plain-token");
+    // The refresh itself -- exchange, rotation, persistence -- is
+    // providers-zenodo-oauth.test.js's job, against the Firestore emulator.
+    // What belongs here is the DECISION: a nearly-dead token must send
+    // resolveToken to the token endpoint rather than be handed back. A
+    // network fault is the one refresh outcome that touches no Firestore, so
+    // it keeps this suite emulator-free.
+    global.fetch.mockRejectedValueOnce(new Error("network down"));
+
+    const result = await zenodoProvider.resolveToken(userData, "owner-uid");
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const [url, options] = global.fetch.mock.calls[0];
+    expect(url).toBe(`${SERVER_URL}/oauth/token`);
+    expect(options.body).toContain("grant_type=refresh_token");
+    expect(options.body).toContain("refresh_token=plain-refresh");
+    expect(result).toEqual({
+      success: false,
+      error: "INVALID_REFRESH_TOKEN",
+      detail: "network down",
+    });
   });
 });
 
