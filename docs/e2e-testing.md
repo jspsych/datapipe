@@ -106,10 +106,11 @@ A Playwright job would look like this: read `scenarios.json`, filter to
 e2e experiment whose ID is a repository variable), open each scenario URL with
 `run` set to the commit SHA, poll
 `document.documentElement.dataset.testbedStatus`, read `window.__testbed`, and
-assert the `expectPage` block. Seven of the fifteen scenarios qualify today
-(`clean-finish`, `baseline-no-streaming`, `ended-early`, `vanilla-streaming`,
-`vanilla-uncompressed`, `duplicate-rejection`, `validation-failure`, plus
-`failed-final-submission` for its page-level half), and the `base64-*` pair
+assert the `expectPage` block. Eight of the fifteen scenarios are marked `full` today:
+seven completely (`clean-finish`, `baseline-no-streaming`, `ended-early`,
+`vanilla-streaming`, `vanilla-uncompressed`, `duplicate-rejection`,
+`validation-failure`), and `failed-final-submission` for its page-level half
+only -- its recovery check is deferred, and the `base64-*` pair
 joins them if the shared experiment leaves base64 uploads switched on.
 
 Playwright runs in the page's own world, so `window.__testbed` is directly
