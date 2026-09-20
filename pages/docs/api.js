@@ -371,7 +371,7 @@ export default function ApiReferencePage() {
           maxW="70ch"
         >
           <Text fontSize="sm" fontWeight="semibold" mb={2}>
-            Renamed on 16 September 2026
+            Renamed in September 2026
           </Text>
           <Text fontSize="sm" color="fg.muted">
             Three codes dropped their <Code>OSF_</Code> prefix:{" "}
@@ -384,7 +384,9 @@ export default function ApiReferencePage() {
             branch stops running — most often a retry that regenerates a
             filename after <Code>OSF_FILE_EXISTS</Code>. Match the new names,
             or both while you roll experiments over. The HTTP status codes are
-            unchanged, so anything branching on those is unaffected.
+            unchanged, so anything branching on those is unaffected. See{" "}
+            <ProseLink href="/docs/whats-changed">What&apos;s changed</ProseLink>{" "}
+            for the rest of the September 2026 update.
           </Text>
         </Box>
         <Text fontSize="sm" color="fg.muted" maxW="70ch">

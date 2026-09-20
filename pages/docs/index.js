@@ -45,6 +45,11 @@ export default function DocsOverviewPage() {
         purpose="What DataPipe does, what it leaves to other tools, and where to read next."
       />
 
+      <GuidanceLine href="/docs/whats-changed" linkText="What's changed" mb={6}>
+        DataPipe had a large update in September 2026. If you used DataPipe
+        before, start there.
+      </GuidanceLine>
+
       <DocsSection id="how-it-works" title="How it works">
         <Text maxW="70ch">
           DataPipe takes the data your participants produce and puts it in
