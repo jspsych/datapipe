@@ -22,6 +22,7 @@ import BandMark from "../components/home/BandMark";
 import { ConnectIcon, CreateIcon, CollectIcon } from "../components/home/StepIcons";
 import { osfSunsetLabel } from "../lib/osf-sunset";
 import OsfSunsetBanner from "../components/OsfSunsetBanner";
+import WhatsChangedModal from "../components/WhatsChangedModal";
 
 // ─────────────────────────────────────────────────────────────────────────
 // REGISTER NOTE. This page is BRAND register; the rest of DataPipe is
@@ -375,6 +376,16 @@ export default function Home() {
           has data there and points at /docs/providers/osf instead. Two
           audiences, two destinations -- not a duplicate. */}
       <OsfSunsetBanner />
+
+      {/* One-time release announcement, deliberately a dialog -- see the WHY
+          comment atop WhatsChangedModal.js for why this is an approved
+          exception to DESIGN.md §8's "modal as first thought" ban. It is a
+          fixed-position overlay with its own stacking context, so where it
+          mounts in this tree doesn't affect what renders behind it or above
+          it; it lives here, next to the other homepage-only announcement,
+          rather than in _app.js, because it -- like the banner above it --
+          has no business on the dashboard or in the docs. */}
+      <WhatsChangedModal />
 
       {/* ── Ground 1: the page's own surface ────────────────────────────
           Two columns: the type on the left, the code device on the right.
