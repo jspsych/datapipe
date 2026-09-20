@@ -239,7 +239,7 @@ not a fill. Do not look for `role="alert"`. OBSERVED 2026-09-20: headline icon
 `svg.lucide-circle-x`, stroke `status.error`; no red fill and no red body
 text anywhere in the panel. In dark mode the panel's `background-color` is
 byte-identical to the page background, so the 1px border is the only other
-thing separating them (in light mode the two differ).
+thing separating them.
 
 | | Literal string |
 |---|---|
@@ -362,44 +362,33 @@ report it as a known issue, not a finding.
   captured token started getting `401 {"error":"Invalid authentication token"}`
   at 22:55Z. Re-read the token from IndexedDB on every poll — see
   [endpoints.md](endpoints.md).
-- **A theme override EXISTS** — earlier text here said the pages "follow the
-  OS colour scheme and have no theme toggle"; that is wrong. See "Colour
-  mode" below.
+- **Dark is the only mode.** Earlier text here said the pages "follow the OS
+  colour scheme"; that is wrong. See "Colour mode" below — there is nothing to
+  check in light mode.
 
 ## Colour mode
 
-`pages/_app.js` wraps the app in next-themes' `ThemeProvider` with
-`attribute="class"`, `defaultTheme="dark"` and `forcedTheme="dark"` — dark is
-DataPipe's only supported mode (DESIGN.md §2) and there is no in-app toggle.
-`forcedTheme` means the provider stamps `class="dark"` on `<html>` and never
-calls `setTheme` again on its own, so a driver can flip modes for a
-screenshot with a plain DOM write that next-themes will not fight back:
+**DataPipe is dark-only. Do not check light mode, and do not report anything
+seen in it.** `pages/_app.js` wraps the app in next-themes' `ThemeProvider` with
+`attribute="class"`, `defaultTheme="dark"` and **`forcedTheme="dark"`**; its own
+comment says why: "Dark is DataPipe's only mode (DESIGN.md §2). forcedTheme, not
+just defaultTheme: visitors who picked Light/System while the toggle existed
+still have that choice in localStorage, and it must not resurrect a retired
+mode." There is no in-app toggle and the page does NOT follow the OS setting.
 
-1. Read and record `document.documentElement.className` (it should be
-   `"dark"`).
-2. Set `document.documentElement.className = "light"` for a light-mode
-   screenshot; the whole page repaints instantly.
-3. Set it back to the value you recorded in step 1 to restore it exactly.
+That comment also explains a stray finding: the 2026-09-20 run saw
+`localStorage["datapipe-color-mode"]` in the maintainer's browser. It is a
+leftover from when a toggle existed — nothing in the current source reads or
+writes it — so never treat it as a control.
 
-OBSERVED 2026-09-20: this round-trips cleanly and does not touch
-`localStorage`. **One discrepancy to flag, not paper over:** the 2026-09-20
-live run also reported `localStorage["datapipe-color-mode"] = "dark"` on the
-page, and read that as next-themes' persisted preference. Nothing in
-`pages/_app.js`, or anywhere else in the source at `origin/test`, sets a
-`storageKey` of `"datapipe-color-mode"` — the code passes no `storageKey` at
-all, so next-themes' own default (`"theme"`) would apply if anything ever
-called `setTheme`, which nothing here does. That `localStorage` entry, if
-present, is unexplained by the current code — it may be left over from an
-earlier build that had a real toggle. **Do not hardcode either key name.**
-Read whatever key is actually present with one named `localStorage.getItem`
-call before relying on it (the query-string-data block above bans enumerating
-all keys at once), and prefer the DOM-write/restore procedure above, which
-works regardless of what is or is not in storage.
+Overwriting `document.documentElement.className` with `"light"` does repaint
+the page (the 2026-09-20 run did this and restored it), but what it shows is
+the retired mode: unsupported, unmaintained, and not evidence of anything. The
+only reason to know the mechanism is to recognise the state if a run ever finds
+the page light — that would be a bug in the forcing, and worth reporting.
 
-Observed token values (`--chakra-colors-status-error`): `#A82E16` light /
-`#F17761` dark. Both the red left edge on the rejections panel and the clock
-icon and muted sub-line on the queue panel stay clearly legible in light
-mode.
+Observed dark-mode token value (`--chakra-colors-status-error`): `#F17761` —
+the red left edge on the rejections panel and its `lucide-circle-x` icon.
 
 ## Other traps
 
