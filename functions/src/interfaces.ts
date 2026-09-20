@@ -51,6 +51,15 @@ export interface ExperimentData {
     // .toMillis() on, and a client able to clear notifiedAt could make
     // DataPipe mail them once per failed file instead of once per episode.
     uploadFailure?: UploadFailureState;
+    // Set once, by psychds-ignore-claim.ts's claimPsychdsIgnore, the first
+    // time THIS experiment's .psychds-ignore is written. Its presence is what
+    // lets api-data.ts drop .psychds-ignore from derivedFiles on every
+    // submission after the first with zero extra reads -- see that module's
+    // header for why a per-experiment Firestore claim replaces relying on a
+    // provider's NAME_CONFLICT (Drive has none). Deleted (not merely cleared)
+    // by releasePsychdsIgnoreClaim when a write that claimed it never actually
+    // landed the file and never queued a retry either.
+    psychdsIgnoreWrittenAt?: FirebaseFirestore.Timestamp;
   }
 
   // experiments/{id}.uploadFailure. One episode at a time: an episode opens at

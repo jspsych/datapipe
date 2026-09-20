@@ -148,11 +148,22 @@ function createMockZenodo() {
   const deleteCounts = new Map();
   let corruptChecksums = false;
   let failDeletes = false;
+  // Keys whose NEXT PUT is refused outright with a 500 -- distinct from
+  // corruptChecksums (which lets the write land, then fails verification) and
+  // from the max-file-count 400 above. Added for the restore-failure branch
+  // of restoreIgnoreFile: nothing else in this mock can force a write to
+  // .psychds-ignore specifically to fail while leaving the rest of the record
+  // untouched.
+  const failNextWrite = new Set();
 
   app.get("/api/deposit/depositions", (req, res) => res.status(200).json([]));
 
   app.put("/api/files/:bucketId/:key", (req, res) => {
     const key = decodeURIComponent(req.params.key);
+    if (failNextWrite.delete(key)) {
+      res.status(500).json({ status: 500, message: "Internal server error" });
+      return;
+    }
     if (req.headers["content-type"] !== "application/octet-stream") {
       res.status(415).json({ status: 415, message: "Invalid 'Content-Type' header." });
       return;
@@ -232,11 +243,15 @@ function createMockZenodo() {
           setFailDeletes: (value) => {
             failDeletes = value;
           },
+          forceWriteFailure: (key) => {
+            failNextWrite.add(key);
+          },
           reset: () => {
             files.clear();
             deleteCounts.clear();
             corruptChecksums = false;
             failDeletes = false;
+            failNextWrite.clear();
           },
         })
       );
@@ -928,6 +943,38 @@ describe("C8. saturation recovers without a human", () => {
     expect(mock.has("data_raw_subject-1.json")).toBe(false);
     const entries = readZipEntries(mock.get(archiveNameForIndex(1)));
     expect(entries.has("data/raw/subject-1.json")).toBe(true);
+  });
+
+  // psychds-ignore-claim.ts: once .psychds-ignore is claimed for an
+  // experiment, nothing else will ever attempt to write it again -- UNLESS
+  // the claim is released. restoreIgnoreFile puts the borrowed slot's copy
+  // back after a successful pass; if THAT put itself fails, the record is
+  // left without the file and, before this fix, nothing would ever retry it
+  // (the claim -- once this feature exists -- would just sit there won
+  // forever). restoreIgnoreFile's failure branch has to release the claim so
+  // the next submission's own claim attempt gets a fair shot at rewriting it.
+  it("releases the psychds-ignore claim when the post-compaction restore fails", async () => {
+    const { experimentID } = await seedFullRecord();
+    // seedExperiment (this file) seeds .psychds-ignore straight onto the mock
+    // provider, the way an experiment that predates this feature would have
+    // it without a claim recorded -- so simulate a real claim here, the way
+    // api-data.ts's first successful write would have left one.
+    await db.collection("experiments").doc(experimentID).update({
+      psychdsIgnoreWrittenAt: Timestamp.now(),
+    });
+    mock.forceWriteFailure(PSYCHDS_IGNORE_FILE);
+
+    const result = await compactExperiment(experimentID);
+
+    // The pass itself still succeeds -- restoreIgnoreFile's failure is
+    // logged, not fatal (same contract as before this feature existed).
+    expect(result.status).toBe("compacted");
+    expect(result.recoveredFromSaturation).toBe(true);
+    // The restore never landed...
+    expect(mock.has(PSYCHDS_IGNORE_FILE)).toBe(false);
+    // ...so the claim must not still say it did.
+    const expData = (await db.collection("experiments").doc(experimentID).get()).data();
+    expect(expData.psychdsIgnoreWrittenAt).toBeUndefined();
   });
 });
 

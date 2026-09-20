@@ -23,11 +23,14 @@
 //
 // Modelled on scheduled-pending-recovery.ts throughout, including its
 // promote-into-the-existing-queue approach and its batching. It does NOT do
-// the provider write itself: it hands the assembled session to queueUpload and
-// lets scheduled-upload-retry.ts deliver it, which means a recovered session
-// appears in the researcher's dashboard QueuePanel, inherits the existing
-// backoff, and can be downloaded by hand if delivery never succeeds. No
-// duplicate retry infrastructure.
+// the provider write itself: it hands the assembled session to queueUpload
+// (with attemptImmediately: true -- see that module's firstRetryDelayMs
+// comment) and lets scheduled-upload-retry.ts deliver it, which means a
+// recovered session appears in the researcher's dashboard QueuePanel, is
+// picked up by that SAME sweep invocation's upload-retry pass (the ordering
+// scheduled-sweep-core.ts documents), inherits the ordinary backoff tiers for
+// any retry beyond the first, and can be downloaded by hand if delivery never
+// succeeds. No duplicate retry infrastructure.
 //
 // WHY SWEEP HEALTH IS A WRITTEN METRIC AND NOT JUST A CRON ENTRY
 //
@@ -496,6 +499,14 @@ export async function recoverSession(
     // Read by upload-failure-notify.ts, which refuses to open a notification
     // episode on a partial. A tab closing is not "your data stopped arriving".
     partial: true,
+    // Nothing has been attempted on this entry -- there is no failure to back
+    // off from -- so its first attempt should not sit on the ordinary 1-hour
+    // default (queue-upload.ts's firstRetryDelayMs). This is also what makes
+    // the ordering in scheduled-sweep-core.ts (staging sweep before upload
+    // retry, same invocation) pay off: with nextRetryAt = now, the SAME tick's
+    // upload-retry pass picks this entry up, rather than it sitting until the
+    // next hour-scale tick for no reason anyone chose.
+    attemptImmediately: true,
     failureReason: `Recovered from an abandoned session (${notes.join(", ")})`,
   });
 

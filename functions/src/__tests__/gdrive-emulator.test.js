@@ -52,6 +52,7 @@ import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { randomUUID } from "crypto";
 import express from "express";
 import MESSAGES from "../api-messages";
+import { deriveFallbackBase } from "@jspsych/metadata";
 
 process.env.FIRESTORE_EMULATOR_HOST = "localhost:8080";
 
@@ -605,6 +606,49 @@ describe("14. metadata on gdrive", () => {
 
     expect(mockDrive.getUploadCount("dataset_description.json")).toBe(1); // still just the one create
     expect(mockDrive.getUpdateCount(refId)).toBe(1); // the media PATCH from the second submission
+  });
+});
+
+// The bug this regression-guards: Drive permits duplicate names, so it never
+// answers NAME_CONFLICT, and metadata-derived-upload.ts's dedup ("an earlier
+// attempt already landed the file; nothing to do") never fires for
+// .psychds-ignore on this provider -- every submission used to land a fresh
+// copy. psychds-ignore-claim.ts's per-experiment Firestore claim, filtered at
+// the source in api-data.ts, is what stops that -- for every provider, not
+// just Drive, but Drive is the one where the old behaviour was actually
+// observable (OSF/Dataverse/Zenodo's own 409 happened to mask it).
+describe("14b. .psychds-ignore is claimed once per experiment on gdrive", () => {
+  it("two submissions write .psychds-ignore exactly once, while each submission's own main data CSV still lands", async () => {
+    const experimentID = `gdrive-int14b-${randomUUID()}`;
+    const folderId = `folder-${randomUUID()}`;
+    await createGdriveExperiment(experimentID, folderId, { metadataActive: true });
+
+    const filenameA = `case14b-a-${randomUUID()}.json`;
+    const first = await saveData({ experimentID, data: sampleData, filename: filenameA });
+    expect(first.status).toBe(201);
+
+    const filenameB = `case14b-b-${randomUUID()}.json`;
+    const second = await saveData({ experimentID, data: sampleData, filename: filenameB });
+    expect(second.status).toBe(201);
+
+    // The whole point of this test: one write total across two submissions,
+    // not one per submission.
+    expect(mockDrive.getUploadCount(".psychds-ignore")).toBe(1);
+
+    // "Unaffected" means each submission's OWN main data CSV still lands --
+    // the claim only ever touches .psychds-ignore, never the other derived
+    // files. The leaf name is computed the same way
+    // metadata-derived-files.ts's buildDerivedFiles does: strip the
+    // extension to get the stem, then deriveFallbackBase (the library
+    // function buildPsychDSDataFiles uses internally for the main table).
+    const csvLeafFor = (filename) => `${deriveFallbackBase(filename.replace(/\.json$/, ""))}_data.csv`;
+    expect(mockDrive.getUploadCount(csvLeafFor(filenameA))).toBe(1);
+    expect(mockDrive.getUploadCount(csvLeafFor(filenameB))).toBe(1);
+
+    // And the claim itself: set once, by the first submission, never touched
+    // by the second.
+    const expData = (await db.collection("experiments").doc(experimentID).get()).data();
+    expect(expData.psychdsIgnoreWrittenAt).toBeTruthy();
   });
 });
 
