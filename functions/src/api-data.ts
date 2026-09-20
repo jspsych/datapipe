@@ -11,6 +11,8 @@ import MESSAGES from "./api-messages.js";
 import blockMetadata from "./metadata-block.js";
 import { DerivedFile, uploadPathFor } from "./metadata-derived-files.js";
 import { uploadDerivedFiles, queueDerivedFiles } from "./metadata-derived-upload.js";
+import { claimPsychdsIgnore } from "./psychds-ignore-claim.js";
+import { PSYCHDS_IGNORE_FILENAME } from "@jspsych/metadata";
 import resolveToken, { classifyTokenFailure } from "./resolve-token.js";
 import queueUpload from "./queue-upload.js";
 import { persistPending, cleanupPending, markPendingKept } from "./persist-pending.js";
@@ -421,6 +423,26 @@ export async function apiDataHandler(req: Request, res: Response): Promise<void>
 
     metadataMessage = metadataResponse.metadataMessage;
     derivedFiles = metadataResponse.derivedFiles ?? [];
+
+    // .psychds-ignore is byte-identical on every submission, so it only ever
+    // needs writing ONCE per experiment -- see psychds-ignore-claim.ts's
+    // header for why relying on the provider's NAME_CONFLICT
+    // (metadata-derived-upload.ts's existing dedup) is not enough: Google
+    // Drive permits duplicate names and never sends one. Filtered here, at
+    // the source, before EITHER path below that consumes derivedFiles sees
+    // it -- the direct uploadDerivedFiles call and every queueDerivedFiles
+    // call, including the compaction-hold one.
+    if (derivedFiles.some((file) => file.filename === PSYCHDS_IGNORE_FILENAME)) {
+      // The common case costs zero extra reads: this experiment document was
+      // already loaded above for this request, so its claim state is already
+      // in hand. Only the (at most one, ever) request that finds the field
+      // absent pays for the claim transaction.
+      const shouldWrite =
+        exp_data.psychdsIgnoreWrittenAt != null ? false : await claimPsychdsIgnore(experimentID);
+      if (!shouldWrite) {
+        derivedFiles = derivedFiles.filter((file) => file.filename !== PSYCHDS_IGNORE_FILENAME);
+      }
+    }
   }
 
   const derivedTarget = {

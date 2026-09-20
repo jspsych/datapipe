@@ -96,11 +96,19 @@ the same list as `knownIssues` so a driver does not flag them.
   retry or a failure — accurate, since DataPipe has never attempted a provider
   write for it. Note also that the retry worker re-checks `finalized` but not
   `active` — that gap is unchanged by this.
-- **One `.psychds-ignore` per upload on Google Drive**, rather than one per
-  experiment. `metadata-derived-upload.ts` dedupes on the provider's
-  `NAME_CONFLICT`, and Drive permits duplicate names, so the dedupe never
-  fires. Harmless but untidy, and it means file counts must be taken by
-  filename pattern rather than folder total.
+- **FIXED, no longer a known issue as of `psychds-ignore-claim.ts`**: Google
+  Drive used to get one `.psychds-ignore` copy per submission rather than one
+  per experiment, because `metadata-derived-upload.ts`'s dedupe relies on the
+  provider's `NAME_CONFLICT` and Drive permits duplicate names, so the dedupe
+  never fired. A per-experiment Firestore claim (`experiments/{id}
+  .psychdsIgnoreWrittenAt`) now stops the file from being offered to any
+  provider after the first successful write, so file counts by filename
+  pattern should show exactly one going forward. One caveat: an experiment
+  that already had the file (and no claim recorded, because there was nothing
+  to record one against before this shipped) gets ONE more redundant copy on
+  its next submission and then stops for good — expected, not a regression,
+  if you see it on an experiment this repo's tests reused from before the
+  fix.
 - **Assert on `error`, never on `message`.** `metadata-block.ts` returns
   `{...MESSAGES.METADATA_ERROR, message: errorMessage}`, replacing the message
   with the specific failure text — so the wire message is not the string in

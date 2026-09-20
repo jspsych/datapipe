@@ -33,6 +33,7 @@ import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import { db, storage } from "./app.js";
 import { getProvider } from "./providers/index.js";
 import { StorageProvider, ContainerRef, ResolvedAuth, FileRef } from "./providers/types.js";
+import { releasePsychdsIgnoreClaim } from "./psychds-ignore-claim.js";
 import { ExperimentData, UserData } from "./interfaces.js";
 import resolveToken from "./resolve-token.js";
 import { getSalt, claimDocId, sealClaimHashes, readSealedNames } from "./collision-cache.js";
@@ -82,9 +83,12 @@ const ARCHIVE_PATTERN = /^datapipe-batch-\d{4}\.zip$/;
 // submission, and burying it inside a zip would both break that ref and hide
 // the one file a visitor to the record should see first.
 //
-// .psychds-ignore is rewritten by metadata-derived-upload.ts on every
-// submission, so archiving it would just churn -- it would reappear loose
-// moments later.
+// .psychds-ignore is claimed once per experiment (psychds-ignore-claim.ts)
+// and api-data.ts writes it at most once as a result -- but archiving it
+// would still be wrong even so: this module's own restoreIgnoreFile puts a
+// borrowed slot's copy straight back (see below), and burying either copy in
+// a zip would leave the record without the loose file a Psych-DS validator
+// actually looks for at the top level.
 const NEVER_ARCHIVE = new Set(["dataset_description.json", ".psychds-ignore"]);
 
 export function archiveNameForIndex(index: number): string {
@@ -736,8 +740,11 @@ async function runCompaction(experimentID: string): Promise<Omit<CompactionResul
     // given up for free: its content is a fixed constant shared with the
     // Psych-DS tooling, so deleting it loses nothing and restoring it is a PUT
     // of a literal. It is put back once the pass completes; if the pass dies
-    // first, metadata-derived-upload.ts rewrites it on the next submission
-    // anyway, which is why this needs no resume state.
+    // first without restoring it, restoreIgnoreFile's own failure branch below
+    // releases the psychds-ignore-claim.ts claim, so the NEXT submission's
+    // claim attempt succeeds and rewrites it -- rather than what would
+    // otherwise happen post-claim: no resume state, but also no claim left
+    // to let anyone try again.
     //
     // An experiment without that file has nothing reproducible to give up, and
     // overwriting a session instead would risk its only copy, so it stops and
@@ -771,7 +778,7 @@ async function runCompaction(experimentID: string): Promise<Omit<CompactionResul
     if (!uploaded.ok) {
       await batchRef.delete();
       if (saturated) {
-        await restoreIgnoreFile(provider, auth, container);
+        await restoreIgnoreFile(experimentID, provider, auth, container);
       }
       await releaseLease(experimentID, sessionsSeen, {
         "compaction.lastFileCount": files.length,
@@ -795,7 +802,7 @@ async function runCompaction(experimentID: string): Promise<Omit<CompactionResul
     if (saturated) {
       // Deleting the batch above returned far more room than the one slot that
       // was borrowed, so this always fits now.
-      await restoreIgnoreFile(provider, auth, container);
+      await restoreIgnoreFile(experimentID, provider, auth, container);
     }
 
     const after = await provider.listFiles(auth, container);
@@ -827,11 +834,15 @@ async function runCompaction(experimentID: string): Promise<Omit<CompactionResul
  *
  * Reproducing it needs nothing from the provider: the content is a constant
  * shared with the Psych-DS tooling, which is the entire reason this is the
- * file whose slot gets borrowed. metadata-derived-upload.ts would rewrite it
- * on the next submission anyway; doing it here means the record is never left
- * missing a file a validator expects.
+ * file whose slot gets borrowed. Before psychds-ignore-claim.ts existed, a
+ * failed restore was harmless -- metadata-derived-upload.ts would just
+ * rewrite it on the next submission. Now a submission only writes it when it
+ * WINS the claim, and this experiment already has one (it is the reason a
+ * slot needed borrowing in the first place) -- so on failure below, release
+ * that claim, or nothing will ever attempt this write again.
  */
 async function restoreIgnoreFile(
+  experimentID: string,
   provider: StorageProvider,
   auth: ResolvedAuth,
   container: ContainerRef
@@ -844,8 +855,10 @@ async function restoreIgnoreFile(
     { size: Buffer.byteLength(PSYCHDS_IGNORE_CONTENT), contentType: "text/plain" }
   );
   if (!result.success) {
-    // Not fatal, and deliberately not retried here: the next submission
-    // rewrites this file regardless.
+    // Not fatal here, and deliberately not retried in this function -- the
+    // claim release above is what makes the NEXT submission's own attempt
+    // retry it instead.
+    await releasePsychdsIgnoreClaim(experimentID);
     console.warn(`compaction: could not restore ${PSYCHDS_IGNORE_FILENAME}: ${result.error}`);
   }
 }

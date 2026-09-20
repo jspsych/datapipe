@@ -4,6 +4,8 @@ import queueUpload from "./queue-upload.js";
 import writeLog from "./write-log.js";
 import MESSAGES from "./api-messages.js";
 import { DerivedFile } from "./metadata-derived-files.js";
+import { releasePsychdsIgnoreClaim } from "./psychds-ignore-claim.js";
+import { PSYCHDS_IGNORE_FILENAME } from "@jspsych/metadata";
 
 export interface DerivedUploadTarget {
   experimentID: string;
@@ -113,6 +115,16 @@ export async function queueDerivedFiles(
     } catch (e) {
       const detail = e instanceof Error ? e.message : "Unknown error";
       await writeLog(target.experimentID, "logError", {...MESSAGES.UPLOAD_ERROR, detail: `derived file ${file.filename} could not be queued: ${detail}`}, logContext);
+      // .psychds-ignore is the one file in this batch that api-data.ts had
+      // already claimed (psychds-ignore-claim.ts) before handing it here,
+      // betting that THIS call would either write the file or queue it for
+      // retry. queueUpload just threw, so neither happened: the file is gone
+      // for good this round, with nothing left to land it later. Release the
+      // claim so the next submission gets to try again, instead of the claim
+      // silently outliving the only attempt that was ever going to fulfil it.
+      if (file.filename === PSYCHDS_IGNORE_FILENAME) {
+        await releasePsychdsIgnoreClaim(target.experimentID);
+      }
     }
   }
 }
