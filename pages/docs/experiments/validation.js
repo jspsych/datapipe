@@ -132,16 +132,18 @@ export default function ValidationAndSessionLimitsPage() {
         title="Validation with no formats allowed"
       >
         <Text maxW="70ch">
-          If you uncheck both <strong>Allow JSON</strong> and{" "}
-          <strong>Allow CSV</strong> while validation is on,{" "}
-          <strong>your experiment stops collecting data entirely</strong>.
+          With validation on and neither <strong>Allow JSON</strong> nor{" "}
+          <strong>Allow CSV</strong> checked,{" "}
+          <strong>an experiment stops collecting data entirely</strong>.
           There&apos;s no format left for a submission to be valid in, so
           every one of them is rejected with <Code>INVALID_DATA</Code> and
           destroyed.
         </Text>
         <Text maxW="70ch">
-          Nothing in the dashboard prevents this combination, and nothing
-          looks broken from the outside. The experiment still reports that
+          The dashboard no longer lets you get there: it keeps the last
+          format checked and tells you why. An experiment that was already
+          set up this way before that change is still in that state, though,
+          and nothing looks broken from the outside — it still reports that
           it&apos;s accepting data. If submissions are being rejected and you
           can&apos;t see why, check these two boxes first.
         </Text>
