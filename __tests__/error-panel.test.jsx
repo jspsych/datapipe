@@ -11,7 +11,7 @@ jest.mock("../lib/firebase", () => ({
   db: {},
 }));
 
-import ErrorPanel, { METADATA_KEPT_NOTE } from "../components/dashboard/ErrorPanel";
+import ErrorPanel, { METADATA_KEPT_NOTE, formatErrorTime } from "../components/dashboard/ErrorPanel";
 
 function renderPanel(props) {
   return render(
@@ -118,6 +118,26 @@ describe("ErrorPanel — rendering", () => {
   it("still renders a 'Clear this list' button in that no-visible-rows case", () => {
     renderPanel({ errors: [], totalCount: 3 });
     expect(screen.getByRole("button", { name: /clear this list/i })).toBeInTheDocument();
+  });
+});
+
+describe("ErrorPanel — Time column", () => {
+  // "19/09/2026, 18:33:48 GMT-4" was dropping "GMT-4" onto a second line at
+  // normal widths. getComputedStyle is meaningful here -- Chakra/Emotion
+  // injects a real <style> tag that jsdom's CSSOM parses, so this reads the
+  // actual cascaded value rather than a prop that may or may not have been
+  // wired through to CSS.
+  it("keeps the header and cell text on one line", () => {
+    renderPanel({
+      errors: [{ error: "A", time: recentTimestamp }],
+      totalCount: 1,
+    });
+
+    const header = screen.getByText("Time");
+    expect(getComputedStyle(header).whiteSpace).toBe("nowrap");
+
+    const cell = screen.getByText(formatErrorTime(recentTimestamp));
+    expect(getComputedStyle(cell).whiteSpace).toBe("nowrap");
   });
 });
 

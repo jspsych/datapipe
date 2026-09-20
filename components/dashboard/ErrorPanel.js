@@ -285,7 +285,11 @@ export default function ErrorPanel({
                       {/* Sentence case per DESIGN.md §3; these were `ERROR`
                           and `TIME`. */}
                       <Table.ColumnHeader>What happened</Table.ColumnHeader>
-                      <Table.ColumnHeader>Time</Table.ColumnHeader>
+                      {/* nowrap: at normal widths "19/09/2026, 18:33:48
+                          GMT-4" was dropping "GMT-4" onto a second line. The
+                          "What happened" column has prose room to spare and
+                          absorbs the flex this gives up. */}
+                      <Table.ColumnHeader whiteSpace="nowrap">Time</Table.ColumnHeader>
                     </Table.Row>
                   </Table.Header>
                   <Table.Body>
@@ -327,7 +331,7 @@ export default function ErrorPanel({
                           )}
                         </Table.Cell>
                         <Table.Cell>
-                          <Text fontSize="xs" color="fg.muted">
+                          <Text fontSize="xs" color="fg.muted" whiteSpace="nowrap">
                             {formatErrorTime(error?.time) || "—"}
                           </Text>
                         </Table.Cell>
