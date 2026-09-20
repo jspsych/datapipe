@@ -60,14 +60,30 @@ function experimentRef(experimentID: string) {
  */
 export async function claimPsychdsIgnore(experimentID: string): Promise<boolean> {
   const ref = experimentRef(experimentID);
-  return db.runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    if (snap.data()?.psychdsIgnoreWrittenAt != null) {
-      return false;
-    }
-    tx.update(ref, { psychdsIgnoreWrittenAt: FieldValue.serverTimestamp() });
+  // NEVER THROWS, and that is the point. api-data.ts calls this in the request
+  // path, before the participant's raw data has been uploaded, and the
+  // experiment document is a hot one -- every submission increments `sessions`
+  // on it -- so under a burst this transaction can exhaust its retries and
+  // abort. Letting that escape would turn a participant's submission into a 500
+  // over a 24-byte marker file. If the claim cannot be decided, answer "write
+  // it": the worst case is one duplicate copy, which is exactly what happened
+  // on every submission before this module existed.
+  try {
+    return await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (snap.data()?.psychdsIgnoreWrittenAt != null) {
+        return false;
+      }
+      tx.update(ref, { psychdsIgnoreWrittenAt: FieldValue.serverTimestamp() });
+      return true;
+    });
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : "Unknown error";
+    console.error(
+      `psychds-ignore-claim: could not claim for ${experimentID}, writing the file anyway: ${detail}`
+    );
     return true;
-  });
+  }
 }
 
 /**

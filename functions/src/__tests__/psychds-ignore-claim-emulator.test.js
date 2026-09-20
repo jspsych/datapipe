@@ -103,6 +103,14 @@ describe("claimPsychdsIgnore", () => {
     expect(results.filter(Boolean)).toHaveLength(1);
   });
 
+  it("never throws: a claim that cannot be decided answers 'write it'", async () => {
+    // tx.update on a document that does not exist rejects the transaction --
+    // the cheapest way to make it fail for real. api-data.ts calls this in the
+    // request path before the raw data is uploaded, so a throw here would 500
+    // a participant's submission over a marker file.
+    await expect(claimPsychdsIgnore(`no-such-experiment-${Date.now()}`)).resolves.toBe(true);
+  });
+
   it("release is a no-op (does not throw) when there is nothing to release", async () => {
     const experimentID = await makeExperiment();
 

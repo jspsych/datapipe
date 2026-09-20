@@ -204,15 +204,10 @@ dashboard panel itself now makes that distinction (waiting vs. retrying). See
 
 **Rendered only while the upload queue is empty.** The parent hides it whenever
 anything is queued, so any assertion about a rejection has to be made before a
-recovery scenario queues a partial. A recovered partial no longer sits on an
-hour-long first attempt (`queueUpload`'s `attemptImmediately`, set by the
-staging sweep) — it is due, and picked up, within the same sweep invocation
-that queued it — so the panel should only stay away for the ~10–15 minutes
-between the dropout and that recovery, not the "1 h 5 min" the old build's bug
-produced. The 2026-09-19 observation (queue held the recovered partial
-continuously from 22:40Z, panel never seen) was that bug, not the intended
-behavior; re-verify against a build carrying the fix before treating a
-long-held panel as expected again.
+recovery scenario queues a partial — and that partial's first storage attempt
+is an hour after it was queued, so the panel stays away for roughly **1 h 5
+min**. OBSERVED 2026-09-19: the queue held the recovered partial continuously
+from 22:40Z, so the panel was never seen on the new build at all.
 
 A quiet `SectionPanel` with a **3px `status.error` left border** — an accent,
 not a fill. Do not look for `role="alert"`.

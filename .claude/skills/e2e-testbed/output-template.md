@@ -45,7 +45,7 @@ For each `FAIL`, underneath the table:
 
 | Scenario | Look for | In | Not before |
 |---|---|---|---|
-| `abandoned-tab` | `testbed-abandoned-tab-…-<8 hex>.partial.json` | `My Drive/DataPipe/e2e-…` | <HH:MM> (10–15 min after the tab closed) |
+| `abandoned-tab` | `testbed-abandoned-tab-…-<8 hex>.partial.json` | `My Drive/DataPipe/e2e-…` | <HH:MM> (75 min after the tab closed) |
 
 ## Endpoint probes
 
@@ -73,11 +73,7 @@ the only source for `retryCount` and `lastAttemptAt`.
 | | | | | | |
 
 Entries with `retryCount: 0` and `lastAttemptAt: null` have never been
-attempted. That is the expected state for the first hour on an entry queued
-after a genuine provider failure with no error code — but NOT for a recovered
-partial (`partial: true`), which is queued with `nextRetryAt` already due and
-should show a real `lastAttemptAt` within the same sweep tick it was queued
-on, not an hour of `null`.
+attempted. That is the expected state for the first hour.
 
 ## Server-side
 
