@@ -153,18 +153,9 @@ osf-token-info.txt
 
 testServiceAccount.json
 
-# Output from the e2e testbed runbook (.claude/skills/e2e-testbed). One file per
-# run against a test deployment: a throwaway artifact, not documentation, and
-# one that names a maintainer's Drive folder contents in a public repo. Paste
-# anything worth keeping into the PR or an issue. See docs/e2e-testing.md.
-e2e-reports/
-
-# .claude/skills/ IS committed (it is project tooling, shared deliberately).
-# Everything else under .claude/ is per-machine: agent worktrees live at
-# .claude/worktrees/, and settings.local.json is one developer's permissions.
+# Per-machine Claude Code state: agent worktrees live at .claude/worktrees/, and
+# settings.local.json is one developer's permissions.
 .claude/*
-!.claude/skills/
-.claude/settings.local.json
 
 # TypeScript build artifacts
 functions/lib/
