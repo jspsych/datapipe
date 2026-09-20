@@ -110,8 +110,8 @@ export default function WhatsChangedModal() {
               <Text color="fg">
                 A large update went out in September 2026: new storage
                 providers, saving data as the experiment runs, and a few
-                changes that can affect existing code. Your experiments keep
-                working exactly as they did before.
+                changes that can affect existing code. Experiments that are
+                already running keep collecting data.
               </Text>
             </Dialog.Description>
           </Dialog.Body>

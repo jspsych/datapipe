@@ -56,11 +56,11 @@ export default function WhatsChangedPage() {
       />
 
       <Text maxW="70ch">
-        DataPipe had a large update in September 2026. If you have an
-        experiment already collecting data, it keeps working exactly as
-        before — nothing here breaks a study in progress. The rest of this
-        page covers what changed, in the order it matters: things that can
-        affect code you already wrote, then what's new.
+        DataPipe had a large update in September 2026. An experiment that is
+        already collecting data keeps collecting: your experiment IDs, your
+        storage and the way data is sent are all the same. A few things may
+        still need a change on your side, so this page starts with those and
+        then covers what's new.
       </Text>
 
       <DocsSection
@@ -131,14 +131,19 @@ export default function WhatsChangedPage() {
 
         <SubHeading>Accounts now need a confirmed contact email</SubHeading>
         <Text maxW="70ch">
-          A new account needs a contact email address before it can create an
-          experiment. DataPipe uses it for one thing: telling you if uploads
-          for one of your experiments start failing.
+          Every account now needs a contact email address. If yours
+          doesn&apos;t have one, DataPipe asks for it the next time you sign
+          in, before it shows your experiments. DataPipe uses the address for
+          one thing: telling you if uploads for one of your experiments start
+          failing. Your experiments keep collecting data in the meantime,
+          whether or not you have signed in.
         </Text>
         <Text maxW="70ch">
-          <strong>What to do:</strong> if your address isn&apos;t confirmed,
-          DataPipe still sends that notification — it just can&apos;t be sure
-          it reaches you. Confirm it from{" "}
+          <strong>What to do:</strong> enter an address when asked, then
+          confirm it from the email DataPipe sends. If your address
+          isn&apos;t confirmed, DataPipe still sends the notification — it
+          just can&apos;t be sure it reaches you. You can change or confirm it
+          any time from{" "}
           <ProseLink href="/admin/account">account settings</ProseLink>.
         </Text>
       </DocsSection>
