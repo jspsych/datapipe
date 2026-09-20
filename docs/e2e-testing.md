@@ -34,7 +34,12 @@ page load and a driver read it as trials advancing, wrongly, twice. And
 `trialsCompleted` / `trialsPlanned` make "act at trial N" a poll rather than a
 guess: the abandoned-tab scenario used to be timed off the clock, and the page
 finished before it could be abandoned. A driver should read `schema` and fall
-back if it is still 1.
+back if it is still 1. A 2026-09-20 live run confirmed all of this holds
+end-to-end, and also flagged that learning the schema in the first place
+means parsing `#testbed-result`'s JSON just to read one field — a follow-up
+testbed change adds `data-testbed-schema` to `<html>`, alongside the other
+DOM mirrors, so a driver can check it with a one-line DOM read once that
+change ships. Until then, fall back to the JSON's `schema` field as before.
 
 **The scenario manifest** — `site/scenarios.json` in that repo is the single
 source of truth for what to check: the URL parameters, the steps a driver has

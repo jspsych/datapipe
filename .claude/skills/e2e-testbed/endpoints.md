@@ -42,6 +42,10 @@ answers the first until `test` is promoted to `main`**. `metadataMessage` is
 present and empty. A run that asserted on the message would have "failed" a
 deploy that changed nothing but the wording.
 
+OBSERVED 2026-09-20: the reworded detail is now also live in the dashboard's
+rejections panel, not just on the wire — the first time this has been
+confirmed there. See dashboard.md's Rejections section.
+
 ## `POST /api/data`
 
 Body: `experimentID`, `filename`, `data`, optional `sessionId`.
@@ -90,6 +94,14 @@ the policy is never to destroy raw data over it. Note that the retry worker
 re-checks `finalized` but **not** `active`. OBSERVED 2026-09-19: three such
 entries, one per refusal (pre-dates this wording change; the entries
 themselves, not this exact failureReason string, were what was observed).
+
+**Its `nextRetryAt` is `createdAt` + 1 minute, not +60 like a recovered
+partial** — OBSERVED 2026-09-20: queued 25 min 24 s after the probe (the
+`:30` pending-recovery slot), `nextRetryAt` exactly one minute later, so it
+is visible in the dashboard queue panel for only about 5 minutes before its
+own first (and, so far, successful) storage attempt. A recovered partial's
+`nextRetryAt` is `createdAt` + 60 minutes — the two held reasons do not wait
+the same length of time, even though both render as kind `waiting`.
 
 ## `POST /api/base64`
 
