@@ -9,8 +9,9 @@ The testbed is two participant-facing pages at
 <https://jspsych.github.io/datapipe-testbed/> (source: `jspsych/datapipe-testbed`) that
 send real data to a real DataPipe experiment. Every run publishes a machine-readable
 result, so you assert on it instead of reading a log. `scenarios.json` beside those pages
-says what to run, **in what order**, and what to expect. Lines marked OBSERVED were
-confirmed by live runs against `datapipe-test`; the rest is read off source.
+says what to run, **in what order**, and what to expect — each scenario's `verified`
+field is `"live"` (confirmed against a live deployment), `"code"` (read off source), or
+`"partial"` (see its `verifiedNote` for what remains unconfirmed).
 
 Reference files here: [endpoints.md](endpoints.md) (status/error codes per endpoint,
 copy-paste probes), [dashboard.md](dashboard.md) (click paths, literal UI strings, and
@@ -48,15 +49,14 @@ write-up you must produce).
 
 Do this first, or a green report means nothing. `gh run list --workflow "Deploy to Test"
 --branch test --limit 3` — the run for the commit under test must be `completed /
-success`. Note the SHA. Optionally, and often unavailably (§8), `functions_list_functions`
+success`. Note the SHA. Optionally, and often unavailable (§8), `functions_list_functions`
 on `datapipe-test` should show the 13 exports in `functions/src/index.ts` and **no**
 standalone `apisessionstart`, `apicondition` or `apibase64`; without it you can only prove
 a couple of removed routes 404 from the browser — say so.
 
 **Do not start a run while a "Deploy to Test" is in progress, and wait ~1 min after it
-completes.** OBSERVED 2026-09-20: a click landed in the last 10 s of a deploy and
-`dashboardapi` took **17.9 s** to start, against a normal 3–5 s cold start (Cloud Run
-startup logs, all functions).
+completes.** A click that lands in the last moments of a deploy can hit a cold start near
+18 s, against a normal 3–5 s cold start (Cloud Run startup logs, all functions).
 
 ## 3. Create the experiment
 
@@ -87,8 +87,8 @@ contract absent too — see §5 — every scenario is `automation: agent`).
 **Run them in `order`. This is not a preference.** Switching data collection off makes the
 staging sweep **discard** anything still staged (`scheduled-staging-sweep.ts`, "THE SECOND
 DOOR"), so running `closed-experiment` before the recovery scenarios' partials are queued
-destroys them and reports a recovery bug that does not exist (happened 2026-09-19). Before
-any `mustRunLast` scenario, check its `runAfterCondition`: for `closed-experiment`, `GET
+destroys them and reports a recovery bug that does not exist. Before any `mustRunLast`
+scenario, check its `runAfterCondition`: for `closed-experiment`, `GET
 /api/queuestatus?experimentID=<id>` must already list an entry for each id in its
 `runAfter`. If not, wait, or use a second throwaway experiment.
 
@@ -110,21 +110,20 @@ For each scenario in the manifest:
    **Do not click the page body first** — a tab opened with `tabs_create_mcp` + `navigate`
    is not the tab Chrome is displaying (`document.visibilityState === "hidden"` even
    though `document.hasFocus()` misleadingly reads `true`), and a keypress only reaches
-   the displayed tab; `type` is ignored too. OBSERVED 2026-09-20: take a `computer`
-   **screenshot** of the tab first — that brings it to the front — then, in a separate
-   call, send a single `f`; re-read the status. **`running` means the key landed; still
-   `ready` means it did not** — screenshot and send again. `f` is also a valid trial
-   response, so an extra keypress is harmless. A page that goes `ready` → `aborted`
-   without a key (`vanilla-condition-off`) is not waiting for one; poll for a terminal
-   status.
+   the displayed tab; `type` is ignored too. Take a `computer` **screenshot** of the tab
+   first — that brings it to the front — then, in a separate call, send a single `f`;
+   re-read the status. **`running` means the key landed; still `ready` means it did
+   not** — screenshot and send again. `f` is also a valid trial response, so an extra
+   keypress is harmless. A page that goes `ready` → `aborted` without a key
+   (`vanilla-condition-off`) is not waiting for one; poll for a terminal status.
 4. Perform mid-run `driverActions`. To act **at a trial** — closing the tab
    half-way — poll `data-testbed-trials-completed` against `data-testbed-trials-planned`
-   about every 5 s; never time it off the clock (a 2026-09-19 run let a 60-trial page
-   finish before it could abandon it). Tool calls cost seconds each, so expect to
-   overshoot by 20–30 s; the manifest sizes `trials` to absorb it. **Read the result and
-   keep `filenames[0]` FIRST** — unrecoverable once the tab is gone, and how you recognise
-   the partial an hour later. Note the wall-clock close time: the recovery clock starts at
-   the socket drop; an open tab is live.
+   about every 5 s; never time it off the clock, which risks the page finishing before
+   you can abandon it. Tool calls cost seconds each, so expect to overshoot by 20–30 s;
+   the manifest sizes `trials` to absorb it. **Read the result and keep `filenames[0]`
+   FIRST** — unrecoverable once the tab is gone, and how you recognise the partial once
+   it is queued. Note the wall-clock close time: the recovery clock starts at the socket
+   drop; an open tab is live.
 5. Poll `data-testbed-status` every 2 s until `finished`, `failed` or
    `aborted`, or `timing.pageRun` exceeded by 60 s. Then read the JSON text of
    `#testbed-result`. **Read the DOM, not `window.__testbed`** — same object, but an
@@ -140,13 +139,13 @@ For each scenario in the manifest:
 7. Check `expectDashboard` (live Firestore listeners — no refresh needed,
    but changes can lag a few seconds). Assert on the literal strings in
    [dashboard.md](dashboard.md), never a paraphrase, and **match the live-session row by
-   this run's `run` id — never assert on the session count or the header's "N sessions in
-   progress" chip**, which shows even at zero for a collecting, streaming experiment
+   the scenario's `run` id — never assert on the session count or the header's "N sessions
+   in progress" chip**, which shows even at zero for a collecting, streaming experiment
    (merely loading the jsPsych page opens a session too). The rejections panel is hidden
-   whenever anything is queued; [dashboard.md](dashboard.md) has both panels' concrete,
-   now-observed expectations.
+   whenever anything is queued; [dashboard.md](dashboard.md) has both panels' concrete
+   expectations.
 8. Check `expectStorage` in the Drive folder tab, per the scenario's
-   `countBy`: **count files by this run's filename stem, never the folder total.** A
+   `countBy`: **count files by the scenario's filename stem, never the folder total.** A
    `.psychds-ignore` accumulates once per upload on Drive (known issue). With metadata on,
    raw files sit under `data/raw/` with a derived `subject-…_data.csv` beside each. Then
    close the scenario's tab.
@@ -165,9 +164,8 @@ you got, in the report header:
   testbed predates the contract. Judge each run from
   `document.getElementById('log').textContent` and say so per scenario.
 
-`get_page_text` is intermittently refused — on `jspsych.github.io`, and OBSERVED
-2026-09-20 on the dashboard right after a hard reload. `document.body.innerText` always
-worked, on both.
+`get_page_text` is intermittently refused — on `jspsych.github.io`, and on the dashboard
+right after a hard reload. `document.body.innerText` works reliably on both.
 
 ## 6. Direct endpoint probes
 
@@ -181,8 +179,8 @@ rejections-panel entry on the real experiment: expected — note it, and that a
 
 `GET /api/queuestatus?experimentID=<id>` gives the raw `retryCount` / `lastAttemptAt` /
 `failureReason`, and is how you check `closed-experiment`'s `runAfterCondition`. **Re-read
-the ID token from IndexedDB on every poll** — a cached one expires after about an hour
-(OBSERVED 22:55Z, 2026-09-19). Call and token location: [endpoints.md](endpoints.md).
+the ID token from IndexedDB on every poll** — a cached one expires after about an hour.
+Call and token location: [endpoints.md](endpoints.md).
 
 ## 8. Server-side verification — optional
 
@@ -192,10 +190,9 @@ for `apidata`, `participantapi`, `dashboardapi`, `scheduledsweep`, `compactionta
 `saveData`/`saveDataSucceeded`/`saveDataQueued` counters against what you submitted;
 `uploadQueue` filtered to the experiment.
 
-**Not a gate, and frequently unavailable** — both the MCP tools and the local `firebase`
-CLI returned 401 on 2026-09-19; do not log in. Record the section as **not observed**
-rather than blank: blank reads as "clean", and §2's function inventory goes unverified
-with it.
+**Not a gate, and often unavailable** — both the MCP tools and the local `firebase` CLI
+can return 401; do not log in. Record the section as **not observed** rather than blank:
+blank reads as "clean", and §2's function inventory goes unverified with it.
 
 ## 9. Deferred checks
 
@@ -203,17 +200,16 @@ Scenarios with `deferredCheck: true` cannot finish inside a run. The staging swe
 **queues** a recovered session, and a queue entry with no provider error code waits an
 hour for its first attempt — so a `.partial.json` lands in storage roughly **65–75
 minutes** after the dropout, not 15. Until then the queue panel lists it **"Waiting to be
-stored"**, `retryCount: 0`, `lastAttemptAt: null` — not a failed upload. OBSERVED
-2026-09-20: queued exactly **10 min 25 s** after the tab closed, `nextRetryAt` =
-`createdAt` + 60 min exactly. **Trials still staged but not yet flushed when the tab dies
-are lost** — a page counter reading 64 at close recovered as a 60-trial partial — so when
-polling `trialsCompleted` to act "at trial N", expect the partial to hold a few fewer
-trials than N.
+stored"**, `retryCount: 0`, `lastAttemptAt: null` — not a failed upload. A recovered
+session is typically queued about ten to fifteen minutes after the tab closes (the
+abandonment grace period plus the next 5-minute sweep), with `nextRetryAt` set to
+`createdAt` + 60 minutes exactly. **Trials still staged but not yet flushed when the tab
+dies are lost**, so when polling `trialsCompleted` to act "at trial N", expect the
+recovered partial to hold a few fewer trials than N.
 
 A `METADATA_ERROR` probe is the tightest window: its kept copy is queued at the next
 `:00`/`:15`/`:30`/`:45` slot once older than 15 minutes, with `nextRetryAt` = `createdAt`
-+ **1 minute** — not +60 like a recovered partial — so visible in the queue only **about 5
-minutes**. OBSERVED 2026-09-20: queued 25 min 24 s after the probe (the `:30` slot).
++ **1 minute** (not +60 like a recovered partial), so visible only **about 5 minutes**.
 
 Record, per deferred scenario: the filename stem, the folder, the wall-clock time to
 check. Mark it `DEFERRED`, never `PASS`. **Before reporting a finding, read "Known issues
@@ -233,6 +229,11 @@ strings matched. "Looked fine" is not evidence. Say explicitly what was **not ob
 including anything §8 could not reach, and end with everything that surprised you — the
 manifest is meant to be corrected.
 
+**What a run learns goes in its report, never back into these files.** These five files
+hold only timeless procedure or facts — never a date, a clock time, run narration, or a
+specific account, browser or experiment identifier. That is what keeps the history from
+growing back here.
+
 ## 11. Cleanup
 
 - Switch **"Accept new data"** off, and any switch a scenario turned on.
@@ -241,9 +242,9 @@ manifest is meant to be corrected.
   /api/queuestatus` — because the sweep discards staged sessions of an experiment that is
   not collecting (§4). Note every setup change, such as the Psych-DS metadata toggle, so
   the next reader knows the experiment is not in its default state.
-- **Do not delete the experiment or any stored file**, not even after the
-  deferred checks clear: the folder must stay intact for another hour, and the maintainer
-  decides when an e2e experiment goes.
+- **Do not delete the experiment or any stored file**, not even after the deferred checks
+  clear — the folder must stay intact for another hour, and deleting an e2e experiment is
+  always a deliberate, separate decision, never part of a run.
 - Close the tabs you opened; leave the user's own alone. If the tooling
   refuses to close one — it dissolves its tab group once the others are gone — say which
   tab is still open rather than leaving it unmentioned.

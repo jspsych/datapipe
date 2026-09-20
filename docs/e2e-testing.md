@@ -26,20 +26,17 @@ and the client's own requests). The same object is mirrored onto `<html>` as
 extension evaluates JavaScript in an isolated world and may not see a page
 global at all. The testbed README describes the shape.
 
-Schema 2 (2026-09-19) added the two things the first agent-driven run needed
-and did not have. A run is **`ready`** — loaded, valid, waiting for the
-participant's first keypress — before it is `running`, so a driver can tell
-"the page is up" from "the start key landed"; schema 1 published `running` from
-page load and a driver read it as trials advancing, wrongly, twice. And
-`trialsCompleted` / `trialsPlanned` make "act at trial N" a poll rather than a
-guess: the abandoned-tab scenario used to be timed off the clock, and the page
-finished before it could be abandoned. A driver should read `schema` and fall
-back if it is still 1. A 2026-09-20 live run confirmed all of this holds
-end-to-end, and also flagged that learning the schema in the first place
-means parsing `#testbed-result`'s JSON just to read one field — a follow-up
-testbed change adds `data-testbed-schema` to `<html>`, alongside the other
-DOM mirrors, so a driver can check it with a one-line DOM read once that
-change ships. Until then, fall back to the JSON's `schema` field as before.
+Schema 2 gives a driver two things schema 1 lacks. A run is **`ready`** —
+loaded, valid, waiting for the participant's first keypress — before it is
+`running`, so a driver can tell "the page is up" from "the start key landed";
+schema 1 publishes `running` from page load, which a driver can easily misread
+as trials already advancing. And `trialsCompleted` / `trialsPlanned` make "act
+at trial N" a poll rather than a guess — timing an abandon-the-tab step off
+the wall clock risks the page finishing before it can be abandoned.
+`data-testbed-schema` on `<html>` lets a driver check the schema with a
+one-line DOM read instead of parsing `#testbed-result`'s JSON just to find one
+field; fall back to the JSON's `schema` field if the attribute is absent, and
+to schema-1 behaviour if that is still `1`.
 
 **The scenario manifest** — `site/scenarios.json` in that repo is the single
 source of truth for what to check: the URL parameters, the steps a driver has
@@ -54,7 +51,10 @@ the Drive folder, probe the endpoints directly, and write a report to
 `e2e-reports/` (gitignored — a run's output is a per-run artifact about a test
 deployment, not documentation, and this repo is public). The reference files
 beside it hold the endpoint expectation table, taken from the handlers, and the
-dashboard click paths with the literal UI strings.
+dashboard click paths with the literal UI strings. What a run learns goes in
+its report, never back into the runbook itself: the runbook is updated only
+with timeless procedure or facts, never with dates, timestamps, run narration,
+or account or experiment identifiers.
 
 ## Running it by hand
 
@@ -74,10 +74,10 @@ or retrying upload. That is expected.
 
 And one ordering rule: **switch data collection off last.** While an experiment
 is not `active`, the staging sweep *discards* every session still staged for it
-(`scheduled-staging-sweep.ts`, "THE SECOND DOOR") rather than recovering it. A
-run on 2026-09-19 closed the experiment for the closed-experiment check while
-an earlier session was still waiting out its grace period, and spent the rest
-of the session investigating a recovery bug that does not exist.
+(`scheduled-staging-sweep.ts`, "THE SECOND DOOR") rather than recovering it —
+closing the experiment before an earlier session's grace period has elapsed
+destroys that session's data and can look like a recovery bug that does not
+exist.
 
 ## Known issues a run will trip over
 
@@ -104,12 +104,12 @@ the same list as `knownIssues` so a driver does not flag them.
 - **Assert on `error`, never on `message`.** `metadata-block.ts` returns
   `{...MESSAGES.METADATA_ERROR, message: errorMessage}`, replacing the message
   with the specific failure text — so the wire message is not the string in
-  `api-messages.ts`. By design, and the reword in #261 proves the point: the
-  same probe answered `"Invalid metadata generated"` in the morning and `"No
-  columns were found in the submitted data, so Psych-DS metadata could not be
-  generated. …"` in the evening, both 400 `METADATA_ERROR`. **Production still
-  answers the old string** until `test` is promoted to `main`, so a run pointed
-  at production sees the old copy — throughout the dashboard, not only here.
+  `api-messages.ts`, and it can change wording between deployments while the
+  `error` code and status stay the same. **A deployment that predates the
+  current metadata-error wording shows the older string** — production can
+  run an older build than the `test` deployment until `test` is promoted to
+  `main`, so a run pointed at production sees the old copy throughout the
+  dashboard, not only here.
 - **Loading a page starts a session**, so a page opened and abandoned before
   the first keypress still leaves a live-session row behind. Never assert on
   the number of sessions in progress.
@@ -188,7 +188,7 @@ that actually breaks on a deploy.
 - **The deferred checks** generally. They belong in a separate scheduled job,
   or in the human runbook.
 
-**What the maintainer would have to set up**, in the order the value arrives:
+**What would need to be set up**, in the order the value arrives:
 
 1. A long-lived e2e experiment on `datapipe-test` with data collection,
    conditions and base64 uploads all on, validation left at its default, and
@@ -208,5 +208,5 @@ a real Drive folder, and a per-deploy job writes several. Either sweep the e2e
 folder on a schedule or accept the accumulation deliberately.
 
 **Do not add Playwright or a workflow on the strength of this document.** It is
-a recommendation, and steps 1 and 2 should be a separate change with the
-maintainer's sign-off.
+a recommendation, and steps 1 and 2 should be a separate change, made
+deliberately rather than inferred from this document.

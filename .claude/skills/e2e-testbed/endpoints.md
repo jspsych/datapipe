@@ -26,25 +26,25 @@ with the specific failure text, so the wire message for `METADATA_ERROR` is not
 the string in `api-messages.ts`. That is by design; treat the whole `message`
 field as free text on every endpoint.
 
-The rewording in datapipe #261 is the proof. The same probe, six hours apart:
+The same probe can return different `message` text on different deployments
+while keeping the same `error` code and status:
 
 ```
-17:00Z  {"error":"METADATA_ERROR","message":"Invalid metadata generated"}
-22:33Z  {"success":false,"error":"METADATA_ERROR","message":"No columns were
-         found in the submitted data, so Psych-DS metadata could not be
-         generated. The data must be a JSON array of trials or a CSV with a
-         header row.","metadataMessage":""}
+{"error":"METADATA_ERROR","message":"Invalid metadata generated"}
+{"success":false,"error":"METADATA_ERROR","message":"No columns were
+ found in the submitted data, so Psych-DS metadata could not be
+ generated. The data must be a JSON array of trials or a CSV with a
+ header row.","metadataMessage":""}
 ```
 
-Both OBSERVED, both 400, both `METADATA_ERROR`. The second is what `test`
-answers now (`functions/src/metadata-production.ts`); **production still
-answers the first until `test` is promoted to `main`**. `metadataMessage` is
-present and empty. A run that asserted on the message would have "failed" a
-deploy that changed nothing but the wording.
-
-OBSERVED 2026-09-20: the reworded detail is now also live in the dashboard's
-rejections panel, not just on the wire — the first time this has been
-confirmed there. See dashboard.md's Rejections section.
+Both are 400 `METADATA_ERROR`; `metadataMessage` is present and empty. **A
+deployment that predates the current metadata-error wording shows the first
+form — production can run an older build than the `test` deployment**, so a
+driver pointed at production sees the older text throughout the dashboard, not
+only here. A run that asserted on the message text would wrongly fail a deploy
+that changed nothing but the wording. The reworded detail also appears
+verbatim in the dashboard's rejections panel — see dashboard.md's Rejections
+section.
 
 ## `POST /api/data`
 
@@ -91,17 +91,15 @@ stored"**, not "Retrying" — because DataPipe has never attempted a provider
 write for it; see dashboard.md's Queue section. `METADATA_ERROR` means
 metadata generation failed, not that the participant's data was refused, and
 the policy is never to destroy raw data over it. Note that the retry worker
-re-checks `finalized` but **not** `active`. OBSERVED 2026-09-19: three such
-entries, one per refusal (pre-dates this wording change; the entries
-themselves, not this exact failureReason string, were what was observed).
+re-checks `finalized` but **not** `active`.
 
 **Its `nextRetryAt` is `createdAt` + 1 minute, not +60 like a recovered
-partial** — OBSERVED 2026-09-20: queued 25 min 24 s after the probe (the
-`:30` pending-recovery slot), `nextRetryAt` exactly one minute later, so it
-is visible in the dashboard queue panel for only about 5 minutes before its
-own first (and, so far, successful) storage attempt. A recovered partial's
-`nextRetryAt` is `createdAt` + 60 minutes — the two held reasons do not wait
-the same length of time, even though both render as kind `waiting`.
+partial** — it is queued at the next `:00`/`:15`/`:30`/`:45` pending-recovery
+slot after the probe, then attempted a minute after that, so it is visible in
+the dashboard queue panel for only about 5 minutes before its own first
+storage attempt. A recovered partial's `nextRetryAt` is `createdAt` + 60
+minutes — the two held reasons do not wait the same length of time, even
+though both render as kind `waiting`.
 
 ## `POST /api/base64`
 
@@ -232,20 +230,20 @@ await fetch(`${BASE}/api/queuestatus?experimentID=${EXP}`, {
 
 **Re-read that token on every poll.** Firebase ID tokens expire after about an
 hour, and a cached one starts answering `401 {"error":"Invalid authentication
-token"}` mid-session — OBSERVED at 22:55Z on 2026-09-19, on a poller that had
-captured the token once at the start. Reading it from IndexedDB each cycle
-fixed it. A long deferred check will always outlive the first token.
+token"}` once it does — this bit a poller that had captured the token once at
+the start. Reading it from IndexedDB each cycle fixes it. A long deferred
+check will always outlive the first token.
 
-**Trailing slashes.** On a LIVE endpoint the slash makes no difference: Firebase
-Hosting matches the rewrite either way (checked on datapipe-test, 2026-09-19 —
-same response, same latency, no redirect), which is why `datapipe-client` can
-build every URL as `/api/<path>/` (`endpoint()` in `packages/client/src/http.ts`)
-at no cost, and why the testbed records a library-issued request's URL with the
-slash and its own without. It bites only on a path with NO rewrite — a removed
-endpoint, a typo: that falls through to the Next.js app, is 308-redirected to
-the slashless form, and `fetch` surfaces the CORS-less 404 behind it as "Failed
-to fetch" rather than a status. When checking that a route is *gone*, use the
-no-slash URL or `curl`. OBSERVED 2026-09-19.
+**Trailing slashes.** On a LIVE endpoint the slash makes no difference:
+Firebase Hosting matches the rewrite either way (same response, same latency,
+no redirect), which is why `datapipe-client` can build every URL as
+`/api/<path>/` (`endpoint()` in `packages/client/src/http.ts`) at no cost, and
+why the testbed records a library-issued request's URL with the slash and its
+own without. It bites only on a path with NO rewrite — a removed endpoint, a
+typo: that falls through to the Next.js app, is 308-redirected to the
+slashless form, and `fetch` surfaces the CORS-less 404 behind it as "Failed to
+fetch" rather than a status. When checking that a route is *gone*, use the
+no-slash URL or `curl`.
 
 Every probe that names a real experiment writes to `logs/<experimentID>`, so
 the dashboard's rejections panel will show the deliberate failures — whenever

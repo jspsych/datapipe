@@ -1,7 +1,11 @@
 # The write-up a run must produce
 
-Fill this template in and write it to `e2e-reports/<YYYY-MM-DD>-<shortsha>.md`.
-Keep the headings; they are what makes two runs comparable.
+Fill this template in and write it to `e2e-reports/<YYYY-MM-DD>-<shortsha>.md` —
+that directory is gitignored. **Never commit a report, and never paste its
+dates, timestamps, run narration, or account/experiment identifiers back into
+SKILL.md, dashboard.md, endpoints.md, this template, or docs/e2e-testing.md.**
+A run's findings belong in its own report; the skill files hold only timeless
+procedure or facts. Keep the headings; they are what makes two runs comparable.
 
 ---
 
@@ -80,8 +84,8 @@ attempted. That is the expected state for the first hour.
 **State one of these explicitly. Do not leave this section blank — a blank
 section reads as "clean".**
 
-- [ ] **Observed** — results below.
-- [ ] **NOT OBSERVED** — Firebase MCP / CLI unauthenticated (401) or otherwise
+- [ ] **Checked** — results below.
+- [ ] **Not checked** — Firebase MCP / CLI unauthenticated (401) or otherwise
       unavailable. The function inventory, `scheduledsweep`'s tick cadence,
       per-function log severities and `compactiontask` non-execution are
       therefore unverified and must not be inferred from anything above.
@@ -101,13 +105,13 @@ meant to be corrected.
 **Check the manifest's `knownIssues` before writing anything here.** The
 `METADATA_ERROR` payloads that reappear in the queue, the per-upload
 `.psychds-ignore` files, and live-session rows from pages that never ran a
-trial are all known and expected. Reporting them as findings costs the
-maintainer a day.
+trial are all known and expected. Reporting them as findings wastes a day of
+triage for whoever reads the report.
 
 ## Cleanup
 
 - [ ] "Accept new data" switched off
 - [ ] Any switch a scenario turned on switched back
 - [ ] Setup deviations recorded in the header table above
-- [ ] Tabs opened by this run closed — name any the tooling refused to close
+- [ ] Tabs you opened are closed — name any the tooling refused to close
 - [ ] Nothing deleted (and the experiment left in place)

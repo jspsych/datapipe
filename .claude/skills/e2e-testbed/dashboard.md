@@ -4,10 +4,6 @@ Click paths and the literal strings to match on. All quoted text is copied from
 the components, so `find` and `get_page_text` can match it exactly — including
 the em dashes in the live-session states. Sources are named per section.
 
-Lines marked **OBSERVED 2026-09-19** or **OBSERVED 2026-09-20** were
-confirmed by a live run against `datapipe-test`; a bare date in prose (e.g.
-"2026-09-20") marks the same. Everything else is read off the components.
-
 ## Routes
 
 | Page | Route |
@@ -63,8 +59,7 @@ full-page OAuth navigation). Dataverse instead opens an inline form with
 **Read the experiment ID from `location.pathname`** after that redirect. It is
 also beside the label **"Experiment ID"**
 (`components/dashboard/ExperimentInfo.js`), and there is no copy button
-anywhere in the app. OBSERVED 2026-09-19: the create call took 1.3 s; budget
-~10 s.
+anywhere in the app. The create call typically takes about 1.3 s; budget ~10 s.
 
 ## Switches — `components/dashboard/ExperimentActive.js`
 
@@ -73,9 +68,8 @@ toggle, and show a transient "Saved" badge (`role="status"`) on success. No
 confirmation.
 
 **Click the visible switch track, not the hidden `<input type=checkbox>`.**
-OBSERVED 2026-09-19: clicking the input by element reference did nothing, even
-though it carries the accessible name. Wait for the "Saved" badge before moving
-on.
+Clicking the input by element reference does nothing, even though it carries
+the accessible name. Wait for the "Saved" badge before moving on.
 
 | Switch | Used by |
 |---|---|
@@ -109,7 +103,7 @@ intact.
 
 **"Generate Psych-DS metadata" locks permanently once data exists** — "Locked
 because this experiment has collected data". Set it before the first
-submission or not at all. OBSERVED 2026-09-19.
+submission or not at all.
 
 ## Live sessions — `components/dashboard/LiveSessionsPanel.js`
 
@@ -121,24 +115,21 @@ absence is the assertion for "the session closed", not a bug. Heading:
 shows the **"N sessions in progress"** chip whenever `inProgressCount > 0` OR
 (`logs.startSession > 0 && data.active && !data.finalized`) — so a collecting,
 streaming experiment shows **"0 sessions in progress"** with no session open
-at all, once any session has ever started. OBSERVED 2026-09-20. Never treat
-this chip as the assertion for "no live sessions"; use the panel's presence
-(or the row matching this run's `run` id) instead.
+at all, once any session has ever started. Never treat this chip as the
+assertion for "no live sessions"; use the panel's presence (or the row
+matching the scenario's `run` id) instead.
 
-Exact status strings:
+Exact status strings, in the sequence a dropped connection moves through them:
 
 - **`In progress`** — connected.
 - **`Connection lost — may resume`** — disconnected, inside the 10-minute grace.
 - **`Stopped — being recovered`** — disconnected past the grace; the sweep will
-  take it.
-
-All three OBSERVED 2026-09-19, in that sequence, with the row disappearing once
-the partial was queued.
+  take it. The row disappears once the partial is queued.
 
 **Never assert on the NUMBER of sessions in progress.** Loading the jsPsych page
 opens a session before any trial runs, so a page opened and navigated away from
-leaves a row behind until the sweep clears it. OBSERVED 2026-09-19: two such
-rows. Match the row belonging to this run instead.
+leaves a row behind until the sweep clears it. Match the row belonging to the
+scenario's `run` id instead.
 
 "Running for" renders as `under a minute`, `<n> min`, `<h> h <m> min` or
 `<h> h`. Above 25 rows a footer reads "<n> more sessions are in progress and
@@ -172,25 +163,23 @@ queue — only a permanent failure gets it.
 There is **no retry button** — retries are server-side. The only controls are
 **"Download all as ZIP"**, a per-row icon button with
 `aria-label="Download <filename>"` (the row's **full stored path**, not the
-basename shown in the cell — OBSERVED 2026-09-20, by design per the
-component's own comment), and an accordion trigger **"What is happening to
-these files?"** whose body is hidden until clicked.
+basename shown in the cell — by design, per the component's own comment), and
+an accordion trigger **"What is happening to these files?"** whose body is
+hidden until clicked.
 
 The headline text depends on which kinds are present — see
 `components/dashboard/QueuePanel.js`'s `summaryText` for the exact four cases
 (all failed / failed + others / retrying, maybe some waiting / all waiting).
 An all-waiting queue never says "did not upload" or anything implying a
-failure; a `METADATA_ERROR` recovery entry no longer says "server restart or
+failure; a `METADATA_ERROR` recovery entry does not say "server restart or
 memory limit" — see endpoints.md.
 
-**The polish has landed — assert on these strings.** OBSERVED 2026-09-20, a
-one- then two-entry all-`waiting` queue, dark mode, 1384 CSS px viewport:
+**Assert on these strings, for an all-`waiting` queue in dark mode:**
 
 - Plain neutral `SectionPanel`, no coloured edge, no fill: `background`
   byte-identical to the page background in dark mode, all four borders 1px
-  neutral. `svg.lucide-clock` — never `svg.lucide-minus` — in the header chip,
-  the panel headline, and each waiting row's status (3 occurrences with one
-  entry).
+  neutral. `svg.lucide-clock` — never `svg.lucide-minus` — appears in the
+  header chip, the panel headline, and each waiting row's status.
 - Headline **"One file is waiting to be stored."** / **"N files are waiting
   to be stored."**; header chip **"N upload(s) waiting to be stored"**.
 - Body: *"DataPipe is storing these automatically; nothing has failed. You
@@ -208,13 +197,13 @@ one- then two-entry all-`waiting` queue, dark mode, 1384 CSS px viewport:
 - A row's per-row download is `GET
   /api/queuestatus?experimentID=<id>&download=<id>` → 200.
 - "Kept for another" reads `<n>d <n>h` (no `retainUntil` on the entry falls
-  back to `createdAt + 7d`; OBSERVED `6d 23h`), one line.
+  back to `createdAt + 7d`), one line.
 - The rejections panel and its header chip are both absent while this panel
   shows anything.
 
-The `Retrying` and `Failed` rows were **not** produced this run either — both
-need the Drive connection broken — so their icons and the orange/red panel
-treatments remain unverified.
+The `Retrying` and `Failed` row states have not been exercised against a live
+deployment — both need the Drive connection broken — so their icons and the
+orange/red panel treatments remain unverified.
 
 When the queue drains, a notice reads **"All queued uploads completed
 successfully."** and **auto-hides after 8 seconds** — do not build an assertion
@@ -235,10 +224,10 @@ is an hour after it was queued, so the panel stays away for roughly **1 h 5
 min**.
 
 A quiet `SectionPanel` with a **3px `status.error` left border** — an accent,
-not a fill. Do not look for `role="alert"`. OBSERVED 2026-09-20: headline icon
-`svg.lucide-circle-x`, stroke `status.error`; no red fill and no red body
-text anywhere in the panel. In dark mode the panel's `background-color` is
-byte-identical to the page background, so the 1px border is the only other
+not a fill. Do not look for `role="alert"`. The headline icon is
+`svg.lucide-circle-x`, stroke `status.error`; there is no red fill and no red
+body text anywhere in the panel. In dark mode the panel's `background-color`
+is byte-identical to the page background, so the 1px border is the only other
 thing separating them.
 
 | | Literal string |
@@ -258,11 +247,8 @@ the frontend row/accordion cap. The backend's `MAX_ERROR_ENTRIES = 50`
 **`METADATA_ERROR` rows carry an extra line**, because that refusal is the one
 that does not lose the data: *"The raw data was kept. DataPipe stores it in
 your storage provider without Psych-DS metadata, usually within about half an
-hour."* datapipe #261 also reworded the METADATA_ERROR `detail` itself — see
-[endpoints.md](endpoints.md). OBSERVED 2026-09-20: **the new wording is now
-live in this panel** — the reworded detail ("No columns were found in the
-submitted data…") appeared exactly as it does on the wire, the first time
-this has been confirmed off the network log.
+hour."* The panel's row `detail` matches the API response's `message` field
+verbatim — see [endpoints.md](endpoints.md) for the wire text.
 
 **Counts are since the last clear**, not lifetime: `lib/error-panel.js`'s
 `visibleErrors` returns `logError - logErrorCleared`, and rows older than
@@ -272,15 +258,15 @@ number of probes you fired. **"Clear this list"** posts to `/api/clearerrors`
 with the account's ID token and moves the watermark; the lifetime counters are
 untouched.
 
-**OBSERVED 2026-09-20, exercised for the first time:** `POST /api/clearerrors`
-→ **200**. The panel and the header chip **disappear together, without a
-reload** — the parent's Firestore listener unmounts both once the watermark
-lands. **The round trip is slow: budget more than 10 s, up to ~16 s** (a
-cold `dashboardapi` most likely) — at ~5 s a driver would reasonably, and
-wrongly, conclude the button did nothing; nothing flashes or errors while
-waiting, the button just shows its loading state. A fresh rejection after a
-clear shows a headline count of **exactly one**, with only the new row in the
-accordion — the watermark, not the lifetime count, drives the number.
+`POST /api/clearerrors` returns **200**. The panel and the header chip
+**disappear together, without a reload** — the parent's Firestore listener
+unmounts both once the watermark lands. **The round trip is slow: budget more
+than 10 s, up to ~16 s** (a cold `dashboardapi` most likely) — at ~5 s a
+driver would reasonably, and wrongly, conclude the button did nothing; nothing
+flashes or errors while waiting, the button just shows its loading state. A
+fresh rejection after a clear shows a headline count of **exactly one**, with
+only the new row in the accordion — the watermark, not the lifetime count,
+drives the number.
 
 ## Finalize — `components/dashboard/FinalizeControl.js`
 
@@ -310,61 +296,60 @@ folder also holds derived CSVs (`subject-…_data.csv`, one per upload) plus
 Base64 uploads always go to the root — `/api/base64` applies no Psych-DS layout
 and runs no metadata block.
 
-**Count files by this run's filename stem, never by folder total.** A
+**Count files by the scenario's filename stem, never by folder total.** A
 `.psychds-ignore` accumulates **one per successful upload** rather than one per
 experiment: `metadata-derived-upload.ts` dedupes on the provider's
-`NAME_CONFLICT`, and Drive permits duplicate names, so the dedupe never fires.
-OBSERVED 2026-09-19: 5 copies after 5 uploads. A pre-existing DataPipe bug —
-report it as a known issue, not a finding.
+`NAME_CONFLICT`, and Drive permits duplicate names, so the dedupe never fires —
+N uploads leave N copies. A pre-existing DataPipe bug — report it as a known
+issue, not a finding.
 
 ## What the browser tooling cannot do
 
-- **`resize_window` reported success and changed nothing**, OBSERVED both
-  2026-09-19 and 2026-09-20. At 420 px, 440 px, 1280 px, `window.innerWidth`
-  stayed pinned at its starting value (1710 = `screen.width` on 2026-09-19,
-  1384 on 2026-09-20) while only `outerWidth` moved: the Chrome window was in
-  macOS fullscreen, so the renderer viewport does not follow the window
-  bounds. **After calling it, verify `window.innerWidth` actually changed. If
-  it did not, report that and move on — do not retry the call.** A responsive
-  check needs a human to take the Chrome window out of fullscreen first;
-  neither the ~420 px nor the ~1280 px layout has ever been checked.
+- **`resize_window` can report success and change nothing.** At target widths
+  like 420 px, 440 px or 1280 px, `window.innerWidth` can stay pinned at its
+  starting value while only `outerWidth` moves: this happens when the Chrome
+  window is in macOS fullscreen, where the renderer viewport does not follow
+  the window bounds. **After calling it, verify `window.innerWidth` actually
+  changed. If it did not, report that and move on — do not retry the call.**
+  A responsive check needs a human to take the Chrome window out of
+  fullscreen first; the narrow (~420 px) and wide (~1280 px) layouts remain
+  unchecked until then.
 - **`computer` clicks are in the screenshot frame, not CSS pixels, and the
-  scale differs per tab.** OBSERVED 2026-09-20: 1544×784 on testbed tabs,
-  1384×703 on the dashboard tab, while `getBoundingClientRect()` always
-  returns CSS pixels. A click built from an unscaled JS rect silently misses
-  (a download-button click produced no network request at all) — scale by
+  scale differs per tab.** `getBoundingClientRect()` always returns CSS
+  pixels, while the screenshot frame can be a different size (e.g. on a
+  high-DPI display). A click built from an unscaled JS rect silently misses —
+  a download-button click can produce no network request at all — so scale by
   `screenshotWidth / window.innerWidth` before clicking, and scroll the
   target into view first.
 - **`javascript_tool` has a hard ~45 s CDP ceiling** ("Runtime.evaluate timed
-  out after 45000ms"). OBSERVED 2026-09-20: keep an in-page poll loop under
-  ~40 s per call rather than writing one long loop that dies. The extension
-  also returns `[BLOCKED: Cookie/query string data]` for expressions that
-  enumerate `localStorage` keys or dump all of an element's attributes (e.g.
+  out after 45000ms"). Keep an in-page poll loop under ~40 s per call rather
+  than writing one long loop that dies. The extension also returns
+  `[BLOCKED: Cookie/query string data]` for expressions that enumerate
+  `localStorage` keys or dump all of an element's attributes (e.g.
   `[...html.attributes].map(...)`) — read one named value per call instead.
 - **A tab created with `tabs_create_mcp` + `navigate` is not the tab Chrome
   is displaying** (`document.visibilityState === "hidden"`, while
   `document.hasFocus()` misleadingly reads `true`), so a keypress sent to it
   does nothing and `type` is ignored too. Taking a `computer` screenshot of
   the tab is what brings it to the front; see SKILL.md §5 step 3.
-- **Accordions animate.** The first screenshot of an expanded explainer caught
-  it mid-flight, clipped to a ~4 px sliver. Screenshot after it settles, or
+- **Accordions animate.** Screenshotting an expanding accordion mid-animation
+  can catch it clipped to a thin sliver. Screenshot after it settles, or
   measure the element (`data-state="open"`, a real `height`) instead. Not a
   clipping bug.
 - **Background tabs are throttled.** A 20 s `setInterval` poller in a
-  backgrounded dashboard tab fired about once a minute. It still caught every
-  transition, but do not size a tight window off a background poll.
+  backgrounded dashboard tab can fire as infrequently as once a minute. It
+  still catches every transition, but do not size a tight window off a
+  background poll.
 - **`get_page_text` is unreliable in two places.** It is intermittently
-  refused on `jspsych.github.io`, and OBSERVED 2026-09-20: it returned "No
-  text content found" on the dashboard immediately after a hard reload (it
-  worked before the reload). `document.body.innerText` always worked, on
-  both.
+  refused on `jspsych.github.io`, and can return "No text content found" on
+  the dashboard immediately after a hard reload (working again once the page
+  settles). `document.body.innerText` works reliably on both.
 - **Firebase ID tokens expire after about an hour.** A poller holding a
-  captured token started getting `401 {"error":"Invalid authentication token"}`
-  at 22:55Z. Re-read the token from IndexedDB on every poll — see
-  [endpoints.md](endpoints.md).
-- **Dark is the only mode.** Earlier text here said the pages "follow the OS
-  colour scheme"; that is wrong. See "Colour mode" below — there is nothing to
-  check in light mode.
+  captured token will start getting `401
+  {"error":"Invalid authentication token"}` once it does. Re-read the token
+  from IndexedDB on every poll — see [endpoints.md](endpoints.md).
+- **Dark is the only mode.** The dashboard is dark-only; there is nothing to
+  check in light mode. See "Colour mode" below.
 
 ## Colour mode
 
@@ -376,19 +361,19 @@ just defaultTheme: visitors who picked Light/System while the toggle existed
 still have that choice in localStorage, and it must not resurrect a retired
 mode." There is no in-app toggle and the page does NOT follow the OS setting.
 
-That comment also explains a stray finding: the 2026-09-20 run saw
-`localStorage["datapipe-color-mode"]` in the maintainer's browser. It is a
-leftover from when a toggle existed — nothing in the current source reads or
-writes it — so never treat it as a control.
+That comment also explains a stray key sometimes found in browser storage:
+`localStorage["datapipe-color-mode"]` is a leftover from when a toggle
+existed — nothing in the current source reads or writes it — so never treat
+it as a control.
 
 Overwriting `document.documentElement.className` with `"light"` does repaint
-the page (the 2026-09-20 run did this and restored it), but what it shows is
-the retired mode: unsupported, unmaintained, and not evidence of anything. The
-only reason to know the mechanism is to recognise the state if a run ever finds
-the page light — that would be a bug in the forcing, and worth reporting.
+the page, but what it shows is the retired mode: unsupported, unmaintained,
+and not evidence of anything. The only reason to know the mechanism is to
+recognise the state if a run ever finds the page light — that would be a bug
+in the forcing, and worth reporting.
 
-Observed dark-mode token value (`--chakra-colors-status-error`): `#F17761` —
-the red left edge on the rejections panel and its `lucide-circle-x` icon.
+Dark-mode token value (`--chakra-colors-status-error`): `#F17761` — the red
+left edge on the rejections panel and its `lucide-circle-x` icon.
 
 ## Other traps
 
@@ -400,7 +385,7 @@ the red left edge on the rejections panel and its `lucide-circle-x` icon.
   experiment"`, then `aria-label="Save new name"` or `"Cancel renaming"`.
 - The experiment list links to `/admin/<id>` from the title text, not a button.
 
-## Timings measured on 2026-09-19 and 2026-09-20
+## Typical timings
 
 Use these to size waits, not as assertions.
 
@@ -408,17 +393,17 @@ Use these to size waits, not as assertions.
 |---|---|
 | jsPsych page, `auto=1` | 1.1–1.7 s per trial |
 | Vanilla page, `auto=1` | 400 ms per trial |
-| `POST /api/data` that writes to Drive | 2–4.5 s (OBSERVED 2026-09-20: one vanilla-page save at 4.79 s) |
-| `POST /api/createexperiment` | 1.3 s |
+| `POST /api/data` that writes to Drive | 2–4.5 s (occasionally up to ~5 s on a vanilla-page save) |
+| `POST /api/createexperiment` | about 1.3 s |
 | Warm `dashboardapi` calls | 190–370 ms |
 | Refusals that never reach a provider | 270–480 ms |
 | `dashboardapi` cold start, clean deploy | ~745 ms |
-| `dashboardapi` cold start, click landed in the last 10 s of a deploy | **17.9 s** (OBSERVED 2026-09-20 — wait ~1 min after "Deploy to Test" completes) |
-| Abandoned tab → queue entry | 10 min 25 s exactly (OBSERVED 2026-09-20; was estimated 10–12 min) |
+| `dashboardapi` cold start, click landed in the last moments of a deploy | up to about 18 s — wait ~1 min after "Deploy to Test" completes |
+| Abandoned tab → queue entry | about ten to fifteen minutes |
 | Queue entry (recovered partial) → first Drive attempt | `createdAt` + 60 min exactly |
-| `METADATA_ERROR` refusal → its kept copy queued | 25 min 24 s (OBSERVED 2026-09-20, the next `:00`/`:15`/`:30`/`:45` slot; was estimated ~27 min) |
+| `METADATA_ERROR` refusal → its kept copy queued | at the next `:00`/`:15`/`:30`/`:45` slot, roughly 15–30 min after the probe |
 | That metadata-kept entry → its own first attempt | `createdAt` + **1 min** (not +60 like a recovered partial), so visible in the queue only ~5 min |
-| `POST /api/clearerrors` round trip | **> 10.4 s, ≤ ~16 s** (OBSERVED 2026-09-20 — a slow round trip, not a broken button) |
+| `POST /api/clearerrors` round trip | > 10 s, up to ~16 s — a slow round trip, not a broken button |
 
 `participantapi`'s genuinely-first call is made inside the page by the
 extension and is not visible, so its cold start remains unmeasured.
