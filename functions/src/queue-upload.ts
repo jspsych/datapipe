@@ -35,6 +35,14 @@ interface QueueUploadParams {
   // notification episode on one -- see the comment there. Omitted from the
   // Firestore write when undefined, same convention as the fields above.
   partial?: boolean;
+  // Set only by scheduled-staging-sweep.ts, for the same recovered-partial
+  // entries as `partial` above (the two happen to coincide today, but this
+  // flag is about scheduling, not about what kind of entry this is -- a
+  // future caller with a never-attempted, non-partial entry could set it
+  // too). Says "nothing has been attempted yet, so there is no failure to
+  // back off from" -- see firstRetryDelayMs below. NOT a field on the
+  // Firestore doc itself; it only changes the nextRetryAt this call computes.
+  attemptImmediately?: boolean;
 }
 
 const MAX_RETRIES = 5;
@@ -123,17 +131,32 @@ export default async function queueUpload(params: QueueUploadParams): Promise<st
   const docRef = db.collection("uploadQueue").doc(docId);
 
   const now = Timestamp.now();
-  // 60 seconds for the fast tier (CONTENTION) and for a one-off probe
-  // (AUTH_EXPIRED); 1 hour for everything else, including no providerErrorCode
-  // at all. The two differ in what happens NEXT, not here: CONTENTION keeps a
-  // minutes-scale schedule for all five attempts, a probe code takes this one
-  // early look and then reverts to hours.
+  // Three cases for the FIRST delay. Every later retry ignores all of this and
+  // runs on computeBackoffMs's tier arithmetic (upload-backoff.ts), keyed off
+  // the providerErrorCode of whichever attempt just failed -- none of that
+  // changes here.
   //
-  // 60 seconds is a floor, not a promise. scheduled-upload-retry.ts runs on
-  // */5, so the real first attempt lands at the next 5-minute tick -- which is
-  // the number to reason about when judging whether this is worth it.
-  const firstRetryDelayMs =
-    isFastRetry(params.providerErrorCode) || isProbeRetry(params.providerErrorCode)
+  //  - attemptImmediately: no delay at all (nextRetryAt = now). Set only by
+  //    scheduled-staging-sweep.ts for a recovered partial -- an entry that has
+  //    never been attempted, so there is no failure to back off from. `now` is
+  //    a floor, not a promise: scheduled-upload-retry.ts's
+  //    `where("nextRetryAt", "<=", now)` query is what actually picks it up,
+  //    and scheduled-sweep-core.ts runs the staging sweep before upload retry
+  //    in the same invocation specifically so that happens on the SAME tick
+  //    this entry was queued on, not the next one.
+  //  - fast tier (CONTENTION) or a one-off probe (AUTH_EXPIRED,
+  //    UNAVAILABLE): 60 seconds. The two differ in what happens NEXT, not
+  //    here: CONTENTION keeps a minutes-scale schedule for all five attempts,
+  //    a probe code takes this one early look and then reverts to hours.
+  //  - everything else, including no providerErrorCode at all: 1 hour.
+  //
+  // 60 seconds (and attemptImmediately's zero) are floors, not promises.
+  // scheduled-upload-retry.ts runs on */5, so the real first attempt lands at
+  // the next 5-minute tick -- which is the number to reason about when judging
+  // whether either is worth it.
+  const firstRetryDelayMs = params.attemptImmediately
+    ? 0
+    : isFastRetry(params.providerErrorCode) || isProbeRetry(params.providerErrorCode)
       ? 60 * 1000
       : 60 * 60 * 1000;
   const nextRetryAt = Timestamp.fromMillis(now.toMillis() + firstRetryDelayMs);
@@ -147,6 +170,16 @@ export default async function queueUpload(params: QueueUploadParams): Promise<st
   // worker can never see because a newer call with fresher data returned
   // early here without ever writing it. Completed/failed docs fall through
   // and get freshly re-queued below.
+  //
+  // `attemptImmediately` does NOT reach into this branch to pull the existing
+  // doc's `nextRetryAt` forward, on purpose. This is the "let the existing
+  // schedule stand" branch: whatever is already there has its own history --
+  // it could be mid-backoff after a real provider failure, held by a
+  // compaction hold, or a previous recovery of this same session that is
+  // already on the immediate schedule -- and `attemptImmediately` only speaks
+  // to entries this call is about to WRITE, which by definition have no
+  // history yet. Overwriting a real backoff with "now" would re-hit a
+  // provider that just told us (via that backoff) to wait.
   const existingDoc = await docRef.get();
   if (existingDoc.exists) {
     const status = existingDoc.data()?.status;

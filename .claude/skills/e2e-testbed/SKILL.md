@@ -123,9 +123,9 @@ For each scenario in the manifest:
    abandon it. Tool calls cost a few seconds each, so expect to overshoot by
    20–30 s; the manifest sizes `trials` to absorb that. **Read the result and
    keep `filenames[0]` FIRST** — it is unrecoverable once the tab is gone, and
-   it is how you recognise the partial an hour later. Note the wall-clock time
-   of the close: the recovery clock starts at the socket drop, and an open tab
-   counts as live.
+   it is how you recognise the partial roughly 10–15 minutes later (see
+   §9). Note the wall-clock time of the close: the recovery clock starts at
+   the socket drop, and an open tab counts as live.
 5. Poll `data-testbed-status` every 2 s until it is `finished`, `failed` or
    `aborted`, or `timing.pageRun` has been exceeded by 60 s. Then read the JSON
    text of `#testbed-result`. **Read the DOM, not `window.__testbed`** — both
@@ -205,12 +205,20 @@ section as **not observed** rather than leaving it blank: blank reads as
 ## 9. Deferred checks
 
 Scenarios with `deferredCheck: true` cannot finish inside a run. The staging
-sweep only **queues** a recovered session, and a queue entry with no provider
-error code waits an hour for its first attempt — so a `.partial.json` lands in
-storage roughly **65–75 minutes** after the dropout, not 15. Until then the
-queue panel lists it as **"Waiting to be stored"**, `retryCount: 0`,
-`lastAttemptAt: null`; it is no longer called a failed upload. Measured
-2026-09-19: queued 10–12 min after the tab closed, `nextRetryAt` exactly +60.
+sweep waits out `ABANDON_GRACE_MS` (10 minutes of no reconnect, no further
+trial) before it **recovers and queues** a session — but the queue entry it
+writes is no longer on the hour-long default: it carries
+`attemptImmediately: true`, so `nextRetryAt` is set to the moment it's
+queued, not an hour later, and the SAME sweep invocation's upload-retry pass
+picks it up right after. So a `.partial.json` now lands in storage roughly
+**10–15 minutes** after the dropout (the abandonment grace period plus
+whatever's left of the five-minute sweep cadence), not 65–75. The queue panel
+still briefly lists it as **"Waiting to be stored"**, `retryCount: 0`,
+`lastAttemptAt: null`, between the moment it's queued and the retry pass a
+few lines of code later in the same invocation — but that window is
+sub-second in production, not the tens of minutes it used to be. If you
+catch it queued but not yet delivered, wait for the next 5-minute tick rather
+than assuming something is stuck.
 
 A `METADATA_ERROR` probe is the tightest window in the run: queued at the next
 `:00`/`:15`/`:30`/`:45` slot once its pending copy is older than 15 minutes,
@@ -243,8 +251,9 @@ corrected.
   every setup change, such as the Psych-DS metadata toggle, so the next reader
   knows the experiment is not in its default state.
 - **Do not delete the experiment or any stored file**, not even after the
-  deferred checks clear: the folder has to stay intact for another hour, and
-  the maintainer decides when an e2e experiment goes.
+  deferred checks clear: the folder has to stay intact until every deferred
+  check has had its ~10–15 minute window (see §9), and the maintainer decides
+  when an e2e experiment goes.
 - Close the tabs you opened; leave the user's own alone. If the tooling refuses
   to close one — it dissolves its tab group once the others are gone — say
   which tab is still open rather than leaving it unmentioned.

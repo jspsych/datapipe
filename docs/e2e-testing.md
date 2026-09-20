@@ -58,14 +58,19 @@ on, open the testbed home page, enter the experiment ID, and work down the
 list. Each scenario says what the dashboard and the storage folder should look
 like and when.
 
-One timing is worth knowing before it surprises you: an abandoned session is
-recovered by the five-minute sweep, but the sweep only **queues** it. A queue
-entry with no provider error code waits an hour for its first upload attempt,
-so a `.partial.json` reaches storage roughly 65–75 minutes after the dropout.
-In the meantime the dashboard's queue panel shows it as **"Waiting to be
-stored"** — DataPipe has recovered the data but has not tried to upload it
-yet, which is what actually happened; it is no longer described as a failed
-or retrying upload. That is expected.
+One timing is worth knowing before it surprises you: recovery still waits out
+`ABANDON_GRACE_MS` (10 minutes of no reconnect and no further trial) plus
+however much of the five-minute sweep cadence is left, so a `.partial.json`
+reaches the dashboard's queue roughly 10–15 minutes after the dropout. Past
+that, though, the queue entry is no longer on the hour-long default: the
+staging sweep hands it to `queueUpload` with `attemptImmediately: true`
+(`nextRetryAt = now`), so it is due by the time that SAME sweep invocation's
+upload-retry pass runs a moment later, and the file lands in storage within
+that same 10–15 minute window rather than up to an hour after. If you catch
+the dashboard's queue panel mid-invocation you may see it as **"Waiting to be
+stored"** for an instant — DataPipe has recovered the data but not yet tried
+to upload it — but in practice the window to observe that state is seconds,
+not the better part of an hour it used to be.
 
 And one ordering rule: **switch data collection off last.** While an experiment
 is not `active`, the staging sweep *discards* every session still staged for it
@@ -109,11 +114,13 @@ the same list as `knownIssues` so a driver does not flag them.
   the first keypress still leaves a live-session row behind. Never assert on
   the number of sessions in progress.
 - **The rejections panel is hidden while anything is queued.** It is not
-  missing; the parent renders one panel or the other. Since a recovered
-  partial waits an hour for its first storage attempt, checking a rejection
-  after a recovery scenario means waiting roughly 1 h 5 min for the queue to
-  drain. Check rejections *before* the recovery scenarios, or read the
-  refusal's status code from the page's own result instead.
+  missing; the parent renders one panel or the other. A recovered partial no
+  longer sits on an hour-long first attempt, but it still queues 10–15
+  minutes after the dropout (`ABANDON_GRACE_MS` plus the sweep cadence) and
+  the queue then drains within that same sweep pass. Check rejections
+  *before* the recovery scenarios anyway, or read the refusal's status code
+  from the page's own result instead — waiting out even the shorter window is
+  needless when the result is already on screen.
 - **`sessionId` is null on every jsPsych-page run.**
   `@jspsych/extension-pipe` 0.2.0 exposes no public way to read the session it
   opened — the testbed says so in `notes` rather than reaching into the
@@ -175,8 +182,9 @@ that actually breaks on a deploy.
   does not exist and should not be invented for a test.
 - **Tab close and network toggling** — `abandoned-tab` and `brief-dropout`.
   Playwright can do both (`page.close()`, `context.setOffline(true)`), but the
-  assertion that matters is the recovered partial in storage 75 minutes later,
-  which no per-deploy job should wait for. `brief-dropout` is the interesting
+  assertion that matters is the recovered partial in storage roughly 10–15
+  minutes later (`ABANDON_GRACE_MS` plus the sweep cadence), which no
+  per-deploy job should wait for. `brief-dropout` is the interesting
   one: a browser extension cannot go offline at all, so a headless job is the
   *only* way that scenario ever runs unattended. It is marked `manual` in the
   manifest for exactly that reason.

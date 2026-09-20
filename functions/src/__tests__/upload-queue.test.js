@@ -326,6 +326,103 @@ describe("queueUpload tiers the first nextRetryAt by providerErrorCode", () => {
     expect(deltaMs).toBeLessThanOrEqual(60 * 60 * 1000 + 5000);
   });
 
+  // attemptImmediately (scheduled-staging-sweep.ts's recoverSession): a
+  // recovered partial has never been attempted, so there is nothing to back
+  // off from -- nextRetryAt should land at (approximately) "now", not the
+  // 1-hour default a bare, code-less call would otherwise get. This is what
+  // scheduled-sweep-core.ts's same-tick ordering depends on: the retry
+  // worker's `nextRetryAt <= now` query must already be true by the time it
+  // runs.
+  test("attemptImmediately sets nextRetryAt to ~now, overriding the 1-hour default", async () => {
+    const experimentID = `queue-attempt-immediately-${randomUUID()}`;
+    const filename = `file-${randomUUID()}.json`;
+    const docId = `${experimentID}:${filename}`.replace(/[/\\]/g, "_");
+    queueDoc(docId);
+
+    const before = Date.now();
+    await queueUpload({
+      experimentID,
+      owner: "upload-queue-test-owner",
+      filename,
+      data: "[]",
+      dataType: "data",
+      osfFilesLink: "https://osf.io/files/",
+      errorCode: 0,
+      sessionIncremented: false,
+      partial: true,
+      attemptImmediately: true,
+    });
+    const after = Date.now();
+
+    const doc = await db.collection("uploadQueue").doc(docId).get();
+    expect(doc.exists).toBe(true);
+    // attemptImmediately is scheduling-only -- it must not leak onto the doc
+    // as a stored field (unlike partial/providerErrorCode, which ARE stored).
+    expect(doc.data().attemptImmediately).toBeUndefined();
+
+    const deltaMs = doc.data().nextRetryAt.toMillis() - before;
+    expect(deltaMs).toBeGreaterThanOrEqual(0);
+    // Comfortably under both the 60s fast/probe floor and the 1-hour default,
+    // with slack for test-runner jitter.
+    expect(deltaMs).toBeLessThan(after - before + 5000);
+  });
+
+  // The decision documented in queue-upload.ts's "refresh an existing pending
+  // doc" branch: attemptImmediately only speaks to an entry THIS CALL is
+  // about to write, never to a doc that already exists. An existing pending
+  // entry has its own retry history -- here, a real hours-scale backoff after
+  // a genuine failure -- and attemptImmediately must not blow that away.
+  test("attemptImmediately does not pull an existing PENDING doc's nextRetryAt forward", async () => {
+    const experimentID = `queue-attempt-immediately-existing-${randomUUID()}`;
+    const filename = `file-${randomUUID()}.json`;
+    const docId = `${experimentID}:${filename}`.replace(/[/\\]/g, "_");
+    const docRef = queueDoc(docId);
+
+    // A real backoff schedule, as if a genuine earlier failure put it here --
+    // nothing like a recovered partial's own history.
+    const originalNextRetryAt = Timestamp.fromMillis(Date.now() + 2 * 60 * 60 * 1000);
+    await docRef.set({
+      experimentID,
+      owner: "upload-queue-test-owner",
+      filename,
+      storagePath: `upload-queue/${docId}`,
+      dataType: "data",
+      status: "pending",
+      errorCode: 500,
+      providerErrorCode: "UNAVAILABLE",
+      retryCount: 1,
+      maxRetries: 5,
+      createdAt: Timestamp.now(),
+      lastAttemptAt: Timestamp.now(),
+      nextRetryAt: originalNextRetryAt,
+      completedAt: null,
+      failureReason: "Provider error 503: Service Unavailable",
+      deduplicationKey: `${experimentID}:${filename}`,
+      sessionIncremented: true,
+    });
+
+    // A second, unrelated call for the SAME deduplication key -- e.g. a
+    // recovered partial that happens to share a filename with an entry
+    // already mid-backoff -- passing attemptImmediately: true.
+    await queueUpload({
+      experimentID,
+      owner: "upload-queue-test-owner",
+      filename,
+      data: "[]",
+      dataType: "data",
+      osfFilesLink: "https://osf.io/files/",
+      errorCode: 0,
+      sessionIncremented: false,
+      partial: true,
+      attemptImmediately: true,
+    });
+
+    const after = await docRef.get();
+    // Untouched: still the real backoff schedule, not pulled forward to now.
+    expect(after.data().nextRetryAt.isEqual(originalNextRetryAt)).toBe(true);
+    expect(after.data().retryCount).toBe(1);
+  });
+
   // Was a slow-tier assertion until UNAVAILABLE joined PROBE_RETRY_CODES. A
   // 5xx is usually a blip that clears in seconds, and the cost of being wrong
   // is a single extra request before the same hours-scale chain resumes.

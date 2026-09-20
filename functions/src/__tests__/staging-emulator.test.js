@@ -629,6 +629,11 @@ describe("the abandonment sweep", () => {
     expect(entry.partial).toBe(true);
     expect(entry.status).toBe("pending");
     expect(entry.failureReason).toContain("4 trials");
+    // attemptImmediately (queue-upload.ts): a recovered partial has never
+    // been attempted, so its first attempt is due immediately, not an hour
+    // from now -- this is what lets the SAME sweep tick's upload-retry pass
+    // pick it up (scheduled-sweep-core.ts's ordering comment).
+    expect(entry.nextRetryAt.toMillis()).toBeLessThanOrEqual(Date.now());
 
     // Uncounted: an abandoned participant must not consume the cap.
     const exp = await db.collection("experiments").doc(experimentID).get();

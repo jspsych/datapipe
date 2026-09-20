@@ -79,7 +79,14 @@ const SLOW_JOB_MS = 30_000;
  * Staging sweep feeds the upload queue (it hands recovered sessions to
  * queueUpload), so running it first means a session recovered this tick can
  * be picked up by the SAME tick's upload-retry pass instead of waiting for
- * the next one.
+ * the next one. This actually holds, not just in theory: queueUpload's
+ * attemptImmediately (set by scheduled-staging-sweep.ts's recoverSession)
+ * gives a recovered entry nextRetryAt = now rather than the ordinary 1-hour
+ * default, so it is within scheduled-upload-retry.ts's
+ * `where("nextRetryAt", "<=", now)` window the moment upload retry runs a few
+ * lines below in this same invocation -- see queue-upload.ts's
+ * firstRetryDelayMs comment for why that default would otherwise defeat the
+ * ordering described here.
  *
  * Each job runs in its own try/catch: one job throwing must never prevent
  * the others from running, since they are otherwise-unrelated cleanup
