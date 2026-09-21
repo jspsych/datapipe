@@ -175,3 +175,81 @@ describe("osfProvider.listFiles", () => {
     );
   });
 });
+
+// Real experiment documents store osfFilesLink as the osfstorage root's
+// WaterButler upload link (lib/experiment-creation.js), which already ends in
+// "/providers/osfstorage/". WaterButler reports file ids WITH a provider
+// prefix -- "osfstorage/<id>" -- and listFiles / putFileOSF pass that id
+// through verbatim, so the adapter must drop the prefix before appending the
+// id to the link. Otherwise the URL names the provider twice
+// (".../providers/osfstorage/osfstorage/<id>") and every dataset_description.json
+// update and download misses the file. The fake "https://osf.io/abc123/" link
+// used above cannot catch this, which is why these tests use the real shape.
+describe("osfProvider file URLs against a real osfstorage upload link", () => {
+  const realContainer = {
+    provider: "osf",
+    filesLink: "https://files.osf.io/v1/resources/abc12/providers/osfstorage/",
+  };
+
+  beforeEach(() => {
+    mockFetch.mockReset();
+  });
+
+  it("updateFile addresses a listFiles id without doubling the provider segment", async () => {
+    mockFetch.mockResolvedValueOnce({
+      json: () =>
+        Promise.resolve({
+          data: [
+            { attributes: { name: "dataset_description.json", kind: "file" }, id: "osfstorage/5f0e1d2c" },
+          ],
+        }),
+    });
+    const [fileRef] = await osfProvider.listFiles(auth, realContainer);
+
+    mockFetch.mockResolvedValueOnce(mockResponse({ status: 200, statusText: "OK" }));
+    await osfProvider.updateFile(auth, realContainer, fileRef, "{}", {
+      size: 2,
+      contentType: "application/json",
+    });
+
+    expect(mockFetch).toHaveBeenLastCalledWith(
+      "https://files.osf.io/v1/resources/abc12/providers/osfstorage/5f0e1d2c?kind=file",
+      expect.objectContaining({ method: "PUT" })
+    );
+  });
+
+  it("downloadFile addresses a prefixed id without doubling the provider segment", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ...mockResponse({ status: 200, statusText: "OK" }),
+      text: () => Promise.resolve("{}"),
+    });
+
+    const result = await osfProvider.downloadFile(auth, realContainer, {
+      name: "dataset_description.json",
+      id: "osfstorage/5f0e1d2c",
+    });
+
+    expect(result).toEqual({ success: true, content: "{}" });
+    expect(mockFetch).toHaveBeenCalledWith(
+      "https://files.osf.io/v1/resources/abc12/providers/osfstorage/5f0e1d2c",
+      expect.anything()
+    );
+  });
+
+  it("still accepts a bare id with no provider prefix", async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse({ status: 200, statusText: "OK" }));
+
+    await osfProvider.updateFile(
+      auth,
+      realContainer,
+      { name: "dataset_description.json", id: "5f0e1d2c" },
+      "{}",
+      { size: 2, contentType: "application/json" }
+    );
+
+    expect(mockFetch).toHaveBeenLastCalledWith(
+      "https://files.osf.io/v1/resources/abc12/providers/osfstorage/5f0e1d2c?kind=file",
+      expect.objectContaining({ method: "PUT" })
+    );
+  });
+});
