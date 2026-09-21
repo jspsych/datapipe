@@ -77,7 +77,9 @@ export default function SavingAsYouGoPage() {
           &apos;s <Code>createSession</Code>. Unlike the extension, the
           library doesn&apos;t stream by default. Your experiment opts in by
           starting a session. The <strong>Save as you go</strong> tab under
-          JavaScript in the panel below has the code.
+          JavaScript in the panel below has the code. Note that the library
+          takes <Code>experimentID</Code>, where the extension&apos;s
+          parameter is <Code>experiment_id</Code>.
         </Text>
         <CodeHints expId="YOUR_EXPERIMENT_ID" />
         <Text maxW="70ch">

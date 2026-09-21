@@ -6,6 +6,7 @@ import DocsLayout from "../../../components/docs/DocsLayout";
 import DocsSection from "../../../components/docs/DocsSection";
 import CodeHints from "../../../components/dashboard/CodeHints";
 import CodeBlock from "../../../components/CodeBlock";
+import { DATAPIPE_CLIENT_SCRIPT } from "../../../components/dashboard/script-tags";
 
 // Prose link, per DESIGN.md §5: brandGreen.fg with a persistent underline, so
 // a link is never signalled by color alone. Local to this page for the same
@@ -97,7 +98,7 @@ export default function SendingDataPage() {
           of the panel above switches every sample to it.
         </Text>
         <CodeBlock language="html">
-          {`<script src="https://unpkg.com/datapipe-client"></script>`}
+          {DATAPIPE_CLIENT_SCRIPT}
         </CodeBlock>
         <Text maxW="70ch">
           That gives you a <Code>DataPipe</Code> global. If you use a bundler,{" "}
@@ -105,6 +106,18 @@ export default function SendingDataPage() {
           one function for each JavaScript tab in the panel:{" "}
           <Code>saveData</Code>, <Code>createSession</Code>,{" "}
           <Code>saveBase64Data</Code>, and <Code>getCondition</Code>.
+        </Text>
+        <Text maxW="70ch">
+          The URL names an exact version, and so does the extension&apos;s in
+          the jsPsych samples. Keep it pinned. Without a version, unpkg
+          serves the newest release, which could change a study that&apos;s
+          already collecting data. Move to a newer version when you&apos;re
+          ready to pilot with it.
+        </Text>
+        <Text maxW="70ch">
+          The library names the ID <Code>experimentID</Code>. The jsPsych
+          extension&apos;s parameter is <Code>experiment_id</Code>, following
+          jsPsych&apos;s naming. Copy the sample for the one you use.
         </Text>
         <Text maxW="70ch">
           Send whatever your experiment produces. The data string is stored
