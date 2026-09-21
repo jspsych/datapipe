@@ -60,15 +60,16 @@ import { onUploadQueueChanged } from '../../lib/upload-queue-trigger.js';
 const GLOBAL_MAX_INSTANCES = 20;
 
 describe('apiData capacity options (functions/src/api-data.ts)', () => {
-  it('overrides the global maxInstances with a much higher per-function ceiling', () => {
+  it('overrides the global maxInstances with the combined pre-consolidation ceiling', () => {
     const { maxInstances } = apiData.__endpoint;
     expect(typeof maxInstances).toBe('number');
     expect(maxInstances).toBeGreaterThan(GLOBAL_MAX_INSTANCES);
-    // A few hundred simultaneous submissions (the design doc's lecture-hall
-    // example) must be servable without shedding. This ceiling now also
-    // governs /api/base64 traffic, dispatched from within this same function
-    // -- see the module header.
-    expect(maxInstances).toBeGreaterThanOrEqual(200);
+    // 40 = apidata's 20 + apibase64's 20 as main deploys them, since
+    // /api/base64 is now dispatched from within this same function (see the
+    // module header). Pinned exactly: the ceiling bounds cost as well as
+    // capacity, so raising it should be a deliberate edit here too -- see
+    // the comment above apiDataHandler in api-data.ts.
+    expect(maxInstances).toBe(2 * GLOBAL_MAX_INSTANCES);
   });
 
   it('sets timeoutSeconds to 300, up from the 60s default', () => {

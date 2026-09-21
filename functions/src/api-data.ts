@@ -24,29 +24,31 @@ import { discardSession, isValidSessionId } from "./staging.js";
 import { ExperimentData, UserData, RequestBody } from './interfaces';
 import { apiBase64Handler } from "./api-base64.js";
 
-// maxInstances: 200, overriding index.ts's global 20 (which still governs
-// every OTHER function). Sized for the design doc's own worst case -- a
-// lecture-hall study where a few hundred participants submit within seconds
-// of each other (docs/streaming-ingest-design.md) -- served rather than shed.
-// concurrency: 1 stays exactly as 058a1db set it (git show 058a1db): each
-// instance still handles one request at a time, so that memory-safety
-// argument (a 512MiB instance cannot be pushed over by concurrent large
-// payloads) is untouched; this only raises how many such single-request
-// instances Cloud Run is allowed to run side by side. 200 is the ceiling
-// Cloud Run enforces in us-central1 for this CPU size: the first deploy at
-// 300 was refused with "Max instances must be set to 200 or fewer to set the
-// requested total CPU" (Cloud Run quota), so this is the largest value that
-// deploys without a quota increase. Production on `main`
-// has no concurrency cap at all and defaults to 80 (see
-// firebase-functions/lib/v2/options.d.ts: "A value of null restores the
-// default concurrency (80 when CPU >= 1, 1 otherwise)"), so 20 instances x 80
-// gives roughly 1,600 request slots today; this branch's 20 x 1 was a ~98%
-// capacity cut hiding behind an unrelated perf commit. 200 recovers a large
-// share of that headroom while keeping the memory guarantee. maxInstances is
-// a CEILING, not a reservation -- idle instances still scale to zero, so this
-// does not raise idle/steady-state cost, only the number Cloud Run is willing
-// to spin up under burst. Cloud Run's default per-region instance quota is in
-// the low thousands, comfortably above 200.
+// maxInstances: 40, overriding index.ts's global 20 (which still governs
+// every OTHER function). concurrency: 1 stays exactly as 058a1db set it (git
+// show 058a1db): each instance handles one request at a time, so a 512MiB
+// instance cannot be pushed over by concurrent large payloads -- which makes
+// maxInstances the number of submissions processed at once.
+//
+// 40 is what production already served before /api/base64 was folded in
+// here: main deploys apidata and apibase64 as two functions, each at the
+// global 20 with concurrency: 1, so 40 simultaneous submissions across both
+// endpoints. Both now share this one pool, so 40 keeps that capacity rather
+// than halving it. At a second or two per submission that clears roughly 20
+// submissions a second; when every slot is busy Cloud Run holds new requests
+// briefly before refusing them (429).
+//
+// The ceiling is also the cost bound: maxInstances is a CEILING, not a
+// reservation -- idle instances scale to zero, so it costs nothing until
+// traffic reaches it -- but it caps what a flood of requests to this public,
+// unauthenticated endpoint can spend. An earlier revision set 200, for a
+// lecture-hall burst of a few hundred simultaneous submissions, on the
+// mistaken premise that main ran at the default concurrency of 80. It does
+// not (see main's api-data.ts), and no burst anywhere near 40 has been
+// observed. Raise this from production's measured peak concurrency and 429
+// rate, not from a hypothetical. Cloud Run's quota for this CPU size in
+// us-central1 refuses anything above 200 (a deploy at 300 was rejected), so
+// going past that needs a quota increase first.
 //
 // timeoutSeconds: 300 (up from the 60s default) gives collision-cache.ts's
 // rehydrate() -- called below via claimFilename(), and which lists every file
@@ -75,7 +77,7 @@ import { apiBase64Handler } from "./api-base64.js";
 // the jsPsych plugin's unconditional response.json() -- a separate, pre-
 // existing problem) instead of a clean 201. Every submission after that one
 // finds a warm cache and succeeds normally, instead of repeating the doomed
-// rehydration on every single request. 200 also covers this endpoint's other
+// rehydration on every single request. 300 also covers this endpoint's other
 // slow paths uniformly (the provider upload itself, metadata derivation) for
 // direct Cloud Run invocations that bypass Hosting.
 //
@@ -87,7 +89,7 @@ import { apiBase64Handler } from "./api-base64.js";
 // must stay apiDataHandler, never a 404: a bare "/" is exactly what a request
 // that bypasses Hosting's "/api/data" rewrite looks like, and that has to
 // keep working unchanged. Once the standalone apiBase64 export is removed in
-// the follow-up, apiData and apiBase64 share this one 200-instance pool.
+// the follow-up, apiData and apiBase64 share this one 40-instance pool.
 // apiBase64 itself keeps its own maxInstances (100) as a thin wrapper around
 // the same handler -- see api-base64.ts.
 export async function apiDataHandler(req: Request, res: Response): Promise<void> {
@@ -716,12 +718,12 @@ export async function apiDataHandler(req: Request, res: Response): Promise<void>
   res.status(201).json({...MESSAGES.SUCCESS, metadataMessage});
 }
 
-// apiData's onRequest options are UNCHANGED from before this dispatcher
-// existed -- see the long comment above apiDataHandler for why every one of
-// these values is load-bearing (real out-of-memory incidents). Do not alter
-// memory, concurrency, maxInstances, or timeoutSeconds here.
+// See the long comment above apiDataHandler for why every one of these
+// values is load-bearing: memory and concurrency guard against real
+// out-of-memory incidents, and maxInstances bounds both capacity and cost.
+// Do not alter them here without reading it.
 export const apiData = onRequest(
-  { cors: true, memory: "512MiB", concurrency: 1, maxInstances: 200, timeoutSeconds: 300 },
+  { cors: true, memory: "512MiB", concurrency: 1, maxInstances: 40, timeoutSeconds: 300 },
   async (req, res) => {
     const path =
       req.path.length > 1 && req.path.endsWith("/") ? req.path.slice(0, -1) : req.path;

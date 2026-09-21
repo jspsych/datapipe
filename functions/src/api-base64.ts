@@ -22,7 +22,7 @@ import { ExperimentData, UserData } from './interfaces';
 // consolidation's rollout (see api-data.ts's ROUTING NOTE and
 // participant-api.ts's header). That wrapper is gone now: every /api/base64
 // request is dispatched from WITHIN apiData (api-data.ts), so it runs under
-// apiData's own onRequest options (maxInstances: 200, concurrency: 1, 512MiB,
+// apiData's own onRequest options (maxInstances: 40, concurrency: 1, 512MiB,
 // 300s) -- see the long comment above apiDataHandler there, which is now the
 // single source of truth for this endpoint's capacity tuning.
 export async function apiBase64Handler(req: Request, res: Response): Promise<void> {
