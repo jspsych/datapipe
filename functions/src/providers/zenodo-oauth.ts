@@ -40,6 +40,7 @@
 import { decrypt, encrypt } from "../crypto-utils.js";
 import { db } from "../app.js";
 import { OAuth2AccountConnection } from "./types.js";
+import { DATAPIPE_USER_AGENT } from "../user-agent.js";
 
 export type ZenodoRefreshResult =
   | { success: true; accessToken: string }
@@ -112,7 +113,10 @@ async function exchangeRefreshToken(refreshToken: string): Promise<ExchangeOutco
   try {
     response = await fetch(zenodoTokenUrl(), {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": DATAPIPE_USER_AGENT,
+      },
       body: params.toString(),
     });
   } catch (e) {

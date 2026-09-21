@@ -20,6 +20,7 @@ import { getOAuthConfig, getProvider } from "./providers/index.js";
 import { revokeGdriveToken } from "./providers/gdrive-oauth.js";
 import { OAuth2AccountConnection, StorageProviderId } from "./providers/types.js";
 import { isAllowedServerUrl } from "./providers/server-url.js";
+import { DATAPIPE_USER_AGENT } from "./user-agent.js";
 
 export type AuthCheckResult =
   | { ok: true }
@@ -122,6 +123,7 @@ export async function connectProviderHandler(req: Request, res: ExpressResponse)
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': DATAPIPE_USER_AGENT,
         },
         body: params.toString(),
       });
