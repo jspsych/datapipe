@@ -51,7 +51,7 @@ describe("WhatsChangedPage", () => {
       screen.getByRole("heading", { name: "What's changed", level: 1 })
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/DataPipe had a large update in September 2026/i)
+      screen.getByText(/already collecting data keeps collecting/i)
     ).toBeInTheDocument();
   });
 
