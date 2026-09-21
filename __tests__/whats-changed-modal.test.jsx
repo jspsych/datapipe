@@ -111,6 +111,23 @@ describe("WhatsChangedModal", () => {
     expect(window.localStorage.getItem(DISMISS_KEY)).toBe("1");
   });
 
+  it("has exactly one close-trigger part, so Dismiss stays in the footer", async () => {
+    // jsdom does no layout, so an overlap cannot be seen here -- but its cause
+    // can. Chakra's dialog recipe positions the `closeTrigger` slot absolutely
+    // in the top corner; a footer button wrapped in a second
+    // Dialog.CloseTrigger lands on top of the x. Only the x may be that part.
+    renderModal();
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.querySelectorAll('[data-part="close-trigger"]')).toHaveLength(1);
+
+    const dismiss = screen.getByRole("button", { name: "Dismiss" });
+    expect(dismiss.closest('[data-part="close-trigger"]')).toBeNull();
+    // The footer renders no data-part of its own, so identify it by what it
+    // holds: Dismiss sits beside the primary link, in the same container.
+    const primary = screen.getByRole("link", { name: "See what's changed" });
+    expect(dismiss.parentElement).toBe(primary.parentElement);
+  });
+
   it("clicking the close (x) control sets the key and closes the dialog", async () => {
     renderModal();
     await screen.findByRole("heading", { name: "DataPipe has changed" });

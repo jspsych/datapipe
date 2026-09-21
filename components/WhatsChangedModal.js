@@ -117,9 +117,16 @@ export default function WhatsChangedModal() {
           </Dialog.Body>
 
           <Dialog.Footer gap={3}>
-            <Dialog.CloseTrigger asChild>
-              <Button variant="outline">Dismiss</Button>
-            </Dialog.CloseTrigger>
+            {/* A plain button, NOT a second Dialog.CloseTrigger. In Chakra v3
+                CloseTrigger is not just behaviour: it is the dialog recipe's
+                `closeTrigger` slot, which is positioned absolutely in the
+                top corner (pos: absolute; top: 2; insetEnd: 2). Wrapping this
+                button in one lifted it out of the footer and onto the x
+                above. ConfirmDialog's Cancel is a plain button for the same
+                reason. */}
+            <Button variant="outline" onClick={dismiss}>
+              Dismiss
+            </Button>
             {/* The one primary action per screen (DESIGN.md §5). The
                 homepage's own primary ("Create an account" / "Go to my
                 experiments") is the hero's CTA, off-screen behind this
