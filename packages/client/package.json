@@ -41,7 +41,7 @@
     "test:watch": "vitest",
     "size": "node scripts/report-size.mjs",
     "changeset": "changeset",
-    "version-packages": "changeset version",
+    "version-packages": "changeset version && node scripts/sync-readme-pin.mjs",
     "release": "npm run build && changeset publish"
   },
   "dependencies": {

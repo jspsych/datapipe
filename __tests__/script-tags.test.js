@@ -3,8 +3,9 @@
  *
  * The pinned datapipe-client version in the pasted <script> tags has to follow
  * the package. Changesets bumps packages/client/package.json in the release
- * PR. This suite fails there until the docs samples and the client README are
- * bumped to match, so neither goes on pointing at an old release.
+ * PR. The docs samples read that version directly, and
+ * packages/client/scripts/sync-readme-pin.mjs rewrites the README's pin in the
+ * same step. This suite catches either of those coming unstuck.
  */
 
 import fs from "fs";

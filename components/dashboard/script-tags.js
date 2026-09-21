@@ -5,12 +5,18 @@
 // that is already collecting data, mid-study and without anyone touching it.
 // A pinned URL keeps a running study on the code it was piloted with.
 //
-// Bump these when a new version is published. DATAPIPE_CLIENT_VERSION must
-// match packages/client/package.json, and __tests__/script-tags.test.js fails
-// until it does. The extension lives in the jsPsych repo, so its version has
-// no check here.
+// The client's version is read from its package.json rather than written
+// here, so the "Release datapipe-client" PR moves the pin by bumping the
+// version, with no step to forget. It can't be synced by a script instead:
+// changesets/action commits only files under packages/client, so an edit to
+// this file made during that PR's version step would never be committed.
+//
+// The extension lives in the jsPsych repo, so bump its version by hand when a
+// new one is published.
+import clientPackage from "../../packages/client/package.json";
+
 export const EXTENSION_PIPE_VERSION = "0.2.0";
-export const DATAPIPE_CLIENT_VERSION = "0.1.0";
+export const DATAPIPE_CLIENT_VERSION = clientPackage.version;
 
 export const EXTENSION_PIPE_SCRIPT = `<script src="https://unpkg.com/@jspsych/extension-pipe@${EXTENSION_PIPE_VERSION}"></script>`;
 export const DATAPIPE_CLIENT_SCRIPT = `<script src="https://unpkg.com/datapipe-client@${DATAPIPE_CLIENT_VERSION}"></script>`;
