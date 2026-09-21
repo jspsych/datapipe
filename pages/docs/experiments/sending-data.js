@@ -154,7 +154,7 @@ export default function SendingDataPage() {
           isn&apos;t stored. Generate a fresh random ID per participant and
           build the filename from it, as the samples above do. (This code was
           called <Code>OSF_FILE_EXISTS</Code> before September 2026. See{" "}
-          <ProseLink href="/docs/whats-changed">What&apos;s changed</ProseLink>.)
+          <ProseLink href="/docs/whats-changed#error-codes">What&apos;s changed</ProseLink>.)
         </Text>
         <GuidanceLine href="/docs/data/files" linkText="Filenames, archives and your storage">
           How the check works, and what each provider does with a duplicate.
