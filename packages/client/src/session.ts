@@ -43,7 +43,7 @@ import {
   update,
 } from "firebase/database";
 
-import { endpoint } from "./http.js";
+import { endpoint, experimentIDFrom } from "./http.js";
 import { SessionConfig, SessionOptions } from "./types.js";
 
 // How many trials record() will hold onto before the session has finished
@@ -558,6 +558,24 @@ export class DataPipeSession {
 }
 
 /**
+ * The experiment ID for a session, or "" if there is no usable one.
+ *
+ * `experimentIDFrom` throws when `experiment_id` and `experimentID`
+ * disagree, which is right for `saveData` but not here: starting a session
+ * never throws (see `startSession`). An empty ID turns streaming off in
+ * `doStart`, and a `saveData` call given the same options throws where
+ * the caller can see it.
+ */
+function sessionExperimentID(options: SessionOptions): string {
+  try {
+    return experimentIDFrom(options);
+  } catch (error) {
+    console.warn((error as Error).message);
+    return "";
+  }
+}
+
+/**
  * Start an incremental upload session SYNCHRONOUSLY: the session object is
  * returned immediately, and the POST /api/session round trip runs in the
  * background.
@@ -580,7 +598,7 @@ export function createSession(options: SessionOptions): DataPipeSession {
   const session = new DataPipeSession();
   // Fire-and-forget: errors are handled inside start() itself (see
   // doStart's catch block) and never surface here or reject anything.
-  void session.start(options.experimentID, endpoint("session", options.baseURL), {
+  void session.start(sessionExperimentID(options), endpoint("session", options.baseURL), {
     filename: options.filename,
   });
   return session;
@@ -602,7 +620,7 @@ export function createSession(options: SessionOptions): DataPipeSession {
  */
 export async function startSession(options: SessionOptions): Promise<DataPipeSession> {
   const session = new DataPipeSession();
-  await session.start(options.experimentID, endpoint("session", options.baseURL), {
+  await session.start(sessionExperimentID(options), endpoint("session", options.baseURL), {
     filename: options.filename,
   });
   return session;
