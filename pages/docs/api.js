@@ -385,7 +385,7 @@ export default function ApiReferencePage() {
             filename after <Code>OSF_FILE_EXISTS</Code>. Match the new names,
             or both while you roll experiments over. The HTTP status codes are
             unchanged, so anything branching on those is unaffected. See{" "}
-            <ProseLink href="/docs/whats-changed">What&apos;s changed</ProseLink>{" "}
+            <ProseLink href="/docs/whats-changed#error-codes">What&apos;s changed</ProseLink>{" "}
             for the rest of the September 2026 update.
           </Text>
         </Box>

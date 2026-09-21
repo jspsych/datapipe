@@ -55,14 +55,47 @@ describe("WhatsChangedPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("puts the renamed error codes first, under Changes that can affect your code", () => {
+  it("runs from the largest change to the smallest, and ends with the checklist", () => {
+    // The order is the page's argument: OSF going away drives everything else,
+    // and the small API changes fall out at the end. A reshuffle that loses
+    // that order should fail here rather than be noticed by a reader.
     renderPage();
-    expect(
-      screen.getByRole("heading", { name: "Changes that can affect your code" })
-    ).toBeInTheDocument();
+    const sections = screen
+      .getAllByRole("heading", { level: 2 })
+      // DocsSection appends a "#" self-link glyph to every section heading.
+      .map((heading) => heading.textContent.replace(/\s*#\s*$/, ""));
+    expect(sections).toEqual([
+      "Where your data goes",
+      "How your data gets there",
+      "What DataPipe writes",
+      "Your dashboard",
+      "Your account",
+      "Changes to the API",
+      "What you may need to do",
+      "Questions",
+    ]);
+  });
+
+  it("names the renamed error codes", () => {
+    renderPage();
     expect(screen.getByText("FILE_EXISTS")).toBeInTheDocument();
     expect(screen.getByText("UPLOAD_ERROR")).toBeInTheDocument();
     expect(screen.getByText("UPLOAD_EXCEPTION")).toBeInTheDocument();
+  });
+
+  it("every in-page link points at an id that exists on the page", () => {
+    // The callout and the closing checklist are only useful if their jumps
+    // land somewhere. A renamed section id would otherwise break them silently.
+    const { container } = renderPage();
+    const anchors = screen
+      .getAllByRole("link")
+      .map((link) => link.getAttribute("href"))
+      .filter((href) => href && href.startsWith("#"));
+
+    expect(anchors.length).toBeGreaterThan(0);
+    for (const href of anchors) {
+      expect(container.querySelector(`[id="${href.slice(1)}"]`)).not.toBeNull();
+    }
   });
 
   it("every internal /docs/... link on the page points at a page that exists", () => {

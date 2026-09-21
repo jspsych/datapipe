@@ -35,9 +35,19 @@ function ProseLink({ href, external, children }) {
 // A sub-topic heading inside a DocsSection, same shape as the "Failures that
 // are handled faster" / "Uploads that never reported back" headings in
 // pages/docs/data/failures.js.
-function SubHeading({ children }) {
+function SubHeading({ id, children }) {
   return (
-    <Heading as="h3" fontSize="md" fontWeight="600" color="fg" mt={2}>
+    <Heading
+      as="h3"
+      id={id}
+      fontSize="md"
+      fontWeight="600"
+      color="fg"
+      mt={2}
+      // Same offset DocsSection gives its own headings, so a link to a
+      // sub-topic does not land underneath the sticky navbar.
+      scrollMarginTop="24"
+    >
       {children}
     </Heading>
   );
@@ -52,60 +62,40 @@ export default function WhatsChangedPage() {
     <>
       <PageHeader
         title="What's changed"
-        purpose="A large update went out in September 2026. Here's what's different, starting with what might need a change on your side."
+        purpose="DataPipe had a large update in September 2026. This page explains what changed and why, from the largest change to the smallest."
       />
 
+      {/* THE ORDER IS THE ARGUMENT. One fact drives this release -- OSF is
+          closing the feature DataPipe was built on -- and the sections follow
+          from it in order of size: where data goes, how it gets there, what
+          gets written, then the dashboard, accounts, and last the small API
+          changes that fall out of all that. Those small changes are the ones
+          that can break existing code, so the callout below and the checklist
+          at the end make sure a reader in a hurry still finds them. */}
+      <Text maxW="70ch">
+        DataPipe was built to do one thing: send experiment data to the Open
+        Science Framework. OSF is shutting down the feature DataPipe depends
+        on, so DataPipe now sends data to other places too. Most of what is
+        new follows from that.
+      </Text>
       <Text maxW="70ch">
         An experiment that is already collecting data keeps collecting. Its
-        ID, its storage, and the way it sends data are unchanged. A few things
-        may still need a change on your side. This page starts with those,
-        then covers what&apos;s new.
+        ID, its storage, and the way it sends data are unchanged.
       </Text>
-
-      <DocsSection
-        id="changes-that-can-affect-your-code"
-        title="Changes that can affect your code"
-      >
-        <Box borderWidth="1px" borderColor="border" bg="bg.muted" rounded="md" p={4} maxW="70ch">
-          <Text fontSize="sm">
-            <strong>Read this section first</strong> if your code reads
-            DataPipe&apos;s responses, if you have an experiment collecting on
-            OSF, or if you haven&apos;t signed in since the update.
-          </Text>
-        </Box>
-
-        <SubHeading>Three error codes were renamed</SubHeading>
-        <Text maxW="70ch">
-          Three error codes lost their OSF prefix, because every storage
-          provider returns them: <Code>OSF_FILE_EXISTS</Code> is now{" "}
-          <Code>FILE_EXISTS</Code>, <Code>OSF_UPLOAD_ERROR</Code> is now{" "}
-          <Code>UPLOAD_ERROR</Code>, and <Code>OSF_UPLOAD_EXCEPTION</Code> is
-          now <Code>UPLOAD_EXCEPTION</Code>.
+      <Box borderWidth="1px" borderColor="border" bg="bg.muted" rounded="md" p={4} maxW="70ch">
+        <Text fontSize="sm">
+          <strong>Short on time?</strong> Go to{" "}
+          <ProseLink href="#what-you-may-need-to-do">
+            What you may need to do
+          </ProseLink>
+          . If your code reads DataPipe&apos;s responses, read{" "}
+          <ProseLink href="#changes-to-the-api">Changes to the API</ProseLink>{" "}
+          as well.
         </Text>
-        <Text maxW="70ch">
-          <strong>What to do:</strong> check any code that compares the{" "}
-          <Code>error</Code> field of a response with one of the old names.
-          Code that picks a new filename and retries after{" "}
-          <Code>OSF_FILE_EXISTS</Code> is the usual case. That comparison now
-          fails without an error. Change it to the new name, or test for both
-          names until every experiment is updated. HTTP status codes are
-          unchanged.
-        </Text>
-        <GuidanceLine href="/docs/api#error-codes" linkText="Error codes">
-          The full table, with what each one means and what status it comes
-          back with.
-        </GuidanceLine>
+      </Box>
 
-        <SubHeading>The metadataOptions parameter was removed</SubHeading>
-        <Text maxW="70ch">
-          The data-saving endpoint no longer reads a{" "}
-          <Code>metadataOptions</Code> field in the request body. The field
-          was never documented, and it let any participant&apos;s submission
-          set the name, author, or license in your dataset&apos;s description.
-          If your code sends it, DataPipe ignores it.
-        </Text>
-
-        <SubHeading>OSF no longer takes new experiments</SubHeading>
+      <DocsSection id="where-your-data-goes" title="Where your data goes">
+        <SubHeading id="osf">OSF is closing to new experiments</SubHeading>
         <Text maxW="70ch">
           OSF is shutting down its projects feature, so DataPipe can no
           longer create new experiments there.{" "}
@@ -115,36 +105,14 @@ export default function WhatsChangedPage() {
           An experiment already collecting on OSF keeps collecting until
           then.
         </Text>
-        <Text maxW="70ch">
-          <strong>What to do:</strong> if your account settings ask you to
-          re-authorize OSF, do it, so your OSF experiments can keep saving.
-          For a new study, connect Google Drive, Dataverse, or Zenodo.
-        </Text>
         <GuidanceLine href="/docs/providers/osf" linkText="Moving off OSF">
           What changes, what happens to data you already collected, and how
           to move to another provider.
         </GuidanceLine>
 
-        <SubHeading>Every account needs a contact email</SubHeading>
+        <SubHeading id="providers">Three new storage providers</SubHeading>
         <Text maxW="70ch">
-          If your account has no contact email address, DataPipe asks for one
-          the next time you sign in, before it shows your experiments. It
-          uses the address for one thing: telling you when uploads for one of
-          your experiments start failing. Your experiments keep collecting
-          whether or not you have signed in.
-        </Text>
-        <Text maxW="70ch">
-          <strong>What to do:</strong> enter an address when asked, then
-          confirm it from the email DataPipe sends. DataPipe notifies an
-          unconfirmed address too, but it can&apos;t know the message
-          arrives. You can change or confirm the address at any time in{" "}
-          <ProseLink href="/admin/account">account settings</ProseLink>.
-        </Text>
-      </DocsSection>
-
-      <DocsSection id="new-places-to-send-data" title="New places to send data">
-        <Text maxW="70ch">
-          DataPipe can now send data to three more storage providers.
+          DataPipe can now send data to three more places.
         </Text>
         <Text maxW="70ch">
           <strong>Google Drive.</strong> Your own Drive, in a folder DataPipe
@@ -173,10 +141,10 @@ export default function WhatsChangedPage() {
         </GuidanceLine>
       </DocsSection>
 
-      <DocsSection
-        id="saving-data-as-it-runs"
-        title="Saving data as the experiment runs"
-      >
+      <DocsSection id="how-your-data-gets-there" title="How your data gets there">
+        <SubHeading id="saving-as-it-runs">
+          Saving data as the experiment runs
+        </SubHeading>
         <Text maxW="70ch">
           An experiment can now send each trial to DataPipe as it happens,
           instead of only once at the end. In jsPsych, register the{" "}
@@ -209,9 +177,8 @@ export default function WhatsChangedPage() {
           What to expect, what it means for privacy, and the limits it runs
           under.
         </GuidanceLine>
-      </DocsSection>
 
-      <DocsSection id="when-an-upload-fails" title="When an upload fails">
+        <SubHeading id="when-an-upload-fails">When an upload fails</SubHeading>
         <Text maxW="70ch">
           When your storage provider can&apos;t take a submission, DataPipe
           now keeps a copy and retries: up to five attempts over about 31
@@ -231,26 +198,8 @@ export default function WhatsChangedPage() {
         </GuidanceLine>
       </DocsSection>
 
-      <DocsSection id="rejected-submissions" title="Rejected submissions">
-        <Text maxW="70ch">
-          Each experiment&apos;s dashboard now lists the submissions DataPipe
-          refused, with the reason and the time of each. Before, a refusal
-          left nothing you could see.
-        </Text>
-        <Text maxW="70ch">
-          Use <strong>Clear this list</strong> once you have dealt with the
-          entries. Later refusals appear as they happen.
-        </Text>
-        <GuidanceLine
-          href="/docs/experiments/validation#rejected-data-is-gone"
-          linkText="Rejected data is gone"
-        >
-          Why a rejected submission can&apos;t be recovered, and how to test
-          your validation rules before participants arrive.
-        </GuidanceLine>
-      </DocsSection>
-
-      <DocsSection id="psych-ds-metadata" title="Psych-DS metadata">
+      <DocsSection id="what-datapipe-writes" title="What DataPipe writes">
+        <SubHeading id="psych-ds-metadata">Psych-DS metadata</SubHeading>
         <Text maxW="70ch">
           With Psych-DS metadata turned on, DataPipe now writes a{" "}
           <Code>dataset_description.json</Code>, a data table per session, and
@@ -269,9 +218,8 @@ export default function WhatsChangedPage() {
           What gets written, where the variable descriptions come from, and
           why the setting locks.
         </GuidanceLine>
-      </DocsSection>
 
-      <DocsSection id="finalizing-a-dataset" title="Finalizing a dataset">
+        <SubHeading id="finalizing">Finalizing a dataset</SubHeading>
         <Text maxW="70ch">
           When a Zenodo study is done, you can finalize the experiment from
           its dashboard. DataPipe merges everything into a single archive and
@@ -289,19 +237,38 @@ export default function WhatsChangedPage() {
         </GuidanceLine>
       </DocsSection>
 
-      <DocsSection
-        id="signing-in-and-your-account"
-        title="Signing in and your account"
-      >
+      <DocsSection id="your-dashboard" title="Your dashboard">
+        <SubHeading id="rejected-submissions">Rejected submissions</SubHeading>
+        <Text maxW="70ch">
+          Each experiment&apos;s dashboard now lists the submissions DataPipe
+          refused, with the reason and the time of each. Before, a refusal
+          left nothing you could see.
+        </Text>
+        <Text maxW="70ch">
+          Use <strong>Clear this list</strong> once you have dealt with the
+          entries. Later refusals appear as they happen.
+        </Text>
+        <GuidanceLine
+          href="/docs/experiments/validation#rejected-data-is-gone"
+          linkText="Rejected data is gone"
+        >
+          Why a rejected submission can&apos;t be recovered, and how to test
+          your validation rules before participants arrive.
+        </GuidanceLine>
+
+        <SubHeading id="a-new-look">A new look</SubHeading>
+        <Text maxW="70ch">
+          The dashboard and the documentation have been redesigned, and
+          DataPipe now uses a dark theme throughout.
+        </Text>
+      </DocsSection>
+
+      <DocsSection id="your-account" title="Your account">
+        <SubHeading id="signing-in">More ways to sign in</SubHeading>
         <Text maxW="70ch">
           You can sign in to DataPipe with Google, ORCID, GitHub, or an email
           address and password, and add more than one to the same account.
-        </Text>
-        <Text maxW="70ch">
-          OSF sign-in is being retired. <strong>What to do:</strong> if it is
-          your only way into DataPipe, link another sign-in method in your
-          account settings. Without one, you can lose access to the account
-          that owns your experiments.
+          OSF sign-in is being retired along with the rest of OSF support.
         </Text>
         <Text maxW="70ch">
           Deleting your account removes every experiment you own and
@@ -312,12 +279,22 @@ export default function WhatsChangedPage() {
           Sign-in methods, how credentials are stored, and what account
           deletion removes.
         </GuidanceLine>
-      </DocsSection>
 
-      <DocsSection
-        id="privacy-and-data-handling"
-        title="Privacy and data handling"
-      >
+        <SubHeading id="contact-email">A contact email for every account</SubHeading>
+        <Text maxW="70ch">
+          If your account has no contact email address, DataPipe asks for one
+          the next time you sign in, before it shows your experiments. It
+          uses the address for one thing: telling you when uploads for one of
+          your experiments start failing. Your experiments keep collecting
+          whether or not you have signed in.
+        </Text>
+        <Text maxW="70ch">
+          DataPipe notifies an unconfirmed address too, but it can&apos;t know
+          the message arrives. You can change or confirm the address at any
+          time in <ProseLink href="/admin/account">account settings</ProseLink>.
+        </Text>
+
+        <SubHeading id="privacy">Privacy and data handling</SubHeading>
         <Text maxW="70ch">
           DataPipe now has a privacy page written for IRB protocols and
           institutional security reviews: what it processes, what it stores,
@@ -325,10 +302,9 @@ export default function WhatsChangedPage() {
         </Text>
         <Text maxW="70ch">
           A submission held for retry is encrypted (AES-256-GCM) for as long
-          as DataPipe holds it. Disconnecting
-          Google Drive from your account settings deletes DataPipe&apos;s
-          stored token and asks Google to revoke DataPipe&apos;s
-          authorization.
+          as DataPipe holds it. Disconnecting Google Drive from your account
+          settings deletes DataPipe&apos;s stored token and asks Google to
+          revoke DataPipe&apos;s authorization.
         </Text>
         <GuidanceLine href="/docs/privacy" linkText="Privacy & information for IRBs">
           A paragraph you can adapt for a protocol, plus retention, access,
@@ -336,11 +312,84 @@ export default function WhatsChangedPage() {
         </GuidanceLine>
       </DocsSection>
 
-      <DocsSection id="a-new-look" title="A new look">
+      <DocsSection id="changes-to-the-api" title="Changes to the API">
         <Text maxW="70ch">
-          The dashboard and the documentation have been redesigned, and
-          DataPipe now uses a dark theme throughout.
+          Two small changes can affect code you have already written. The way
+          you send data, and every HTTP status code, are unchanged.
         </Text>
+
+        <SubHeading id="error-codes">Three error codes were renamed</SubHeading>
+        <Text maxW="70ch">
+          Three error codes lost their OSF prefix, because every storage
+          provider returns them: <Code>OSF_FILE_EXISTS</Code> is now{" "}
+          <Code>FILE_EXISTS</Code>, <Code>OSF_UPLOAD_ERROR</Code> is now{" "}
+          <Code>UPLOAD_ERROR</Code>, and <Code>OSF_UPLOAD_EXCEPTION</Code> is
+          now <Code>UPLOAD_EXCEPTION</Code>.
+        </Text>
+        <Text maxW="70ch">
+          This matters only to code that compares the <Code>error</Code>{" "}
+          field of a response with one of the old names. Code that picks a new
+          filename and retries after <Code>OSF_FILE_EXISTS</Code> is the usual
+          case. That comparison now fails without an error.
+        </Text>
+        <GuidanceLine href="/docs/api#error-codes" linkText="Error codes">
+          The full table, with what each one means and what status it comes
+          back with.
+        </GuidanceLine>
+
+        <SubHeading id="metadata-options">
+          The metadataOptions parameter was removed
+        </SubHeading>
+        <Text maxW="70ch">
+          The data-saving endpoint no longer reads a{" "}
+          <Code>metadataOptions</Code> field in the request body. The field
+          was never documented, and it let any participant&apos;s submission
+          set the name, author, or license in your dataset&apos;s description.
+          If your code sends it, DataPipe ignores it.
+        </Text>
+      </DocsSection>
+
+      <DocsSection id="what-you-may-need-to-do" title="What you may need to do">
+        <Text maxW="70ch">
+          Check this list against your own setup. An item applies only if
+          its first sentence describes you.
+        </Text>
+        <Box as="ul" pl={5} listStyleType="disc" maxW="70ch">
+          <Box as="li" mb={2}>
+            <strong>Your code compares the error field with an old name.</strong>{" "}
+            Change it to the new name, or test for both names until every
+            experiment is updated. See{" "}
+            <ProseLink href="#error-codes">Three error codes were renamed</ProseLink>.
+          </Box>
+          <Box as="li" mb={2}>
+            <strong>Your code sends metadataOptions.</strong> Remove it. See{" "}
+            <ProseLink href="#metadata-options">
+              The metadataOptions parameter was removed
+            </ProseLink>
+            .
+          </Box>
+          <Box as="li" mb={2}>
+            <strong>You have experiments on OSF.</strong> If your account
+            settings ask you to re-authorize OSF, do it, so those experiments
+            can keep saving. For a new study, connect Google Drive, Dataverse,
+            or Zenodo. See{" "}
+            <ProseLink href="#osf">OSF is closing to new experiments</ProseLink>.
+          </Box>
+          <Box as="li" mb={2}>
+            <strong>OSF is your only way to sign in.</strong> Link another
+            sign-in method in your account settings. Without one, you can lose
+            access to the account that owns your experiments. See{" "}
+            <ProseLink href="#signing-in">More ways to sign in</ProseLink>.
+          </Box>
+          <Box as="li" mb={2}>
+            <strong>DataPipe asks you for a contact email.</strong> Enter an
+            address, then confirm it from the email DataPipe sends. See{" "}
+            <ProseLink href="#contact-email">
+              A contact email for every account
+            </ProseLink>
+            .
+          </Box>
+        </Box>
       </DocsSection>
 
       <DocsSection id="questions" title="Questions">
