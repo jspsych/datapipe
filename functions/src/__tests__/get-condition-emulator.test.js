@@ -5,12 +5,16 @@
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import MESSAGES from "../api-messages";
+import { fnUrl } from "./helpers/fn-url.js";
 
 process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080';
 
+// apicondition no longer deploys as its own function -- its handler is now
+// dispatched from participantapi (see participant-api.ts), reached over HTTP
+// at /api/condition. fnUrl knows the difference.
 async function getCondition(body) {
   const response = await fetch(
-    "http://localhost:5001/datapipe-test/us-central1/apicondition",
+    fnUrl("/api/condition"),
     {
       method: "POST",
       headers: {
@@ -48,7 +52,7 @@ beforeAll(async () => {
   await db
     .collection("experiments")
     .doc("testexp")
-    .set({ activeConditionAssignment: false });
+    .set({ activeConditionAssignment: false, owner: "testuser", storageProvider: "osf" });
   await db
     .collection("experiments")
     .doc("testexp-active")
@@ -81,6 +85,8 @@ describe("getCondition", () => {
     await getCondition({ experimentID: "testexp" });
     let doc = await waitForLog(db, "testexp", "logError", 1);
     expect(doc.data().logError).toBe(1);
+    expect(doc.data().errorsByCode.CONDITION_ASSIGNMENT_NOT_ACTIVE).toBe(1);
+    expect(doc.data().owner).toBe("testuser");
 
     await getCondition({ experimentID: "testexp" });
     doc = await waitForLog(db, "testexp", "logError", 2);

@@ -1,0 +1,77 @@
+// Shared emulator-URL builder for the dashboardapi consolidation
+// (functions/src/dashboard-api.ts). Eighteen low-traffic dashboard endpoints
+// (most of which used to each deploy as their own Cloud Function; a few,
+// like clearErrors, joined the dispatcher directly) are now dispatched from
+// ONE function, keyed on req.path -- so a test that used to build
+// http://localhost:5001/datapipe-test/us-central1/createexperiment now has to
+// hit http://localhost:5001/datapipe-test/us-central1/dashboardapi/api/createexperiment
+// instead. fnUrl(apiPath) is the one place that knows which of those two
+// shapes a given hosting-facing path (as it appears in firebase.json's
+// rewrite `source`) resolves to, so individual suites don't each hardcode it.
+//
+// Respects the same FUNCTIONS_HOST / PROJECT_ID conventions the emulator test
+// files already use (see e.g. staging-emulator.test.js, session-id-
+// validation-emulator.test.js), defaulting to the values every suite in this
+// repo assumes when they are unset.
+//
+// Two more mergers, same idea: /api/session and /api/condition now dispatch
+// from participantapi (functions/src/participant-api.ts), and /api/base64
+// now dispatches from WITHIN apidata itself (functions/src/api-data.ts's own
+// req.path check) rather than being its own function. /api/data stays
+// unmerged -- apidata's dispatcher treats anything that is not
+// "/api/base64" (including a bare "/", which is what a direct
+// function-URL/test hit looks like) as the data endpoint, so the plain
+// (non-merged) URL still reaches it.
+
+const FUNCTIONS_HOST = process.env.FUNCTIONS_HOST || "localhost:5001";
+const PROJECT_ID = process.env.PROJECT_ID || "datapipe-test";
+const REGION = "us-central1";
+
+// Mirrors firebase.json's hosting.rewrites. Endpoints merged into
+// dashboardapi carry `merged: true`; everything else keeps its own function
+// name, exactly as firebase.json still routes it.
+const ROUTES = {
+  // -- merged into dashboardapi --
+  "/api/createexperiment": { fn: "dashboardapi", merged: true },
+  "/api/connectprovider": { fn: "dashboardapi", merged: true },
+  "/api/connectstatictokenprovider": { fn: "dashboardapi", merged: true },
+  "/api/disconnectprovider": { fn: "dashboardapi", merged: true },
+  "/api/deleteaccount": { fn: "dashboardapi", merged: true },
+  "/api/generateoauthstate": { fn: "dashboardapi", merged: true },
+  "/api/oauth2callback": { fn: "dashboardapi", merged: true },
+  "/api/saveosftoken": { fn: "dashboardapi", merged: true },
+  "/api/getprovideraccesstoken": { fn: "dashboardapi", merged: true },
+  "/api/providersetupwarnings": { fn: "dashboardapi", merged: true },
+  "/api/checkemailconflict": { fn: "dashboardapi", merged: true },
+  "/api/sendcontactemailverification": { fn: "dashboardapi", merged: true },
+  "/api/verifycontactemail": { fn: "dashboardapi", merged: true },
+  // ensureDerivedPaths landed on `test` via PR #249, after the other 15 were
+  // merged -- same treatment, added as a 16th route.
+  "/api/ensurederivedpaths": { fn: "dashboardapi", merged: true },
+  // apiFinalize joined as a 17th route -- see dashboard-api.ts's header.
+  // finalizeTask (the onTaskDispatched half) is NOT reachable over HTTP at
+  // all, so it has no entry here.
+  "/api/finalize": { fn: "dashboardapi", merged: true },
+  // clearErrors joined as an 18th route, for ErrorPanel.js's "Clear this
+  // list" button -- see dashboard-api.ts's and clear-errors.ts's headers.
+  "/api/clearerrors": { fn: "dashboardapi", merged: true },
+  // -- merged into participantapi (functions/src/participant-api.ts) --
+  "/api/session": { fn: "participantapi", merged: true },
+  "/api/condition": { fn: "participantapi", merged: true },
+  // -- merged into apidata itself (functions/src/api-data.ts's dispatcher) --
+  "/api/base64": { fn: "apidata", merged: true },
+  // -- untouched, still their own function --
+  "/api/data": { fn: "apidata" },
+  "/api/queuestatus": { fn: "apiqueuestatus" },
+};
+
+// apiPath: a hosting-facing path exactly as firebase.json's rewrite `source`
+// spells it, e.g. "/api/createexperiment".
+export function fnUrl(apiPath) {
+  const route = ROUTES[apiPath];
+  if (!route) {
+    throw new Error(`fn-url: no route registered for "${apiPath}" -- add it to ROUTES in helpers/fn-url.js`);
+  }
+  const base = `http://${FUNCTIONS_HOST}/${PROJECT_ID}/${REGION}/${route.fn}`;
+  return route.merged ? `${base}${apiPath}` : base;
+}

@@ -1,6 +1,7 @@
 import { onRequest } from "firebase-functions/v2/https";
 import archiver from "archiver";
 import { db, auth, storage } from "./app.js";
+import { decryptPayload } from "./payload-crypto.js";
 
 export const apiQueueStatus = onRequest({ cors: true }, async (req, res) => {
   if (req.method !== "GET") {
@@ -57,7 +58,13 @@ export const apiQueueStatus = onRequest({ cors: true }, async (req, res) => {
       const bucket = storage.bucket();
       const file = bucket.file(storagePath);
       const [contents] = await file.download();
-      const raw = contents.toString("utf-8");
+      // Queue payloads are encrypted at rest (payload-crypto.ts). Objects
+      // written before that shipped are unmarked and pass through unchanged.
+      // A marked object that will not authenticate throws here rather than
+      // handing the researcher a file of ciphertext they would save, open,
+      // and find unreadable -- the catch below turns it into the 500 that
+      // QueuePanel already renders as a download failure.
+      const raw = decryptPayload(contents).toString("utf-8");
 
       if (dataType === "base64") {
         const split = raw.split(",");
@@ -117,7 +124,12 @@ export const apiQueueStatus = onRequest({ cors: true }, async (req, res) => {
         const data = doc.data();
         const file = bucket.file(data.storagePath);
         const [contents] = await file.download();
-        const raw = contents.toString("utf-8");
+        // Same decrypt-if-marked / passthrough-if-legacy contract as the
+        // single-file download above. An undecryptable entry aborts the ZIP
+        // through the existing catch, which is the pre-existing behavior for
+        // any unreadable member and keeps the researcher from receiving an
+        // archive with one silently unusable file in it.
+        const raw = decryptPayload(contents).toString("utf-8");
 
         if (data.dataType === "base64") {
           const split = raw.split(",");
@@ -138,12 +150,19 @@ export const apiQueueStatus = onRequest({ cors: true }, async (req, res) => {
   }
 
   // List queue entries for this experiment
-  const queueItems = await db
-    .collection("uploadQueue")
-    .where("experimentID", "==", experimentID)
-    .where("status", "in", ["pending", "processing", "failed"])
-    .orderBy("createdAt", "desc")
-    .get();
+  let queueItems;
+  try {
+    queueItems = await db
+      .collection("uploadQueue")
+      .where("experimentID", "==", experimentID)
+      .where("status", "in", ["pending", "processing", "failed"])
+      .orderBy("createdAt", "desc")
+      .get();
+  } catch (e) {
+    console.error(`Failed to list queue entries for experiment ${experimentID}:`, e instanceof Error ? e.message : e);
+    res.status(500).json({ error: "Failed to list queue entries" });
+    return;
+  }
 
   const entries = queueItems.docs.map((doc) => {
     const data = doc.data();

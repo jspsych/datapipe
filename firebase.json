@@ -6,6 +6,9 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
+  "database": {
+    "rules": "database.rules.json"
+  },
   "hosting": {
     "source": ".",
     "ignore": [
@@ -19,40 +22,84 @@
         "function": "apidata"
       },
       {
+        "source": "/api/session",
+        "function": "participantapi"
+      },
+      {
         "source": "/api/condition",
-        "function": "apicondition"
+        "function": "participantapi"
       },
       {
         "source": "/api/base64",
-        "function": "apibase64"
+        "function": "apidata"
       },
       {
         "source": "/api/oauth2callback",
-        "function": "oauth2callback"
-      },
-      {
-        "source": "/api/oauth2regenerate",
-        "function": "oauth2regenerate"
+        "function": "dashboardapi"
       },
       {
         "source": "/api/checkemailconflict",
-        "function": "checkemailconflict"
+        "function": "dashboardapi"
       },
       {
         "source": "/api/generateoauthstate",
-        "function": "generateoauthstate"
+        "function": "dashboardapi"
       },
       {
         "source": "/api/saveosftoken",
-        "function": "saveosftoken"
-      },
-      {
-        "source": "/api/getosftoken",
-        "function": "getosftoken"
+        "function": "dashboardapi"
       },
       {
         "source": "/api/queuestatus",
         "function": "apiqueuestatus"
+      },
+      {
+        "source": "/api/createexperiment",
+        "function": "dashboardapi"
+      },
+      {
+        "source": "/api/connectprovider",
+        "function": "dashboardapi"
+      },
+      {
+        "source": "/api/connectstatictokenprovider",
+        "function": "dashboardapi"
+      },
+      {
+        "source": "/api/disconnectprovider",
+        "function": "dashboardapi"
+      },
+      {
+        "source": "/api/getprovideraccesstoken",
+        "function": "dashboardapi"
+      },
+      {
+        "source": "/api/providersetupwarnings",
+        "function": "dashboardapi"
+      },
+      {
+        "source": "/api/deleteaccount",
+        "function": "dashboardapi"
+      },
+      {
+        "source": "/api/finalize",
+        "function": "dashboardapi"
+      },
+      {
+        "source": "/api/ensurederivedpaths",
+        "function": "dashboardapi"
+      },
+      {
+        "source": "/api/clearerrors",
+        "function": "dashboardapi"
+      },
+      {
+        "source": "/api/sendcontactemailverification",
+        "function": "dashboardapi"
+      },
+      {
+        "source": "/api/verifycontactemail",
+        "function": "dashboardapi"
       }
     ]
   },
@@ -67,6 +114,10 @@
     },
     "firestore": {
       "port": 8080,
+      "host": "localhost"
+    },
+    "database": {
+      "port": 9000,
       "host": "localhost"
     },
     "hosting": {

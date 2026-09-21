@@ -1,0 +1,57 @@
+{
+  "name": "datapipe-client",
+  "version": "0.1.0",
+  "description": "Framework-neutral client for sending data from browser-based experiments to DataPipe (pipe.jspsych.org), including incremental (streaming) upload.",
+  "type": "module",
+  "license": "MIT",
+  "homepage": "https://github.com/jspsych/datapipe/tree/main/packages/client",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jspsych/datapipe.git",
+    "directory": "packages/client"
+  },
+  "keywords": [
+    "datapipe",
+    "jspsych",
+    "osf",
+    "research",
+    "behavioral-experiments"
+  ],
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "unpkg": "./dist/datapipe-client.browser.global.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "size": "node scripts/report-size.mjs",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "npm run build && changeset publish"
+  },
+  "dependencies": {
+    "firebase": "^12.0.0"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.29.7",
+    "jsdom": "^25.0.1",
+    "tsup": "^8.5.1",
+    "typescript": "^5.6.0",
+    "vitest": "^5.0.1"
+  }
+}

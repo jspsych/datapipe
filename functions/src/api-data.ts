@@ -1,26 +1,189 @@
 import { onRequest } from "firebase-functions/v2/https";
+import type { Request } from "firebase-functions/v2/https";
+import type { Response } from "express";
+import { randomUUID } from "crypto";
 import { FieldValue, DocumentReference, DocumentData, DocumentSnapshot } from "firebase-admin/firestore";
 import validateJSON from "./validate-json.js";
 import validateCSV from "./validate-csv.js";
-import putFileOSF from "./put-file-osf.js";
 import { db } from "./app.js";
 import writeLog from "./write-log.js";
 import MESSAGES from "./api-messages.js";
 import blockMetadata from "./metadata-block.js";
-import resolveToken from "./resolve-token.js";
+import { DerivedFile, uploadPathFor } from "./metadata-derived-files.js";
+import { uploadDerivedFiles, queueDerivedFiles } from "./metadata-derived-upload.js";
+import { claimPsychdsIgnore } from "./psychds-ignore-claim.js";
+import { PSYCHDS_IGNORE_FILENAME } from "@jspsych/metadata";
+import resolveToken, { classifyTokenFailure } from "./resolve-token.js";
 import queueUpload from "./queue-upload.js";
-import { persistPending, cleanupPending } from "./persist-pending.js";
-import { ExperimentData, UserData, MetadataResponse, OSFResult, RequestBody } from './interfaces';
+import { persistPending, cleanupPending, markPendingKept } from "./persist-pending.js";
+import { getProviderForExperiment, claimNameFor } from "./providers/index.js";
+import { WriteResult, ResolvedAuth } from "./providers/types.js";
+import { claimFilename, claimFilenameWithoutCredentials, confirmClaim, CollisionCacheUnavailableError } from "./collision-cache.js";
+import { isCompactionInFlight, COMPACTION_HOLD_REASON } from "./compaction-gate.js";
+import { discardSession, isValidSessionId } from "./staging.js";
+import { ExperimentData, UserData, RequestBody } from './interfaces';
+import { apiBase64Handler } from "./api-base64.js";
 
-export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 }, async (req, res) => {
-  const { experimentID, data, filename, metadataOptions }: RequestBody = req.body;
+// maxInstances: 40, overriding index.ts's global 20 (which still governs
+// every OTHER function). concurrency: 1 stays exactly as 058a1db set it (git
+// show 058a1db): each instance handles one request at a time, so a 512MiB
+// instance cannot be pushed over by concurrent large payloads -- which makes
+// maxInstances the number of submissions processed at once.
+//
+// 40 is what production already served before /api/base64 was folded in
+// here: main deploys apidata and apibase64 as two functions, each at the
+// global 20 with concurrency: 1, so 40 simultaneous submissions across both
+// endpoints. Both now share this one pool, so 40 keeps that capacity rather
+// than halving it. At a second or two per submission that clears roughly 20
+// submissions a second; when every slot is busy Cloud Run holds new requests
+// briefly before refusing them (429).
+//
+// The ceiling is also the cost bound: maxInstances is a CEILING, not a
+// reservation -- idle instances scale to zero, so it costs nothing until
+// traffic reaches it -- but it caps what a flood of requests to this public,
+// unauthenticated endpoint can spend. An earlier revision set 200, for a
+// lecture-hall burst of a few hundred simultaneous submissions, on the
+// mistaken premise that main ran at the default concurrency of 80. It does
+// not (see main's api-data.ts), and no burst anywhere near 40 has been
+// observed. Raise this from production's measured peak concurrency and 429
+// rate, not from a hypothetical. Cloud Run's quota for this CPU size in
+// us-central1 refuses anything above 200 (a deploy at 300 was rejected), so
+// going past that needs a quota increase first.
+//
+// timeoutSeconds: 300 (up from the 60s default) gives collision-cache.ts's
+// rehydrate() -- called below via claimFilename(), and which lists every file
+// a legacy experiment's provider container holds and bulk-writes one Firestore
+// claim per file in batches of 500 -- room to finish for experiments with
+// thousands of existing files. Under the old 60s default the instance was
+// killed mid-rehydration, and because REHYDRATION_LEASE_MS (collision-cache.ts)
+// was also 60s, the lease expired at essentially the same moment: the next
+// submission just repeated the same too-slow rehydration forever, a permanent
+// per-experiment stall. See collision-cache.ts for the matching lease change.
+//
+// CAVEAT: requests that arrive through Firebase Hosting's "/api/data" rewrite
+// (pipe.jspsych.org, firebase.json) are still cut off at Hosting's own fixed
+// 60-second ceiling regardless of this value -- see pages/docs/api.js's
+// "Limits" section, which documents this explicitly ("Every /api/* path runs
+// behind a hosting layer with a hard 60-second ceiling"), and
+// firebase-tools/lib/deploy/functions/validate.js's MAX_V2_HTTP_TIMEOUT_SECONDS
+// (3600s), which caps only the FUNCTION's own timeout and says nothing about
+// what the Hosting proxy in front of it will wait for. So a participant whose
+// submission triggers a cold rehydration will likely still see a 504 at 60s.
+// timeoutSeconds: 300 is still worth setting: Cloud Run keeps the instance
+// running past that client-side disconnect (CPU stays allocated to the
+// in-flight request, not the client's dropped connection) up to this new
+// limit, so rehydrate() gets to finish writing the cache even though that
+// one participant's data landed in the queue (or was lost client-side, per
+// the jsPsych plugin's unconditional response.json() -- a separate, pre-
+// existing problem) instead of a clean 201. Every submission after that one
+// finds a warm cache and succeeds normally, instead of repeating the doomed
+// rehydration on every single request. 300 also covers this endpoint's other
+// slow paths uniformly (the provider upload itself, metadata derivation) for
+// direct Cloud Run invocations that bypass Hosting.
+//
+// ROUTING NOTE (apiBase64 folded in below): apiData is now a small dispatcher
+// in front of this handler and apiBase64Handler (api-base64.ts) -- normalized
+// req.path === "/api/base64" goes to apiBase64Handler, everything else
+// (including "/", which is what a direct function-URL invocation or this
+// file's own tests send) goes here, to apiDataHandler. The DEFAULT branch
+// must stay apiDataHandler, never a 404: a bare "/" is exactly what a request
+// that bypasses Hosting's "/api/data" rewrite looks like, and that has to
+// keep working unchanged. Once the standalone apiBase64 export is removed in
+// the follow-up, apiData and apiBase64 share this one 40-instance pool.
+// apiBase64 itself keeps its own maxInstances (100) as a thin wrapper around
+// the same handler -- see api-base64.ts.
+export async function apiDataHandler(req: Request, res: Response): Promise<void> {
+  const { experimentID, data, filename, sessionId }: RequestBody = req.body;
 
   if (!experimentID || !data || !filename) {
     res.status(400).json(MESSAGES.MISSING_PARAMETER);
     return;
   }
 
-  await writeLog(experimentID, "saveData");
+  // Drop this submission's staged trials, if it streamed
+  // (docs/streaming-ingest-design.md). A no-op for every request that did not
+  // -- the plugin's non-streaming path, and anything written by hand against
+  // this endpoint -- which is what keeps the change below to one line per
+  // branch instead of a second code path through the handler.
+  //
+  // WHERE THIS IS CALLED, AND WHY THERE
+  //
+  // Everywhere cleanupPending() is called, plus the finalized / inactive /
+  // session-cap / unknown-experiment gates above that reject before a pending
+  // copy even exists. Both sets are (almost) the same predicate: DataPipe
+  // either HAS the data somewhere durable (uploaded, or in the encrypted
+  // upload queue) or has DEFINITIVELY REFUSED THE EXPERIMENT, not merely this
+  // submission -- see the "NOT CALLED ON EVERY REFUSAL" note below for the
+  // two exceptions.
+  //
+  // Both halves matter, and for opposite reasons.
+  //
+  //  - Missing the durable half duplicates data. A 202 means queue-upload.ts
+  //    holds an encrypted copy and the retry worker will write it; leaving the
+  //    staged copy behind means the sweep later writes the SAME session again
+  //    as a .partial.json, and the researcher gets both.
+  //  - Missing the refusal half breaks finalization. A submission rejected
+  //    with EXPERIMENT_FINALIZED that stayed staged would come back through
+  //    the sweep as a file landing outside the merged archive -- exactly the
+  //    non-Psych-DS state docs/finalization-spec.md exists to prevent. (The
+  //    sweep re-checks the gates itself, so this is the first of two doors,
+  //    not the only one.)
+  //
+  //  NOT CALLED ON EVERY REFUSAL, THOUGH. The four gates below this comment
+  //  (finalized / inactive / session-cap / unknown experiment -- the last one
+  //  is EXPERIMENT_NOT_FOUND, above this comment, which never staged anything
+  //  in the first place) are refusals about the EXPERIMENT: nothing this
+  //  submission does will ever be accepted, so the staged copy is genuinely
+  //  worthless and discarding it is correct. INVALID_DATA and the
+  //  duplicate-filename refusals (FILE_EXISTS, from either the collision
+  //  cache's "duplicate" verdict or the provider's own NAME_CONFLICT) are
+  //  refusals about THIS SUBMISSION -- this exact string failed validation, or
+  //  this exact filename collided -- and say nothing about whether the
+  //  experiment would accept the participant's trials under a different name
+  //  or format. Discarding on those would destroy the one recoverable copy in
+  //  exactly the case the staging tier exists for: a participant whose
+  //  browser is never coming back to retry. Leaving it staged costs nothing
+  //  extra -- the sweep's second door re-checks finalized/active before ever
+  //  promoting it, so a since-finalized or since-deactivated experiment is
+  //  still covered.
+  //
+  // It is deliberately NOT called on DataPipe's own failures -- a persist
+  // error, a token failure, a metadata error, an exception path that could not
+  // even queue. Those are the cases the staging tier is FOR: the participant
+  // is gone, DataPipe dropped the ball, and the staged copy is the last thing
+  // standing between that and lost data. Same reasoning as the "pending-data
+  // copy is deliberately kept" note in the metadata branch below.
+  //
+  // Never throws: discardSession reports its own errors through its boolean
+  // return value (ignored here) rather than throwing, because orphaned
+  // staging data is a sweep's problem and must never turn a 201 into a 500.
+  //
+  // ORDERING: always awaited BEFORE res.json(), never after. On the branches
+  // that reach cleanupPending() that is already true, because those clean up
+  // ahead of responding. On the three experiment-state gates above it is a
+  // deliberate departure from the surrounding style -- writeLog() there runs
+  // AFTER the response -- and the difference is that a log write losing a
+  // race costs a log line, while this one leaves a participant's trials
+  // sitting in RTDB. Work queued
+  // after a response is not guaranteed to run: the instance can be frozen or
+  // scaled down the moment the response is flushed. Same reasoning as the
+  // "logs are written BEFORE the response here" note on the NAME_CONFLICT
+  // branch below.
+  //
+  // isValidSessionId, not a truthiness check: sessionId is whatever the
+  // request body claimed, unauthenticated and unchecked by anything ahead of
+  // this point, and discardSession splices it straight into an RTDB path. A
+  // body of `{"sessionId": "/"}` is truthy and, once the Admin SDK normalizes
+  // away the empty path segments, resolves to "/staging" and "/openSessions"
+  // themselves -- wiping every in-progress session for every experiment. This
+  // gate runs on every request that reaches discardStaging, including the
+  // three unauthenticated experiment-state gates below (finalized / inactive /
+  // session-cap), so a closed experiment id was, before this check, enough to
+  // reach it. discardSession guards the same thing again on its own input;
+  // this is the first of the two doors, not the only one.
+  const discardStaging = async () => {
+    if (isValidSessionId(sessionId)) await discardSession(sessionId);
+  };
 
   const exp_doc_ref: DocumentReference<DocumentData> = db.collection("experiments").doc(experimentID);
   const exp_doc: DocumentSnapshot = await exp_doc_ref.get();
@@ -40,16 +203,44 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
     return;
   }
 
+  // Identity for every log write below. Reading it costs nothing extra --
+  // exp_doc is already in hand -- and it is what makes logs/{id} readable by
+  // its owner at all (firestore.rules) and groupable by provider.
+  const logContext = { owner: exp_data.owner, storageProvider: exp_data.storageProvider };
+
+  // The attempt is counted HERE, after the experiment is known to exist,
+  // rather than at the top of the handler. Counting first meant every request
+  // carrying a mistyped or invented experiment ID created a log document that
+  // has no owner -- unreadable by anyone, and unbounded in number. See
+  // write-log.ts.
+  await writeLog(experimentID, "saveData", undefined, logContext);
+
+  // Finalization is permanent (docs/finalization-spec.md): once an experiment
+  // is finalized, every remaining file has been merged into one archive and
+  // the originals deleted. A session accepted after that would sit outside
+  // the archive and quietly make the record non-Psych-DS again, so this is
+  // checked ahead of (and independent from) the ordinary `active` flag --
+  // finalizing does not require a researcher to also turn data collection
+  // off, and this message is the one that should surface either way.
+  if (exp_data.finalized) {
+    await discardStaging();
+    res.status(400).json(MESSAGES.EXPERIMENT_FINALIZED);
+    await writeLog(experimentID, "logError", MESSAGES.EXPERIMENT_FINALIZED, logContext);
+    return;
+  }
+
   if (!exp_data.active) {
+    await discardStaging();
     res.status(400).json(MESSAGES.DATA_COLLECTION_NOT_ACTIVE);
-    await writeLog(experimentID, "logError", MESSAGES.DATA_COLLECTION_NOT_ACTIVE);
+    await writeLog(experimentID, "logError", MESSAGES.DATA_COLLECTION_NOT_ACTIVE, logContext);
     return;
   }
 
   if (exp_data.limitSessions) {
     if (exp_data.sessions >= exp_data.maxSessions) {
+      await discardStaging();
       res.status(400).json(MESSAGES.SESSION_LIMIT_REACHED);
-      await writeLog(experimentID, "logError", MESSAGES.SESSION_LIMIT_REACHED);
+      await writeLog(experimentID, "logError", MESSAGES.SESSION_LIMIT_REACHED, logContext);
       return;
     }
   }
@@ -69,8 +260,12 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
       }
     }
     if (!valid) {
+      // Staging is deliberately LEFT ALONE here -- see the comment on
+      // discardStaging() above. This submission's string failed validation;
+      // the trials sitting in RTDB did not, and the sweep is what gives a
+      // participant who cannot retry a second chance at being recovered.
       res.status(400).json(MESSAGES.INVALID_DATA);
-      await writeLog(experimentID, "logError", MESSAGES.INVALID_DATA);
+      await writeLog(experimentID, "logError", MESSAGES.INVALID_DATA, logContext);
       return;
     }
   }
@@ -80,11 +275,11 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
   // during heavy processing (metadata, OSF upload).
   let pendingPath: string;
   try {
-    pendingPath = await persistPending(experimentID, filename, data, metadataOptions);
+    pendingPath = await persistPending(experimentID, filename, data, "data");
   } catch (e) {
     const detail = e instanceof Error ? e.message : "Unknown error";
     res.status(500).json(MESSAGES.DATA_PERSIST_ERROR);
-    await writeLog(experimentID, "logError", {...MESSAGES.DATA_PERSIST_ERROR, detail});
+    await writeLog(experimentID, "logError", {...MESSAGES.DATA_PERSIST_ERROR, detail}, logContext);
     return;
   }
 
@@ -92,7 +287,7 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
 
   if (!user_doc.exists) {
     res.status(400).json(MESSAGES.INVALID_OWNER);
-    await writeLog(experimentID, "logError", MESSAGES.INVALID_OWNER);
+    await writeLog(experimentID, "logError", MESSAGES.INVALID_OWNER, logContext);
     return;
   }
 
@@ -100,9 +295,23 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
 
   if (!user_data) {
     res.status(400).json(MESSAGES.USER_DATA_NOT_FOUND);
-    await writeLog(experimentID, "logError", MESSAGES.USER_DATA_NOT_FOUND);
+    await writeLog(experimentID, "logError", MESSAGES.USER_DATA_NOT_FOUND, logContext);
     return;
   }
+
+  //With metadata on, the raw submission is the critical upload and lives at
+  //data/raw/<original name> in the Psych-DS layout (the CSVs above are derived
+  //from it). Session counting and queue-on-failure key off this file. With
+  //metadata off, the layout is unchanged: the raw file goes to the root.
+  //
+  // Computed here -- ahead of token resolution -- rather than down in the
+  // metadata block where it used to live, purely so the RECOVERABLE
+  // token-failure branch below can queue under the same path the retry
+  // worker will eventually write. uploadPathFor is pure and depends only on
+  // exp_data.metadataActive and filename, neither of which changes between
+  // here and its old call site, so moving it earlier changes no behavior for
+  // any other branch.
+  const uploadFilename = uploadPathFor(exp_data.metadataActive, filename);
 
   let tokenResult: Awaited<ReturnType<typeof resolveToken>>;
   try {
@@ -110,101 +319,418 @@ export const apiData = onRequest({ cors: true, memory: "512MiB", concurrency: 1 
   } catch (e) {
     const detail = e instanceof Error ? e.message : "Unknown error";
     res.status(500).json(MESSAGES.TOKEN_RESOLUTION_ERROR);
-    await writeLog(experimentID, "logError", {...MESSAGES.TOKEN_RESOLUTION_ERROR, detail});
+    await writeLog(experimentID, "logError", {...MESSAGES.TOKEN_RESOLUTION_ERROR, detail}, logContext);
     return;
   }
 
   if (!tokenResult.success) {
     const errorMessage = MESSAGES[tokenResult.error as keyof typeof MESSAGES] || MESSAGES.TOKEN_RESOLUTION_ERROR;
-    res.status(400).json(errorMessage);
-    await writeLog(experimentID, "logError", {...errorMessage, detail: tokenResult.detail});
-    return;
+
+    // NOT_RECOVERABLE (no connection for this owner/provider at all --
+    // resolve-token.ts's classifyTokenFailure) keeps the original behavior:
+    // reject outright, nothing to queue a retry against.
+    if (classifyTokenFailure(tokenResult.error) === "NOT_RECOVERABLE") {
+      res.status(400).json(errorMessage);
+      await writeLog(experimentID, "logError", {...errorMessage, detail: tokenResult.detail}, logContext);
+      return;
+    }
+
+    // RECOVERABLE: a connection exists but its credential is currently
+    // unusable (expired/revoked refresh token, a failed refresh exchange, an
+    // expired static token). The researcher reconnecting -- or the token
+    // simply outliving a transient refresh-endpoint hiccup -- fixes this with
+    // no code change, so this is queued for retry exactly like the "upload
+    // exception" branch below, instead of rejecting a submission that a later
+    // attempt could have saved.
+    //
+    // The filename is claimed first, the same as on the normal path, so a
+    // repeated name is rejected here instead of replacing the first
+    // submission's queued payload, and the retry worker re-enters this claim
+    // by its token. See claimFilenameWithoutCredentials for the cold-cache
+    // case. No derivedFiles are queued: the metadata block hasn't run yet,
+    // and the retry worker never generates them for any queued entry.
+    const tokenFailureClaimToken = randomUUID();
+    const { provider: tokenFailureProvider } = getProviderForExperiment(exp_data);
+    const claimOutcome = await claimFilenameWithoutCredentials(
+      experimentID, claimNameFor(tokenFailureProvider, uploadFilename), tokenFailureClaimToken
+    );
+    if (claimOutcome === "duplicate") {
+      await cleanupPending(pendingPath);
+      res.status(400).json(MESSAGES.FILE_EXISTS);
+      await writeLog(experimentID, "logError", MESSAGES.FILE_EXISTS, logContext);
+      return;
+    }
+    try {
+      await queueUpload({
+        experimentID, owner: exp_data.owner, filename: uploadFilename, data,
+        dataType: "data", osfFilesLink: exp_data.osfFilesLink,
+        storageProvider: exp_data.storageProvider, providerContainer: exp_data.providerContainer,
+        errorCode: 0, sessionIncremented: true,
+        failureReason: `Token resolution failed: ${tokenResult.error}`,
+        // Same code the retry worker assigns, so the first retry is the
+        // 60-second probe and QueuePanel shows the credential copy right away.
+        providerErrorCode: "AUTH_EXPIRED",
+        claimToken: tokenFailureClaimToken,
+      });
+      await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
+      await cleanupPending(pendingPath); // queue-upload has its own copy
+      await discardStaging();
+      res.status(202).json(MESSAGES.UPLOAD_QUEUED);
+      // Counted apart from both success and failure, same convention as
+      // every other queue branch -- see write-log.ts.
+      await writeLog(experimentID, "saveDataQueued", undefined, logContext);
+      // The original credential-specific message (INVALID_REFRESH_TOKEN,
+      // PROVIDER_TOKEN_EXPIRED, INVALID_OSF_TOKEN, ...), not a generic queued
+      // notice -- this is what makes the dashboard's error panel show the
+      // credential problem immediately, before the failure-notification email
+      // (which waits for the retry worker's first attempt) ever fires.
+      await writeLog(experimentID, "logError", {...errorMessage, detail: tokenResult.detail}, logContext);
+      return;
+    } catch {
+      res.status(500).json(MESSAGES.UPLOAD_EXCEPTION);
+      await writeLog(experimentID, "logError", {...errorMessage, detail: tokenResult.detail}, logContext);
+      return;
+    }
   }
 
-  const token = tokenResult.token;
+  const auth: ResolvedAuth = { token: tokenResult.token, serverUrl: tokenResult.serverUrl };
 
   //METADATA BLOCK START
 
   let metadataMessage: string = '';
+  //Psych-DS files derived from this submission (main data CSV, sidecar CSVs
+  //for nested columns, .psychds-ignore), produced by the metadata block and
+  //uploaded only after the participant's raw data file lands in OSF.
+  let derivedFiles: DerivedFile[] = [];
 
   if (exp_data.metadataActive) {
     //Creates or references a document containing the metadata for the experiment in the metdata collection on Firestore.
     const metadata_doc_ref: DocumentReference<DocumentData> = db.collection("metadata").doc(experimentID);
 
-    const metadataResponse: MetadataResponse = await blockMetadata(exp_data, user_data, metadata_doc_ref, data, metadataOptions);
+    const metadataResponse = await blockMetadata(exp_data, auth, metadata_doc_ref, data, filename);
 
     if (metadataResponse.success === false) {
-      await cleanupPending(pendingPath);
+      // The pending-data copy is deliberately kept (not cleaned up) here: the
+      // participant's raw data never made it to OSF, so scheduled-pending-recovery
+      // salvages it later instead of losing it outright.
       res.status(400).json(metadataResponse);
-      await writeLog(experimentID, "logError", {...MESSAGES.METADATA_ERROR, detail: metadataResponse.message});
+      await writeLog(experimentID, "logError", {...MESSAGES.METADATA_ERROR, detail: metadataResponse.message}, logContext);
+      // Label WHY the pending copy was kept, so scheduled-pending-recovery.ts
+      // can promote it with a reason that says "no Psych-DS metadata" instead
+      // of its generic OOM/restart wording. Best-effort and after the
+      // response/log above -- see markPendingKept's doc comment.
+      await markPendingKept(pendingPath, "metadata-failure");
       return;
     }
 
     metadataMessage = metadataResponse.metadataMessage;
+    derivedFiles = metadataResponse.derivedFiles ?? [];
+
+    // .psychds-ignore is byte-identical on every submission, so it only ever
+    // needs writing ONCE per experiment -- see psychds-ignore-claim.ts's
+    // header for why relying on the provider's NAME_CONFLICT
+    // (metadata-derived-upload.ts's existing dedup) is not enough: Google
+    // Drive permits duplicate names and never sends one. Filtered here, at
+    // the source, before EITHER path below that consumes derivedFiles sees
+    // it -- the direct uploadDerivedFiles call and every queueDerivedFiles
+    // call, including the compaction-hold one.
+    if (derivedFiles.some((file) => file.filename === PSYCHDS_IGNORE_FILENAME)) {
+      // The common case costs zero extra reads: this experiment document was
+      // already loaded above for this request, so its claim state is already
+      // in hand. Only the (at most one, ever) request that finds the field
+      // absent pays for the claim transaction.
+      const shouldWrite =
+        exp_data.psychdsIgnoreWrittenAt != null ? false : await claimPsychdsIgnore(experimentID);
+      if (!shouldWrite) {
+        derivedFiles = derivedFiles.filter((file) => file.filename !== PSYCHDS_IGNORE_FILENAME);
+      }
+    }
   }
+
+  const derivedTarget = {
+    experimentID,
+    owner: exp_data.owner,
+    storageProvider: exp_data.storageProvider,
+    providerContainer: exp_data.providerContainer,
+    osfFilesLink: exp_data.osfFilesLink,
+  };
 
   //METADATA BLOCK END
 
-  let result: OSFResult;
+  const { provider, container } = getProviderForExperiment(exp_data);
+
+  // Collision detection: claim the filename in the Firestore cache
+  // immediately before the provider write. The provider's own conflict
+  // response (NAME_CONFLICT) stays wired up below as a dual-run backstop.
+  //
+  // Claimed on the name the PROVIDER will store this file under, derived from
+  // uploadFilename by that adapter's own storedNameFor. It used to be claimed
+  // on the raw leaf filename, which put claims in a different namespace from
+  // the listFiles results a cold cache rehydrates from -- so on a rehydrated
+  // cache no claim ever matched, and the providers with no NAME_CONFLICT to
+  // fall back on silently overwrote (Zenodo) or duplicated (Dataverse) a
+  // participant's data. It also disagreed with the retry worker, which claims
+  // on the queued upload path, so a queued retry never re-entered its own
+  // pending claim.
+  const claimToken = randomUUID();
+  const claimName = claimNameFor(provider, uploadFilename);
+  let claimResult: Awaited<ReturnType<typeof claimFilename>>;
   try {
-    result = await putFileOSF(
-      exp_data.osfFilesLink,
-      token,
-      data,
-      filename
+    claimResult = await claimFilename(experimentID, claimName, claimToken, () =>
+      provider.listFiles(auth, container)
     );
   } catch (e) {
-    // Network errors, timeouts, etc. — queue for retry
-    const detail = e instanceof Error ? e.message : "Unknown error";
+    if (e instanceof CollisionCacheUnavailableError) {
+      const detail = e.message;
+      try {
+        await queueUpload({
+          // uploadFilename, not the raw filename: the retry worker writes
+          // whatever it finds here, so queueing the raw leaf would drop a
+          // metadataActive submission at the container root instead of under
+          // data/raw/ (and claim it in the wrong namespace on the way).
+          experimentID, owner: exp_data.owner, filename: uploadFilename, data,
+          dataType: "data", osfFilesLink: exp_data.osfFilesLink,
+          storageProvider: exp_data.storageProvider, providerContainer: exp_data.providerContainer,
+          errorCode: 0, sessionIncremented: true,
+          failureReason: `Collision cache rehydration failed: ${detail}`,
+          claimToken,
+        });
+        await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
+        await cleanupPending(pendingPath); // queue-upload has its own copy
+        await discardStaging();
+        res.status(202).json({...MESSAGES.UPLOAD_QUEUED, metadataMessage});
+        // The submission is safe (queue-upload.ts holds an encrypted copy) but
+        // is not in the researcher's storage yet. Counted apart from both
+        // success and failure so that
+        //   failed = saveData - saveDataSucceeded - saveDataQueued
+        // holds exactly. See write-log.ts.
+        await writeLog(experimentID, "saveDataQueued", undefined, logContext);
+        await writeLog(experimentID, "logError", {...MESSAGES.UPLOAD_EXCEPTION, detail: `Collision cache rehydration failed: ${detail}`}, logContext);
+        return;
+      } catch {
+        res.status(500).json({...MESSAGES.UPLOAD_EXCEPTION, metadataMessage});
+        await writeLog(experimentID, "logError", {...MESSAGES.UPLOAD_EXCEPTION, detail}, logContext);
+        return;
+      }
+    }
+    throw e;
+  }
+
+  if (!claimResult.claimed) {
+    if (claimResult.reason === "duplicate") {
+      // cleanupPending() runs (the Cloud Storage pending copy really is
+      // superseded -- persist-pending.ts's own sweep would just rediscover an
+      // identical failure), but staging is deliberately LEFT ALONE -- see the
+      // comment on discardStaging() above. This filename collided; the
+      // participant's trials did not, and the sweep can still recover them
+      // under partialFilenameFor's own (hash-suffixed) name.
+      await cleanupPending(pendingPath);
+      res.status(400).json({...MESSAGES.FILE_EXISTS, metadataMessage});
+      await writeLog(experimentID, "logError", MESSAGES.FILE_EXISTS, logContext);
+      return;
+    }
+
+    // reason === "rehydrating" — another request holds the rehydration
+    // lease; queue this upload and let the retry land after it expires.
     try {
       await queueUpload({
-        experimentID, owner: exp_data.owner, filename, data,
+        // uploadFilename for the same reason as the rehydration-failure path
+        // above -- the retry worker writes exactly what is queued here.
+        experimentID, owner: exp_data.owner, filename: uploadFilename, data,
         dataType: "data", osfFilesLink: exp_data.osfFilesLink,
+        storageProvider: exp_data.storageProvider, providerContainer: exp_data.providerContainer,
         errorCode: 0, sessionIncremented: true,
-        failureReason: `Upload exception: ${detail}`,
+        failureReason: "Collision cache rehydrating",
+        claimToken,
       });
       await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
       await cleanupPending(pendingPath); // queue-upload has its own copy
-      res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail});
+      await discardStaging();
+      // Same reasoning as the compaction-gate branch below: without this the
+      // session's derived tables are never generated at all. Pre-dates the
+      // gate and is far rarer (a rehydration lease lasts 60 seconds), but it
+      // is the identical hole.
+      await queueDerivedFiles(derivedFiles, derivedTarget, "Collision cache rehydrating");
+      res.status(202).json({...MESSAGES.UPLOAD_QUEUED, metadataMessage});
+      await writeLog(experimentID, "saveDataQueued", undefined, logContext);
+      await writeLog(experimentID, "logError", {...MESSAGES.UPLOAD_EXCEPTION, detail: "Collision cache rehydrating"}, logContext);
       return;
     } catch {
-      res.status(500).json({...MESSAGES.OSF_UPLOAD_EXCEPTION, metadataMessage});
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_EXCEPTION, detail});
+      res.status(500).json({...MESSAGES.UPLOAD_EXCEPTION, metadataMessage});
+      await writeLog(experimentID, "logError", {...MESSAGES.UPLOAD_EXCEPTION, detail: "Collision cache rehydrating"}, logContext);
+      return;
+    }
+  }
+
+  // A compaction pass is rearranging this container right now. DataPipe is its
+  // only writer, so holding this submission back is what guarantees the pass
+  // has room for the archive it is about to upload -- see compaction-gate.ts.
+  // The queue is the same durable buffer that absorbs provider outages, and
+  // compaction releases these entries as soon as its pass ends.
+  if (isCompactionInFlight(exp_data)) {
+    try {
+      await queueUpload({
+        experimentID, owner: exp_data.owner, filename: uploadFilename, data,
+        dataType: "data", osfFilesLink: exp_data.osfFilesLink,
+        storageProvider: exp_data.storageProvider, providerContainer: exp_data.providerContainer,
+        errorCode: 0, sessionIncremented: true,
+        failureReason: COMPACTION_HOLD_REASON,
+        // CONTENTION is exactly this situation as types.ts defines it --
+        // "another write to this same container is already in flight" -- and it
+        // puts the entry on the 60-second fast tier, so it drains promptly even
+        // if the explicit release is missed.
+        providerErrorCode: "CONTENTION",
+        claimToken,
+      });
+      await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
+      await cleanupPending(pendingPath); // queue-upload has its own copy
+      await discardStaging();
+      // The derived Psych-DS tables have to be queued too. The retry worker
+      // only writes back what is in the queue -- it never re-runs the metadata
+      // pipeline -- so queueing the raw file alone means this session's
+      // data/<base>_data.csv is never produced at all. The raw file is the
+      // source of truth and no submitted data is lost either way, but the
+      // dataset ends up missing derived tables for every session the gate
+      // diverted, which is a Psych-DS dataset with holes in it. Observed live:
+      // 44 loose raw sessions against 10 derived CSVs.
+      await queueDerivedFiles(derivedFiles, derivedTarget, COMPACTION_HOLD_REASON, "CONTENTION");
+      res.status(202).json({...MESSAGES.UPLOAD_QUEUED, metadataMessage});
+      await writeLog(experimentID, "saveDataQueued", undefined, logContext);
+      return;
+    } catch {
+      res.status(500).json({...MESSAGES.UPLOAD_EXCEPTION, metadataMessage});
+      return;
+    }
+  }
+
+  let result: WriteResult;
+  try {
+    result = await provider.writeSessionFile(
+      auth,
+      container,
+      uploadFilename,
+      data,
+      { size: Buffer.byteLength(data), contentType: "application/json" }
+    );
+  } catch (e) {
+    // Network errors, timeouts, etc. — queue for retry. The claim stays
+    // pending so the retry can re-enter it with the same token.
+    const detail = e instanceof Error ? e.message : "Unknown error";
+    try {
+      await queueUpload({
+        experimentID, owner: exp_data.owner, filename: uploadFilename, data,
+        dataType: "data", osfFilesLink: exp_data.osfFilesLink,
+        storageProvider: exp_data.storageProvider, providerContainer: exp_data.providerContainer,
+        errorCode: 0, sessionIncremented: true,
+        failureReason: `Upload exception: ${detail}`,
+        claimToken,
+      });
+      await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
+      await cleanupPending(pendingPath); // queue-upload has its own copy
+      await discardStaging();
+      // OSF is unreachable, so queue the derived files alongside the raw data.
+      await queueDerivedFiles(derivedFiles, derivedTarget, `Queued alongside data file: ${detail}`);
+      res.status(202).json({...MESSAGES.UPLOAD_QUEUED, metadataMessage});
+      await writeLog(experimentID, "saveDataQueued", undefined, logContext);
+      await writeLog(experimentID, "logError", {...MESSAGES.UPLOAD_EXCEPTION, detail}, logContext);
+      return;
+    } catch {
+      res.status(500).json({...MESSAGES.UPLOAD_EXCEPTION, metadataMessage});
+      await writeLog(experimentID, "logError", {...MESSAGES.UPLOAD_EXCEPTION, detail}, logContext);
       return;
     }
   }
 
   if (!result.success) {
-    if (result.errorCode === 409 && result.errorText === "Conflict") {
-      res.status(400).json({...MESSAGES.OSF_FILE_EXISTS, metadataMessage});
-      await writeLog(experimentID, "logError", MESSAGES.OSF_FILE_EXISTS);
+    if (result.error === "NAME_CONFLICT" && result.providerMessage === "Conflict") {
+      // Dual-run disagreement: the cache thought the name was free but OSF
+      // says it's taken. OSF is still the backstop — record the
+      // disagreement and confirm the claim (the name is now provably taken).
+      await confirmClaim(experimentID, claimName, claimToken);
+      // Logs are written BEFORE the response here (unlike other branches):
+      // the disagreement entry is the dual-run's whole audit trail, and
+      // responding first races observers of the log against the write.
+      await writeLog(experimentID, "logError", MESSAGES.FILE_EXISTS, logContext);
+      await writeLog(experimentID, "logError", {
+        // Carries an `error` code like every other entry so it lands in its
+        // own errorsByCode bucket instead of the UNCODED catch-all -- a
+        // dual-run disagreement is exactly the kind of thing worth counting
+        // per provider. The boolean stays for the existing audit trail.
+        error: "COLLISION_CACHE_DISAGREEMENT",
+        collisionCacheDisagreement: true,
+        direction: "cache-free-provider-conflict",
+      }, logContext);
+      await cleanupPending(pendingPath);
+      // Staging is deliberately LEFT ALONE here too -- see the comment on
+      // discardStaging() above. The provider refused this filename; the
+      // participant's trials did not, and the sweep can still recover them
+      // under partialFilenameFor's own (hash-suffixed) name.
+      res.status(400).json({...MESSAGES.FILE_EXISTS, metadataMessage});
       return;
     }
-    // Queue all other failures for retry
+    // Queue all other failures for retry. The claim stays pending so the
+    // retry can re-enter it with the same token.
     try {
       await queueUpload({
-        experimentID, owner: exp_data.owner, filename, data,
+        experimentID, owner: exp_data.owner, filename: uploadFilename, data,
         dataType: "data", osfFilesLink: exp_data.osfFilesLink,
-        errorCode: result.errorCode || 0, sessionIncremented: true,
-        failureReason: `OSF error ${result.errorCode}: ${result.errorText}`,
+        storageProvider: exp_data.storageProvider, providerContainer: exp_data.providerContainer,
+        errorCode: result.providerStatus || 0, providerErrorCode: result.error, sessionIncremented: true,
+        failureReason: `Provider error ${result.providerStatus}: ${result.providerMessage}`,
+        claimToken,
       });
       await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
       await cleanupPending(pendingPath); // queue-upload has its own copy
-      res.status(202).json({...MESSAGES.OSF_UPLOAD_QUEUED, metadataMessage});
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.errorCode, osfStatusText: result.errorText});
+      await discardStaging();
+      // OSF is failing, so queue the derived files alongside the raw data —
+      // same provider error code, since it's the same provider write path.
+      await queueDerivedFiles(derivedFiles, derivedTarget, `Queued alongside data file: Provider error ${result.providerStatus}`, result.error);
+      res.status(202).json({...MESSAGES.UPLOAD_QUEUED, metadataMessage});
+      await writeLog(experimentID, "saveDataQueued", undefined, logContext);
+      await writeLog(experimentID, "logError", {...MESSAGES.UPLOAD_ERROR, osfStatus: result.providerStatus, osfStatusText: result.providerMessage}, logContext);
       return;
     } catch {
-      res.status(400).json({...MESSAGES.OSF_UPLOAD_ERROR, metadataMessage});
-      await writeLog(experimentID, "logError", {...MESSAGES.OSF_UPLOAD_ERROR, osfStatus: result.errorCode, osfStatusText: result.errorText});
+      res.status(400).json({...MESSAGES.UPLOAD_ERROR, metadataMessage});
+      await writeLog(experimentID, "logError", {...MESSAGES.UPLOAD_ERROR, osfStatus: result.providerStatus, osfStatusText: result.providerMessage}, logContext);
       return;
     }
   }
+
+  // Successful write — confirm the claim (best-effort; a confirm failure
+  // must not fail a request that already succeeded against the provider).
+  await confirmClaim(experimentID, claimName, claimToken);
+
+  // The participant's file is in the researcher's storage. This is the only
+  // place in this handler that is true.
+  await writeLog(experimentID, "saveDataSucceeded", undefined, logContext);
 
   await exp_doc_ref.set({ sessions: FieldValue.increment(1) }, { merge: true });
 
   // Data successfully uploaded to OSF — clean up the pending copy.
   await cleanupPending(pendingPath);
+  await discardStaging();
+
+  // The raw data file is safely in OSF; upload the files derived from it
+  // (main data CSV, sidecar CSVs, .psychds-ignore — best-effort: failures are
+  // queued for retry and logged, never failing the submission).
+  await uploadDerivedFiles(derivedFiles, derivedTarget, auth);
 
   res.status(201).json({...MESSAGES.SUCCESS, metadataMessage});
-});
+}
+
+// See the long comment above apiDataHandler for why every one of these
+// values is load-bearing: memory and concurrency guard against real
+// out-of-memory incidents, and maxInstances bounds both capacity and cost.
+// Do not alter them here without reading it.
+export const apiData = onRequest(
+  { cors: true, memory: "512MiB", concurrency: 1, maxInstances: 40, timeoutSeconds: 300 },
+  async (req, res) => {
+    const path =
+      req.path.length > 1 && req.path.endsWith("/") ? req.path.slice(0, -1) : req.path;
+    if (path === "/api/base64") {
+      await apiBase64Handler(req, res);
+      return;
+    }
+    await apiDataHandler(req, res);
+  }
+);

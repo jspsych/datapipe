@@ -1,27 +1,25 @@
 {
   "name": "@jspsych/metadata",
-  "version": "0.0.1",
-  "description": "jsPsych plugin for creating and customizing metadata according to Psych-DS standards.",
+  "version": "0.0.3",
+  "description": "jsPsych package for creating and customizing metadata according to Psych-DS standards.",
   "type": "module",
-  "main": "dist/index.cjs",
+  "main": "dist/index.js",
   "exports": {
-    "import": "./dist/index.js",
-    "require": "./dist/index.cjs"
+    ".": {
+      "import": {
+        "node": "./dist/index.js",
+        "default": "./dist/index.esm.js"
+      },
+      "require": "./dist/index.cjs",
+      "types": "./dist/index.d.ts"
+    }
   },
   "typings": "dist/index.d.ts",
   "unpkg": "dist/index.browser.min.js",
   "files": [
-    "src",
     "dist"
   ],
   "source": "src/index.ts",
-  "scripts": {
-    "test": "jest",
-    "test:watch": "npm test -- --watch",
-    "tsc": "tsc",
-    "build": "rollup --config",
-    "build:watch": "npm run build -- --watch"
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/jspsych/jsPsych.git",
@@ -33,13 +31,7 @@
     "url": "https://github.com/jspsych/jsPsych/issues"
   },
   "homepage": "https://www.jspsych.org/latest/metadata",
-  "peerDependencies": {
-    "jspsych": "^8.0.0"
-  },
-  "devDependencies": {
-    "@jspsych/config": "^3.2.2",
-    "@jspsych/test-utils": "^1.1.2",
-    "@types/jest": "^29.5.12",
-    "ts-jest": "^29.1.4"
+  "dependencies": {
+    "csv-parse": "^5.5.6"
   }
 }
