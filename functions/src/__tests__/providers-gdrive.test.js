@@ -904,7 +904,10 @@ describe("7. downloadFile", () => {
     });
   });
 
-  it("osf: GETs filesLink+id and returns the body text as content", async () => {
+  // The WaterButler "osfstorage/" id prefix is stripped: filesLink already
+  // names the provider, so appending the prefixed id would double it (see
+  // bareFileId in providers/osf.ts and providers-osf.test.js).
+  it("osf: GETs filesLink+bare id and returns the body text as content", async () => {
     mockFetch.mockResolvedValueOnce(mockResponse({ status: 200, statusText: "OK", textBody: "osf file content" }));
 
     const container = { provider: "osf", filesLink: "https://osf.io/abc123/" };
@@ -912,7 +915,7 @@ describe("7. downloadFile", () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const { url, options } = callArgs(0);
-    expect(url).toBe("https://osf.io/abc123/osfstorage/111");
+    expect(url).toBe("https://osf.io/abc123/111");
     expect(options.method).toBe("GET");
     expect(header(options.headers, "Authorization")).toBe("Bearer test-token");
 

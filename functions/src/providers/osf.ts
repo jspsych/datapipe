@@ -29,6 +29,18 @@ function hasValidPAT(user_data: UserData): boolean {
   return user_data.osfTokenValid && !!user_data.osfToken;
 }
 
+// WaterButler reports file ids with a provider prefix ("osfstorage/<id>"),
+// and listFiles / putFileOSF hand that id back verbatim, so it is what gets
+// stored in metadataFileRef. filesLink already ends in "/providers/osfstorage/",
+// so appending the prefixed id names the provider twice and misses the file.
+// main's metadata-process.ts stripped the prefix at lookup time; the strip was
+// lost when the adapter started tracking refs, so it lives here now, at the
+// two places ids become URLs (updateFile, downloadFile). Bare ids pass
+// through unchanged.
+function bareFileId(fileId: string): string {
+  return fileId.replace(/^osfstorage\//, "");
+}
+
 function mapStatus(errorCode: number | null): ProviderErrorCode {
   switch (errorCode) {
     case 409:
@@ -212,7 +224,7 @@ export const osfProvider: StorageProvider = {
 
     // updateFileOSF throws on non-200 responses — let the throw propagate,
     // callers rely on this behavior.
-    await updateFileOSF(osfContainer.filesLink, auth.token, data as string, existingFileRef.id as string);
+    await updateFileOSF(osfContainer.filesLink, auth.token, data as string, bareFileId(existingFileRef.id as string));
 
     return {
       success: true,
@@ -247,7 +259,7 @@ export const osfProvider: StorageProvider = {
   ): Promise<DownloadResult> {
     const osfContainer = container as OSFContainerRef;
 
-    const response = await fetch(`${osfContainer.filesLink}${fileRef.id}`, {
+    const response = await fetch(`${osfContainer.filesLink}${bareFileId(fileRef.id as string)}`, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${auth.token}`,

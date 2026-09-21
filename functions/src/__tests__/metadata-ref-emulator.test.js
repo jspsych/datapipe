@@ -316,6 +316,62 @@ describe("5. legacy discovery: metadata doc has metadata but no metadataFileRef 
   });
 });
 
+// 4b/5b: the same two flows with file ids in WaterButler's real shape,
+// "osfstorage/<id>". listFiles and putFileOSF pass that id through verbatim,
+// and osfFilesLink already ends in "/providers/osfstorage/", so the adapter
+// has to strip the prefix before building a file URL. Cases 4 and 5 use bare
+// ids and cannot see the difference; with the prefix left on, the update
+// misses the file, the self-heal re-create hits OSF's 409 (forced below, as
+// real OSF answers for an existing name), and every submission to a
+// metadata-active OSF experiment fails with METADATA_ERROR.
+describe("4b. stored ref with a WaterButler-prefixed id updates the bare-id file", () => {
+  it("PUTs to /files/<id>, not /files/osfstorage/<id>", async () => {
+    const experimentID = `metadata-ref4b-${randomUUID()}`;
+    const bareId = `preexisting-meta-${randomUUID()}`;
+    await createExperiment(experimentID);
+
+    await db.collection("metadata").doc(experimentID).set({
+      metadata: existingMetadata,
+      metadataFileRef: { id: `osfstorage/${bareId}`, name: "dataset_description.json" },
+    });
+    mockOSF.forceCreateStatus("dataset_description.json", 409);
+
+    const response = await saveData({
+      experimentID,
+      data: sampleData,
+      filename: `case4b-${randomUUID()}.json`,
+    });
+
+    expect(response.status).toBe(201);
+    expect(mockOSF.getUpdateCount(bareId)).toBe(1);
+    expect(mockOSF.getCreateCount("dataset_description.json")).toBe(0);
+  });
+});
+
+describe("5b. legacy discovery with a WaterButler-prefixed id (the pre-migration production shape)", () => {
+  it("updates the existing dataset_description.json instead of failing with METADATA_ERROR", async () => {
+    const experimentID = `metadata-ref5b-${randomUUID()}`;
+    const bareId = `legacy-meta-${randomUUID()}`;
+    await createExperiment(experimentID);
+
+    await db.collection("metadata").doc(experimentID).set({ metadata: existingMetadata });
+    mockOSF.setListing([
+      { attributes: { name: "dataset_description.json", kind: "file" }, id: `osfstorage/${bareId}` },
+    ]);
+    mockOSF.forceCreateStatus("dataset_description.json", 409);
+
+    const response = await saveData({
+      experimentID,
+      data: sampleData,
+      filename: `case5b-${randomUUID()}.json`,
+    });
+
+    expect(response.status).toBe(201);
+    expect(mockOSF.getUpdateCount(bareId)).toBe(1);
+    expect(mockOSF.getCreateCount("dataset_description.json")).toBe(0);
+  });
+});
+
 describe("6. 210-bug resurrection: metadataFileRef explicitly null, no metadata file on the provider", () => {
   it("creates the metadata file and succeeds (previously always failed with METADATA_ERROR)", async () => {
     const experimentID = `metadata-ref6-${randomUUID()}`;
