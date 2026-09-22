@@ -17,16 +17,21 @@
 // which time the declaration has run. The test covers this, because a reader
 // copying the sample is likely to "simplify" it back into a string.
 //
+// `baseURL` is set only on builds that are not production (lib/base-url.js),
+// where the extension's built-in default would send the data to the wrong
+// deployment.
+//
 // Flush-left on purpose: CodeBlock strips the first line's indentation from
 // every line, and there is none here to strip.
-export function extensionSnippet(expId) {
+export function extensionSnippet(expId, baseURL = null) {
+  const baseURLParam = baseURL ? `,\n        base_url: "${baseURL}"` : "";
   return `const jsPsych = initJsPsych({
   extensions: [
     {
       type: jsPsychExtensionPipe,
       params: {
         experiment_id: "${expId}",
-        filename: () => \`\${subject_id}.csv\`
+        filename: () => \`\${subject_id}.csv\`${baseURLParam}
       }
     }
   ]
