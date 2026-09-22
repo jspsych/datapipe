@@ -1,8 +1,9 @@
 // The three one-shot REST calls: saveData, saveBase64Data, getCondition.
 // Incremental upload (DataPipeSession) lives in session.ts and calls
-// saveData too, via the caller's own code -- see the `sessionId` option.
+// saveData too, via the caller's own code -- see the `session` option.
 
 import { endpoint, experimentIDFrom, isSuccessfulResult, sendRequest } from "./http.js";
+import type { DataPipeSession } from "./session.js";
 import { ExperimentIDOption, SaveResult } from "./types.js";
 
 export { setBaseURL, getBaseURL } from "./http.js";
@@ -40,23 +41,32 @@ async function postJSON(
  *   its extension. If it already exists, no data will be saved.
  * @param options.data A string-based representation of the data (JSON, CSV,
  *   or any other text-based format).
- * @param options.sessionId Present only for a streamed session -- see
- *   `DataPipeSession`. Carries no data of its own; it tells DataPipe which
- *   staged copy this submission supersedes.
+ * @param options.session The streamed session this submission completes, if
+ *   there is one. saveData waits for it to start and sends its id, which
+ *   tells DataPipe which staged copy this submission supersedes.
+ * @param options.sessionId The same id, given directly. Use `session`
+ *   instead unless you are managing the id yourself; if both are given,
+ *   `session` wins.
  * @param options.baseURL Override the DataPipe deployment for this call.
  */
 export async function saveData(
   options: ExperimentIDOption & {
     filename: string;
     data: string;
+    session?: DataPipeSession;
     sessionId?: string;
     baseURL?: string;
   }
 ): Promise<SaveResult> {
   const experimentID = experimentIDFrom(options);
-  const { filename, data, sessionId, baseURL } = options;
+  const { filename, data, session, baseURL } = options;
   if (!experimentID || !filename || !data) {
     throw new Error("Missing required parameter(s).");
+  }
+  let sessionId = options.sessionId;
+  if (session) {
+    await session.ready();
+    sessionId = session.sessionId;
   }
   return postJSON(
     endpoint("data", baseURL),

@@ -124,6 +124,51 @@ describe("saveData", () => {
     expect(body.sessionId).toBe("SESSION123");
   });
 
+  it("waits for a session that has not started yet, then sends its id", async () => {
+    let started!: () => void;
+    const session = {
+      sessionId: "",
+      ready: () =>
+        new Promise<void>((resolve) => {
+          started = () => {
+            session.sessionId = "SESSION123";
+            resolve();
+          };
+        }),
+    };
+    const fetchMock = mockFetch(() => ({ message: "Success" }));
+
+    const pending = saveData({
+      experimentID: "EXP12345",
+      filename: "p01.csv",
+      data: "a,b\n1,2\n",
+      session: session as any,
+    });
+    await Promise.resolve();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    started();
+    await pending;
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1]!.body as string);
+    expect(body.sessionId).toBe("SESSION123");
+  });
+
+  it("sends no sessionId for a session that could not start", async () => {
+    const session = { sessionId: "", ready: async () => {} };
+    const fetchMock = mockFetch(() => ({ message: "Success" }));
+
+    await saveData({
+      experimentID: "EXP12345",
+      filename: "p01.csv",
+      data: "a,b\n1,2\n",
+      session: session as any,
+    });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1]!.body as string);
+    expect(body).not.toHaveProperty("sessionId");
+  });
+
   it("throws on a missing required parameter", async () => {
     await expect(saveData({ experimentID: "", filename: "p01.csv", data: "x" })).rejects.toThrow();
   });

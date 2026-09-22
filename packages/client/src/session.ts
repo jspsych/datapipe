@@ -76,7 +76,10 @@ export class DataPipeSession {
   }
 
   private _sessionId = "";
-  /** The id to send with the final submission. Empty when never enabled. */
+  /**
+   * The id to send with the final submission. Empty until the session has
+   * started (see `ready()`), and for good if it never does.
+   */
   get sessionId(): string {
     return this._sessionId;
   }
@@ -143,6 +146,19 @@ export class DataPipeSession {
       this.startPromise = this.doStart(experimentID, endpointURL, options);
     }
     return this.startPromise;
+  }
+
+  /**
+   * Resolves once the session has started, or failed to start. Never
+   * rejects. From then on `sessionId` is final: the session's id, or "" if
+   * it could not start.
+   *
+   * This waits only for the round trip to /api/session, not for any staged
+   * writes, so it is the thing to await before submitting. (`saveData` does
+   * it for you when given `session`.)
+   */
+  async ready(): Promise<void> {
+    await this.startPromise;
   }
 
   private async doStart(

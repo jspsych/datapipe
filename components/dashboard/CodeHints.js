@@ -216,18 +216,14 @@ export default function CodeHints({ expId }) {
             session.record(trialData);
 
             // ...when the experiment ends:
-            await session.flush();
             const result = await DataPipe.saveData({
               experimentID: "${expId}",
               filename: filename,
               data: dataAsString,
-              sessionId: session.sessionId,
+              session: session,
             });
             await session.close({ submitted: result.ok });`}
               </CodeBlock>
-              <Text fontSize="sm" color="fg.muted">
-                Flush before reading sessionId: the session starts in the background, and until it has, the id is empty. Submitting without it leaves the staged copy unmatched, and it comes back as a duplicate .partial.json.
-              </Text>
               <Text fontSize="sm" color="fg.muted">
                 A participant who finishes produces one ordinary file. One who quits partway produces a separate file ending in .partial.json, holding the trials they completed. Partial sessions do not count toward your session limit.
               </Text>

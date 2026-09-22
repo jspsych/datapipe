@@ -52,12 +52,11 @@ const session = createSession({
 session.record(trialData);
 
 // ...at the end:
-await session.flush();
 const result = await saveData({
   experimentID: "YOUR_EXPERIMENT_ID",
   filename: "subject-01.csv",
   data: allTrialsAsCSV,
-  sessionId: session.sessionId,
+  session,
 });
 await session.close({ submitted: result.ok });
 ```
@@ -65,7 +64,7 @@ await session.close({ submitted: result.ok });
 Three things are worth knowing:
 
 - **`createSession()` returns immediately.** The request that starts the session is still in flight, and trials recorded before it lands are buffered and staged once it does. Use `await startSession(...)` instead if you would rather wait and check `session.enabled`.
-- **Flush before reading `sessionId`.** `flush()` waits for the session to start, so until you have awaited it, `sessionId` may still be empty. Submitting without it leaves DataPipe unable to match your file to the staged copy, which it would then recover a second time.
+- **Pass the session to `saveData`.** It tells DataPipe that this submission completes the staged copy, so the staged copy is discarded instead of being recovered as a second file. If you build the request yourself, `await session.ready()` and send `session.sessionId`.
 - **Tell `close()` what happened.** `{ submitted: true }` cancels the abandonment marker, so a completed session is never also reported as abandoned. `{ submitted: false }` marks it now, so the staged trials are recovered on DataPipe's normal sweep rather than waiting out the 24-hour expiry.
 
 Nothing about staging will break your experiment. If the session cannot be started, every method on it becomes a no-op and the data is still submitted at the end.
@@ -116,7 +115,7 @@ setBaseURL("https://datapipe-test.web.app");
 | `getCondition(options)` | `Promise<number>` | **yes** |
 | `setBaseURL(url)` / `getBaseURL()` | — | no |
 
-`DataPipeSession` has `enabled`, `sessionId`, `record(data)`, `flush()`, and `close({ submitted })`.
+`DataPipeSession` has `enabled`, `sessionId`, `ready()`, `record(data)`, `flush()`, and `close({ submitted })`.
 
 `SaveResult` is `{ ok: boolean, status: number, body: any }`. A `status` of `0` means the request never reached DataPipe.
 
