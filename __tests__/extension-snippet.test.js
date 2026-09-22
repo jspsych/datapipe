@@ -71,6 +71,13 @@ describe("the jsPsych code sample", () => {
     expect(calls.run).toHaveLength(1);
   });
 
+  it("passes base_url to the extension when the build is not production", async () => {
+    const { calls } = await execute(extensionSnippet("EXP123", "https://datapipe-test.web.app"));
+    expect(calls.initialize).toEqual([
+      { experiment_id: "EXP123", filename: "p42.csv", base_url: "https://datapipe-test.web.app" },
+    ]);
+  });
+
   it("appends no save trial: the extension owns the submission", async () => {
     const { calls } = await execute(code);
     expect(calls.run[0]).toHaveLength(0);

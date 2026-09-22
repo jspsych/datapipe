@@ -1,4 +1,5 @@
 import { Stack, Heading, Text, Table, Badge, Code } from "@chakra-ui/react";
+import { BASE_URL } from "../../lib/base-url";
 
 /**
  * ApiPrimitives
@@ -12,8 +13,10 @@ import { Stack, Heading, Text, Table, Badge, Code } from "@chakra-ui/react";
  *
  * Package D (docs IA plan §4) reuses these unchanged for /docs/api's moved
  * API reference content.
+ *
+ * BASE_URL is the deployment this build serves (lib/base-url.js), so the test
+ * site's reference names the test site rather than production.
  */
-export const BASE_URL = "https://pipe.jspsych.org";
 
 export function EndpointHeading({ method, path, children }) {
   return (
