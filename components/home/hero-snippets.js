@@ -51,7 +51,7 @@ export const snippets = [
       { role: "fg", text: "await DataPipe." },
       { role: "fn", text: "saveData" },
       { role: "fg", text: "({\n" },
-      { role: "fg", text: "  experimentID: " },
+      { role: "fg", text: "  experiment_id: " },
       { role: "string", text: '"your_id"' },
       { role: "fg", text: ",\n" },
       { role: "fg", text: "  filename: " },

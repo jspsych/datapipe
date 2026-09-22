@@ -90,6 +90,33 @@ describe("startSession", () => {
 
     expect(session.enabled).toBe(false);
   });
+
+  it("accepts experiment_id, the name the jsPsych extension uses", async () => {
+    const fetchMock = mockFetch(() => SESSION_CONFIG);
+
+    const session = await startSession({ experiment_id: "EXP12345", filename: "p01.csv" });
+
+    expect(JSON.parse(fetchMock.mock.calls[0][1]!.body as string)).toEqual({
+      experimentID: "EXP12345",
+      filename: "p01.csv",
+    });
+    expect(session.enabled).toBe(true);
+  });
+
+  it("returns an inert session, without throwing, when the two names disagree", async () => {
+    const fetchMock = mockFetch(() => SESSION_CONFIG);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const session = await startSession({
+      experiment_id: "EXP12345",
+      experimentID: "OTHER",
+    } as any);
+
+    expect(session.enabled).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(warn.mock.calls[0][0]).toMatch(/experiment_id and experimentID/);
+    warn.mockRestore();
+  });
 });
 
 describe("createSession (synchronous, pre-start buffering)", () => {
@@ -181,6 +208,30 @@ describe("createSession (synchronous, pre-start buffering)", () => {
     await flushPromise;
 
     expect(flushedTrials(0)).toEqual([["trials/0", '{"trial":0}']]);
+  });
+
+  it("ready() resolves once the session has started, without waiting for staged writes", async () => {
+    const release = deferredFetch();
+    rtdb.update.mockImplementation(() => new Promise(() => {})); // a write that never lands
+
+    const session = createSession({ experimentID: "EXP12345" });
+    session.record({ trial: 0 });
+    expect(session.sessionId).toBe("");
+
+    release(SESSION_CONFIG);
+    await session.ready();
+
+    expect(session.sessionId).toBe("SESSION123");
+  });
+
+  it("ready() resolves, with an empty sessionId, when the start fails", async () => {
+    const release = deferredFetch();
+    const session = createSession({ experimentID: "EXP12345" });
+
+    release({ ok: false, status: 400 });
+    await session.ready();
+
+    expect(session.sessionId).toBe("");
   });
 
   it("a trial recorded after close() is requested is not staged", async () => {

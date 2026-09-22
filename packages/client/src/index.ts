@@ -12,4 +12,4 @@
 
 export { saveData, saveBase64Data, getCondition, setBaseURL, getBaseURL } from "./api.js";
 export { DataPipeSession, createSession, startSession } from "./session.js";
-export type { SessionOptions, SaveResult, SessionConfig } from "./types.js";
+export type { ExperimentIDOption, SessionOptions, SaveResult, SessionConfig } from "./types.js";
