@@ -115,11 +115,6 @@ export default function SendingDataPage() {
           ready to pilot with it.
         </Text>
         <Text maxW="70ch">
-          The library names the ID <Code>experimentID</Code>. The jsPsych
-          extension&apos;s parameter is <Code>experiment_id</Code>, following
-          jsPsych&apos;s naming. Copy the sample for the one you use.
-        </Text>
-        <Text maxW="70ch">
           Send whatever your experiment produces. The data string is stored
           byte for byte under the filename you give it.
         </Text>

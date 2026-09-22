@@ -179,7 +179,7 @@ export default function CodeHints({ expId }) {
               <CodeBlock>
                 {`
             const result = await DataPipe.saveData({
-              experimentID: "${expId}",
+              experiment_id: "${expId}",
               filename: "UNIQUE_FILENAME.csv",
               data: dataAsString,
             });
@@ -208,7 +208,7 @@ export default function CodeHints({ expId }) {
                 {`
             const filename = "UNIQUE_FILENAME.csv";
             const session = DataPipe.createSession({
-              experimentID: "${expId}",
+              experiment_id: "${expId}",
               filename: filename,
             });
 
@@ -217,7 +217,7 @@ export default function CodeHints({ expId }) {
 
             // ...when the experiment ends:
             const result = await DataPipe.saveData({
-              experimentID: "${expId}",
+              experiment_id: "${expId}",
               filename: filename,
               data: dataAsString,
               session: session,
@@ -240,7 +240,7 @@ export default function CodeHints({ expId }) {
               <CodeBlock>
                 {`
             const result = await DataPipe.saveBase64Data({
-              experimentID: "${expId}",
+              experiment_id: "${expId}",
               filename: "UNIQUE_FILENAME.webm",
               data: base64DataString,
             });`}
@@ -259,7 +259,7 @@ export default function CodeHints({ expId }) {
                 {`
             let condition;
             try {
-              condition = await DataPipe.getCondition({ experimentID: "${expId}" });
+              condition = await DataPipe.getCondition({ experiment_id: "${expId}" });
             } catch (error) {
               document.body.innerHTML = "<p>The experiment could not be started.</p>";
               throw error;

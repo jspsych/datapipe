@@ -24,7 +24,7 @@ Keep the version in the URL. Without one, unpkg serves the newest release, which
 import { saveData } from "datapipe-client";
 
 const result = await saveData({
-  experimentID: "YOUR_EXPERIMENT_ID",
+  experiment_id: "YOUR_EXPERIMENT_ID",
   filename: "subject-01.csv",
   data: "rt,response\n204,1\n389,0",
 });
@@ -44,7 +44,7 @@ Staging each trial as it is produced means a participant who closes the tab at t
 import { createSession, saveData } from "datapipe-client";
 
 const session = createSession({
-  experimentID: "YOUR_EXPERIMENT_ID",
+  experiment_id: "YOUR_EXPERIMENT_ID",
   filename: "subject-01.csv",
 });
 
@@ -53,7 +53,7 @@ session.record(trialData);
 
 // ...at the end:
 const result = await saveData({
-  experimentID: "YOUR_EXPERIMENT_ID",
+  experiment_id: "YOUR_EXPERIMENT_ID",
   filename: "subject-01.csv",
   data: allTrialsAsCSV,
   session,
@@ -76,7 +76,7 @@ import { getCondition } from "datapipe-client";
 
 let condition;
 try {
-  condition = await getCondition({ experimentID: "YOUR_EXPERIMENT_ID" });
+  condition = await getCondition({ experiment_id: "YOUR_EXPERIMENT_ID" });
 } catch (error) {
   document.body.innerHTML = "<p>The experiment could not be started.</p>";
   throw error;
@@ -91,7 +91,7 @@ try {
 import { saveBase64Data } from "datapipe-client";
 
 await saveBase64Data({
-  experimentID: "YOUR_EXPERIMENT_ID",
+  experiment_id: "YOUR_EXPERIMENT_ID",
   filename: "subject-01-recording.webm",
   data: base64EncodedString,
 });
