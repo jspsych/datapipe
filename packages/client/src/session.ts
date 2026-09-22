@@ -43,7 +43,7 @@ import {
   update,
 } from "firebase/database";
 
-import { endpoint } from "./http.js";
+import { endpoint, experimentIDFrom } from "./http.js";
 import { SessionConfig, SessionOptions } from "./types.js";
 
 // How many trials record() will hold onto before the session has finished
@@ -76,7 +76,10 @@ export class DataPipeSession {
   }
 
   private _sessionId = "";
-  /** The id to send with the final submission. Empty when never enabled. */
+  /**
+   * The id to send with the final submission. Empty until the session has
+   * started (see `ready()`), and for good if it never does.
+   */
   get sessionId(): string {
     return this._sessionId;
   }
@@ -143,6 +146,19 @@ export class DataPipeSession {
       this.startPromise = this.doStart(experimentID, endpointURL, options);
     }
     return this.startPromise;
+  }
+
+  /**
+   * Resolves once the session has started, or failed to start. Never
+   * rejects. From then on `sessionId` is final: the session's id, or "" if
+   * it could not start.
+   *
+   * This waits only for the round trip to /api/session, not for any staged
+   * writes, so it is the thing to await before submitting. (`saveData` does
+   * it for you when given `session`.)
+   */
+  async ready(): Promise<void> {
+    await this.startPromise;
   }
 
   private async doStart(
@@ -558,6 +574,24 @@ export class DataPipeSession {
 }
 
 /**
+ * The experiment ID for a session, or "" if there is no usable one.
+ *
+ * `experimentIDFrom` throws when `experiment_id` and `experimentID`
+ * disagree, which is right for `saveData` but not here: starting a session
+ * never throws (see `startSession`). An empty ID turns streaming off in
+ * `doStart`, and a `saveData` call given the same options throws where
+ * the caller can see it.
+ */
+function sessionExperimentID(options: SessionOptions): string {
+  try {
+    return experimentIDFrom(options);
+  } catch (error) {
+    console.warn((error as Error).message);
+    return "";
+  }
+}
+
+/**
  * Start an incremental upload session SYNCHRONOUSLY: the session object is
  * returned immediately, and the POST /api/session round trip runs in the
  * background.
@@ -580,7 +614,7 @@ export function createSession(options: SessionOptions): DataPipeSession {
   const session = new DataPipeSession();
   // Fire-and-forget: errors are handled inside start() itself (see
   // doStart's catch block) and never surface here or reject anything.
-  void session.start(options.experimentID, endpoint("session", options.baseURL), {
+  void session.start(sessionExperimentID(options), endpoint("session", options.baseURL), {
     filename: options.filename,
   });
   return session;
@@ -602,7 +636,7 @@ export function createSession(options: SessionOptions): DataPipeSession {
  */
 export async function startSession(options: SessionOptions): Promise<DataPipeSession> {
   const session = new DataPipeSession();
-  await session.start(options.experimentID, endpoint("session", options.baseURL), {
+  await session.start(sessionExperimentID(options), endpoint("session", options.baseURL), {
     filename: options.filename,
   });
   return session;

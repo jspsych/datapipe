@@ -12,6 +12,7 @@ import { ChevronDown } from "lucide-react";
 
 import CodeBlock from "../CodeBlock";
 import { extensionSnippet } from "./extension-snippet";
+import { EXTENSION_PIPE_SCRIPT, DATAPIPE_CLIENT_SCRIPT } from "./script-tags";
 
 export default function CodeHints({ expId }) {
   const [language, setLanguage] = useState("jsPsych v8");
@@ -89,7 +90,7 @@ export default function CodeHints({ expId }) {
                 Load the extension and register it. That is the whole integration — there is no save trial to add.
               </Text>
               <CodeBlock language="html">
-                {`<script src="https://unpkg.com/@jspsych/extension-pipe"></script>`}
+                {EXTENSION_PIPE_SCRIPT}
               </CodeBlock>
               <CodeBlock>{extensionSnippet(expId)}</CodeBlock>
               <Text fontSize="sm" color="fg.muted">
@@ -106,7 +107,7 @@ export default function CodeHints({ expId }) {
                 Use saveBase64Data to upload binary files (audio, video, images). This example saves audio from the html-audio-response plugin.
               </Text>
               <CodeBlock language="html">
-                {`<script src="https://unpkg.com/@jspsych/extension-pipe"></script>`}
+                {EXTENSION_PIPE_SCRIPT}
               </CodeBlock>
               <CodeBlock>
                 {`
@@ -132,7 +133,7 @@ export default function CodeHints({ expId }) {
                 Request the next condition assignment. This is async, so wrap your experiment in an async function.
               </Text>
               <CodeBlock language="html">
-                {`<script src="https://unpkg.com/@jspsych/extension-pipe"></script>`}
+                {EXTENSION_PIPE_SCRIPT}
               </CodeBlock>
               <CodeBlock>
                 {`
@@ -173,12 +174,12 @@ export default function CodeHints({ expId }) {
                 Send your data as a string with a unique filename.
               </Text>
               <CodeBlock language="html">
-                {`<script src="https://unpkg.com/datapipe-client"></script>`}
+                {DATAPIPE_CLIENT_SCRIPT}
               </CodeBlock>
               <CodeBlock>
                 {`
             const result = await DataPipe.saveData({
-              experimentID: "${expId}",
+              experiment_id: "${expId}",
               filename: "UNIQUE_FILENAME.csv",
               data: dataAsString,
             });
@@ -201,13 +202,13 @@ export default function CodeHints({ expId }) {
                 Send each trial as it happens, so a participant who closes the tab partway through does not take all of their data with them.
               </Text>
               <CodeBlock language="html">
-                {`<script src="https://unpkg.com/datapipe-client"></script>`}
+                {DATAPIPE_CLIENT_SCRIPT}
               </CodeBlock>
               <CodeBlock>
                 {`
             const filename = "UNIQUE_FILENAME.csv";
             const session = DataPipe.createSession({
-              experimentID: "${expId}",
+              experiment_id: "${expId}",
               filename: filename,
             });
 
@@ -215,18 +216,14 @@ export default function CodeHints({ expId }) {
             session.record(trialData);
 
             // ...when the experiment ends:
-            await session.flush();
             const result = await DataPipe.saveData({
-              experimentID: "${expId}",
+              experiment_id: "${expId}",
               filename: filename,
               data: dataAsString,
-              sessionId: session.sessionId,
+              session: session,
             });
             await session.close({ submitted: result.ok });`}
               </CodeBlock>
-              <Text fontSize="sm" color="fg.muted">
-                Flush before reading sessionId: the session starts in the background, and until it has, the id is empty. Submitting without it leaves the staged copy unmatched, and it comes back as a duplicate .partial.json.
-              </Text>
               <Text fontSize="sm" color="fg.muted">
                 A participant who finishes produces one ordinary file. One who quits partway produces a separate file ending in .partial.json, holding the trials they completed. Partial sessions do not count toward your session limit.
               </Text>
@@ -238,12 +235,12 @@ export default function CodeHints({ expId }) {
                 Send binary data (audio, video, images) as a base64 string. DataPipe decodes it and uploads the file to your storage provider.
               </Text>
               <CodeBlock language="html">
-                {`<script src="https://unpkg.com/datapipe-client"></script>`}
+                {DATAPIPE_CLIENT_SCRIPT}
               </CodeBlock>
               <CodeBlock>
                 {`
             const result = await DataPipe.saveBase64Data({
-              experimentID: "${expId}",
+              experiment_id: "${expId}",
               filename: "UNIQUE_FILENAME.webm",
               data: base64DataString,
             });`}
@@ -256,13 +253,13 @@ export default function CodeHints({ expId }) {
                 Request the next condition assignment, a number starting at 0.
               </Text>
               <CodeBlock language="html">
-                {`<script src="https://unpkg.com/datapipe-client"></script>`}
+                {DATAPIPE_CLIENT_SCRIPT}
               </CodeBlock>
               <CodeBlock>
                 {`
             let condition;
             try {
-              condition = await DataPipe.getCondition({ experimentID: "${expId}" });
+              condition = await DataPipe.getCondition({ experiment_id: "${expId}" });
             } catch (error) {
               document.body.innerHTML = "<p>The experiment could not be started.</p>";
               throw error;

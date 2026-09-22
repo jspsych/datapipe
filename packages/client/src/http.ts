@@ -49,6 +49,28 @@ export function normalizeBaseURL(url: string): string {
   return url.slice(0, end);
 }
 
+/**
+ * The experiment ID from an options object, whichever name it came under
+ * (see `ExperimentIDOption`). Returns "" when neither is given, so each
+ * caller keeps its own answer to a missing ID.
+ *
+ * Throws when both are given and disagree. TypeScript already refuses both,
+ * but a plain-JavaScript caller gets no such check, and quietly picking one
+ * would send data to an experiment the researcher may not have meant.
+ */
+export function experimentIDFrom(options: {
+  experiment_id?: string;
+  experimentID?: string;
+}): string {
+  const { experiment_id, experimentID } = options;
+  if (experiment_id && experimentID && experiment_id !== experimentID) {
+    throw new Error(
+      "datapipe: experiment_id and experimentID were both given and differ. Pass only experiment_id."
+    );
+  }
+  return experiment_id || experimentID || "";
+}
+
 export function endpoint(path: string, override?: string): string {
   return `${normalizeBaseURL(override || baseURL)}/api/${path}/`;
 }

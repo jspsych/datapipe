@@ -81,15 +81,10 @@ export default function SavingAsYouGoPage() {
         </Text>
         <CodeHints expId="YOUR_EXPERIMENT_ID" />
         <Text maxW="70ch">
-          One thing to get right in plain JavaScript:{" "}
-          <strong>
-            call <Code>flush()</Code> before you read <Code>sessionId</Code>.
-          </strong>{" "}
-          A session starts in the background, and until it has, the ID is an
-          empty string. If you submit without it, DataPipe can&apos;t match
-          your file to the staged copy, so it recovers that copy separately
-          and you end up with a stray <Code>.partial.json</Code> next to a
-          complete file.
+          At the end, pass the session to <Code>saveData</Code> as{" "}
+          <Code>session</Code>. That tells DataPipe the submission completes
+          the staged copy, so the staged copy is discarded rather than
+          recovered as a second file.
         </Text>
         <GuidanceLine href="/docs/experiments/sending-data" linkText="Sending data from your experiment">
           The rest of the code, for jsPsych and plain JavaScript, and what

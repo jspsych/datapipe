@@ -13,8 +13,10 @@ npm install datapipe-client
 Or in a plain HTML page, which exposes a `DataPipe` global:
 
 ```html
-<script src="https://unpkg.com/datapipe-client/dist/datapipe-client.browser.global.js"></script>
+<script src="https://unpkg.com/datapipe-client@0.1.0/dist/datapipe-client.browser.global.js"></script>
 ```
+
+Keep the version in the URL. Without one, unpkg serves the newest release, which could change a study that is already collecting data.
 
 ## Sending data at the end
 
@@ -22,7 +24,7 @@ Or in a plain HTML page, which exposes a `DataPipe` global:
 import { saveData } from "datapipe-client";
 
 const result = await saveData({
-  experimentID: "YOUR_EXPERIMENT_ID",
+  experiment_id: "YOUR_EXPERIMENT_ID",
   filename: "subject-01.csv",
   data: "rt,response\n204,1\n389,0",
 });
@@ -42,7 +44,7 @@ Staging each trial as it is produced means a participant who closes the tab at t
 import { createSession, saveData } from "datapipe-client";
 
 const session = createSession({
-  experimentID: "YOUR_EXPERIMENT_ID",
+  experiment_id: "YOUR_EXPERIMENT_ID",
   filename: "subject-01.csv",
 });
 
@@ -50,12 +52,11 @@ const session = createSession({
 session.record(trialData);
 
 // ...at the end:
-await session.flush();
 const result = await saveData({
-  experimentID: "YOUR_EXPERIMENT_ID",
+  experiment_id: "YOUR_EXPERIMENT_ID",
   filename: "subject-01.csv",
   data: allTrialsAsCSV,
-  sessionId: session.sessionId,
+  session,
 });
 await session.close({ submitted: result.ok });
 ```
@@ -63,7 +64,7 @@ await session.close({ submitted: result.ok });
 Three things are worth knowing:
 
 - **`createSession()` returns immediately.** The request that starts the session is still in flight, and trials recorded before it lands are buffered and staged once it does. Use `await startSession(...)` instead if you would rather wait and check `session.enabled`.
-- **Flush before reading `sessionId`.** `flush()` waits for the session to start, so until you have awaited it, `sessionId` may still be empty. Submitting without it leaves DataPipe unable to match your file to the staged copy, which it would then recover a second time.
+- **Pass the session to `saveData`.** It tells DataPipe that this submission completes the staged copy, so the staged copy is discarded instead of being recovered as a second file. If you build the request yourself, `await session.ready()` and send `session.sessionId`.
 - **Tell `close()` what happened.** `{ submitted: true }` cancels the abandonment marker, so a completed session is never also reported as abandoned. `{ submitted: false }` marks it now, so the staged trials are recovered on DataPipe's normal sweep rather than waiting out the 24-hour expiry.
 
 Nothing about staging will break your experiment. If the session cannot be started, every method on it becomes a no-op and the data is still submitted at the end.
@@ -75,7 +76,7 @@ import { getCondition } from "datapipe-client";
 
 let condition;
 try {
-  condition = await getCondition({ experimentID: "YOUR_EXPERIMENT_ID" });
+  condition = await getCondition({ experiment_id: "YOUR_EXPERIMENT_ID" });
 } catch (error) {
   document.body.innerHTML = "<p>The experiment could not be started.</p>";
   throw error;
@@ -90,7 +91,7 @@ try {
 import { saveBase64Data } from "datapipe-client";
 
 await saveBase64Data({
-  experimentID: "YOUR_EXPERIMENT_ID",
+  experiment_id: "YOUR_EXPERIMENT_ID",
   filename: "subject-01-recording.webm",
   data: base64EncodedString,
 });
@@ -114,7 +115,7 @@ setBaseURL("https://datapipe-test.web.app");
 | `getCondition(options)` | `Promise<number>` | **yes** |
 | `setBaseURL(url)` / `getBaseURL()` | — | no |
 
-`DataPipeSession` has `enabled`, `sessionId`, `record(data)`, `flush()`, and `close({ submitted })`.
+`DataPipeSession` has `enabled`, `sessionId`, `ready()`, `record(data)`, `flush()`, and `close({ submitted })`.
 
 `SaveResult` is `{ ok: boolean, status: number, body: any }`. A `status` of `0` means the request never reached DataPipe.
 

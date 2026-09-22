@@ -124,6 +124,51 @@ describe("saveData", () => {
     expect(body.sessionId).toBe("SESSION123");
   });
 
+  it("waits for a session that has not started yet, then sends its id", async () => {
+    let started!: () => void;
+    const session = {
+      sessionId: "",
+      ready: () =>
+        new Promise<void>((resolve) => {
+          started = () => {
+            session.sessionId = "SESSION123";
+            resolve();
+          };
+        }),
+    };
+    const fetchMock = mockFetch(() => ({ message: "Success" }));
+
+    const pending = saveData({
+      experimentID: "EXP12345",
+      filename: "p01.csv",
+      data: "a,b\n1,2\n",
+      session: session as any,
+    });
+    await Promise.resolve();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    started();
+    await pending;
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1]!.body as string);
+    expect(body.sessionId).toBe("SESSION123");
+  });
+
+  it("sends no sessionId for a session that could not start", async () => {
+    const session = { sessionId: "", ready: async () => {} };
+    const fetchMock = mockFetch(() => ({ message: "Success" }));
+
+    await saveData({
+      experimentID: "EXP12345",
+      filename: "p01.csv",
+      data: "a,b\n1,2\n",
+      session: session as any,
+    });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1]!.body as string);
+    expect(body).not.toHaveProperty("sessionId");
+  });
+
   it("throws on a missing required parameter", async () => {
     await expect(saveData({ experimentID: "", filename: "p01.csv", data: "x" })).rejects.toThrow();
   });
@@ -248,5 +293,51 @@ describe("getCondition", () => {
 
   it("throws on a missing required parameter", async () => {
     await expect(getCondition({ experimentID: "" })).rejects.toThrow();
+  });
+});
+
+// experiment_id is the documented name, matching the jsPsych extension and
+// plugin. experimentID was the only name in 0.1.0, and studies running on an
+// unpinned script tag still pass it, so it has to keep working. Either way the
+// wire format is unchanged: the API has always read `experimentID`.
+describe("the experiment ID's two names", () => {
+  const calls: Array<[string, (options: any) => Promise<unknown>]> = [
+    ["saveData", (id) => saveData({ ...id, filename: "p01.csv", data: "x" })],
+    ["saveBase64Data", (id) => saveBase64Data({ ...id, filename: "a.wav", data: "AAAA" })],
+    ["getCondition", (id) => getCondition(id)],
+  ];
+
+  it.each(calls)("%s sends experiment_id as experimentID", async (_name, call) => {
+    const fetchMock = mockFetch(() => ({ condition: 1 }));
+
+    await call({ experiment_id: "EXP12345" });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1]!.body as string);
+    expect(body.experimentID).toBe("EXP12345");
+    expect(body).not.toHaveProperty("experiment_id");
+  });
+
+  it.each(calls)("%s still accepts experimentID", async (_name, call) => {
+    const fetchMock = mockFetch(() => ({ condition: 1 }));
+
+    await call({ experimentID: "EXP12345" });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1]!.body as string);
+    expect(body.experimentID).toBe("EXP12345");
+  });
+
+  it.each(calls)("%s accepts both when they agree", async (_name, call) => {
+    mockFetch(() => ({ condition: 1 }));
+
+    await expect(call({ experiment_id: "EXP12345", experimentID: "EXP12345" })).resolves.not.toThrow();
+  });
+
+  it.each(calls)("%s throws when they disagree, and sends nothing", async (_name, call) => {
+    const fetchMock = mockFetch(() => ({ condition: 1 }));
+
+    await expect(call({ experiment_id: "EXP12345", experimentID: "OTHER" })).rejects.toThrow(
+      /experiment_id and experimentID/
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

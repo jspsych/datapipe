@@ -2,10 +2,29 @@
 // surface these describe, and docs/streaming-ingest-design.md (in the
 // DataPipe repository) for the staging-tier design these types are part of.
 
+/**
+ * The experiment ID, under either name.
+ *
+ * `experiment_id` is the documented one, because it is what the jsPsych
+ * extension and the older jsPsych plugin call it, and a researcher moving
+ * between them should not have to remember a second spelling. `experimentID`
+ * was this library's only name in 0.1.0 and keeps working, since studies
+ * already running on an unpinned script tag pass it. Give one, not both.
+ */
+export type ExperimentIDOption =
+  | {
+      /** The 12-character experiment ID provided by pipe.jspsych.org. */
+      experiment_id: string;
+      experimentID?: never;
+    }
+  | {
+      /** The same, under the name 0.1.0 used. Prefer `experiment_id`. */
+      experimentID: string;
+      experiment_id?: never;
+    };
+
 /** Options for starting an incremental-upload session. */
-export interface SessionOptions {
-  /** The 12-character experiment ID provided by pipe.jspsych.org. */
-  experimentID: string;
+export type SessionOptions = ExperimentIDOption & {
   /**
    * The filename this participant will submit under, if it is already known.
    *
@@ -17,7 +36,7 @@ export interface SessionOptions {
   filename?: string;
   /** Override the DataPipe deployment. Defaults to https://pipe.jspsych.org. */
   baseURL?: string;
-}
+};
 
 /** The outcome of a `saveData` / `saveBase64Data` call. */
 export interface SaveResult {
