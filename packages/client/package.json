@@ -1,6 +1,6 @@
 {
   "name": "datapipe-client",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Framework-neutral client for sending data from browser-based experiments to DataPipe (pipe.jspsych.org), including incremental (streaming) upload.",
   "type": "module",
   "license": "MIT",

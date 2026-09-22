@@ -13,7 +13,7 @@ npm install datapipe-client
 Or in a plain HTML page, which exposes a `DataPipe` global:
 
 ```html
-<script src="https://unpkg.com/datapipe-client@0.1.0/dist/datapipe-client.browser.global.js"></script>
+<script src="https://unpkg.com/datapipe-client@0.2.0/dist/datapipe-client.browser.global.js"></script>
 ```
 
 Keep the version in the URL. Without one, unpkg serves the newest release, which could change a study that is already collecting data.
