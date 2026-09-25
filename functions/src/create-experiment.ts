@@ -177,6 +177,9 @@ export async function createExperimentHandler(req: Request, res: Response): Prom
       providerContainer = await storageProvider.createDataContainer(auth, containerInput);
     } catch (e) {
       const detail = e instanceof Error ? e.message : "Unknown error";
+      // Otherwise this failure leaves no server-side trace: the 502 below is
+      // the only record, and it goes to the browser, not Cloud Logging.
+      console.error(`Error creating storage container for provider ${provider}:`, detail);
       res.status(502).json({ error: "Failed to create storage container", detail });
       return;
     }

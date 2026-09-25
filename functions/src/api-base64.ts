@@ -13,6 +13,7 @@ import { getProviderForExperiment, claimNameFor } from "./providers/index.js";
 import { WriteResult, ResolvedAuth } from "./providers/types.js";
 import { claimFilename, claimFilenameWithoutCredentials, confirmClaim, CollisionCacheUnavailableError } from "./collision-cache.js";
 import { isCompactionInFlight, COMPACTION_HOLD_REASON } from "./compaction-gate.js";
+import { isValidExperimentId } from "./experiment-id.js";
 import { ExperimentData, UserData } from './interfaces';
 
 // NO onRequest OPTIONS HERE ANY MORE. apiBase64Handler used to also back a
@@ -30,6 +31,13 @@ export async function apiBase64Handler(req: Request, res: Response): Promise<voi
 
   if (!experimentID || !data || !filename) {
     res.status(400).json(MESSAGES.MISSING_PARAMETER);
+    return;
+  }
+
+  // Firestore throws (not misses) on reserved ids like "__X__"; see experiment-id.ts.
+  // No writeLog: logs/{experimentID} would throw the same way.
+  if (!isValidExperimentId(experimentID)) {
+    res.status(400).json(MESSAGES.EXPERIMENT_NOT_FOUND);
     return;
   }
 

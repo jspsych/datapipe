@@ -21,6 +21,7 @@ import { WriteResult, ResolvedAuth } from "./providers/types.js";
 import { claimFilename, claimFilenameWithoutCredentials, confirmClaim, CollisionCacheUnavailableError } from "./collision-cache.js";
 import { isCompactionInFlight, COMPACTION_HOLD_REASON } from "./compaction-gate.js";
 import { discardSession, isValidSessionId } from "./staging.js";
+import { isValidExperimentId } from "./experiment-id.js";
 import { ExperimentData, UserData, RequestBody } from './interfaces';
 import { apiBase64Handler } from "./api-base64.js";
 
@@ -184,6 +185,13 @@ export async function apiDataHandler(req: Request, res: Response): Promise<void>
   const discardStaging = async () => {
     if (isValidSessionId(sessionId)) await discardSession(sessionId);
   };
+
+  // Firestore throws (not misses) on reserved ids like "__X__"; see experiment-id.ts.
+  // No writeLog: logs/{experimentID} would throw the same way.
+  if (!isValidExperimentId(experimentID)) {
+    res.status(400).json(MESSAGES.EXPERIMENT_NOT_FOUND);
+    return;
+  }
 
   const exp_doc_ref: DocumentReference<DocumentData> = db.collection("experiments").doc(experimentID);
   const exp_doc: DocumentSnapshot = await exp_doc_ref.get();

@@ -2,6 +2,7 @@ import { onRequest } from "firebase-functions/v2/https";
 import archiver from "archiver";
 import { db, auth, storage } from "./app.js";
 import { decryptPayload } from "./payload-crypto.js";
+import { isValidExperimentId } from "./experiment-id.js";
 
 export const apiQueueStatus = onRequest({ cors: true }, async (req, res) => {
   if (req.method !== "GET") {
@@ -29,6 +30,12 @@ export const apiQueueStatus = onRequest({ cors: true }, async (req, res) => {
   const experimentID = req.query.experimentID as string;
   if (!experimentID) {
     res.status(400).json({ error: "experimentID query parameter is required" });
+    return;
+  }
+
+  // Firestore throws (not misses) on reserved ids like "__X__"; see experiment-id.ts.
+  if (!isValidExperimentId(experimentID)) {
+    res.status(403).json({ error: "Access denied" });
     return;
   }
 

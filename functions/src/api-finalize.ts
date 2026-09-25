@@ -48,6 +48,7 @@ import { db, functions } from "./app.js";
 import { finalizeExperiment } from "./finalization.js";
 import { ExperimentData, FinalizationState } from "./interfaces.js";
 import { requireUser } from "./require-user.js";
+import { isValidExperimentId } from "./experiment-id.js";
 
 // Task-queue functions cap at 1800s (see module header). finalizeExperiment
 // streams rather than buffers (docs/finalization-spec.md's "why streaming,
@@ -84,6 +85,12 @@ export async function apiFinalizeHandler(req: Request, res: Response): Promise<v
   const experimentID = req.body?.experimentID as string | undefined;
   if (!experimentID) {
     res.status(400).json({ error: "experimentID is required" });
+    return;
+  }
+
+  // Firestore throws (not misses) on reserved ids like "__X__"; see experiment-id.ts.
+  if (!isValidExperimentId(experimentID)) {
+    res.status(403).json({ error: "Access denied" });
     return;
   }
 

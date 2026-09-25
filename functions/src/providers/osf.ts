@@ -244,8 +244,19 @@ export const osfProvider: StorageProvider = {
       },
     });
 
-    const folder = (await osfResult.json()) as { data: OSFFile[] };
-    const listOfFiles: OSFFile[] = folder["data"];
+    // An error response has no `data`, so the filter below would throw an opaque
+    // TypeError. Throw OSF's status instead (same shape as zenodo/gdrive listFiles);
+    // collision-cache's rehydrate wraps it in CollisionCacheUnavailableError.
+    if (osfResult.status !== 200) {
+      throw new Error(`OSF listing failed: ${osfResult.status} ${osfResult.statusText}`);
+    }
+
+    const folder = (await osfResult.json()) as { data?: OSFFile[] };
+    const listOfFiles = folder["data"];
+
+    if (!Array.isArray(listOfFiles)) {
+      throw new Error("OSF listing failed: response body had no file list");
+    }
 
     return listOfFiles
       .filter((file) => file.attributes.kind === "file")

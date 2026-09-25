@@ -49,6 +49,7 @@ import { DocumentSnapshot } from "firebase-admin/firestore";
 import { db } from "./app.js";
 import writeLog from "./write-log.js";
 import MESSAGES from "./api-messages.js";
+import { isValidExperimentId } from "./experiment-id.js";
 import { ExperimentData } from "./interfaces.js";
 import {
   openSession,
@@ -97,6 +98,13 @@ export async function apiSessionStartHandler(req: Request, res: Response): Promi
 
   if (!experimentID) {
     res.status(400).json(MESSAGES.MISSING_PARAMETER);
+    return;
+  }
+
+  // Firestore throws (not misses) on reserved ids like "__X__"; see experiment-id.ts.
+  // No writeLog: logs/{experimentID} would throw the same way.
+  if (!isValidExperimentId(experimentID)) {
+    res.status(400).json(MESSAGES.EXPERIMENT_NOT_FOUND);
     return;
   }
 
