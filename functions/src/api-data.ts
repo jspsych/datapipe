@@ -21,6 +21,7 @@ import { WriteResult, ResolvedAuth } from "./providers/types.js";
 import { claimFilename, claimFilenameWithoutCredentials, confirmClaim, CollisionCacheUnavailableError } from "./collision-cache.js";
 import { isCompactionInFlight, COMPACTION_HOLD_REASON } from "./compaction-gate.js";
 import { discardSession, isValidSessionId } from "./staging.js";
+import { getExperiment } from "./experiment-id.js";
 import { ExperimentData, UserData, RequestBody } from './interfaces';
 import { apiBase64Handler } from "./api-base64.js";
 
@@ -185,16 +186,18 @@ export async function apiDataHandler(req: Request, res: Response): Promise<void>
     if (isValidSessionId(sessionId)) await discardSession(sessionId);
   };
 
-  const exp_doc_ref: DocumentReference<DocumentData> = db.collection("experiments").doc(experimentID);
-  const exp_doc: DocumentSnapshot = await exp_doc_ref.get();
+  // null for a missing experiment AND for an id Firestore would reject
+  // outright (e.g. an unfilled "__X__" placeholder); see experiment-id.ts.
+  const exp_doc = await getExperiment(experimentID);
 
-  if (!exp_doc.exists) {
+  if (!exp_doc) {
     res.status(400).json(MESSAGES.EXPERIMENT_NOT_FOUND);
     await writeLog(experimentID, "logError", MESSAGES.EXPERIMENT_NOT_FOUND);
     return;
   }
   
 
+  const exp_doc_ref = exp_doc.ref;
   const exp_data: ExperimentData = exp_doc.data() as ExperimentData;
 
   if (!exp_data) {
