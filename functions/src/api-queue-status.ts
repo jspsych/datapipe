@@ -2,7 +2,7 @@ import { onRequest } from "firebase-functions/v2/https";
 import archiver from "archiver";
 import { db, auth, storage } from "./app.js";
 import { decryptPayload } from "./payload-crypto.js";
-import { isValidExperimentId } from "./experiment-id.js";
+import { getExperiment, isValidDocumentId } from "./experiment-id.js";
 
 export const apiQueueStatus = onRequest({ cors: true }, async (req, res) => {
   if (req.method !== "GET") {
@@ -33,15 +33,10 @@ export const apiQueueStatus = onRequest({ cors: true }, async (req, res) => {
     return;
   }
 
-  // Firestore throws (not misses) on reserved ids like "__X__"; see experiment-id.ts.
-  if (!isValidExperimentId(experimentID)) {
-    res.status(403).json({ error: "Access denied" });
-    return;
-  }
-
-  // Verify the user owns this experiment
-  const expDoc = await db.doc(`experiments/${experimentID}`).get();
-  if (!expDoc.exists || expDoc.data()?.owner !== uid) {
+  // Verify the user owns this experiment. getExperiment's null also covers an
+  // id Firestore would reject outright, which would otherwise throw as a 500.
+  const expDoc = await getExperiment(experimentID);
+  if (!expDoc || expDoc.data()?.owner !== uid) {
     res.status(403).json({ error: "Access denied" });
     return;
   }
@@ -49,7 +44,13 @@ export const apiQueueStatus = onRequest({ cors: true }, async (req, res) => {
   const download = req.query.download as string | undefined;
 
   if (download) {
-    // Return a signed download URL for a specific queue entry
+    // Return a signed download URL for a specific queue entry. The id is
+    // checked first for the same reason as experimentID: doc() throws on a
+    // reserved "__X__" id, and a "/" would make this a collection path.
+    if (!isValidDocumentId(download)) {
+      res.status(404).json({ error: "Queue entry not found" });
+      return;
+    }
     const queueDoc = await db.doc(`uploadQueue/${download}`).get();
     if (!queueDoc.exists || queueDoc.data()?.experimentID !== experimentID) {
       res.status(404).json({ error: "Queue entry not found" });

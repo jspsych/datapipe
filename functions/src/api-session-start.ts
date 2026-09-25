@@ -45,11 +45,9 @@
 
 import type { Request } from "firebase-functions/v2/https";
 import type { Response } from "express";
-import { DocumentSnapshot } from "firebase-admin/firestore";
-import { db } from "./app.js";
 import writeLog from "./write-log.js";
 import MESSAGES from "./api-messages.js";
-import { isValidExperimentId } from "./experiment-id.js";
+import { getExperiment } from "./experiment-id.js";
 import { ExperimentData } from "./interfaces.js";
 import {
   openSession,
@@ -101,19 +99,11 @@ export async function apiSessionStartHandler(req: Request, res: Response): Promi
     return;
   }
 
-  // Firestore throws (not misses) on reserved ids like "__X__"; see experiment-id.ts.
-  // No writeLog: logs/{experimentID} would throw the same way.
-  if (!isValidExperimentId(experimentID)) {
-    res.status(400).json(MESSAGES.EXPERIMENT_NOT_FOUND);
-    return;
-  }
+  // null for a missing experiment AND for an id Firestore would reject
+  // outright (e.g. an unfilled "__X__" placeholder); see experiment-id.ts.
+  const exp_doc = await getExperiment(experimentID);
 
-  const exp_doc: DocumentSnapshot = await db
-    .collection("experiments")
-    .doc(experimentID)
-    .get();
-
-  if (!exp_doc.exists) {
+  if (!exp_doc) {
     res.status(400).json(MESSAGES.EXPERIMENT_NOT_FOUND);
     await writeLog(experimentID, "logError", MESSAGES.EXPERIMENT_NOT_FOUND);
     return;

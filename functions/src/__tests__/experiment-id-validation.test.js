@@ -1,8 +1,13 @@
 /**
  * @jest-environment node
  *
- * isValidExperimentId (experiment-id.ts) -- the gate between a client-
- * supplied experimentID and db.collection("experiments").doc(experimentID).
+ * isValidDocumentId (experiment-id.ts) -- the gate between a client-supplied
+ * id and db.collection(...).doc(id). Named for what it actually checks (any
+ * Firestore document id), not just the experiments collection: api-queue-
+ * status.ts runs its `download` queue-entry id through the same check, and
+ * write-log.ts its logs/{experimentID} id. It was renamed from
+ * isValidExperimentId to isValidDocumentId to reflect that; the logic itself
+ * is unchanged.
  *
  * The bug this guards against: Firestore does not treat an invalid document
  * id as a lookup miss, it THROWS synchronously out of doc()/get() for a
@@ -19,14 +24,14 @@
  * Firestore itself would reject.
  */
 
-const { isValidExperimentId } = require("../../lib/experiment-id.js");
+const { isValidDocumentId } = require("../../lib/experiment-id.js");
 
-describe("isValidExperimentId", () => {
+describe("isValidDocumentId", () => {
   it.each([
     ["a 12-char nanoid-style id, as create-experiment.ts mints", "aB3xY9kLm2Qz"],
     ["an id with mixed alphanumeric, hyphen and underscore characters", "abc-DEF_123"],
   ])("accepts %s", (_label, value) => {
-    expect(isValidExperimentId(value)).toBe(true);
+    expect(isValidDocumentId(value)).toBe(true);
   });
 
   it.each([
@@ -43,7 +48,7 @@ describe("isValidExperimentId", () => {
     // string-length.
     ["over 1500 bytes via multi-byte characters, under 1500 JS characters", "é".repeat(751)],
   ])("rejects %s", (_label, value) => {
-    expect(isValidExperimentId(value)).toBe(false);
+    expect(isValidDocumentId(value)).toBe(false);
   });
 
   it.each([
@@ -54,15 +59,15 @@ describe("isValidExperimentId", () => {
     ["an array", ["a"]],
     ["a boolean", true],
   ])("rejects %s (not a string)", (_label, value) => {
-    expect(isValidExperimentId(value)).toBe(false);
+    expect(isValidDocumentId(value)).toBe(false);
   });
 
   it("accepts an id exactly at the 1500-byte boundary", () => {
-    expect(isValidExperimentId("a".repeat(1500))).toBe(true);
+    expect(isValidDocumentId("a".repeat(1500))).toBe(true);
   });
 
   it("accepts a period or double period as part of a longer id, not standing alone", () => {
-    expect(isValidExperimentId("a.b")).toBe(true);
-    expect(isValidExperimentId("a..b")).toBe(true);
+    expect(isValidDocumentId("a.b")).toBe(true);
+    expect(isValidDocumentId("a..b")).toBe(true);
   });
 });

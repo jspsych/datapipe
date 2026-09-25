@@ -57,6 +57,20 @@ function mapStatus(errorCode: number | null): ProviderErrorCode {
   }
 }
 
+// OSF's own explanation of an error response: the JSON:API body's
+// errors[0].detail, e.g. "You do not have permission to perform this action."
+// Empty when the body is not JSON or has no detail -- the caller falls back to
+// statusText, which is itself empty behind some proxies and over HTTP/2.
+async function osfErrorDetail(response: { json: () => Promise<unknown> }): Promise<string> {
+  try {
+    const body = (await response.json()) as { errors?: { detail?: unknown }[] };
+    const detail = body?.errors?.[0]?.detail;
+    return typeof detail === "string" ? detail : "";
+  } catch {
+    return "";
+  }
+}
+
 export const osfProvider: StorageProvider = {
   id: "osf",
   authMethod: "oauth2",
@@ -245,10 +259,12 @@ export const osfProvider: StorageProvider = {
     });
 
     // An error response has no `data`, so the filter below would throw an opaque
-    // TypeError. Throw OSF's status instead (same shape as zenodo/gdrive listFiles);
-    // collision-cache's rehydrate wraps it in CollisionCacheUnavailableError.
+    // TypeError. Throw OSF's status and its own explanation instead (same shape
+    // as zenodo/gdrive listFiles); collision-cache's rehydrate wraps it in
+    // CollisionCacheUnavailableError.
     if (osfResult.status !== 200) {
-      throw new Error(`OSF listing failed: ${osfResult.status} ${osfResult.statusText}`);
+      const reason = (await osfErrorDetail(osfResult)) || osfResult.statusText;
+      throw new Error(`OSF listing failed: ${osfResult.status} ${reason}`.trim());
     }
 
     const folder = (await osfResult.json()) as { data?: OSFFile[] };

@@ -1,3 +1,6 @@
+import { DocumentSnapshot } from "firebase-admin/firestore";
+import { db } from "./app.js";
+
 // Whether a client-supplied experimentID is even a value Firestore will
 // accept as a document id -- checked BEFORE it is ever spliced into
 // db.collection("experiments").doc(experimentID). Firestore does not treat an
@@ -31,12 +34,29 @@
 const RESERVED_ID_PATTERN = /^__.*__$/;
 const MAX_ID_BYTES = 1500;
 
-/** Whether `value` is a string Firestore will accept as a document id. */
-export function isValidExperimentId(value: unknown): value is string {
+/**
+ * Whether `value` is a string Firestore will accept as a document id. Not
+ * specific to experiments: api-queue-status.ts runs its `download` queue-entry
+ * id through the same check, and write-log.ts its logs/{experimentID} id.
+ */
+export function isValidDocumentId(value: unknown): value is string {
   if (typeof value !== "string" || value.length === 0) return false;
   if (value.includes("/")) return false;
   if (value === "." || value === "..") return false;
   if (RESERVED_ID_PATTERN.test(value)) return false;
   if (Buffer.byteLength(value, "utf-8") > MAX_ID_BYTES) return false;
   return true;
+}
+
+/**
+ * experiments/{experimentID}, or null when there is no such experiment --
+ * including when `experimentID` is not an id Firestore would accept at all.
+ * Every endpoint that looks an experiment up by a client-supplied id goes
+ * through this, so none of them can reach the doc() call that throws, and
+ * each keeps the single not-found branch it already had.
+ */
+export async function getExperiment(experimentID: unknown): Promise<DocumentSnapshot | null> {
+  if (!isValidDocumentId(experimentID)) return null;
+  const snap = await db.collection("experiments").doc(experimentID).get();
+  return snap.exists ? snap : null;
 }

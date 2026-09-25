@@ -21,7 +21,7 @@ import { WriteResult, ResolvedAuth } from "./providers/types.js";
 import { claimFilename, claimFilenameWithoutCredentials, confirmClaim, CollisionCacheUnavailableError } from "./collision-cache.js";
 import { isCompactionInFlight, COMPACTION_HOLD_REASON } from "./compaction-gate.js";
 import { discardSession, isValidSessionId } from "./staging.js";
-import { isValidExperimentId } from "./experiment-id.js";
+import { getExperiment } from "./experiment-id.js";
 import { ExperimentData, UserData, RequestBody } from './interfaces';
 import { apiBase64Handler } from "./api-base64.js";
 
@@ -186,23 +186,18 @@ export async function apiDataHandler(req: Request, res: Response): Promise<void>
     if (isValidSessionId(sessionId)) await discardSession(sessionId);
   };
 
-  // Firestore throws (not misses) on reserved ids like "__X__"; see experiment-id.ts.
-  // No writeLog: logs/{experimentID} would throw the same way.
-  if (!isValidExperimentId(experimentID)) {
-    res.status(400).json(MESSAGES.EXPERIMENT_NOT_FOUND);
-    return;
-  }
+  // null for a missing experiment AND for an id Firestore would reject
+  // outright (e.g. an unfilled "__X__" placeholder); see experiment-id.ts.
+  const exp_doc = await getExperiment(experimentID);
 
-  const exp_doc_ref: DocumentReference<DocumentData> = db.collection("experiments").doc(experimentID);
-  const exp_doc: DocumentSnapshot = await exp_doc_ref.get();
-
-  if (!exp_doc.exists) {
+  if (!exp_doc) {
     res.status(400).json(MESSAGES.EXPERIMENT_NOT_FOUND);
     await writeLog(experimentID, "logError", MESSAGES.EXPERIMENT_NOT_FOUND);
     return;
   }
   
 
+  const exp_doc_ref = exp_doc.ref;
   const exp_data: ExperimentData = exp_doc.data() as ExperimentData;
 
   if (!exp_data) {

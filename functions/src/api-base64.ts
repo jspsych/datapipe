@@ -1,7 +1,6 @@
 import type { Request } from "firebase-functions/v2/https";
 import type { Response } from "express";
 import { randomUUID } from "crypto";
-import { DocumentReference, DocumentData, DocumentSnapshot } from "firebase-admin/firestore";
 import { db } from "./app.js";
 import writeLog from "./write-log.js";
 import isBase64 from "is-base64";
@@ -13,7 +12,7 @@ import { getProviderForExperiment, claimNameFor } from "./providers/index.js";
 import { WriteResult, ResolvedAuth } from "./providers/types.js";
 import { claimFilename, claimFilenameWithoutCredentials, confirmClaim, CollisionCacheUnavailableError } from "./collision-cache.js";
 import { isCompactionInFlight, COMPACTION_HOLD_REASON } from "./compaction-gate.js";
-import { isValidExperimentId } from "./experiment-id.js";
+import { getExperiment } from "./experiment-id.js";
 import { ExperimentData, UserData } from './interfaces';
 
 // NO onRequest OPTIONS HERE ANY MORE. apiBase64Handler used to also back a
@@ -34,22 +33,17 @@ export async function apiBase64Handler(req: Request, res: Response): Promise<voi
     return;
   }
 
-  // Firestore throws (not misses) on reserved ids like "__X__"; see experiment-id.ts.
-  // No writeLog: logs/{experimentID} would throw the same way.
-  if (!isValidExperimentId(experimentID)) {
-    res.status(400).json(MESSAGES.EXPERIMENT_NOT_FOUND);
-    return;
-  }
+  // null for a missing experiment AND for an id Firestore would reject
+  // outright (e.g. an unfilled "__X__" placeholder); see experiment-id.ts.
+  const exp_doc = await getExperiment(experimentID);
 
-  const exp_doc_ref: DocumentReference<DocumentData> = db.collection("experiments").doc(experimentID);
-  const exp_doc: DocumentSnapshot = await exp_doc_ref.get();
-
-  if (!exp_doc.exists) {
+  if (!exp_doc) {
     res.status(400).json(MESSAGES.EXPERIMENT_NOT_FOUND);
     await writeLog(experimentID, "logError", MESSAGES.EXPERIMENT_NOT_FOUND);
     return;
   }
 
+  const exp_doc_ref = exp_doc.ref;
   const exp_data: ExperimentData = exp_doc.data() as ExperimentData;
 
   if (!exp_data) {

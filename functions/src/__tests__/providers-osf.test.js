@@ -190,15 +190,50 @@ describe("osfProvider.listFiles", () => {
     [404, "Not Found"],
     [410, "Gone"],
     [429, "Too Many Requests"],
-  ])("throws with the status and statusText on a %i response", async (status, statusText) => {
+  ])("throws with the status and statusText on a %i response with no detail in the body", async (status, statusText) => {
     mockFetch.mockResolvedValueOnce({
       status,
       statusText,
-      json: () => Promise.resolve({ errors: [{ detail: "nope" }] }),
+      json: () => Promise.resolve({ errors: [{}] }),
     });
 
     await expect(osfProvider.listFiles(auth, container)).rejects.toThrow(
       `OSF listing failed: ${status} ${statusText}`
+    );
+  });
+
+  // OSF's JSON:API error body carries its own explanation in errors[0].detail
+  // -- surfaced in preference to the generic statusText whenever it's present,
+  // since "403 Forbidden" alone gives a researcher nothing actionable while
+  // OSF's own detail says exactly what went wrong.
+  it("throws with OSF's own errors[0].detail on a 403 response, not just the statusText", async () => {
+    mockFetch.mockResolvedValueOnce({
+      status: 403,
+      statusText: "Forbidden",
+      json: () =>
+        Promise.resolve({
+          errors: [{ detail: "You do not have permission to perform this action." }],
+        }),
+    });
+
+    await expect(osfProvider.listFiles(auth, container)).rejects.toThrow(
+      "OSF listing failed: 403 You do not have permission to perform this action."
+    );
+  });
+
+  // Some error responses (a proxy timeout page, an HTML 5xx) are not JSON at
+  // all -- .json() rejects instead of resolving with a body that merely lacks
+  // `errors`. Must fall back to statusText rather than let that rejection
+  // propagate as an unrelated, confusing failure.
+  it("falls back to statusText when the error body is not JSON", async () => {
+    mockFetch.mockResolvedValueOnce({
+      status: 502,
+      statusText: "Bad Gateway",
+      json: () => Promise.reject(new SyntaxError("Unexpected token < in JSON at position 0")),
+    });
+
+    await expect(osfProvider.listFiles(auth, container)).rejects.toThrow(
+      "OSF listing failed: 502 Bad Gateway"
     );
   });
 

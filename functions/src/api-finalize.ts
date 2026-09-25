@@ -48,7 +48,7 @@ import { db, functions } from "./app.js";
 import { finalizeExperiment } from "./finalization.js";
 import { ExperimentData, FinalizationState } from "./interfaces.js";
 import { requireUser } from "./require-user.js";
-import { isValidExperimentId } from "./experiment-id.js";
+import { getExperiment } from "./experiment-id.js";
 
 // Task-queue functions cap at 1800s (see module header). finalizeExperiment
 // streams rather than buffers (docs/finalization-spec.md's "why streaming,
@@ -88,22 +88,17 @@ export async function apiFinalizeHandler(req: Request, res: Response): Promise<v
     return;
   }
 
-  // Firestore throws (not misses) on reserved ids like "__X__"; see experiment-id.ts.
-  if (!isValidExperimentId(experimentID)) {
-    res.status(403).json({ error: "Access denied" });
-    return;
-  }
-
-  const expRef = experimentRef(experimentID);
-  const expSnap = await expRef.get();
+  const expSnap = await getExperiment(experimentID);
   // Same 403-for-both convention as api-queue-status.ts: a nonexistent
   // experiment and someone else's experiment get the identical response, so
   // this endpoint never confirms which experiment IDs exist to a caller who
-  // does not already own one.
-  if (!expSnap.exists || expSnap.data()?.owner !== uid) {
+  // does not already own one. (getExperiment's null also covers an id
+  // Firestore would reject outright.)
+  if (!expSnap || expSnap.data()?.owner !== uid) {
     res.status(403).json({ error: "Access denied" });
     return;
   }
+  const expRef = expSnap.ref;
   const expData = expSnap.data() as ExperimentData;
 
   // Permanent, and the one pre-check worth short-circuiting on even though
