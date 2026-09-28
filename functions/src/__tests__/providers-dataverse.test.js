@@ -1351,4 +1351,25 @@ describe("9. validateStaticToken", () => {
 
     expect(result).toBe(false);
   });
+
+  it("logs the status and body of a non-200, with the token scrubbed", async () => {
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({
+        status: 403,
+        statusText: "Forbidden",
+        textBody: '{"status":"ERROR","message":"Bad api key test-token"}',
+      })
+    );
+
+    await dataverseProvider.validateStaticToken(auth);
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    const [message] = warn.mock.calls[0];
+    expect(message).toContain("403");
+    expect(message).toContain(SERVER_URL);
+    expect(message).toContain("Bad api key [redacted]");
+    expect(message).not.toContain("test-token");
+    warn.mockRestore();
+  });
 });
