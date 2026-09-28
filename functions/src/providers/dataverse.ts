@@ -423,7 +423,21 @@ export const dataverseProvider: StorageProvider = {
     });
     // Never throw on a non-200 -- a bad/expired token is simply "not valid",
     // not an exceptional condition.
-    return response.status === 200;
+    if (response.status === 200) return true;
+
+    // Log what the installation actually said. The caller collapses every
+    // non-200 into "Invalid API token", so without this a real 401, a WAF
+    // 403, and an outage 5xx are indistinguishable after the fact. The body
+    // is truncated (a WAF block page can be large) and scrubbed of the token
+    // in case an installation echoes the key back in its error message.
+    let body = "";
+    try {
+      body = (await response.text()).split(auth.token).join("[redacted]").slice(0, 300);
+    } catch {
+      // Body is diagnostic only; an unreadable one still leaves the status.
+    }
+    console.warn(`dataverse validateStaticToken: ${serverUrl}/api/users/:me returned ${response.status}: ${body}`);
+    return false;
   },
 
   // Reads the token's expiry from the one endpoint that reports it, GET
