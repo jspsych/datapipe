@@ -124,6 +124,18 @@ describe("ProviderConnections", () => {
     expect(window.location.assign).not.toHaveBeenCalled();
   });
 
+  it("static-token provider: the token field is plain text so browsers do not autofill a saved password", () => {
+    renderComponent();
+
+    fireEvent.click(screen.getByRole("button", { name: /^Connect Dataverse$/i }));
+
+    const tokenInput = screen.getByLabelText(/API token/i);
+    expect(tokenInput).toHaveAttribute("type", "text");
+    expect(tokenInput).toHaveAttribute("autocomplete", "off");
+    expect(tokenInput).toHaveAttribute("data-1p-ignore");
+    expect(tokenInput).toHaveAttribute("data-lpignore", "true");
+  });
+
   it("static-token provider: Save posts token + serverUrl to connectstatictokenprovider", async () => {
     global.fetch.mockResolvedValue({
       ok: true,
