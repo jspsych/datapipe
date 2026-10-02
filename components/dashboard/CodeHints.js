@@ -13,6 +13,14 @@ import { ChevronDown } from "lucide-react";
 import CodeBlock from "../CodeBlock";
 import { extensionSnippet } from "./extension-snippet";
 import { EXTENSION_PIPE_SCRIPT, DATAPIPE_CLIENT_SCRIPT } from "./script-tags";
+import { SAMPLE_BASE_URL } from "../../lib/base-url";
+
+// Off production, every sample names this build's deployment. The published
+// packages default to pipe.jspsych.org, so a sample copied from the test site
+// without an override sends its data to production (#246).
+const EXTENSION_OPTIONS = SAMPLE_BASE_URL ? `, { base_url: "${SAMPLE_BASE_URL}" }` : "";
+const CLIENT_OPTION = SAMPLE_BASE_URL ? `\n              baseURL: "${SAMPLE_BASE_URL}",` : "";
+const CLIENT_INLINE_OPTION = SAMPLE_BASE_URL ? `, baseURL: "${SAMPLE_BASE_URL}"` : "";
 
 export default function CodeHints({ expId }) {
   const [language, setLanguage] = useState("jsPsych v8");
@@ -92,7 +100,7 @@ export default function CodeHints({ expId }) {
               <CodeBlock language="html">
                 {EXTENSION_PIPE_SCRIPT}
               </CodeBlock>
-              <CodeBlock>{extensionSnippet(expId)}</CodeBlock>
+              <CodeBlock>{extensionSnippet(expId, SAMPLE_BASE_URL)}</CodeBlock>
               <Text fontSize="sm" color="fg.muted">
                 Each trial is sent as it happens, so a participant who closes the tab partway through does not take all of their data with them: their completed trials arrive as a separate file ending in .partial.json, and do not count toward your session limit. A participant who finishes produces one ordinary file.
               </Text>
@@ -117,7 +125,7 @@ export default function CodeHints({ expId }) {
                 recording_duration: 15000,
                 on_finish: async function(data){
                   const filename = \`\${subject_id}_\${jsPsych.getProgress().current_trial_global}_audio.webm\`;
-                  await jsPsychExtensionPipe.saveBase64Data("${expId}", filename, data.response);
+                  await jsPsychExtensionPipe.saveBase64Data("${expId}", filename, data.response${EXTENSION_OPTIONS});
                   data.response = filename;
                 }
               };`}
@@ -140,7 +148,7 @@ export default function CodeHints({ expId }) {
               async function createExperiment(){
                 let condition;
                 try {
-                  condition = await jsPsychExtensionPipe.getCondition("${expId}");
+                  condition = await jsPsychExtensionPipe.getCondition("${expId}"${EXTENSION_OPTIONS});
                 } catch (error) {
                   document.body.innerHTML = "<p>The experiment could not be started.</p>";
                   throw error;
@@ -181,7 +189,7 @@ export default function CodeHints({ expId }) {
             const result = await DataPipe.saveData({
               experiment_id: "${expId}",
               filename: "UNIQUE_FILENAME.csv",
-              data: dataAsString,
+              data: dataAsString,${CLIENT_OPTION}
             });
 
             if (!result.ok) {
@@ -209,7 +217,7 @@ export default function CodeHints({ expId }) {
             const filename = "UNIQUE_FILENAME.csv";
             const session = DataPipe.createSession({
               experiment_id: "${expId}",
-              filename: filename,
+              filename: filename,${CLIENT_OPTION}
             });
 
             // ...after each trial:
@@ -220,7 +228,7 @@ export default function CodeHints({ expId }) {
               experiment_id: "${expId}",
               filename: filename,
               data: dataAsString,
-              session: session,
+              session: session,${CLIENT_OPTION}
             });
             await session.close({ submitted: result.ok });`}
               </CodeBlock>
@@ -242,7 +250,7 @@ export default function CodeHints({ expId }) {
             const result = await DataPipe.saveBase64Data({
               experiment_id: "${expId}",
               filename: "UNIQUE_FILENAME.webm",
-              data: base64DataString,
+              data: base64DataString,${CLIENT_OPTION}
             });`}
               </CodeBlock>
             </VStack>
@@ -259,7 +267,7 @@ export default function CodeHints({ expId }) {
                 {`
             let condition;
             try {
-              condition = await DataPipe.getCondition({ experiment_id: "${expId}" });
+              condition = await DataPipe.getCondition({ experiment_id: "${expId}"${CLIENT_INLINE_OPTION} });
             } catch (error) {
               document.body.innerHTML = "<p>The experiment could not be started.</p>";
               throw error;

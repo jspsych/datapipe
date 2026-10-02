@@ -1,9 +1,9 @@
 import type { Request } from "firebase-functions/v2/https";
 import type { Response } from "express";
-import { DocumentReference, DocumentData, DocumentSnapshot } from "firebase-admin/firestore";
 import { db } from "./app.js";
 import writeLog from "./write-log.js";
 import MESSAGES from "./api-messages.js";
+import { getExperiment } from "./experiment-id.js";
 import { ExperimentData } from './interfaces';
 
 // Plain handler, dispatched from participant-api.ts alongside
@@ -18,15 +18,17 @@ export async function apiConditionHandler(req: Request, res: Response): Promise<
     return;
   }
 
-  const exp_doc_ref: DocumentReference<DocumentData> = db.collection("experiments").doc(experimentID);
-  const exp_doc: DocumentSnapshot = await exp_doc_ref.get();
+  // null for a missing experiment AND for an id Firestore would reject
+  // outright (e.g. an unfilled "__X__" placeholder); see experiment-id.ts.
+  const exp_doc = await getExperiment(experimentID);
 
-  if (!exp_doc.exists) {
+  if (!exp_doc) {
     res.status(400).json(MESSAGES.EXPERIMENT_NOT_FOUND);
     await writeLog(experimentID, "logError", MESSAGES.EXPERIMENT_NOT_FOUND);
     return;
   }
 
+  const exp_doc_ref = exp_doc.ref;
   const exp_data: ExperimentData = exp_doc.data() as ExperimentData;
 
   if (!exp_data) {

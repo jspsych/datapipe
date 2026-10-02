@@ -29,10 +29,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { db } from "./app.js";
 import MESSAGES from "./api-messages.js";
 import { requireUser } from "./require-user.js";
-
-function experimentRef(experimentID: string) {
-  return db.collection("experiments").doc(experimentID);
-}
+import { getExperiment } from "./experiment-id.js";
 
 function logsRef(experimentID: string) {
   return db.collection("logs").doc(experimentID);
@@ -57,12 +54,13 @@ export async function clearErrorsHandler(req: Request, res: Response): Promise<v
     return;
   }
 
-  const expSnap = await experimentRef(experimentID).get();
+  const expSnap = await getExperiment(experimentID);
   // Same 403-for-both convention as ensure-derived-paths.ts: a nonexistent
   // experiment and someone else's experiment get the identical response, so
   // this endpoint never confirms which experiment IDs exist to a caller who
-  // does not already own one.
-  if (!expSnap.exists || expSnap.data()?.owner !== uid) {
+  // does not already own one. (getExperiment's null also covers an id
+  // Firestore would reject outright.)
+  if (!expSnap || expSnap.data()?.owner !== uid) {
     res.status(403).json({ error: "Access denied" });
     return;
   }

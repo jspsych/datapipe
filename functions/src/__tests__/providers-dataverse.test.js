@@ -9,6 +9,8 @@
 // and the docblock + node-fetch mock convention is kept for consistency with
 // every other adapter suite (see commit 0664bd5/313abbf/9008f67).
 
+import { Readable } from "stream";
+
 const mockFetch = jest.fn();
 
 jest.mock("node-fetch", () => ({
@@ -30,6 +32,7 @@ function mockResponse({ status, statusText, jsonBody, textBody }) {
     statusText,
     json: () => Promise.resolve(jsonBody),
     text: () => Promise.resolve(textBody),
+    body: textBody === undefined ? null : Readable.from([Buffer.from(textBody)]),
   };
 }
 
@@ -1350,5 +1353,84 @@ describe("9. validateStaticToken", () => {
     const result = await dataverseProvider.validateStaticToken(auth);
 
     expect(result).toBe(false);
+  });
+
+  it("logs the status and body of a non-200, with the token scrubbed", async () => {
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({
+        status: 403,
+        statusText: "Forbidden",
+        textBody: '{"status":"ERROR","message":"Bad api key test-token"}',
+      })
+    );
+
+    await dataverseProvider.validateStaticToken(auth);
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    const [message] = warn.mock.calls[0];
+    expect(message).toContain("403");
+    expect(message).toContain(SERVER_URL);
+    expect(message).toContain("Bad api key [redacted]");
+    expect(message).not.toContain("test-token");
+    warn.mockRestore();
+  });
+
+  it("reads only a bounded prefix of a huge body and drops the connection", async () => {
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    let pulled = 0;
+    // An endless 64KB-chunk body: text() would never finish buffering it.
+    const body = new Readable({
+      read() {
+        pulled += 1;
+        this.push(Buffer.alloc(64 * 1024, "x"));
+      },
+    });
+    mockFetch.mockResolvedValueOnce({ status: 403, statusText: "Forbidden", body });
+
+    const result = await dataverseProvider.validateStaticToken(auth);
+
+    expect(result).toBe(false);
+    expect(body.destroyed).toBe(true);
+    expect(pulled).toBeLessThan(5);
+    const [message] = warn.mock.calls[0];
+    expect(message.length).toBeLessThan(500);
+    warn.mockRestore();
+  });
+
+  it("gives up on a body that stalls, keeping what arrived", async () => {
+    jest.useFakeTimers();
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const body = new Readable({ read() {} });
+    body.push("partial block page");
+    mockFetch.mockResolvedValueOnce({ status: 503, statusText: "Service Unavailable", body });
+
+    const pending = dataverseProvider.validateStaticToken(auth);
+    await jest.advanceTimersByTimeAsync(5000);
+    const result = await pending;
+
+    expect(result).toBe(false);
+    expect(body.destroyed).toBe(true);
+    expect(warn.mock.calls[0][0]).toContain("503: partial block page");
+    warn.mockRestore();
+    jest.useRealTimers();
+  });
+
+  it("flattens a multi-line body onto one log line", async () => {
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({
+        status: 403,
+        statusText: "Forbidden",
+        textBody: "<html>\n  <body>\n    Request blocked\n  </body>\n</html>",
+      })
+    );
+
+    await dataverseProvider.validateStaticToken(auth);
+
+    const [message] = warn.mock.calls[0];
+    expect(message).not.toContain("\n");
+    expect(message).toContain("<html> <body> Request blocked </body> </html>");
+    warn.mockRestore();
   });
 });

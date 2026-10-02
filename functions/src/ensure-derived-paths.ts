@@ -29,10 +29,7 @@ import { getProviderForExperiment } from "./providers/index.js";
 import { ResolvedAuth, StorageProvider, ContainerRef } from "./providers/types.js";
 import { ExperimentData, UserData } from "./interfaces.js";
 import { requireUser } from "./require-user.js";
-
-function experimentRef(experimentID: string) {
-  return db.collection("experiments").doc(experimentID);
-}
+import { getExperiment } from "./experiment-id.js";
 
 // Same test as firestore.rules' hasCollectedData() and MetadataControl.js's
 // own hasCollectedData() -- see either comment for why `sessions` and
@@ -63,11 +60,11 @@ export async function ensureDerivedPathsHandler(req: Request, res: Response): Pr
     return;
   }
 
-  const expRef = experimentRef(experimentID);
-  const expSnap = await expRef.get();
+  const expSnap = await getExperiment(experimentID);
   // Same 403-for-both convention as api-finalize.ts: a nonexistent
   // experiment and someone else's experiment get the identical response.
-  if (!expSnap.exists || expSnap.data()?.owner !== uid) {
+  // (getExperiment's null also covers an id Firestore would reject outright.)
+  if (!expSnap || expSnap.data()?.owner !== uid) {
     res.status(403).json({ error: "Access denied" });
     return;
   }

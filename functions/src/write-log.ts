@@ -1,6 +1,7 @@
 import { db } from "./app.js";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { StorageProviderId } from "./providers/types.js";
+import { isValidDocumentId } from "./experiment-id.js";
 
 /**
  * logs/{experimentID} — the per-experiment activity record.
@@ -144,6 +145,11 @@ export default async function writeLog(
   error?: object,
   context?: LogContext
 ): Promise<boolean> {
+  // A client-supplied id Firestore would reject (an unfilled "__X__"
+  // placeholder, say) can never have a log document. doc() would throw into
+  // the catch below and print an error per request; skip it quietly instead.
+  if (!isValidDocumentId(experimentID)) return false;
+
   try {
     const log_doc_ref = db.collection("logs").doc(experimentID);
 

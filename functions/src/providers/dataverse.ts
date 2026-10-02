@@ -1,6 +1,8 @@
-import fetch from "node-fetch";
+import fetch, { type Response } from "node-fetch";
+import type { Readable } from "stream";
 import { randomBytes } from "crypto";
 import { decrypt } from "../crypto-utils.js";
+import { redactSecret } from "../redact.js";
 import { UserData } from "../interfaces.js";
 import { isAllowedServerUrl } from "./server-url.js";
 import {
@@ -53,6 +55,39 @@ function newMultipartBoundary(): string {
 function quoteHeaderParam(value: string): string {
   const sanitized = value.replace(/[\r\n]+/g, "").replace(/([\\"])/g, "\\$1");
   return `"${sanitized}"`;
+}
+
+// validateStaticToken's server URL is researcher-chosen, so its error body is
+// untrusted: read at most this much, for at most this long, then drop the
+// connection. response.text() would buffer a hostile multi-hundred-MB (or
+// slow-drip) body into dashboardapi's shared memory. The margin over the 300
+// characters logged leaves room for a token-sized redaction.
+const VALIDATE_BODY_MAX_BYTES = 4096;
+const VALIDATE_BODY_TIMEOUT_MS = 5000;
+
+// Never throws: the body is diagnostic only, and an unreadable one still
+// leaves the status.
+async function readBodyPrefix(response: Response, maxBytes: number, timeoutMs: number): Promise<string> {
+  const stream = response.body as Readable | null;
+  if (!stream) return "";
+  const chunks: Buffer[] = [];
+  let total = 0;
+  let timer: NodeJS.Timeout | undefined;
+  const timedOut = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, timeoutMs);
+  });
+  const read = (async () => {
+    for await (const chunk of stream) {
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array);
+      chunks.push(buf);
+      total += buf.length;
+      if (total >= maxBytes) break;
+    }
+  })().catch(() => {});
+  await Promise.race([read, timedOut]);
+  clearTimeout(timer);
+  stream.destroy();
+  return Buffer.concat(chunks).subarray(0, maxBytes).toString("utf8");
 }
 
 function authHeaders(auth: ResolvedAuth): Record<string, string> {
@@ -423,7 +458,18 @@ export const dataverseProvider: StorageProvider = {
     });
     // Never throw on a non-200 -- a bad/expired token is simply "not valid",
     // not an exceptional condition.
-    return response.status === 200;
+    if (response.status === 200) return true;
+
+    // Log what the installation actually said. The caller collapses every
+    // non-200 into "Invalid API token", so without this a real 401, a WAF
+    // 403, and an outage 5xx are indistinguishable after the fact. The body
+    // is scrubbed of the token in case an installation echoes the key back in
+    // its error message, and flattened to one line so a multi-line block page
+    // stays in one log entry.
+    const prefix = await readBodyPrefix(response, VALIDATE_BODY_MAX_BYTES, VALIDATE_BODY_TIMEOUT_MS);
+    const body = redactSecret(prefix, auth.token).replace(/\s+/g, " ").trim().slice(0, 300);
+    console.warn(`dataverse validateStaticToken: ${serverUrl}/api/users/:me returned ${response.status}: ${body}`);
+    return false;
   },
 
   // Reads the token's expiry from the one endpoint that reports it, GET
