@@ -409,10 +409,23 @@ export default function ProviderConnections({ data }) {
               )}
               <Field.Root>
                 <Field.Label>{provider.tokenLabel}</Field.Label>
+                {/* Plain text, not type="password": Chrome ignores
+                    autocomplete="off" on password fields and fills in the
+                    saved DataPipe login, so a paste lands after it (#278).
+                    Masking buys little -- the token is shown in the clear on
+                    the installation's own page -- and seeing it lets the
+                    researcher check what they pasted. The data-* attributes
+                    keep 1Password and LastPass from filling it too. */}
                 <Input
-                  type="password"
+                  type="text"
                   value={apiToken}
                   autoComplete="off"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  data-1p-ignore
+                  data-lpignore="true"
+                  fontFamily="mono"
                   onChange={(e) => setApiToken(e.target.value)}
                 />
                 {provider.tokenHelp && (
