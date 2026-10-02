@@ -25,6 +25,7 @@ import { customAlphabet } from "nanoid";
 import { db } from "./app.js";
 import { verifyOwnership } from "./connect-provider.js";
 import resolveToken from "./resolve-token.js";
+import { redactSecret } from "./redact.js";
 import { getProvider, listProviders } from "./providers/index.js";
 import { ContainerRef, StorageProviderId, ResolvedAuth } from "./providers/types.js";
 import { ExperimentData, UserData } from "./interfaces.js";
@@ -180,10 +181,18 @@ export async function createExperimentHandler(req: Request, res: Response): Prom
       // Otherwise this failure leaves no server-side trace: the 502 below is
       // the only record, and it goes to the browser, not Cloud Logging. The
       // Error itself, not just its message, so the stack and any network
-      // `code`/`cause` (ECONNRESET, ETIMEDOUT) survive; uid ties it to a
-      // user's report. Provider errors carry no token -- auth rides in the
-      // request headers, never the URL or the message.
-      console.error(`Error creating storage container for provider ${provider}, user ${uid}:`, e);
+      // `code` (ECONNRESET, ETIMEDOUT) survive; uid ties it to a user's
+      // report. Auth rides in request headers, never the URL, but a provider
+      // can still echo the token in its error text (a Dataverse installation
+      // answering "Bad api key <key>"), so the stack is scrubbed before it
+      // reaches Cloud Logging.
+      const trace = e instanceof Error ? (e.stack ?? e.message) : String(e);
+      const code = (e as { code?: unknown } | null)?.code;
+      console.error(
+        `Error creating storage container for provider ${provider}, user ${uid}:`,
+        redactSecret(trace, auth.token),
+        ...(code !== undefined ? [{ code }] : [])
+      );
       res.status(502).json({ error: "Failed to create storage container", detail });
       return;
     }
