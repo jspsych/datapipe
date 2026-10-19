@@ -3,6 +3,7 @@ import { randomBytes } from "crypto";
 import { decrypt } from "../crypto-utils.js";
 import { UserData } from "../interfaces.js";
 import { isAllowedServerUrl } from "./server-url.js";
+import { DATAPIPE_USER_AGENT } from "../user-agent.js";
 import {
   StorageProvider,
   ResolvedAuth,
@@ -55,8 +56,14 @@ function quoteHeaderParam(value: string): string {
   return `"${sanitized}"`;
 }
 
+// Every call identifies DataPipe instead of going out as node-fetch's default
+// "node-fetch" User-Agent. Harvard Dataverse sits behind HUIT-run bot
+// filtering (rate limits and "silent challenges", IQSS/dataverse.harvard.edu
+// #380/#394) that applies to all traffic, and a generic library UA is the
+// kind of thing such filters score against. Not verified as a cause; it also
+// gives an installation's operators something to recognize in their logs.
 function authHeaders(auth: ResolvedAuth): Record<string, string> {
-  return { "X-Dataverse-key": auth.token };
+  return { "X-Dataverse-key": auth.token, "User-Agent": DATAPIPE_USER_AGENT };
 }
 
 // TEST-ONLY TRANSPORT SEAM. Lets exactly one origin bypass isAllowedServerUrl,
@@ -199,21 +206,86 @@ function mapDataverseError(
   return { error, providerStatus: status, providerMessage: message, retryAfter: null };
 }
 
-// Reads the body defensively (Dataverse error bodies are JSON
-// {"status":"ERROR","message":"..."}, but tolerate non-JSON) and maps the
-// response into the shared error shape.
-async function mapErrorResponse(response: {
+interface ErrorResponseLike {
   status: number;
-  statusText: string;
-  json: () => Promise<unknown>;
-}): Promise<MappedDataverseError> {
+  statusText?: string;
+  headers?: { get(name: string): string | null };
+  text?: () => Promise<string>;
+  json?: () => Promise<unknown>;
+}
+
+interface ErrorResponseDetails {
+  body: { status?: string; message?: string } | undefined;
+  contentType: string | null;
+  snippet: string | null;
+}
+
+// Response headers that identify the request to whoever runs the server (or
+// the WAF/CDN in front of it), so a support request can quote one.
+const REQUEST_ID_HEADERS = ["x-request-id", "x-amzn-requestid", "x-amz-cf-id", "x-amzn-trace-id", "cf-ray"];
+
+const LOG_SNIPPET_LENGTH = 500;
+
+// Reads the body defensively. Dataverse's own error bodies are JSON
+// {"status":"ERROR","message":"..."}; anything else (an HTML 403 from a
+// firewall, a proxy's 502 page) did not come from the Dataverse API at all,
+// and the snippet is the only evidence of what did answer.
+async function readErrorResponse(response: ErrorResponseLike): Promise<ErrorResponseDetails> {
+  const contentType = response.headers?.get("content-type") ?? null;
+  let raw: string | null = null;
   let body: { status?: string; message?: string } | undefined;
   try {
-    body = (await response.json()) as { status?: string; message?: string };
+    if (typeof response.text === "function") {
+      raw = await response.text();
+      body = JSON.parse(raw) as { status?: string; message?: string };
+    } else if (typeof response.json === "function") {
+      body = (await response.json()) as { status?: string; message?: string };
+    }
   } catch {
     body = undefined;
   }
-  return mapDataverseError(response.status, response.statusText, body);
+  if (body !== undefined && (typeof body !== "object" || body === null)) {
+    body = undefined;
+  }
+  const snippet = typeof raw === "string" ? raw.replace(/\s+/g, " ").trim().slice(0, LOG_SNIPPET_LENGTH) : null;
+  return { body, contentType, snippet };
+}
+
+// Logs everything about a failed response that could explain it, minus the
+// credential. The token is redacted from the snippet in case a server ever
+// echoes the request back.
+function logErrorResponse(
+  context: string,
+  auth: ResolvedAuth,
+  response: ErrorResponseLike,
+  details: ErrorResponseDetails
+): void {
+  const requestIds = REQUEST_ID_HEADERS.flatMap((name) => {
+    const value = response.headers?.get(name);
+    return value ? [`${name}=${value}`] : [];
+  });
+  const snippet = details.snippet && auth.token ? details.snippet.split(auth.token).join("[redacted]") : details.snippet;
+  console.warn(
+    `dataverse ${context}: HTTP ${response.status} ${response.statusText ?? ""}`.trimEnd() +
+      `, content-type=${details.contentType ?? "unknown"}` +
+      `, server=${response.headers?.get("server") ?? "unknown"}` +
+      (requestIds.length > 0 ? `, ${requestIds.join(", ")}` : "") +
+      `, body=${snippet === null ? "unreadable" : JSON.stringify(snippet)}`
+  );
+}
+
+// Maps a non-2xx response into the shared error shape, logging the raw
+// response first so a failure like "Provider error 403: Forbidden" (no JSON
+// message, so statusText is all the record carries) can be traced to what
+// actually sent it.
+async function mapErrorResponse(
+  context: string,
+  auth: ResolvedAuth,
+  response: ErrorResponseLike
+): Promise<MappedDataverseError> {
+  const details = await readErrorResponse(response);
+  logErrorResponse(context, auth, response, details);
+  return mapDataverseError(response.status, response.statusText ?? "", details.body);
 }
 
 // Hand-built multipart/form-data body with exactly two parts, field names
@@ -415,15 +487,34 @@ export const dataverseProvider: StorageProvider = {
     return { success: true, token: decrypt(dataverse.encryptedToken), serverUrl: dataverse.serverUrl };
   },
 
+  // Returns false only when Dataverse ITSELF rejected the token: a 401 (what
+  // "Bad API key" and an expired token both return), or a 403 carrying
+  // Dataverse's JSON error body. Anything else -- an HTML 403 from a firewall
+  // in front of the installation, a 429, a 5xx, a network error -- means the
+  // request never got a verdict on the token, and THROWS, so the connect
+  // handler can say "couldn't reach the server" instead of telling the
+  // researcher their (working) token is wrong. Either way the raw response is
+  // logged; before this the status alone was discarded.
   async validateStaticToken(auth: ResolvedAuth): Promise<boolean> {
     const serverUrl = resolveServerUrl(auth);
     const response = await fetch(`${serverUrl}/api/users/:me`, {
       method: "GET",
       headers: authHeaders(auth),
     });
-    // Never throw on a non-200 -- a bad/expired token is simply "not valid",
-    // not an exceptional condition.
-    return response.status === 200;
+    if (response.status === 200) {
+      return true;
+    }
+
+    const details = await readErrorResponse(response);
+    logErrorResponse("validateStaticToken", auth, response, details);
+    const fromDataverse = details.body?.status === "ERROR";
+    if (response.status === 401 || (response.status === 403 && fromDataverse)) {
+      return false;
+    }
+    throw new Error(
+      `Dataverse token check got HTTP ${response.status} (content-type ${details.contentType ?? "unknown"}), ` +
+        "not a verdict on the token"
+    );
   },
 
   // Reads the token's expiry from the one endpoint that reports it, GET
@@ -548,7 +639,7 @@ export const dataverseProvider: StorageProvider = {
     // they also claim /add returns 201 when it really returns 200.) Hardcoding
     // 200 made every real dataset creation throw.
     if (!isSuccessStatus(response.status)) {
-      const mapped = await mapErrorResponse(response);
+      const mapped = await mapErrorResponse("createDataContainer", auth, response);
       throw new Error(`Dataverse dataset creation failed: ${mapped.providerStatus} ${mapped.providerMessage}`);
     }
 
@@ -625,7 +716,7 @@ export const dataverseProvider: StorageProvider = {
     });
 
     if (!isSuccessStatus(response.status)) {
-      const mapped = await mapErrorResponse(response);
+      const mapped = await mapErrorResponse("writeSessionFile", auth, response);
       return { success: false, ...mapped };
     }
 
@@ -686,7 +777,7 @@ export const dataverseProvider: StorageProvider = {
     });
 
     if (!isSuccessStatus(deleteResponse.status)) {
-      const mapped = await mapErrorResponse(deleteResponse);
+      const mapped = await mapErrorResponse("updateFile delete", auth, deleteResponse);
       return { success: false, ...mapped };
     }
 
@@ -716,7 +807,7 @@ export const dataverseProvider: StorageProvider = {
       });
 
       if (!isSuccessStatus(response.status)) {
-        const mapped = await mapErrorResponse(response);
+        const mapped = await mapErrorResponse("listFiles", auth, response);
         throw new Error(`Dataverse listing failed: ${mapped.providerStatus} ${mapped.providerMessage}`);
       }
 
@@ -866,7 +957,7 @@ export const dataverseProvider: StorageProvider = {
     });
 
     if (!isSuccessStatus(response.status)) {
-      const mapped = await mapErrorResponse(response);
+      const mapped = await mapErrorResponse("downloadFile", auth, response);
       return {
         success: false,
         error: mapped.error,

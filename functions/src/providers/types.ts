@@ -203,7 +203,10 @@ export interface StorageProvider {
   // (`tokenExpiresAt`).
   refreshExpiringTokens?(windowMs?: number): Promise<void>;
 
-  // static-token providers only
+  // static-token providers only. Resolves false only when the provider itself
+  // rejected the credential. Throws when it got no verdict either way (network
+  // error, a firewall or proxy answering instead of the API, a 5xx), so the
+  // caller can tell "bad token" apart from "could not ask".
   validateStaticToken?(auth: ResolvedAuth): Promise<boolean>;
 
   // static-token providers only. Returns the credential's absolute expiry as

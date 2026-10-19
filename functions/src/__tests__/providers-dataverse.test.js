@@ -29,7 +29,8 @@ function mockResponse({ status, statusText, jsonBody, textBody }) {
     status,
     statusText,
     json: () => Promise.resolve(jsonBody),
-    text: () => Promise.resolve(textBody),
+    // Mirrors a real body: text() of a JSON response is its serialization.
+    text: () => Promise.resolve(textBody ?? (jsonBody === undefined ? "" : JSON.stringify(jsonBody))),
   };
 }
 
@@ -1342,7 +1343,7 @@ describe("9. validateStaticToken", () => {
     expect(result).toBe(true);
   });
 
-  it("returns false (never throws) on a non-200 response", async () => {
+  it("returns false on a 401 from Dataverse", async () => {
     mockFetch.mockResolvedValueOnce(
       mockResponse({ status: 401, statusText: "Unauthorized", jsonBody: { status: "ERROR", message: "Bad API key" } })
     );
@@ -1350,5 +1351,70 @@ describe("9. validateStaticToken", () => {
     const result = await dataverseProvider.validateStaticToken(auth);
 
     expect(result).toBe(false);
+  });
+
+  it("returns false on a 403 carrying Dataverse's own JSON error body", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ status: 403, statusText: "Forbidden", jsonBody: { status: "ERROR", message: "User deactivated" } })
+    );
+
+    const result = await dataverseProvider.validateStaticToken(auth);
+
+    expect(result).toBe(false);
+  });
+
+  // A firewall in front of the installation answering instead of Dataverse
+  // says nothing about the token, so it must not be reported as a bad one.
+  it("throws on an HTML 403 that did not come from the Dataverse API", async () => {
+    mockFetch.mockResolvedValueOnce({
+      status: 403,
+      statusText: "Forbidden",
+      headers: new Map([["content-type", "text/html"]]),
+      text: () => Promise.resolve("<html><body>Request blocked</body></html>"),
+    });
+
+    await expect(dataverseProvider.validateStaticToken(auth)).rejects.toThrow(/HTTP 403.*text\/html/);
+  });
+
+  it("throws on a 5xx", async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse({ status: 503, statusText: "Service Unavailable" }));
+
+    await expect(dataverseProvider.validateStaticToken(auth)).rejects.toThrow(/HTTP 503/);
+  });
+
+  it("logs the upstream response with request ids, and redacts the token", async () => {
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      mockFetch.mockResolvedValueOnce({
+        status: 403,
+        statusText: "Forbidden",
+        headers: new Map([
+          ["content-type", "text/html"],
+          ["server", "awselb/2.0"],
+          ["x-amzn-requestid", "req-123"],
+        ]),
+        text: () => Promise.resolve("<html>blocked request with key test-token</html>"),
+      });
+
+      await expect(dataverseProvider.validateStaticToken(auth)).rejects.toThrow();
+
+      const logged = warn.mock.calls.map((c) => c.join(" ")).join("\n");
+      expect(logged).toContain("HTTP 403 Forbidden");
+      expect(logged).toContain("content-type=text/html");
+      expect(logged).toContain("server=awselb/2.0");
+      expect(logged).toContain("x-amzn-requestid=req-123");
+      expect(logged).toContain("blocked request with key [redacted]");
+      expect(logged).not.toContain("test-token");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("sends a DataPipe User-Agent rather than node-fetch's default", async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse({ status: 200, statusText: "OK", jsonBody: {} }));
+
+    await dataverseProvider.validateStaticToken(auth);
+
+    expect(header(callArgs(0).options.headers, "User-Agent")).toMatch(/^DataPipe /);
   });
 });

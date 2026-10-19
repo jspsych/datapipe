@@ -261,6 +261,40 @@ describe("connectStaticTokenProvider", () => {
     expect(userData?.connectedAccounts?.dataverse).toBeUndefined();
   });
 
+  // A firewall or outage between DataPipe and the installation says nothing
+  // about the token; telling the researcher it was invalid sent them off
+  // regenerating tokens that worked.
+  it.each([
+    [
+      "an HTML 403 from in front of the API",
+      () =>
+        mockFetch.mockResolvedValueOnce({
+          status: 403,
+          statusText: "Forbidden",
+          headers: new Map([["content-type", "text/html"]]),
+          text: () => Promise.resolve("<html>Request blocked</html>"),
+        }),
+    ],
+    ["a network error", () => mockFetch.mockRejectedValueOnce(new Error("socket hang up"))],
+  ])("answers %s with 502 Provider unreachable and persists nothing", async (_label, arrange) => {
+    const { uid, idToken } = await signUpEmulatorUser();
+    arrange();
+
+    const { status, body } = await callConnectStaticTokenProvider({
+      provider: "dataverse",
+      uid,
+      idToken,
+      token: "plaintext-dataverse-api-token",
+      serverUrl: SERVER_URL,
+    });
+
+    expect(status).toBe(502);
+    expect(body.error).toBe("Provider unreachable");
+
+    const userData = await getUserData(uid);
+    expect(userData?.connectedAccounts?.dataverse).toBeUndefined();
+  });
+
   it("rejects an oauth2 provider (gdrive) with 400 Unknown provider, without calling validateStaticToken", async () => {
     const { uid, idToken } = await signUpEmulatorUser();
 

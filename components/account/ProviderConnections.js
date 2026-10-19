@@ -120,6 +120,9 @@ export default function ProviderConnections({ data }) {
     if (error === "Invalid API token") {
       return "That server did not accept the token. Check that you copied it fully, that it has not expired, and that it belongs to the server above.";
     }
+    if (error === "Provider unreachable") {
+      return "DataPipe could not get an answer about the token from that server. This is not a problem with your token: the server may be busy or blocking the request. Please try again in a few minutes.";
+    }
     if (status === 401 || status === 403) {
       return "You are not signed in to the right account. Try reloading the page and signing in again.";
     }

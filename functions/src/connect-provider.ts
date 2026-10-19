@@ -259,10 +259,17 @@ export async function connectStaticTokenProviderHandler(req: Request, res: Expre
     try {
       isValid = await storageProvider.validateStaticToken({ token, serverUrl: normalizedServerUrl });
     } catch (e) {
-      // A network error against an unreachable/misconfigured installation is
-      // "not valid", not a server-side failure.
-      console.error('Static token validation error:', e instanceof Error ? e.message : 'Unknown error');
-      isValid = false;
+      // validateStaticToken throws when it got no verdict on the token at all:
+      // a network error, or a response that did not come from the provider's
+      // API (a firewall's HTML 403, a 5xx). Reporting that as "Invalid API
+      // token" sent researchers off regenerating tokens that worked fine, so
+      // it gets its own error -- 502, since the upstream is what failed.
+      console.error(
+        `Static token validation error (${provider}, ${normalizedServerUrl}):`,
+        e instanceof Error ? e.message : 'Unknown error'
+      );
+      res.status(502).json({ error: 'Provider unreachable' });
+      return;
     }
     if (!isValid) {
       res.status(400).json({ error: 'Invalid API token' });
